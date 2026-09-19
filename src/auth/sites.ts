@@ -16,7 +16,7 @@ const cloudflare: SiteLogin = {
     start: "https://dash.cloudflare.com/login",
     username: { role: "textbox", name: "Email" },
     password: { role: "textbox", name: "Password" },
-    submit: { role: "button", name: "/^log ?in$/i" },
+    submit: { role: "button", name: "/^(log|sign) ?in$/i" },
     code: {
       kind: "totp",
       asks: /authenticator|verification code|two-factor|2fa/i,
@@ -59,7 +59,7 @@ const instantly: SiteLogin = {
     start: "https://app.instantly.ai/auth/login",
     username: { role: "textbox", name: "Email" },
     password: { role: "textbox", name: "Password" },
-    submit: { role: "button", name: "/^log ?in$/i" },
+    submit: { role: "button", name: "/^(log|sign) ?in$/i" },
     code: {
       kind: "email",
       asks: /verification code|check your email/i,

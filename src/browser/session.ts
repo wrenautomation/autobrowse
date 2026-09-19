@@ -146,7 +146,11 @@ export async function looksLikeWall(page: Page): Promise<Wall | null> {
       .innerText()
       .catch(() => "")
   ).slice(0, 4000);
-  if (/verify you are human|captcha|unusual traffic/i.test(text))
+  if (
+    /verify you are human|captcha|unusual traffic|performing security verification|verifies you are not a bot/i.test(
+      text,
+    )
+  )
     return { kind: "captcha", detail: "captcha" };
   if (/verify your phone|enter the code|2-step verification/i.test(text))
     return { kind: "challenge", detail: "verification challenge" };
