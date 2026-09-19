@@ -182,6 +182,9 @@ export function fakeDeps(
         return "set";
       },
       async send() {},
+      async recent() {
+        return [];
+      },
     },
     roster: {
       async read() {

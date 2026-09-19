@@ -8,6 +8,7 @@
 import { FlowFailed } from "../browser/flow.js";
 import { NeedsHuman } from "../browser/session.js";
 import { type Effects, type GateAnswer, type GateName, GateOpen } from "./effects.js";
+import { ALL_GUARDS, type Guards, isGuard } from "./guards.js";
 import type { AnyWorkflow, PlanBase, StepNames, Workflow } from "./workflow.js";
 
 export const KEYS = {
@@ -85,13 +86,20 @@ async function load<M, S extends string>(
   };
 }
 
+export interface AdvanceOptions {
+  /** Gates whose guard is off answer themselves; default = every guard on. */
+  guards?: Guards;
+}
+
 /** Run one step. Each call is one host invocation, so state is saved before it returns. */
 export async function advance<P extends PlanBase, D, M, S extends string>(
   fx: Effects,
   workflow: Workflow<P, D, M, S>,
   deps: D,
   plan: P,
+  opts: AdvanceOptions = {},
 ): Promise<Advance<S>> {
+  const guards = opts.guards ?? ALL_GUARDS;
   const open = await fx.get<OpenGate>(KEYS.gate);
   if (open) return { kind: "waiting", gate: open };
   const { results, memo, answers } = await load<M, S>(fx, workflow);
@@ -121,8 +129,10 @@ export async function advance<P extends PlanBase, D, M, S extends string>(
       memo,
       gate(gate, prompt) {
         const answer = answers[gate];
-        if (!answer) throw new GateOpen(gate, prompt);
-        return answer;
+        if (answer) return answer;
+        if (isGuard(gate) && !guards.has(gate))
+          return { approved: true, note: `guard ${gate} is off`, at };
+        throw new GateOpen(gate, prompt);
       },
     });
     const result: StepResult = { ...out, at };
@@ -215,9 +225,10 @@ export async function runFlow<P extends PlanBase, D, M, S extends string>(
   deps: D,
   plan: P,
   answer: (gate: OpenGate) => GateAnswer | null = () => null,
+  opts: AdvanceOptions = {},
 ): Promise<Outcome<S, M>> {
   for (;;) {
-    const a = await advance(fx, workflow, deps, plan);
+    const a = await advance(fx, workflow, deps, plan, opts);
     if (a.kind === "continue") continue;
     if (a.kind === "finished") return outcomeOf(fx, workflow, a.status);
     const given = answer(a.gate);

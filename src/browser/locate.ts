@@ -33,6 +33,12 @@ export function planLocator(h: Hints): LocatorPlan | null {
   return null;
 }
 
+/** A name written `/pattern/flags` matches loosely; anything else is exact. */
+export function namePattern(name: string): string | RegExp {
+  const m = name.match(/^\/(.+)\/([a-z]*)$/s);
+  return m ? new RegExp(m[1] as string, m[2]) : name;
+}
+
 export function applyLocator(page: Page, plan: LocatorPlan): Locator {
   switch (plan.by) {
     case "testId":
@@ -40,12 +46,18 @@ export function applyLocator(page: Page, plan: LocatorPlan): Locator {
     case "role": {
       // Role strings come from the DOM; Playwright's union is narrower than what a page can carry.
       const role = plan.role as Parameters<Page["getByRole"]>[0];
-      return plan.name
-        ? page.getByRole(role, { name: plan.name, exact: true })
-        : page.getByRole(role);
+      if (!plan.name) return page.getByRole(role);
+      const name = namePattern(plan.name);
+      return typeof name === "string"
+        ? page.getByRole(role, { name, exact: true })
+        : page.getByRole(role, { name });
     }
-    case "label":
-      return page.getByLabel(plan.value, { exact: true });
+    case "label": {
+      const name = namePattern(plan.value);
+      return typeof name === "string"
+        ? page.getByLabel(name, { exact: true })
+        : page.getByLabel(name);
+    }
     case "placeholder":
       return page.getByPlaceholder(plan.value, { exact: true });
     case "text":

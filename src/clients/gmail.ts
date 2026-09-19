@@ -8,6 +8,52 @@ export interface GmailUserClient {
   /** The primary send-as signature; idempotent. */
   setSignature(email: string, html: string): Promise<"set" | "kept">;
   send(mail: { from: string; to: string; subject: string; text: string }): Promise<void>;
+  /** Messages in `inbox` received after `since`, newest first; for one-time codes. */
+  recent(inbox: string, since: Date): Promise<GmailMessage[]>;
+}
+
+export interface GmailMessage {
+  from: string;
+  subject: string;
+  text: string;
+  at: Date;
+}
+
+interface RawMessage {
+  id: string;
+  internalDate?: string;
+  snippet?: string;
+  payload?: RawPart;
+}
+interface RawPart {
+  mimeType?: string;
+  headers?: Array<{ name: string; value: string }>;
+  body?: { data?: string };
+  parts?: RawPart[];
+}
+
+/** Plain text of a message: text/plain parts first, else HTML with tags stripped, else the snippet. */
+export function messageText(m: RawMessage): string {
+  const texts: string[] = [];
+  const htmls: string[] = [];
+  const walk = (p: RawPart | undefined) => {
+    if (!p) return;
+    const data = p.body?.data;
+    if (data) {
+      const s = Buffer.from(data, "base64url").toString("utf8");
+      if (p.mimeType === "text/plain") texts.push(s);
+      else if (p.mimeType === "text/html") htmls.push(s);
+    }
+    for (const c of p.parts ?? []) walk(c);
+  };
+  walk(m.payload);
+  if (texts.length) return texts.join("\n");
+  if (htmls.length)
+    return htmls
+      .join("\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ");
+  return m.snippet ?? "";
 }
 
 export class GmailError extends Error {
@@ -21,7 +67,7 @@ export class GmailError extends Error {
 /** `tokenFor(user)` mints a supplier acting as that user with the scopes the call needs. */
 export function gmailClient(opts: {
   tokenFor: (user: string, scopes: readonly string[]) => TokenSupplier;
-  scopes: { settings: string; send: string };
+  scopes: { settings: string; send: string; read: string };
   http: HttpClient;
 }): GmailUserClient {
   return {
@@ -54,6 +100,34 @@ export function gmailClient(opts: {
         body: { raw: Buffer.from(raw).toString("base64url") },
       });
       if (r.status >= 400) throw new GmailError("send", r.status, r.body);
+    },
+    async recent(inbox, since) {
+      const token = opts.tokenFor(inbox, [opts.scopes.read]);
+      const q = encodeURIComponent(`after:${Math.floor(since.getTime() / 1000)}`);
+      const list = await authedJson<{ messages?: Array<{ id: string }> }>(
+        opts.http,
+        token,
+        `${GMAIL}/messages?q=${q}&maxResults=10`,
+      );
+      if (list.status >= 400) throw new GmailError("list", list.status, list.body);
+      const out: GmailMessage[] = [];
+      for (const { id } of list.body?.messages ?? []) {
+        const m = await authedJson<RawMessage>(
+          opts.http,
+          token,
+          `${GMAIL}/messages/${encodeURIComponent(id)}?format=full`,
+        );
+        if (m.status >= 400 || !m.body) continue;
+        const header = (name: string) =>
+          m.body?.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? "";
+        out.push({
+          from: header("from"),
+          subject: header("subject"),
+          text: messageText(m.body),
+          at: new Date(Number(m.body.internalDate ?? 0)),
+        });
+      }
+      return out.sort((a, b) => b.at.getTime() - a.at.getTime());
     },
   };
 }

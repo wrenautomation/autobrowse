@@ -1,28 +1,10 @@
 /** `autobrowse login <site>` and `autobrowse record <name>`: the recorder's command line. */
 import { join } from "node:path";
 import type { Command } from "commander";
-import { SITES } from "../browser/flow.js";
-import { openSession } from "../browser/session.js";
 import type { Settings } from "./config.js";
 import { browserOptions, llmFor } from "./services.js";
 
 export function registerRecordCommands(program: Command, settings: Settings): void {
-  program
-    .command("login <site>")
-    .description(
-      `Open a headed browser on the site's persistent profile; log in, close it. Sites: ${Object.keys(SITES).join(", ")}`,
-    )
-    .action(async (site: string) => {
-      const known = SITES[site];
-      if (!known) throw new Error(`unknown site ${site}; one of ${Object.keys(SITES).join(", ")}`);
-      const opts = browserOptions(settings, false);
-      if (opts.tier !== "local") throw new Error("login needs BROWSER=local");
-      const session = await openSession(site, opts);
-      await session.page.goto(known.home);
-      console.log("log in, then close the browser window");
-      await new Promise<void>((resolve) => session.context.on("close", () => resolve()));
-    });
-
   program
     .command("record <name>")
     .description(

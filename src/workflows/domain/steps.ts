@@ -199,8 +199,21 @@ export const dkimStart: Step<"dkim-start"> = {
 export const inboxes: Step<"inboxes"> = {
   name: "inboxes",
   irreversible: true,
-  async run({ fx, deps, plan }) {
+  async run({ fx, deps, plan, gate }) {
     const outcomes: string[] = [];
+    const emails = plan.inboxes.map((i) => inboxAddress(plan, i));
+    // Resetting a password somebody may be using is the `password` guard's call.
+    const existing = await fx.run("existing inboxes", async () => {
+      const found = await Promise.all(emails.map((e) => deps.google.getUser(e)));
+      return emails.filter((_, i) => found[i] !== null);
+    });
+    if (existing.length > 0) {
+      const answer = gate(
+        "password",
+        `Reset the password of ${existing.join(", ")} to a new random one (stored in the secret store)?`,
+      );
+      if (!answer.approved) return rejected(answer.note ?? "password reset declined");
+    }
     for (const inbox of plan.inboxes) {
       const email = inboxAddress(plan, inbox);
       // One journaled step per inbox: the password exists only inside it and

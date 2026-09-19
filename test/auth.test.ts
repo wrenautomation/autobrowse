@@ -1,0 +1,293 @@
+import { mkdtempSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { envCredentials, fileCredentials, layeredCredentials } from "../src/auth/credentials.js";
+import {
+  base32Decode,
+  codeSources,
+  extractCode,
+  findTotpSecret,
+  formLogin,
+  LoginFailed,
+  loginProvider,
+  type Message,
+  memoryCredentials,
+  messageSource,
+  parseOtpauth,
+  type SiteLogin,
+  totp,
+  totpRemainingMs,
+  totpSource,
+} from "../src/auth/index.js";
+import type { FlowPage, Op } from "../src/browser/flow.js";
+import type { Hints } from "../src/browser/locate.js";
+import { NeedsHuman } from "../src/browser/session.js";
+
+// RFC 6238 test vector: secret "12345678901234567890" (base32 GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ).
+const RFC_SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+
+describe("totp", () => {
+  it("decodes base32", () => {
+    expect(base32Decode("GEZDGNBVGY3TQOJQ").toString()).toBe("1234567890");
+    expect(base32Decode("gezd gnbv-gy3t qojq").toString()).toBe("1234567890");
+  });
+  it("matches the RFC 6238 vectors", () => {
+    expect(totp(RFC_SECRET, { at: 59_000, digits: 8 })).toBe("94287082");
+    expect(totp(RFC_SECRET, { at: 1_111_111_109_000, digits: 8 })).toBe("07081804");
+    expect(totp(RFC_SECRET, { at: 59_000 })).toBe("287082");
+  });
+  it("knows when the code rolls over", () => {
+    expect(totpRemainingMs(59_000)).toBe(1_000);
+    expect(totpRemainingMs(60_000)).toBe(30_000);
+  });
+  it("parses otpauth URIs", () => {
+    const p = parseOtpauth(
+      "otpauth://totp/Cloudflare:will%40example.com?secret=jbsw%20y3dp-ehpk3pxp&issuer=Cloudflare&digits=6",
+    );
+    expect(p).toEqual({
+      secret: "JBSWY3DPEHPK3PXP",
+      issuer: "Cloudflare",
+      account: "will@example.com",
+      digits: 6,
+      period: 30,
+      algorithm: "sha1",
+    });
+  });
+  it("finds the seed on a page: URI first, then a manual key, else nothing", () => {
+    expect(
+      findTotpSecret(
+        '<img src="data:..."><a href="otpauth://totp/X:a?secret=JBSWY3DPEHPK3PXP&amp;issuer=X">',
+      ),
+    ).toBe("JBSWY3DPEHPK3PXP");
+    expect(findTotpSecret("Can't scan? Enter this key: jbsw y3dp ehpk 3pxp jbsw y3dp")).toBe(
+      "JBSWY3DPEHPK3PXPJBSWY3DP",
+    );
+    expect(findTotpSecret("Welcome back, nothing to see")).toBeNull();
+  });
+});
+
+describe("credentials", () => {
+  it("file store writes 0600, round-trips, and lists names only", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "autobrowse-creds-"));
+    const store = fileCredentials(join(dir, "c.json"));
+    await store.put("cloudflare", { username: "u", password: "p", totpSecret: RFC_SECRET });
+    expect(statSync(join(dir, "c.json")).mode & 0o777).toBe(0o600);
+    expect(await store.list()).toEqual(["cloudflare"]);
+    expect((await store.get("cloudflare"))?.totpSecret).toBe(RFC_SECRET);
+    expect(await store.get("nope")).toBeNull();
+  });
+  it("env store reads AUTOBROWSE_CRED_* and is read-only", async () => {
+    const env = {
+      AUTOBROWSE_CRED_GOOGLE_ADMIN_USERNAME: "a@b.co",
+      AUTOBROWSE_CRED_GOOGLE_ADMIN_PASSWORD: "pw",
+    };
+    const store = envCredentials(env);
+    expect(await store.list()).toEqual(["google-admin"]);
+    expect((await store.get("google-admin"))?.username).toBe("a@b.co");
+    await expect(store.put("x", { username: "u", password: "p" })).rejects.toThrow(/read-only/);
+  });
+  it("layered: first hit wins, writes go to the first store", async () => {
+    const a = memoryCredentials({ s: { username: "a", password: "1" } });
+    const b = memoryCredentials({
+      s: { username: "b", password: "2" },
+      t: { username: "t", password: "3" },
+    });
+    const l = layeredCredentials(a, b);
+    expect((await l.get("s"))?.username).toBe("a");
+    expect((await l.get("t"))?.username).toBe("t");
+    await l.put("n", { username: "n", password: "4" });
+    expect(await a.list()).toContain("n");
+  });
+});
+
+describe("code sources", () => {
+  const cred = { username: "u@x.co", password: "p", totpSecret: RFC_SECRET, recoveryCodes: [] };
+  it("extracts the code near the word code", () => {
+    expect(extractCode("Your Instantly code is 482913. Expires in 10 minutes (600 seconds).")).toBe(
+      "482913",
+    );
+    expect(extractCode("Order 12345678 shipped")).toBe("12345678");
+    expect(extractCode("nothing")).toBeNull();
+  });
+  it("totp waits out a code about to expire", async () => {
+    const waits: number[] = [];
+    let t = 58_000;
+    const sleep = async (ms: number) => {
+      waits.push(ms);
+      t += ms;
+    };
+    const src = totpSource({ now: () => t, sleep });
+    const code = await src.get({ site: "s", kind: "totp", since: new Date(0) }, cred);
+    expect(waits).toEqual([2_000]);
+    expect(code).toBe(totp(RFC_SECRET, { at: 60_000 }));
+    expect(await src.get({ site: "s", kind: "email", since: new Date(0) }, cred)).toBeNull();
+  });
+  it("email polls until a fresh message with the hint carries a code", async () => {
+    const inbox: Message[] = [
+      { from: "old@x", subject: "code 111111", text: "", at: new Date(1_000) },
+    ];
+    let polls = 0;
+    const reader = {
+      async recent(_inbox: string, since: Date) {
+        polls++;
+        if (polls === 2)
+          inbox.push({
+            from: "no-reply@instantly.ai",
+            subject: "Your code",
+            text: "code: 222222",
+            at: new Date(5_000),
+          });
+        return inbox.filter((m) => m.at >= since);
+      },
+    };
+    let t = 10_000;
+    const src = messageSource({
+      kind: "email",
+      reader,
+      now: () => t,
+      sleep: async (ms) => {
+        t += ms;
+      },
+      pollMs: 1_000,
+    });
+    const code = await src.get(
+      { site: "instantly", kind: "email", since: new Date(2_000), hint: "instantly" },
+      cred,
+    );
+    expect(code).toBe("222222");
+    expect(polls).toBe(2);
+  });
+  it("email gives up at the deadline", async () => {
+    let t = 0;
+    const src = messageSource({
+      kind: "email",
+      reader: { recent: async () => [] },
+      now: () => t,
+      sleep: async (ms) => {
+        t += ms;
+      },
+      pollMs: 1_000,
+      timeoutMs: 3_000,
+    });
+    expect(await src.get({ site: "s", kind: "email", since: new Date(0) }, cred)).toBeNull();
+  });
+  it("first source with an answer wins", async () => {
+    const src = codeSources({ get: async () => null }, { get: async () => "9" });
+    expect(await src.get({ site: "s", kind: "sms", since: new Date(0) }, cred)).toBe("9");
+  });
+});
+
+/** A page as a script: what `text()` says after each act, and which hints exist. */
+function fakePage(script: { text: string[]; present: (h: Hints) => boolean; url?: string }) {
+  const acts: Array<{ op: Op; hints: Hints }> = [];
+  let i = 0;
+  const fp: FlowPage = {
+    page: {} as FlowPage["page"],
+    async open() {},
+    url: () => script.url ?? "https://site.test/login",
+    text: async () => script.text[Math.min(i, script.text.length - 1)] ?? "",
+    html: async () => "",
+    has: async (h) => script.present(h),
+    wait: async () => {},
+    async act(op, hints) {
+      acts.push({ op, hints });
+      if (op.kind === "click") i++;
+    },
+    human(reason) {
+      throw new NeedsHuman(reason);
+    },
+  };
+  return { fp, acts };
+}
+
+const spec = {
+  start: "https://site.test/login",
+  username: { role: "textbox", name: "Email" },
+  password: { role: "textbox", name: "Password" },
+  submit: { role: "button", name: "Log in" },
+  code: {
+    kind: "totp" as const,
+    asks: /authenticator/i,
+    field: { role: "textbox", name: "Code" },
+    submit: { role: "button", name: "Continue" },
+  },
+  rejected: /incorrect/i,
+  success: /dashboard/i,
+};
+
+describe("formLogin", () => {
+  const cred = { username: "u", password: "p", totpSecret: RFC_SECRET, recoveryCodes: [] };
+  it("fills username and password, then the code when asked, and checks success", async () => {
+    const { fp, acts } = fakePage({
+      text: ["login", "Enter the code from your authenticator", "Dashboard"],
+      present: () => true,
+    });
+    const asked: string[] = [];
+    const code = async (k: string) => {
+      asked.push(k);
+      return "123456";
+    };
+    await formLogin("s", spec)({ fp, cred, code });
+    expect(asked).toEqual(["totp"]);
+    expect(acts.map((a) => a.op)).toEqual([
+      { kind: "fill", value: "u" },
+      { kind: "fill", value: "p" },
+      { kind: "click" },
+      { kind: "fill", value: "123456" },
+      { kind: "click" },
+    ]);
+  });
+  it("stops on a rejected password instead of retrying into a lockout", async () => {
+    const { fp } = fakePage({
+      text: ["login", "Incorrect email or password"],
+      present: () => true,
+    });
+    await expect(formLogin("s", spec)({ fp, cred, code: async () => "1" })).rejects.toThrow(
+      LoginFailed,
+    );
+  });
+  it("fails loudly when the page is still not signed in", async () => {
+    const { fp } = fakePage({ text: ["login", "something else"], present: () => true });
+    await expect(formLogin("s", spec)({ fp, cred, code: async () => "1" })).rejects.toThrow(
+      /still on/,
+    );
+  });
+});
+
+describe("loginProvider", () => {
+  const site: SiteLogin = {
+    site: "s",
+    home: "https://site.test/",
+    loggedIn: async () => true,
+    async signIn({ code }) {
+      await code("totp");
+    },
+  };
+  it("signs in with the stored credential and a code from the sources", async () => {
+    const login = loginProvider([site], {
+      credentials: memoryCredentials({
+        s: { username: "u", password: "p", totpSecret: RFC_SECRET },
+      }),
+      codes: totpSource(),
+    });
+    expect(await login(fakePage({ text: [], present: () => true }).fp, "s")).toBe("signed-in");
+    expect(await login(fakePage({ text: [], present: () => true }).fp, "other")).toBe(
+      "unknown-site",
+    );
+  });
+  it("reports a missing credential and a missing code", async () => {
+    const login = loginProvider([site], {
+      credentials: memoryCredentials(),
+      codes: { get: async () => null },
+    });
+    expect(await login(fakePage({ text: [], present: () => true }).fp, "s")).toBe("no-credential");
+    const withCred = loginProvider([site], {
+      credentials: memoryCredentials({ s: { username: "u", password: "p" } }),
+      codes: { get: async () => null },
+    });
+    await expect(withCred(fakePage({ text: [], present: () => true }).fp, "s")).rejects.toThrow(
+      /no totp code/,
+    );
+  });
+});

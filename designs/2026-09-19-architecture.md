@@ -14,6 +14,7 @@ table's "may import" column.
 | `engine/` | Workflow/Step types, Effects, gates, `advance`/`applyAnswer`, the generic Restate run object, the `Runs` registry, `RunEvent` | nothing |
 | `browser/` | sessions (profiles, Browserbase), per-site lock, flow runner (trace, hand-off, `fp.act`), locate (hints → locator, one priority for run time and rendered source), repair seam (`Repairer`: llm now, Stagehand later) | `clients/http`, `llm` types, `recorder` types |
 | `clients/` | one HTTP door; one client per API | nothing |
+| `auth/` | credential store (file 0600 / env / layered), TOTP (RFC 6238), code sources (totp, inbox), `SiteLogin`s, `loginProvider`, TOTP enrollment | `browser` types |
 | `llm/` | `Llm` seam: anthropic, openai, fake | `clients/http` |
 | `memory/` | `Memory` seam: `remember`/`recall`; in-process store, Backboard | `clients/http` |
 | `recorder/` | browser + terminal capture → `Recording` on disk, play/pause, redaction | `browser/session` |
@@ -106,6 +107,27 @@ table's "may import" column.
   never page content beyond the snapshot the repairer already saw.
 - Memory is advisory. A recalled hint is tried like any other proposal and
   checked the same way.
+
+## Auth and guards
+
+- Login walls are the runner's to solve. `fp.open` sees a wall, calls the
+  `login` hook for the site, then opens the URL again. A captcha, a site
+  without a stored credential, or a failed sign-in becomes `NeedsHuman`.
+- `SiteLogin` per site: `loggedIn(fp)` and `signIn(ctx)`; `formLogin`
+  writes the common shape. Locator names written `/pattern/i` match
+  loosely. A rejected password stops at once (no lockouts).
+- Second factors are `CodeSource`s: TOTP from the stored seed (waits out a
+  code about to expire), email codes polled from Gmail after the attempt
+  started, SMS through the same shape later. `enroll-totp` reads the seed
+  off the setup page and stores it, so a site's 2FA is ours from day one.
+- Credentials live in `~/.config/autobrowse/credentials.json` (0600) or
+  `AUTOBROWSE_CRED_*` env from a Secret. Read at sign-in time; never on a
+  plan, in a memo, or in a journal.
+- Guards (`engine/guards.ts`) are the named situations a person approves:
+  `purchase`, `password` (resetting an existing inbox's password),
+  `irreversible` (repairing a locator miss on an irreversible act). Each
+  is a gate; a guard that is off answers itself "approved". `GUARDS=none`
+  runs unattended. `human` is not a guard: it means code could not do it.
 
 ## Errors and retries
 

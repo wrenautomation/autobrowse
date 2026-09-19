@@ -7,6 +7,16 @@ Separate from `wren` (the campaign system) on purpose: different
 credentials, different runtime (browser sessions, waits for a human),
 different release pace.
 
+## Hands off
+
+Nothing waits for a person unless a guard says so. Login walls are solved
+with stored credentials, TOTP generated in-process, and one-time codes
+read from an inbox we control. Guards (`GUARDS`) are the situations a
+person still approves: a purchase, a password reset, a locator miss on an
+irreversible act. Each is on by default and can be switched off. What
+stays human: hardware keys, adding a payment method, captchas until
+Browserbase takes them.
+
 ## How it works
 
 - **Durable.** Every flow is a Restate Virtual Object. Each step is one
@@ -58,7 +68,9 @@ pnpm worker                     # Restate endpoint on :9081, UI + API on :9080
 restate cloud env tunnel        # expose it to the shared Restate Cloud env, register it
 pnpm ui:dev                     # SPA with hot reload on :5173, proxied to :9080
 
-pnpm autobrowse login cloudflare               # log in once per site (headed browser)
+echo '{"username":"…","password":"…"}' | pnpm autobrowse creds set cloudflare   # stdin, never argv
+pnpm autobrowse login cloudflare               # signs in by itself: password + TOTP/email code
+pnpm autobrowse enroll-totp cloudflare --url https://dash.cloudflare.com/profile/authentication  # reads the seed, stores it, confirms
 pnpm autobrowse record buy-domain --site cloudflare --url https://dash.cloudflare.com/ --terminal
 pnpm autobrowse compile buy-domain             # → recordings/buy-domain/outline.json, src/workflows/buy-domain/
 pnpm autobrowse compile buy-domain --no-llm --from-outline
@@ -95,9 +107,10 @@ Kubernetes path.
 ## Layout
 
 ```
-src/engine/     workflow/step types, effects seam, run (advance/answer), the Restate run object, Runs registry, events
+src/engine/     workflow/step types, effects seam, guards, run (advance/answer), the Restate run object, Runs registry, events
 src/browser/    session (profiles, Browserbase), lock, flow runner (trace, hand-off, fp.act), locate, repair, flows/
 src/clients/    http.ts (timeouts, retries, safe errors) + one client per API
+src/auth/       credentials (file/env/layered), TOTP, code sources (totp, email), site logins, TOTP enrollment
 src/llm/        Llm seam: anthropic, openai, fake; completeJson
 src/memory/     Memory seam: in-process store, Backboard; what repairs and gate answers taught us
 src/recorder/   observer (in page), browser + terminal capture, redaction, store

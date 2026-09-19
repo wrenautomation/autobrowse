@@ -9,6 +9,7 @@ import { Command } from "commander";
 import type { GateName } from "../engine/effects.js";
 import { summarize } from "../engine/run.js";
 import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
+import { registerAuthCommands } from "./cli-auth.js";
 import { registerRecordCommands } from "./cli-record.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
@@ -132,6 +133,7 @@ program
   });
 
 registerRecordCommands(program, settings);
+registerAuthCommands(program, settings);
 
 program.parseAsync().catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : String(err));

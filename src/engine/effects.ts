@@ -20,7 +20,8 @@ export interface Effects {
   now(): Promise<Date>;
 }
 
-export type GateName = "purchase" | "human";
+/** `human` = a person has to do something; the others are guards (see guards.ts) a person approves. */
+export type GateName = "purchase" | "password" | "human";
 
 export interface GateAnswer {
   approved: boolean;

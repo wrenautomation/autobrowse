@@ -102,17 +102,25 @@ async function browserbaseSession(bb: Browserbase, contextId: string) {
 }
 
 /** The page shows a login, captcha or verification wall. */
-export async function looksLikeWall(page: Page): Promise<string | null> {
+export interface Wall {
+  /** `login` and `challenge` can be solved with credentials and codes; `captcha` still needs a person (or Browserbase). */
+  kind: "login" | "challenge" | "captcha";
+  detail: string;
+}
+
+export async function looksLikeWall(page: Page): Promise<Wall | null> {
   const url = page.url();
-  if (/accounts\.google\.com|\/login|\/sign-in|signin/i.test(url)) return `login page: ${url}`;
+  if (/accounts\.google\.com|\/login|\/sign-in|signin/i.test(url))
+    return { kind: "login", detail: `login page: ${url}` };
   const text = (
     await page
       .locator("body")
       .innerText()
       .catch(() => "")
   ).slice(0, 4000);
-  if (/verify you are human|captcha|unusual traffic/i.test(text)) return "captcha";
+  if (/verify you are human|captcha|unusual traffic/i.test(text))
+    return { kind: "captcha", detail: "captcha" };
   if (/verify your phone|enter the code|2-step verification/i.test(text))
-    return "verification challenge";
+    return { kind: "challenge", detail: "verification challenge" };
   return null;
 }

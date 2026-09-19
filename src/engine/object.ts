@@ -15,6 +15,7 @@ import type { DistributiveOmit } from "../types.js";
 import { type Effects, type GateAnswer, type GateName, Unrecoverable } from "./effects.js";
 import type { RunEvent, RunRef } from "./events.js";
 import { REGISTRY, REGISTRY_KEY, type RunsRegistry } from "./registry.js";
+import type { AdvanceOptions } from "./run.js";
 import {
   advance,
   applyAnswer,
@@ -158,6 +159,7 @@ export function makeRunObject<W extends AnyWorkflow>(
   workflow: W,
   deps: DepsOf<W>,
   host: HostDeps,
+  opts: AdvanceOptions = {},
 ): RunObjectDefinition<W> {
   const service = { name: workflow.name } as const;
   type Self = RunObject<W>;
@@ -240,7 +242,7 @@ export function makeRunObject<W extends AnyWorkflow>(
         if (await ctx.get<boolean>(PAUSED)) return; // `play` sends the next step
         const plan = workflow.plan.parse(raw);
         const fx = effects(ctx);
-        const a = await advance(fx, workflow, deps, plan);
+        const a = await advance(fx, workflow, deps, plan, opts);
         if (a.kind === "continue") {
           await emit(ctx, { type: "step", step: a.step, result: a.result });
           next(ctx, gen);

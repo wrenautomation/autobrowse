@@ -58,6 +58,12 @@ const schema = z.object({
   memory: z.enum(["backboard", "none"]).default("none"),
   backboardApiKey: z.string().min(1).optional(),
   backboardAssistant: z.string().min(1).default("autobrowse"),
+  /** Which guards stay on: `all`, `none`, or a comma list (purchase, password, irreversible). */
+  guards: z.string().default("all"),
+  /** Site credentials for automated sign-in; 0600 JSON. Env (`AUTOBROWSE_CRED_*`) is read first. */
+  credentialsFile: z.string().min(1).default("~/.config/autobrowse/credentials.json"),
+  /** Inbox that receives email one-time codes when a credential does not name one. */
+  codesInbox: z.string().email().optional(),
   /** Restate admin API; set to self-register this worker on start (Docker/k8s). */
   restateAdminUrl: z.string().url().optional(),
   /** How Restate reaches this worker, for self-registration: http://worker:9081 in compose. */
@@ -101,6 +107,9 @@ export const ENV_KEYS = {
   memory: "MEMORY",
   backboardApiKey: "BACKBOARD_API_KEY",
   backboardAssistant: "BACKBOARD_ASSISTANT",
+  guards: "GUARDS",
+  credentialsFile: "CREDENTIALS_FILE",
+  codesInbox: "CODES_INBOX",
   restateAdminUrl: "RESTATE_ADMIN_URL",
   restateEndpointUrl: "RESTATE_ENDPOINT_URL",
 } as const satisfies Record<keyof Settings, string>;

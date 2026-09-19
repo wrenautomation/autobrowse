@@ -1,6 +1,19 @@
 /** Composition root: settings → clients → workflow deps → Restate services. Secrets stay inside the clients. */
+
 import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Logger } from "pino";
+import {
+  type CredentialStore,
+  codeSources,
+  envCredentials,
+  fileCredentials,
+  type LoginProvider,
+  layeredCredentials,
+  loginProvider,
+  messageSource,
+  SITE_LOGINS,
+  totpSource,
+} from "../auth/index.js";
 import { flowRunner } from "../browser/flow.js";
 import { llmRepairer, noRepairer, rememberingRepairer } from "../browser/repair.js";
 import type { BrowserOptions } from "../browser/session.js";
@@ -12,13 +25,14 @@ import {
   webhookChannel,
 } from "../channels/index.js";
 import { cloudflare } from "../clients/cloudflare.js";
-import { gmailClient } from "../clients/gmail.js";
+import { type GmailUserClient, gmailClient } from "../clients/gmail.js";
 import { googleAdmin } from "../clients/google-admin.js";
 import { httpClient } from "../clients/http.js";
 import { domainAvailability } from "../clients/rdap.js";
 import { ssmRosterStore } from "../clients/roster.js";
 import { wrenClient } from "../clients/wren.js";
 import { Unrecoverable } from "../engine/effects.js";
+import { parseGuards } from "../engine/guards.js";
 import { makeRunObject } from "../engine/object.js";
 import { runsRegistry } from "../engine/registry.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
@@ -98,6 +112,24 @@ export interface App {
   memory: Memory;
 }
 
+/** Env credentials first (a Secret in k8s), then the 0600 file; writes go to the file. */
+export function credentialsFor(settings: Settings): CredentialStore {
+  return layeredCredentials(envCredentials(), fileCredentials(settings.credentialsFile));
+}
+
+/** Sign-in for every known site: TOTP from the stored seed, email codes read through Gmail. */
+export function loginFor(settings: Settings, gmail: GmailUserClient): LoginProvider {
+  const email = messageSource({
+    kind: "email",
+    reader: gmail,
+    ...(settings.codesInbox ? { inbox: settings.codesInbox } : {}),
+  });
+  return loginProvider(SITE_LOGINS, {
+    credentials: credentialsFor(settings),
+    codes: codeSources(totpSource(), email),
+  });
+}
+
 export function memoryFor(settings: Settings, http = httpClient()): Memory {
   if (settings.memory === "backboard" && settings.backboardApiKey)
     return backboardMemory({
@@ -108,12 +140,8 @@ export function memoryFor(settings: Settings, http = httpClient()): Memory {
   return memoryStore();
 }
 
-export function buildApp(settings: Settings, log: Logger): App {
-  const http = httpClient();
-  const llm = llmFor(settings, http);
-  const memory = memoryFor(settings, http);
-
-  // Google: one service-account key, one token supplier per (subject, scopes), each caching its bearer.
+/** Google: one service-account key, one token supplier per (subject, scopes), each caching its bearer. */
+export function googleTokens(settings: Settings) {
   const tokens = new Map<string, TokenSupplier>();
   let key: ReturnType<typeof loadServiceAccountKey> | null = null;
   const tokenFor = (subject: string, scopes: readonly string[]): TokenSupplier => {
@@ -128,11 +156,23 @@ export function buildApp(settings: Settings, log: Logger): App {
     }
     return t;
   };
-  const gmail = gmailClient({
-    tokenFor,
-    scopes: { settings: SCOPES.gmailSettings, send: SCOPES.gmailSend },
+  return tokenFor;
+}
+
+export function gmailFor(settings: Settings, http = httpClient()): GmailUserClient {
+  return gmailClient({
+    tokenFor: googleTokens(settings),
+    scopes: { settings: SCOPES.gmailSettings, send: SCOPES.gmailSend, read: SCOPES.gmailRead },
     http,
   });
+}
+
+export function buildApp(settings: Settings, log: Logger): App {
+  const http = httpClient();
+  const llm = llmFor(settings, http);
+  const memory = memoryFor(settings, http);
+  const tokenFor = googleTokens(settings);
+  const gmail = gmailFor(settings, http);
   const ssm = lazy(() => new SSMClient({ region: settings.awsRegion }));
 
   const list: Channel[] = [];
@@ -151,8 +191,11 @@ export function buildApp(settings: Settings, log: Logger): App {
   const bus = eventBus();
   const channel = channels([...list, bus, memoryChannel(memory)]);
 
+  const guards = parseGuards(settings.guards);
   const browser = flowRunner(browserOptions(settings), {
     repairer: rememberingRepairer(memory, llm ? llmRepairer(llm) : noRepairer),
+    login: loginFor(settings, gmail),
+    repairIrreversible: !guards.has("irreversible"),
     onRepair: (r) =>
       log.warn(
         { repair: r },
@@ -208,7 +251,7 @@ export function buildApp(settings: Settings, log: Logger): App {
 
   const host = { emit: (e: Parameters<Channel["deliver"]>[0]) => channel.deliver(e) };
   return {
-    services: [runsRegistry, makeRunObject(domainWorkflow, domainDeps, host)],
+    services: [runsRegistry, makeRunObject(domainWorkflow, domainDeps, host, { guards })],
     channel,
     bus,
     memory,

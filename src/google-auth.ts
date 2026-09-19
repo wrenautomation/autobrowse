@@ -16,6 +16,7 @@ export const SCOPES = {
   siteVerification: "https://www.googleapis.com/auth/siteverification",
   gmailSettings: "https://www.googleapis.com/auth/gmail.settings.basic",
   gmailSend: "https://www.googleapis.com/auth/gmail.send",
+  gmailRead: "https://www.googleapis.com/auth/gmail.readonly",
 } as const;
 
 const DEFAULT_TOKEN_URI = "https://oauth2.googleapis.com/token";
