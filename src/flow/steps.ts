@@ -294,9 +294,11 @@ const steps: Record<StepName, Step> = {
     if (added.length === 0) return done("all inboxes already on the roster", now);
     const since = await fx.now();
     await fx.run("wren redeploy", () => deps.wren.redeploy());
-    const deployed = await fx.run("wren deploy wait", () =>
-      deps.wren.awaitDeploy(since, 15 * 60_000),
-    );
+    const deployed = await pollUntil(fx, "wren deploy", 15 * 60_000, async () => {
+      const state = await deps.wren.deployState(since);
+      if (state === "failed") throw new Error("wren deploy failed; see its Actions tab");
+      return state === "success";
+    });
     if (!deployed) throw new Error("wren did not finish deploying in 15 minutes");
     return done(`added ${added.join(", ")}; wren redeployed`, now);
   },

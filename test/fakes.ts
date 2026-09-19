@@ -133,8 +133,8 @@ export function fakeDeps(
       async redeploy() {
         calls.push("redeploy");
       },
-      async awaitDeploy() {
-        return true;
+      async deployState() {
+        return "success" as const;
       },
       async startLoops(a) {
         calls.push(`loops ${a}`);
