@@ -8,3 +8,4 @@ coverage/
 recordings/
 screenshots/
 test/.generated-*/
+ui/dist/

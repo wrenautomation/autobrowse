@@ -22,6 +22,7 @@ import {
   type TokenSupplier,
 } from "../google-auth.js";
 import { makeLlm } from "../llm/index.js";
+import { type EventBus, eventBus } from "../ui/bus.js";
 import { type DomainDeps, domainWorkflow } from "../workflows/domain/index.js";
 import type { Settings } from "./config.js";
 
@@ -68,6 +69,8 @@ export interface App {
     | ReturnType<typeof makeRunObject>[]
     | Array<ReturnType<typeof makeRunObject> | typeof runsRegistry>;
   channel: Channel;
+  /** The UI's live feed; also one of the channels. */
+  bus: EventBus;
 }
 
 export function buildApp(settings: Settings, log: Logger): App {
@@ -108,7 +111,8 @@ export function buildApp(settings: Settings, log: Logger): App {
       }),
     );
   if (list.length === 0) log.warn("no channel configured: gates are visible only in the UI/CLI");
-  const channel = channels(list);
+  const bus = eventBus();
+  const channel = channels([...list, bus]);
 
   const domainDeps: DomainDeps = {
     cloudflare: cloudflare({
@@ -157,5 +161,6 @@ export function buildApp(settings: Settings, log: Logger): App {
   return {
     services: [runsRegistry, makeRunObject(domainWorkflow, domainDeps, host)],
     channel,
+    bus,
   };
 }

@@ -22,12 +22,26 @@ different release pace.
 - **Verified.** A browser step is proved by an API read afterwards (the
   purchase by the Registrar API, DKIM by the record's shape, the user by
   Directory). The trace is for the person; the API read is for the machine.
-- **Recorded.** `autobrowse record <site> --flow <name>` runs Playwright
-  codegen on the site's logged-in profile. The recording is transcribed
-  into a typed flow (`src/browser/flows/`) with visible-label selectors;
-  the raw recording stays out of git.
+- **Recorded.** `autobrowse record <name>` opens a headed browser with an
+  observer: clicks, typing, navigations, each with a screenshot and
+  locator hints (role, label, text; never CSS). Typed secrets are redacted
+  at capture. `p` pauses (nothing captured), `q` finishes, any other line
+  is a note. `--terminal` records the shell leg after. Raw recordings
+  stay out of git.
+- **Compiled.** `autobrowse compile <name>`: recording → `outline.json`
+  (steps at notes and navigations, typed inputs vs secrets, irreversible
+  verbs, pauses → hand-offs) → a workflow module plus a test that
+  typechecks against the library. A model may polish names and proofs; it
+  can never change what runs. Edit the outline, `--from-outline` again.
+- **Repaired.** Generated flows act through `fp.act(op, hints, {goal})`. A
+  stale locator asks the repairer (a model, later Stagehand) for new hints
+  for the same goal, tries once, reports the repair. Irreversible ops are
+  never repaired; they hand off.
 - **Play/pause.** `pause` holds before the next step; `play` runs on. A
   dry run stops before the first irreversible step.
+- **Watched.** The worker serves a UI on `:9080`: runs, the open gate with
+  its screenshot, controls, live events, recordings and compile.
+  `/hooks/inbound` takes what a person typed on any channel.
 
 ## Flows built
 
@@ -39,13 +53,15 @@ different release pace.
 
 ```sh
 cp .env.example .env            # fill it
-pnpm worker                     # Restate endpoint on :9081
+pnpm ui:build                   # the SPA the worker serves
+pnpm worker                     # Restate endpoint on :9081, UI + API on :9080
 restate cloud env tunnel        # expose it to the shared Restate Cloud env, register it
+pnpm ui:dev                     # SPA with hot reload on :5173, proxied to :9080
 
-pnpm autobrowse record cloudflare              # log in once per site (headed browser)
-pnpm autobrowse record google-admin
-pnpm autobrowse record instantly
-pnpm autobrowse record cloudflare --flow buy   # codegen a flow on the logged-in profile
+pnpm autobrowse login cloudflare               # log in once per site (headed browser)
+pnpm autobrowse record buy-domain --site cloudflare --url https://dash.cloudflare.com/ --terminal
+pnpm autobrowse compile buy-domain             # → recordings/buy-domain/outline.json, src/workflows/buy-domain/
+pnpm autobrowse compile buy-domain --no-llm --from-outline
 
 pnpm autobrowse domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin --dry-run
 pnpm autobrowse domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin
@@ -63,11 +79,20 @@ pnpm autobrowse reset wren-six.com
 ## Layout
 
 ```
+src/engine/     workflow/step types, effects seam, run (advance/answer), the Restate run object, Runs registry, events
+src/browser/    session (profiles, Browserbase), lock, flow runner (trace, hand-off, fp.act), locate, repair, flows/
 src/clients/    http.ts (timeouts, retries, safe errors) + one client per API
-src/browser/    session (profiles, Browserbase), lock (one flow per site), flow (runner: tracing, hand-offs), flows/
-src/flow/       plan (zod), effects (host seam), steps (the domain steps), run (advance / answer / resume)
-src/restate/    the DomainProvision object
-test/           fakes + flow, http, lock, cloudflare, roster, restate (Docker)
+src/llm/        Llm seam: anthropic, openai, fake; completeJson
+src/recorder/   observer (in page), browser + terminal capture, redaction, store
+src/compiler/   structure → outline → render (+ polish); output typechecks
+src/channels/   email, webhook, inbound command parser
+src/deps/       SecretSource, Shell: what compiled workflows need
+src/workflows/  one dir per workflow: plan, deps, steps, index
+src/ui/         Hono API (+ SSE bus, bearer, rate limit) and the static SPA
+src/app/        settings, composition root, CLI, worker
+ui/             React SPA (Vite); ui/dist is served by the worker
+designs/        architecture and per-workflow design docs
+test/           one file per module; restate.test needs Docker
 ```
 
 ## Coupling to `wren`

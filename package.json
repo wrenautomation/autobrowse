@@ -9,27 +9,37 @@
   "scripts": {
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p ui --noEmit",
     "test": "vitest run",
     "worker": "tsx src/app/main.ts",
     "autobrowse": "tsx src/app/cli.ts",
     "record": "tsx src/app/cli-record.ts",
-    "gates": "pnpm lint && pnpm typecheck && pnpm test"
+    "gates": "pnpm lint && pnpm typecheck && pnpm test",
+    "ui:dev": "vite --config ui/vite.config.ts ui",
+    "ui:build": "vite build --config ui/vite.config.ts ui"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",
     "@restatedev/restate-sdk-testcontainers": "1.17.1",
     "@types/node": "22.20.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
     "typescript": "5.9.3",
+    "vite": "8.3.0",
     "vitest": "5.0.1"
   },
   "dependencies": {
     "@aws-sdk/client-ssm": "3.1136.0",
+    "@hono/node-server": "2.1.1",
     "@restatedev/restate-sdk": "1.17.1",
     "@restatedev/restate-sdk-clients": "1.17.1",
     "commander": "15.0.0",
+    "hono": "4.13.8",
     "pino": "10.3.1",
     "playwright": "1.63.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "smol-toml": "1.8.0",
     "tsx": "4.23.13",
     "zod": "4.6.5"

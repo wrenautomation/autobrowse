@@ -12,11 +12,12 @@ table's "may import" column.
 | layer | holds | may import |
 |---|---|---|
 | `engine/` | Workflow/Step types, Effects, gates, `advance`/`applyAnswer`, the generic Restate run object, the `Runs` registry, `RunEvent` | nothing |
-| `browser/` | sessions (profiles, Browserbase), per-site lock, flow runner (trace, hand-off), repair seam | `clients/http` |
+| `browser/` | sessions (profiles, Browserbase), per-site lock, flow runner (trace, hand-off, `fp.act`), locate (hints → locator, one priority for run time and rendered source), repair seam (`Repairer`: llm now, Stagehand later) | `clients/http`, `llm` types, `recorder` types |
 | `clients/` | one HTTP door; one client per API | nothing |
 | `llm/` | `Llm` seam: anthropic, openai, fake | `clients/http` |
 | `recorder/` | browser + terminal capture → `Recording` on disk, play/pause, redaction | `browser/session` |
-| `compiler/` | `Recording` → outline → workflow source draft | `recorder` types, `llm` |
+| `compiler/` | `Recording` → `outline.json` → workflow module + test; output typechecks against the library (tested) | `recorder` types, `llm`, `browser/locate`, `deps` |
+| `deps/` | `SecretSource` (env, memory), `Shell` (local, fake): what compiled workflows depend on | nothing |
 | `channels/` | deliver `RunEvent`s (email, webhook, iMessage); parse inbound commands | `engine` types |
 | `workflows/<name>/` | plan (zod), deps, steps, flows | `engine`, `browser`, `clients` |
 | `ui/` | Hono API + React app | `engine` types, `recorder`, `compiler` |
@@ -67,14 +68,21 @@ table's "may import" column.
 
 ## Compiler
 
-- `structure(recording)`: deterministic. Groups actions into steps at
-  navigations and notes, flags irreversible steps by verb (purchase,
-  create, generate, delete, confirm, pay), turns inputs into plan fields.
-- `render(outline)`: deterministic template → a valid workflow module
-  (`defineWorkflow` + one `defineFlow` per browser step + terminal steps),
-  a test skeleton, TODO comments where a proof is needed.
-- `polish(outline, llm)`: optional. Names steps, proposes API proofs and
-  gates. The LLM proposes, the template disposes; output must compile.
+- `structure(recording)`: deterministic. Steps split at notes (the person
+  named what comes next) and at navigations after a gesture. Typed text →
+  plan field keyed by label; redacted text → secret key; click whose label
+  spends/creates/sends → irreversible (and so its step); pause → `human`
+  op; terminal commands → one terminal step, interactive ones flagged.
+- `render(outline)`: templates only, every line one the domain workflow
+  has by hand. One `defineFlow` per browser step using `fp.act(op, hints,
+  {goal, irreversible})`; secrets read with `deps.secrets.get` outside
+  `fx.run`; shell output reduced to an exit code before journaling; a gate
+  before each irreversible step; a test that dry-runs the recorded example.
+- `polish(outline, llm)`: optional. Merges only names, descriptions,
+  proofs and `irreversible → true` by step index. Never changes ops,
+  fields, order, or clears a flag.
+- The outline is saved beside the recording; `compile --from-outline`
+  re-renders an edited one without the model.
 
 ## Channels
 
@@ -87,13 +95,22 @@ table's "may import" column.
 
 ## UI
 
-- Hono in the worker process: `/api/runs`, `/api/runs/:wf/:key` (+
-  `approve|reject|pause|play|reset`), `/api/events` (SSE), `/api/artifacts/*`
-  (inside `ARTIFACTS_DIR` only), `/api/recordings`, `/api/compile`,
-  `/hooks/inbound`. Mutations need `UI_TOKEN`.
-- React app: Runs (timeline, open gate with screenshot and trace, controls,
-  Browserbase live view when remote), Recordings (list, play/pause state,
-  compile), Workflows (what exists, start one).
+- Hono in the worker process (`src/ui/api.ts`): `/api/workflows` (with a
+  JSON schema per plan), `/api/runs`, `/api/runs/:wf/:key` (GET status,
+  POST start, POST `approve|reject|pause|play|reset`), `/api/events` (SSE
+  over an in-process bus; `after=` resumes), `/api/recordings[/:name
+  [/files/*|/compile]]`, `/api/artifacts?path=` (inside `ARTIFACTS_DIR`
+  only), `/hooks/inbound` (rate limited; `parseCommand` with known
+  workflow names so "yes looks fine" is a note).
+- `UI_TOKEN` set: every route needs the bearer and the server binds all
+  interfaces. Unset: no auth, loopback only. The SPA keeps the token in
+  localStorage and sends it as a header; SSE is read over `fetch`, not
+  `EventSource`, so the token never rides a URL.
+- React SPA (`ui/`, Vite, hash routes, no router dep): Runs (list, start
+  form from the plan schema, dry-run default on), Run (gate card first with
+  screenshot and trace, pause/play/reset, step results, plan), Recordings
+  (list, screenshots per action, compile → outline + files), a live ticker.
+- Built `ui/dist` is served by the worker; `pnpm ui:dev` proxies to it.
 
 ## Rules
 
