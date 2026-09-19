@@ -119,6 +119,26 @@ describe("domain run object", () => {
     expect(deps.calls).not.toContain("buy second.test");
   });
 
+  it("a transient error inside an effect is retried, and the step goes on to finish", async () => {
+    const domain = "flaky.test";
+    // A network blip on the first try; the runtime retries the effect and the second try passes.
+    deps.failCheckWith = new Error("page.goto: net::ERR_INTERNET_DISCONNECTED");
+    deps.failCheckTimes = 1;
+    try {
+      await object(domain).run({ domain, inboxes: inbox });
+      const s = await until(
+        () => object(domain).status(),
+        (s) => s.gate !== null || s.outcome?.status === "failed",
+        30_000,
+      );
+      expect(s.outcome?.status).not.toBe("failed");
+      expect(s.gate?.name).toBe("purchase");
+    } finally {
+      deps.failCheckWith = null;
+      deps.failCheckTimes = Number.POSITIVE_INFINITY;
+    }
+  });
+
   it("an unrecoverable error inside an effect fails the step at once, and NeedsHuman keeps its type", async () => {
     const domain = "noconfig.test";
     deps.failCheckWith = new Unrecoverable("CLOUDFLARE_API_TOKEN is required");

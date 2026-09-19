@@ -91,6 +91,31 @@ export interface FlowRunner {
   run<I, O>(flow: BrowserFlow<I, O>, input: I): Promise<O>;
 }
 
+/**
+ * The browser leg broke under the flow (Chrome died, the network went
+ * away, the CDP socket closed). Nothing about the site or the flow is
+ * wrong, so the host retries the whole flow with a fresh session.
+ */
+export class FlowInterrupted extends Error {
+  constructor(
+    flow: string,
+    cause: unknown,
+    readonly artifacts: { screenshot?: string; trace?: string },
+  ) {
+    super(`${flow}: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = "FlowInterrupted";
+  }
+}
+
+const TRANSIENT =
+  /target (page|context|browser) has been closed|browser has been closed|target closed|connection closed|websocket|socket hang up|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|net::ERR_(INTERNET_DISCONNECTED|NETWORK_CHANGED|CONNECTION_(RESET|CLOSED|REFUSED)|NAME_NOT_RESOLVED|TIMED_OUT|ADDRESS_UNREACHABLE)|browser process (crashed|exited)|Protocol error.*(Target|Session) closed/i;
+
+/** Sleep, a dropped network, a crashed or closed browser: retry, do not fail. */
+export function isTransientBrowserError(err: unknown): boolean {
+  const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  return TRANSIENT.test(msg);
+}
+
 /** A flow threw something other than NeedsHuman; the artifacts say where. */
 export class FlowFailed extends Error {
   constructor(
@@ -151,7 +176,12 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
   return {
     run: (flow, input) =>
       locks.withLock(flow.site, async () => {
-        const session = await openSession(flow.site, opts);
+        // Opening the browser is the first thing the network or the machine can break.
+        const session = await openSession(flow.site, opts).catch((err: unknown) => {
+          if (isTransientBrowserError(err))
+            throw new FlowInterrupted(`${flow.site}/${flow.name}`, err, {});
+          throw err;
+        });
         const stamp = `${flow.site}-${flow.name}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
         mkdirSync(artifactsDir, { recursive: true });
         // Tracing is best effort: a CDP-attached context may refuse it.
@@ -261,6 +291,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             err.artifacts = artifacts;
             throw err;
           }
+          if (isTransientBrowserError(err))
+            throw new FlowInterrupted(`${flow.site}/${flow.name}`, err, artifacts);
           throw new FlowFailed(`${flow.site}/${flow.name}`, err, artifacts);
         } finally {
           if (tracing) await session.context.tracing.stop().catch(() => undefined);

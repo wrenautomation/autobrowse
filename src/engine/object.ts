@@ -52,11 +52,17 @@ export interface HostDeps {
 }
 
 /** Restate retries a failed `ctx.run` forever by default; this is what a step gets instead. */
+/**
+ * Transient failures (network gone, browser crashed, 5xx) back off up to
+ * five minutes between tries and keep trying for about a day: a laptop
+ * lid or an outage is a pause, not a failure. Unrecoverable errors skip
+ * this entirely.
+ */
 const RETRY = {
-  maxRetryAttempts: 6,
+  maxRetryAttempts: 300,
   initialRetryInterval: 1_000,
   retryIntervalFactor: 2,
-  maxRetryInterval: 30_000,
+  maxRetryInterval: 300_000,
 };
 
 /** Error codes that let the original error type survive the journal. */
