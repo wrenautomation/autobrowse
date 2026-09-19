@@ -32,13 +32,16 @@ describe("isTransientBrowserError", () => {
 
 describe("flowRunner", () => {
   const dir = mkdtempSync(join(tmpdir(), "autobrowse-int-"));
-  const runner = flowRunner({
-    tier: "local",
-    channel: "chromium",
-    profilesDir: join(dir, "profiles"),
-    artifactsDir: join(dir, "artifacts"),
-    headless: true,
-  });
+  const runner = flowRunner(
+    {
+      tier: "local",
+      channel: "chromium",
+      profilesDir: join(dir, "profiles"),
+      artifactsDir: join(dir, "artifacts"),
+      headless: true,
+    },
+    { pace: null },
+  );
   it("a closed browser mid-flow is FlowInterrupted, a flow bug is FlowFailed", async () => {
     const dies = defineFlow<undefined, void>({
       site: "scratch",
@@ -58,4 +61,16 @@ describe("flowRunner", () => {
     });
     await expect(runner.run(bug, undefined)).rejects.toBeInstanceOf(FlowFailed);
   }, 60_000);
+});
+
+describe("pace", () => {
+  it("draws log-uniform delays inside the range", async () => {
+    const { drawMs, HUMAN_PACE } = await import("../src/browser/flow.js");
+    for (const r of [0, 0.25, 0.5, 0.99]) {
+      const ms = drawMs(HUMAN_PACE.beforeAct, () => r);
+      expect(ms).toBeGreaterThanOrEqual(HUMAN_PACE.beforeAct[0]);
+      expect(ms).toBeLessThanOrEqual(HUMAN_PACE.beforeAct[1]);
+    }
+    expect(drawMs([100, 1000], () => 0.5)).toBe(316);
+  });
 });

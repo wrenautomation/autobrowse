@@ -35,6 +35,11 @@ const schema = z.object({
   profilesDir: z.string().min(1).default("~/.config/autobrowse/profiles"),
   /** Local browser: the installed Chrome (default, falls back) or Playwright's chromium (containers). */
   browserChannel: z.enum(["chrome", "chromium"]).default("chrome"),
+  /** Headless by default; false on a laptop worker, since Cloudflare's bot check passes only with a window. */
+  browserHeadless: z
+    .string()
+    .default("true")
+    .transform((v) => !/^(false|0|no)$/i.test(v)),
   /** Screenshots and Playwright traces from flows that needed a person or failed. */
   artifactsDir: z.string().min(1).default("~/.config/autobrowse/artifacts"),
   /** Raw Playwright codegen output from `record --flow`; may hold typed secrets, never committed. */
@@ -107,6 +112,7 @@ export const ENV_KEYS = {
   browserbaseProjectId: "BROWSERBASE_PROJECT_ID",
   profilesDir: "PROFILES_DIR",
   browserChannel: "BROWSER_CHANNEL",
+  browserHeadless: "BROWSER_HEADLESS",
   artifactsDir: "ARTIFACTS_DIR",
   recordingsDir: "RECORDINGS_DIR",
   logLevel: "LOG_LEVEL",

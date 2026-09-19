@@ -123,7 +123,8 @@ async function journaled<T>(
         nh.artifacts = artifacts;
         throw nh;
       }
-      if (artifacts.screenshot || artifacts.trace) throw new FlowFailed(name, reason, artifacts);
+      if (artifacts.screenshot || artifacts.aria || artifacts.trace)
+        throw new FlowFailed(name, reason, artifacts);
       throw new Unrecoverable(reason);
     }
     // Retries exhausted: Restate's own terminal wrapper. The step fails with the last message.

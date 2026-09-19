@@ -12,14 +12,20 @@
  * raw and may hold typed secrets; it stays out of git. What goes in is the
  * typed flow with visible-label selectors, so a redesign fails loudly.
  */
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright";
 import { expandHome } from "../google-auth.js";
 import { type Hints, locate } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
 import { canLearn, noRepairer, type Repairer, type RepairReport, snapshotPage } from "./repair.js";
-import { type BrowserOptions, looksLikeWall, NeedsHuman, openSession } from "./session.js";
+import {
+  type Artifacts,
+  type BrowserOptions,
+  looksLikeWall,
+  NeedsHuman,
+  openSession,
+} from "./session.js";
 
 /** A site names a persistent profile; any kebab-case string. Known ones have a home page for `login`. */
 export type Site = string;
@@ -106,7 +112,7 @@ export class FlowInterrupted extends Error {
   constructor(
     flow: string,
     cause: unknown,
-    readonly artifacts: { screenshot?: string; trace?: string },
+    readonly artifacts: Artifacts,
   ) {
     super(`${flow}: ${cause instanceof Error ? cause.message : String(cause)}`);
     this.name = "FlowInterrupted";
@@ -127,7 +133,7 @@ export class FlowFailed extends Error {
   constructor(
     flow: string,
     cause: unknown,
-    readonly artifacts: { screenshot?: string; trace?: string },
+    readonly artifacts: Artifacts,
   ) {
     super(`${flow}: ${cause instanceof Error ? cause.message : String(cause)}`);
     this.name = "FlowFailed";
@@ -136,6 +142,12 @@ export class FlowFailed extends Error {
 
 export interface RunnerOptions {
   repairer?: Repairer;
+  /**
+   * Human-like timing: a random pause before every act and per-key delay
+   * while typing, so a session does not look like a script firing at
+   * machine speed. On by default; tests turn it off.
+   */
+  pace?: Pace | null;
   /**
    * Solves a login wall for a site: "signed-in" to retry the open,
    * anything else to hand off. Absent = every wall is a person's.
@@ -149,6 +161,20 @@ export interface RunnerOptions {
 }
 
 const ACT_TIMEOUT_MS = 15_000;
+
+export interface Pace {
+  /** Pause before an act, ms, drawn each time. */
+  beforeAct: [number, number];
+  /** Delay between typed keys, ms, drawn per key. */
+  perKey: [number, number];
+}
+
+export const HUMAN_PACE: Pace = { beforeAct: [350, 1_600], perKey: [40, 140] };
+
+/** Log-uniform in [lo, hi]: mostly quick, sometimes slow, like a person. */
+export function drawMs([lo, hi]: [number, number], random = Math.random): number {
+  return Math.round(Math.exp(Math.log(lo) + random() * (Math.log(hi) - Math.log(lo))));
+}
 const SETTLE_MS = 8_000;
 
 /**
@@ -161,13 +187,25 @@ async function settle(page: Page, url: string): Promise<void> {
   await page.waitForLoadState("networkidle", { timeout: SETTLE_MS }).catch(() => undefined);
 }
 
-async function doOp(page: Page, hints: Hints, op: Op, timeout: number): Promise<void> {
+async function doOp(
+  page: Page,
+  hints: Hints,
+  op: Op,
+  timeout: number,
+  pace: Pace | null,
+): Promise<void> {
   const target = locate(page, hints);
+  if (pace) await page.waitForTimeout(drawMs(pace.beforeAct));
   switch (op.kind) {
     case "click":
       return target.click({ timeout });
-    case "fill":
-      return target.fill(op.value, { timeout });
+    case "fill": {
+      if (!pace) return target.fill(op.value, { timeout });
+      await target.click({ timeout });
+      await target.fill("", { timeout });
+      for (const ch of op.value) await target.pressSequentially(ch, { delay: drawMs(pace.perKey) });
+      return;
+    }
     case "select":
       return void (await target.selectOption(op.value, { timeout }));
     case "press":
@@ -179,6 +217,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
   const artifactsDir = expandHome(opts.artifactsDir);
   const locks = runner.locks ?? new KeyedMutex();
   const repairer = runner.repairer ?? noRepairer;
+  const pace = runner.pace === undefined ? HUMAN_PACE : runner.pace;
   return {
     run: (flow, input) =>
       locks.withLock(flow.site, async () => {
@@ -250,7 +289,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             const timeout = a.timeoutMs ?? ACT_TIMEOUT_MS;
             const page = active;
             try {
-              await doOp(page, hints, op, timeout);
+              await doOp(page, hints, op, timeout, pace);
               return;
             } catch (err) {
               if (a.irreversible && !runner.repairIrreversible)
@@ -273,7 +312,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
                 ok: false,
               };
               try {
-                await doOp(page, proposal.hints, op, timeout);
+                await doOp(page, proposal.hints, op, timeout, pace);
                 report.ok = true;
               } finally {
                 runner.onRepair?.(report);
@@ -288,7 +327,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         try {
           return await flow.run(fp, input);
         } catch (err) {
-          const artifacts: { screenshot?: string; trace?: string } = {};
+          const artifacts: Artifacts = {};
           const shot = join(artifactsDir, `${stamp}.png`);
           if (
             await session.page.screenshot({ path: shot, fullPage: true }).then(
@@ -297,6 +336,17 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             )
           )
             artifacts.screenshot = shot;
+          // The accessibility tree next to the PNG: a reader (or a model)
+          // sees every control by role and name without opening the image.
+          const aria = join(artifactsDir, `${stamp}.aria.txt`);
+          const tree = await session.page
+            .locator("body")
+            .ariaSnapshot({ timeout: 5_000 })
+            .catch(() => null);
+          if (tree !== null) {
+            writeFileSync(aria, `${session.page.url()}\n\n${tree}`);
+            artifacts.aria = aria;
+          }
           if (tracing) {
             const trace = join(artifactsDir, `${stamp}.zip`);
             if (

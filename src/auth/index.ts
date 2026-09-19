@@ -1,4 +1,11 @@
-export { aesGcmCipher, type Cipher, isSealed, keychainKey, plainCipher } from "./cipher.js";
+export {
+  aesGcmCipher,
+  type Cipher,
+  isSealed,
+  keychainKey,
+  plainCipher,
+  trustKeychainKey,
+} from "./cipher.js";
 export {
   type CodeKind,
   type CodeRequest,

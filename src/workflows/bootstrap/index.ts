@@ -16,7 +16,7 @@ import { defineWorkflow, done, type StepDef, skipped } from "../../engine/workfl
 export const CLOUDFLARE_PERMISSIONS: TokenPermission[] = [
   { scope: "Zone", name: "Zone", level: "Edit" },
   { scope: "Zone", name: "DNS", level: "Edit" },
-  { scope: "Account", name: "Domain Registrar", level: "Edit" },
+  { scope: "Account", name: "Registrar: Domains", level: "Admin" },
 ];
 
 export const bootstrapPlan = z.object({

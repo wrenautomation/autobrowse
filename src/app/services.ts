@@ -75,7 +75,10 @@ function lazy<T extends object>(make: () => T): T {
   });
 }
 
-export function browserOptions(settings: Settings, headless = true): BrowserOptions {
+export function browserOptions(
+  settings: Settings,
+  headless = settings.browserHeadless,
+): BrowserOptions {
   return {
     tier: settings.browser,
     profilesDir: settings.profilesDir,

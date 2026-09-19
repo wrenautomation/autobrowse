@@ -5,6 +5,7 @@
  * same idea. Either way the session is opened for one flow and closed
  * after it; `flow.ts` decides when and holds the per-site lock.
  */
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
 import type { HttpClient } from "../clients/http.js";
@@ -22,6 +23,8 @@ export class NeedsHuman extends Error {
 
 export interface Artifacts {
   screenshot?: string;
+  /** The accessibility tree as text, next to the PNG: every control by role and name. */
+  aria?: string;
   trace?: string;
 }
 
@@ -58,7 +61,9 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
     browser = await chromium.connectOverCDP(session.connectUrl);
     context = browser.contexts()[0] ?? (await browser.newContext());
   } else {
-    context = await launchLocal(join(expandHome(opts.profilesDir), site), opts);
+    const profileDir = join(expandHome(opts.profilesDir), site);
+    context = await launchLocal(profileDir, opts);
+    if (opts.headless === false) keepOutOfTheWay(profileDir);
     // Sites read `navigator.webdriver` to refuse "insecure" browsers; these are our own accounts.
     await context.addInitScript(
       "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });",
@@ -73,6 +78,38 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
       await browser?.close().catch(() => undefined);
     },
   };
+}
+
+/**
+ * A headed Chrome on a laptop someone is using: hide its windows (they
+ * still render, and bot checks still pass) and give focus back to the app
+ * that had it. Best effort; only macOS has the tools.
+ */
+function keepOutOfTheWay(profileDir: string): void {
+  if (process.platform !== "darwin") return;
+  const osascript = (script: string) =>
+    execFileSync("osascript", ["-e", script], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  try {
+    const front = osascript(
+      'tell application "System Events" to get name of first process whose frontmost is true',
+    );
+    const pid = execFileSync("pgrep", ["-f", `user-data-dir=${profileDir}`], { encoding: "utf8" })
+      .split("\n")
+      .find(Boolean);
+    if (pid)
+      osascript(
+        `tell application "System Events" to set visible of (first process whose unix id is ${pid}) to false`,
+      );
+    if (front)
+      osascript(
+        `tell application "System Events" to set frontmost of process "${front.replace(/"/g, "")}" to true`,
+      );
+  } catch {
+    // no Accessibility permission, or nothing frontmost: the window shows, nothing else changes
+  }
 }
 
 /** Launch flags that keep a site from telling the browser apart from a person's. */

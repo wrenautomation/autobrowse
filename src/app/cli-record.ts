@@ -6,6 +6,32 @@ import { browserOptions, llmFor } from "./services.js";
 
 export function registerRecordCommands(program: Command, settings: Settings): void {
   program
+    .command("explore <site>")
+    .description(
+      "Keep one browser open on the site and take commands over loopback (POST JSON to /); every act that works is journaled; `save` writes a recording",
+    )
+    .option("--url <url>", "start here")
+    .option("--port <port>", "loopback port", "9090")
+    .action(async (site: string, o: { url?: string; port: string }) => {
+      const { startExplore } = await import("../explore/server.js");
+      const ex = await startExplore({
+        site,
+        browser: browserOptions(settings, false),
+        recordingsDir: settings.recordingsDir,
+        port: Number(o.port),
+      });
+      console.log(
+        `exploring ${site} on http://127.0.0.1:${ex.port}  (POST {"cmd":"aria"} … {"cmd":"close"})`,
+      );
+      if (o.url)
+        await fetch(`http://127.0.0.1:${ex.port}/`, {
+          method: "POST",
+          body: JSON.stringify({ cmd: "open", url: o.url }),
+        });
+      await ex.done;
+    });
+
+  program
     .command("record <name>")
     .description(
       "Record a chore: a headed browser with an observer, play/pause from this terminal, optional terminal capture",

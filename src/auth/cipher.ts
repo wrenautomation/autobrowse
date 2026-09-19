@@ -62,9 +62,21 @@ function security(commands: string): { status: number; out: string } {
   return { status: r.status ?? 1, out: `${r.stdout}${r.stderr}` };
 }
 
+/** The item trusts the `security` tool itself, so reading it never raises the Keychain dialog. */
+const TRUST = "-T /usr/bin/security";
+
+function store(hex: string): void {
+  const added = security(`add-generic-password -s ${SERVICE} -a ${ACCOUNT} -w ${hex} -U ${TRUST}`);
+  if (added.status !== 0)
+    throw new Error(
+      `keychain: could not store the credential key (${added.out.trim().slice(0, 120)})`,
+    );
+}
+
 /**
- * The 32-byte key from the login Keychain; created on first use. Throws
- * off macOS or when the Keychain says no.
+ * The 32-byte key from the login Keychain; created on first use with the
+ * `security` tool trusted, so no dialog on later reads. Throws off macOS
+ * or when the Keychain says no.
  */
 export function keychainKey(): Buffer {
   if (process.platform !== "darwin") throw new Error("keychain cipher needs macOS");
@@ -72,10 +84,16 @@ export function keychainKey(): Buffer {
   const hex = found.out.match(/\b[0-9a-f]{64}\b/)?.[0];
   if (found.status === 0 && hex) return Buffer.from(hex, "hex");
   const fresh = randomBytes(32).toString("hex");
-  const added = security(`add-generic-password -s ${SERVICE} -a ${ACCOUNT} -w ${fresh} -U`);
-  if (added.status !== 0)
-    throw new Error(
-      `keychain: could not store the credential key (${added.out.trim().slice(0, 120)})`,
-    );
+  store(fresh);
   return Buffer.from(fresh, "hex");
+}
+
+/** Re-store the existing key with the tool trusted (an item made before `TRUST` prompts on every read). */
+export function trustKeychainKey(): "retrusted" | "none" {
+  const found = security(`find-generic-password -s ${SERVICE} -a ${ACCOUNT} -w`);
+  const hex = found.out.match(/\b[0-9a-f]{64}\b/)?.[0];
+  if (found.status !== 0 || !hex) return "none";
+  security(`delete-generic-password -s ${SERVICE} -a ${ACCOUNT}`);
+  store(hex);
+  return "retrusted";
 }

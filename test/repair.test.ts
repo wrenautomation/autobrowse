@@ -26,7 +26,7 @@ describe("fp.act", () => {
         artifactsDir: join(dir, "artifacts"),
         headless: true,
       },
-      { repairer, onRepair: (r) => reports.push(r) },
+      { repairer, onRepair: (r) => reports.push(r), pace: null },
     );
 
   it("repairs a stale locator through the repairer and reports it", async () => {

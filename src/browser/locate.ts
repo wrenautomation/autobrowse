@@ -67,10 +67,15 @@ export function applyLocator(page: Page, plan: LocatorPlan): Locator {
   }
 }
 
-export function locate(page: Page, hints: Hints): Locator {
+/** Every match, in page order; for forms that repeat a row of controls. */
+export function locateAll(page: Page, hints: Hints): Locator {
   const plan = planLocator(hints);
   if (!plan) throw new Error(`no usable locator hints: ${JSON.stringify(hints)}`);
-  return applyLocator(page, plan).first();
+  return applyLocator(page, plan);
+}
+
+export function locate(page: Page, hints: Hints): Locator {
+  return locateAll(page, hints).first();
 }
 
 /** The same plan as source, for generated flows. */
