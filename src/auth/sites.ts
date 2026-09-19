@@ -8,8 +8,9 @@ import { formLogin, type SiteLogin } from "./login.js";
 const cloudflare: SiteLogin = {
   site: "cloudflare",
   home: "https://dash.cloudflare.com/",
+  // A signed-in dashboard URL carries the 32-hex account id; the bare host is the pre-redirect state.
   loggedIn: async (fp) =>
-    /dash\.cloudflare\.com\/(?!login|sign-up)/.test(fp.url()) &&
+    /dash\.cloudflare\.com\/[0-9a-f]{32}/.test(fp.url()) &&
     !(await fp.has({ role: "textbox", name: "Password" })),
   signIn: formLogin("cloudflare", {
     start: "https://dash.cloudflare.com/login",

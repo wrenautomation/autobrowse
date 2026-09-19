@@ -21,7 +21,13 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     )
     .action(async (site: string) => {
       const raw = JSON.parse(readFileSync(0, "utf8"));
-      await credentialsFor(settings).put(site, credentialSchema.parse(raw));
+      const parsed = credentialSchema.safeParse(raw);
+      if (!parsed.success) {
+        for (const i of parsed.error.issues) console.error(`${i.path.join(".")}: ${i.message}`);
+        process.exitCode = 1;
+        return;
+      }
+      await credentialsFor(settings).put(site, parsed.data);
       console.log(`stored credential for ${site}`);
     });
   creds

@@ -291,3 +291,14 @@ describe("loginProvider", () => {
     );
   });
 });
+
+describe("credential schema", () => {
+  it("normalizes a spaced seed and rejects a 6-digit code", async () => {
+    const store = memoryCredentials();
+    await store.put("s", { username: "u", password: "p", totpSecret: "jbsw y3dp-ehpk 3pxp" });
+    expect((await store.get("s"))?.totpSecret).toBe("JBSWY3DPEHPK3PXP");
+    await expect(
+      store.put("s", { username: "u", password: "p", totpSecret: "123456" }),
+    ).rejects.toThrow(/base32 seed/);
+  });
+});

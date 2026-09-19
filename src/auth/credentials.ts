@@ -12,8 +12,19 @@ import { expandHome } from "../google-auth.js";
 export const credentialSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
-  /** Base32 TOTP seed; set by `enrollTotp` or copied from the site's manual key. */
-  totpSecret: z.string().min(16).optional(),
+  /** Base32 TOTP seed (the site's "manual entry key", spaces and dashes allowed); never a 6-digit code. */
+  totpSecret: z
+    .string()
+    .transform((s) => s.replace(/[\s=-]/g, "").toUpperCase())
+    .pipe(
+      z
+        .string()
+        .regex(
+          /^[A-Z2-7]{16,}$/,
+          "totpSecret must be the base32 seed (16+ letters/digits), not a 6-digit code",
+        ),
+    )
+    .optional(),
   /** One-time recovery codes the site handed out; used, then dropped. */
   recoveryCodes: z.array(z.string().min(1)).default([]),
   /** Where the site sends email codes; defaults to `username` when that is an address. */

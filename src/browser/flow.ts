@@ -118,6 +118,17 @@ export interface RunnerOptions {
 }
 
 const ACT_TIMEOUT_MS = 15_000;
+const SETTLE_MS = 8_000;
+
+/**
+ * Navigate and let client-side redirects finish: a dashboard that bounces
+ * to its login page does so after DOMContentLoaded, and a wall check
+ * before that would call an unauthenticated page "signed in".
+ */
+async function settle(page: Page, url: string): Promise<void> {
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  await page.waitForLoadState("networkidle", { timeout: SETTLE_MS }).catch(() => undefined);
+}
 
 async function doOp(page: Page, hints: Hints, op: Op, timeout: number): Promise<void> {
   const target = locate(page, hints);
@@ -152,7 +163,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         const fp: FlowPage = {
           page: session.page,
           async open(url, o = {}) {
-            await session.page.goto(url, { waitUntil: "domcontentloaded" });
+            await settle(session.page, url);
             if (o.allowWall) return;
             const wall = await looksLikeWall(session.page);
             if (!wall) return;
@@ -166,7 +177,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             } finally {
               signingIn = false;
             }
-            await session.page.goto(url, { waitUntil: "domcontentloaded" });
+            await settle(session.page, url);
             const again = await looksLikeWall(session.page);
             if (again) throw new NeedsHuman(`${flow.site}: ${again.detail} after signing in`);
           },
