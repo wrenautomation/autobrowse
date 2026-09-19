@@ -20,6 +20,7 @@ services:
       UI_PORT: "9080"
       UI_HOST: 0.0.0.0 # the host side of the port map stays loopback-only
       BROWSER: ${BROWSER:-local}
+      BROWSER_CHANNEL: chromium # the image ships Playwright's build, no Google Chrome
     ports:
       - "127.0.0.1:${HOST_UI_PORT:-9080}:9080" # UI + API; put a token in UI_TOKEN before exposing wider
     volumes:

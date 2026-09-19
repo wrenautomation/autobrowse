@@ -32,6 +32,12 @@ export interface BrowserOptions {
   profilesDir: string;
   artifactsDir: string;
   headless?: boolean;
+  /**
+   * Which local browser: "chrome" (the installed Google Chrome, what a
+   * person's login looks like) or "chromium" (Playwright's bundle, what a
+   * container has). "chrome" falls back to chromium when none is installed.
+   */
+  channel?: "chrome" | "chromium";
   browserbase?: { apiKey: string; projectId: string; http: HttpClient } | null;
 }
 
@@ -52,10 +58,11 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
     browser = await chromium.connectOverCDP(session.connectUrl);
     context = browser.contexts()[0] ?? (await browser.newContext());
   } else {
-    context = await chromium.launchPersistentContext(join(expandHome(opts.profilesDir), site), {
-      headless: opts.headless ?? true,
-      viewport: { width: 1280, height: 900 },
-    });
+    context = await launchLocal(join(expandHome(opts.profilesDir), site), opts);
+    // Sites read `navigator.webdriver` to refuse "insecure" browsers; these are our own accounts.
+    await context.addInitScript(
+      "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });",
+    );
   }
   const page = context.pages()[0] ?? (await context.newPage());
   return {
@@ -66,6 +73,27 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
       await browser?.close().catch(() => undefined);
     },
   };
+}
+
+/** Launch flags that keep a site from telling the browser apart from a person's. */
+const LOCAL_ARGS = ["--disable-blink-features=AutomationControlled"];
+
+async function launchLocal(profileDir: string, opts: BrowserOptions): Promise<BrowserContext> {
+  const base = {
+    headless: opts.headless ?? true,
+    viewport: { width: 1280, height: 900 },
+    args: LOCAL_ARGS,
+    ignoreDefaultArgs: ["--enable-automation"],
+  };
+  if (opts.channel !== "chromium") {
+    try {
+      return await chromium.launchPersistentContext(profileDir, { ...base, channel: "chrome" });
+    } catch (err) {
+      if (!/executable doesn't exist|chrome/i.test(err instanceof Error ? err.message : ""))
+        throw err;
+    }
+  }
+  return chromium.launchPersistentContext(profileDir, base);
 }
 
 // --- Browserbase: persistent contexts keyed by site name -------------------

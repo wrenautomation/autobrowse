@@ -33,6 +33,8 @@ const schema = z.object({
   browserbaseProjectId: z.string().min(1).optional(),
   /** Persistent browser profiles (logins survive between runs). */
   profilesDir: z.string().min(1).default("~/.config/autobrowse/profiles"),
+  /** Local browser: the installed Chrome (default, falls back) or Playwright's chromium (containers). */
+  browserChannel: z.enum(["chrome", "chromium"]).default("chrome"),
   /** Screenshots and Playwright traces from flows that needed a person or failed. */
   artifactsDir: z.string().min(1).default("~/.config/autobrowse/artifacts"),
   /** Raw Playwright codegen output from `record --flow`; may hold typed secrets, never committed. */
@@ -64,6 +66,13 @@ const schema = z.object({
   credentialsFile: z.string().min(1).default("~/.config/autobrowse/credentials.json"),
   /** Inbox that receives email one-time codes when a credential does not name one. */
   codesInbox: z.string().email().optional(),
+  /** A Twilio number we own, for SMS one-time codes (E.164). All three or none. */
+  twilioAccountSid: z.string().min(1).optional(),
+  twilioAuthToken: z.string().min(1).optional(),
+  twilioNumber: z
+    .string()
+    .regex(/^\+\d{8,15}$/)
+    .optional(),
   /** Restate admin API; set to self-register this worker on start (Docker/k8s). */
   restateAdminUrl: z.string().url().optional(),
   /** How Restate reaches this worker, for self-registration: http://worker:9081 in compose. */
@@ -90,6 +99,7 @@ export const ENV_KEYS = {
   browserbaseApiKey: "BROWSERBASE_API_KEY",
   browserbaseProjectId: "BROWSERBASE_PROJECT_ID",
   profilesDir: "PROFILES_DIR",
+  browserChannel: "BROWSER_CHANNEL",
   artifactsDir: "ARTIFACTS_DIR",
   recordingsDir: "RECORDINGS_DIR",
   logLevel: "LOG_LEVEL",
@@ -110,6 +120,9 @@ export const ENV_KEYS = {
   guards: "GUARDS",
   credentialsFile: "CREDENTIALS_FILE",
   codesInbox: "CODES_INBOX",
+  twilioAccountSid: "TWILIO_ACCOUNT_SID",
+  twilioAuthToken: "TWILIO_AUTH_TOKEN",
+  twilioNumber: "TWILIO_NUMBER",
   restateAdminUrl: "RESTATE_ADMIN_URL",
   restateEndpointUrl: "RESTATE_ENDPOINT_URL",
 } as const satisfies Record<keyof Settings, string>;

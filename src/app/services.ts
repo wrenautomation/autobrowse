@@ -30,6 +30,7 @@ import { googleAdmin } from "../clients/google-admin.js";
 import { httpClient } from "../clients/http.js";
 import { domainAvailability } from "../clients/rdap.js";
 import { ssmRosterStore } from "../clients/roster.js";
+import { twilioReader } from "../clients/twilio.js";
 import { wrenClient } from "../clients/wren.js";
 import { Unrecoverable } from "../engine/effects.js";
 import { parseGuards } from "../engine/guards.js";
@@ -73,6 +74,7 @@ export function browserOptions(settings: Settings, headless = true): BrowserOpti
   return {
     tier: settings.browser,
     profilesDir: settings.profilesDir,
+    channel: settings.browserChannel,
     artifactsDir: settings.artifactsDir,
     headless,
     browserbase:
@@ -117,16 +119,35 @@ export function credentialsFor(settings: Settings): CredentialStore {
   return layeredCredentials(envCredentials(), fileCredentials(settings.credentialsFile));
 }
 
-/** Sign-in for every known site: TOTP from the stored seed, email codes read through Gmail. */
-export function loginFor(settings: Settings, gmail: GmailUserClient): LoginProvider {
-  const email = messageSource({
-    kind: "email",
-    reader: gmail,
-    ...(settings.codesInbox ? { inbox: settings.codesInbox } : {}),
-  });
+/** Sign-in for every known site: TOTP from the stored seed, email codes through Gmail, SMS through Twilio. */
+export function loginFor(
+  settings: Settings,
+  gmail: GmailUserClient,
+  http = httpClient(),
+): LoginProvider {
+  const sources = [
+    totpSource(),
+    messageSource({
+      kind: "email",
+      reader: gmail,
+      ...(settings.codesInbox ? { inbox: settings.codesInbox } : {}),
+    }),
+  ];
+  if (settings.twilioAccountSid && settings.twilioAuthToken && settings.twilioNumber)
+    sources.push(
+      messageSource({
+        kind: "sms",
+        inbox: settings.twilioNumber,
+        reader: twilioReader({
+          accountSid: settings.twilioAccountSid,
+          authToken: settings.twilioAuthToken,
+          http,
+        }),
+      }),
+    );
   return loginProvider(SITE_LOGINS, {
     credentials: credentialsFor(settings),
-    codes: codeSources(totpSource(), email),
+    codes: codeSources(...sources),
   });
 }
 

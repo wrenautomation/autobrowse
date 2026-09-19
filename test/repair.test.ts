@@ -21,6 +21,7 @@ describe("fp.act", () => {
     flowRunner(
       {
         tier: "local",
+        channel: "chromium",
         profilesDir: join(dir, "profiles"),
         artifactsDir: join(dir, "artifacts"),
         headless: true,
