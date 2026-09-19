@@ -120,9 +120,11 @@ table's "may import" column.
   code about to expire), email codes polled from Gmail after the attempt
   started, SMS through the same shape later. `enroll-totp` reads the seed
   off the setup page and stores it, so a site's 2FA is ours from day one.
-- Credentials live in `~/.config/autobrowse/credentials.json` (0600) or
-  `AUTOBROWSE_CRED_*` env from a Secret. Read at sign-in time; never on a
-  plan, in a memo, or in a journal.
+- Credentials live in `~/.config/autobrowse/credentials.json` (0600,
+  AES-256-GCM, key in the macOS login Keychain, made on first use and
+  read through `security -i` so it is never an argv) or `AUTOBROWSE_CRED_*`
+  env from a Secret. Read at sign-in time; never on a plan, in a memo, or
+  in a journal.
 - Guards (`engine/guards.ts`) are the named situations a person approves:
   `purchase`, `password` (resetting an existing inbox's password),
   `irreversible` (repairing a locator miss on an irreversible act). Each

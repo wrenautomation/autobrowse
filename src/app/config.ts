@@ -67,6 +67,10 @@ const schema = z.object({
   guards: z.string().default("all"),
   /** Site credentials for automated sign-in; 0600 JSON. Env (`AUTOBROWSE_CRED_*`) is read first. */
   credentialsFile: z.string().min(1).default("~/.config/autobrowse/credentials.json"),
+  /** How the credential file is sealed: keychain (macOS, default there), none (containers; credentials come from env). */
+  credentialsCipher: z
+    .enum(["keychain", "none"])
+    .default(process.platform === "darwin" ? "keychain" : "none"),
   /** Inbox that receives email one-time codes when a credential does not name one. */
   codesInbox: z.string().email().optional(),
   /** A Twilio number we own, for SMS one-time codes (E.164). All three or none. */
@@ -124,6 +128,7 @@ export const ENV_KEYS = {
   envFile: "ENV_FILE",
   guards: "GUARDS",
   credentialsFile: "CREDENTIALS_FILE",
+  credentialsCipher: "CREDENTIALS_CIPHER",
   codesInbox: "CODES_INBOX",
   twilioAccountSid: "TWILIO_ACCOUNT_SID",
   twilioAuthToken: "TWILIO_AUTH_TOKEN",

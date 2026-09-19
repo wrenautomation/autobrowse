@@ -3,14 +3,17 @@
 import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Logger } from "pino";
 import {
+  aesGcmCipher,
   type CredentialStore,
   codeSources,
   envCredentials,
   fileCredentials,
+  keychainKey,
   type LoginProvider,
   layeredCredentials,
   loginProvider,
   messageSource,
+  plainCipher,
   SITE_LOGINS,
   totpSource,
 } from "../auth/index.js";
@@ -116,9 +119,11 @@ export interface App {
   memory: Memory;
 }
 
-/** Env credentials first (a Secret in k8s), then the 0600 file; writes go to the file. */
+/** Env credentials first (a Secret in k8s), then the sealed 0600 file; writes go to the file. */
 export function credentialsFor(settings: Settings): CredentialStore {
-  return layeredCredentials(envCredentials(), fileCredentials(settings.credentialsFile));
+  const cipher =
+    settings.credentialsCipher === "keychain" ? aesGcmCipher(keychainKey()) : plainCipher;
+  return layeredCredentials(envCredentials(), fileCredentials(settings.credentialsFile, cipher));
 }
 
 /** Sign-in for every known site: TOTP from the stored seed, email codes through Gmail, SMS through Twilio. */

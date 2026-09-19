@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname } from "node:path";
 import { z } from "zod";
 import { expandHome } from "../google-auth.js";
+import { type Cipher, isSealed, plainCipher } from "./cipher.js";
 
 export const credentialSchema = z.object({
   username: z.string().min(1),
@@ -43,12 +44,17 @@ export interface CredentialStore {
 
 const fileSchema = z.object({ sites: z.record(z.string(), credentialSchema) });
 
-/** `{ "sites": { "<site>": Credential } }` at `path`, mode 0600, written atomically. */
-export function fileCredentials(path: string): CredentialStore {
+/**
+ * `{ "sites": { "<site>": Credential } }` at `path`, mode 0600, written
+ * atomically, sealed with `cipher` (a plain file written earlier is still
+ * read, and sealed on the next write).
+ */
+export function fileCredentials(path: string, cipher: Cipher = plainCipher): CredentialStore {
   const file = expandHome(path);
   const read = () => {
     if (!existsSync(file)) return { sites: {} as Record<string, Credential> };
-    return fileSchema.parse(JSON.parse(readFileSync(file, "utf8")));
+    const raw = readFileSync(file, "utf8");
+    return fileSchema.parse(JSON.parse(isSealed(raw) ? cipher.open(raw) : raw));
   };
   return {
     async get(site) {
@@ -59,7 +65,7 @@ export function fileCredentials(path: string): CredentialStore {
       data.sites[site] = credentialSchema.parse(cred);
       mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
       const tmp = `${file}.tmp`;
-      writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
+      writeFileSync(tmp, cipher.seal(JSON.stringify(data, null, 2)), { mode: 0o600 });
       renameSync(tmp, file);
     },
     async list() {

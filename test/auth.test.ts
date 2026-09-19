@@ -302,3 +302,28 @@ describe("credential schema", () => {
     ).rejects.toThrow(/base32 seed/);
   });
 });
+
+describe("sealed credential file", () => {
+  it("writes ciphertext, reads it back, and upgrades a plain file on the next write", async () => {
+    const { aesGcmCipher, isSealed } = await import("../src/auth/cipher.js");
+    const { readFileSync, writeFileSync } = await import("node:fs");
+    const dir = mkdtempSync(join(tmpdir(), "autobrowse-sealed-"));
+    const file = join(dir, "c.json");
+    const key = Buffer.alloc(32, 7);
+    writeFileSync(
+      file,
+      JSON.stringify({ sites: { old: { username: "o", password: "p", recoveryCodes: [] } } }),
+    );
+    const store = fileCredentials(file, aesGcmCipher(key));
+    expect((await store.get("old"))?.username).toBe("o");
+    await store.put("new", { username: "n", password: "q" });
+    const raw = readFileSync(file, "utf8");
+    expect(isSealed(raw)).toBe(true);
+    expect(raw).not.toContain("password");
+    expect((await store.get("old"))?.username).toBe("o");
+    expect((await store.get("new"))?.password).toBe("q");
+    await expect(
+      fileCredentials(file, aesGcmCipher(Buffer.alloc(32, 8))).get("new"),
+    ).rejects.toThrow();
+  });
+});
