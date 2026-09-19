@@ -43,6 +43,8 @@ const schema = z.object({
   uiPort: z.coerce.number().int().default(9080),
   /** Bearer the UI and inbound hooks need for anything that changes a run. Unset = local only, no auth. */
   uiToken: z.string().min(1).optional(),
+  /** Bind address for the UI; see `startUiServer`. */
+  uiHost: z.string().min(1).optional(),
   /** Every run event, as JSON, to one URL (iMessage/Slack/dashboards). */
   webhookUrl: z.string().url().optional(),
   webhookToken: z.string().min(1).optional(),
@@ -52,6 +54,14 @@ const schema = z.object({
   anthropicApiKey: z.string().min(1).optional(),
   openaiApiKey: z.string().min(1).optional(),
   openaiBaseUrl: z.string().url().optional(),
+  /** Memory between runs (repairs that worked, hand-off notes). `none` keeps it in-process. */
+  memory: z.enum(["backboard", "none"]).default("none"),
+  backboardApiKey: z.string().min(1).optional(),
+  backboardAssistant: z.string().min(1).default("autobrowse"),
+  /** Restate admin API; set to self-register this worker on start (Docker/k8s). */
+  restateAdminUrl: z.string().url().optional(),
+  /** How Restate reaches this worker, for self-registration: http://worker:9081 in compose. */
+  restateEndpointUrl: z.string().url().optional(),
 });
 
 export type Settings = z.infer<typeof schema>;
@@ -80,6 +90,7 @@ export const ENV_KEYS = {
   restatePort: "RESTATE_PORT",
   uiPort: "UI_PORT",
   uiToken: "UI_TOKEN",
+  uiHost: "UI_HOST",
   webhookUrl: "WEBHOOK_URL",
   webhookToken: "WEBHOOK_TOKEN",
   llmProvider: "LLM_PROVIDER",
@@ -87,6 +98,11 @@ export const ENV_KEYS = {
   anthropicApiKey: "ANTHROPIC_API_KEY",
   openaiApiKey: "OPENAI_API_KEY",
   openaiBaseUrl: "OPENAI_BASE_URL",
+  memory: "MEMORY",
+  backboardApiKey: "BACKBOARD_API_KEY",
+  backboardAssistant: "BACKBOARD_ASSISTANT",
+  restateAdminUrl: "RESTATE_ADMIN_URL",
+  restateEndpointUrl: "RESTATE_ENDPOINT_URL",
 } as const satisfies Record<keyof Settings, string>;
 
 export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {

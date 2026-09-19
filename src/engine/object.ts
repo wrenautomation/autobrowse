@@ -8,8 +8,11 @@
  * that was reset cannot move the run that replaced it.
  */
 import * as restate from "@restatedev/restate-sdk";
+import { FlowFailed } from "../browser/flow.js";
+import { type Artifacts, NeedsHuman } from "../browser/session.js";
+import { HttpError } from "../clients/http.js";
 import type { DistributiveOmit } from "../types.js";
-import type { Effects, GateAnswer, GateName } from "./effects.js";
+import { type Effects, type GateAnswer, type GateName, Unrecoverable } from "./effects.js";
 import type { RunEvent, RunRef } from "./events.js";
 import { REGISTRY, REGISTRY_KEY, type RunsRegistry } from "./registry.js";
 import {
@@ -47,9 +50,83 @@ export interface HostDeps {
   registry?: boolean;
 }
 
+/** Restate retries a failed `ctx.run` forever by default; this is what a step gets instead. */
+const RETRY = {
+  maxRetryAttempts: 6,
+  initialRetryInterval: 1_000,
+  retryIntervalFactor: 2,
+  maxRetryInterval: 30_000,
+};
+
+/** Error codes that let the original error type survive the journal. */
+const CODE = { needsHuman: 460, failed: 461 } as const;
+
+/** Nothing a retry would fix: config, auth, a person needed, a flow that broke, a client error other than 429. */
+function unrecoverable(err: unknown): boolean {
+  if (err instanceof Unrecoverable || err instanceof NeedsHuman || err instanceof FlowFailed)
+    return true;
+  if (err instanceof HttpError) return err.status >= 400 && err.status < 500 && err.status !== 429;
+  return false;
+}
+
+/**
+ * Inside `ctx.run`, an unrecoverable error becomes a TerminalError so
+ * Restate stops retrying; on the way out it becomes the original type
+ * again (NeedsHuman with its artifacts, or a plain failure), replay
+ * included, because the message is what the journal keeps.
+ */
+async function journaled<T>(
+  ctx: restate.ObjectContext,
+  name: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await ctx.run(
+      name,
+      async () => {
+        try {
+          return await fn();
+        } catch (err) {
+          if (!unrecoverable(err)) throw err;
+          if (err instanceof NeedsHuman)
+            throw new restate.TerminalError(
+              JSON.stringify({ reason: err.message, artifacts: err.artifacts }),
+              {
+                errorCode: CODE.needsHuman,
+              },
+            );
+          const artifacts = err instanceof FlowFailed ? err.artifacts : {};
+          throw new restate.TerminalError(
+            JSON.stringify({ reason: err instanceof Error ? err.message : String(err), artifacts }),
+            { errorCode: CODE.failed },
+          );
+        }
+      },
+      RETRY,
+    );
+  } catch (err) {
+    if (!(err instanceof restate.TerminalError)) throw err;
+    if (err.code === CODE.needsHuman || err.code === CODE.failed) {
+      const { reason, artifacts } = JSON.parse(err.message) as {
+        reason: string;
+        artifacts: Artifacts;
+      };
+      if (err.code === CODE.needsHuman) {
+        const nh = new NeedsHuman(reason);
+        nh.artifacts = artifacts;
+        throw nh;
+      }
+      if (artifacts.screenshot || artifacts.trace) throw new FlowFailed(name, reason, artifacts);
+      throw new Unrecoverable(reason);
+    }
+    // Retries exhausted: Restate's own terminal wrapper. The step fails with the last message.
+    throw new Error(`${name}: ${err.message}`);
+  }
+}
+
 function effects(ctx: restate.ObjectContext): Effects {
   return {
-    run: (name, fn) => ctx.run(name, fn),
+    run: (name, fn) => journaled(ctx, name, fn),
     get: (key) => ctx.get(key),
     set: (key, value) => ctx.set(key, value),
     clear: (key) => ctx.clear(key),
@@ -120,7 +197,13 @@ export function makeRunObject<W extends AnyWorkflow>(
     };
     const fx = effects(ctx);
     const verdict = await applyAnswer(fx, gate, a);
-    await emit(ctx, { type: "gate-answered", gate: gate.name, approved });
+    await emit(ctx, {
+      type: "gate-answered",
+      gate: gate.name,
+      step: gate.step,
+      approved,
+      note: a.note,
+    });
     if (verdict === "rejected") {
       const outcome = await outcomeOf(fx, workflow, "rejected");
       ctx.set(OUTCOME, outcome);
@@ -167,6 +250,7 @@ export function makeRunObject<W extends AnyWorkflow>(
           await emit(ctx, { type: "gate-opened", gate: a.gate });
           return;
         }
+        if (a.step && a.result) await emit(ctx, { type: "step", step: a.step, result: a.result });
         const outcome = await outcomeOf(fx, workflow, a.status);
         ctx.set(OUTCOME, outcome);
         await emit(ctx, { type: "finished", status: a.status, summary: summarize(outcome) });

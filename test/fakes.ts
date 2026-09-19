@@ -130,16 +130,22 @@ export function fakeDeps(
   const bought = new Set<string>();
   const cloudflare = over.cloudflare ?? fakeCloudflare();
   const deps: Deps & {
+    /** Thrown by the next `cloudflare.registered` call, to exercise the host's error handling. */
+    failCheckWith: Error | null;
     calls: string[];
     rosterText: () => string;
     browser: ReturnType<typeof fakeBrowser>;
   } = {
     calls,
+    failCheckWith: null,
     rosterText: () => roster,
     cloudflare: {
       ...cloudflare,
       // A purchase shows up in the Registrar API afterwards.
-      registered: async (d) => bought.has(d) || cloudflare.registered(d),
+      registered: async (d) => {
+        if (deps.failCheckWith) throw deps.failCheckWith;
+        return bought.has(d) || cloudflare.registered(d);
+      },
     },
     google: {
       async getDomain(d) {

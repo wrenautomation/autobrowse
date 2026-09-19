@@ -15,10 +15,11 @@ table's "may import" column.
 | `browser/` | sessions (profiles, Browserbase), per-site lock, flow runner (trace, hand-off, `fp.act`), locate (hints → locator, one priority for run time and rendered source), repair seam (`Repairer`: llm now, Stagehand later) | `clients/http`, `llm` types, `recorder` types |
 | `clients/` | one HTTP door; one client per API | nothing |
 | `llm/` | `Llm` seam: anthropic, openai, fake | `clients/http` |
+| `memory/` | `Memory` seam: `remember`/`recall`; in-process store, Backboard | `clients/http` |
 | `recorder/` | browser + terminal capture → `Recording` on disk, play/pause, redaction | `browser/session` |
 | `compiler/` | `Recording` → `outline.json` → workflow module + test; output typechecks against the library (tested) | `recorder` types, `llm`, `browser/locate`, `deps` |
 | `deps/` | `SecretSource` (env, memory), `Shell` (local, fake): what compiled workflows depend on | nothing |
-| `channels/` | deliver `RunEvent`s (email, webhook, iMessage); parse inbound commands | `engine` types |
+| `channels/` | deliver `RunEvent`s (email, webhook, iMessage, memory); parse inbound commands | `engine` types, `memory` types |
 | `workflows/<name>/` | plan (zod), deps, steps, flows | `engine`, `browser`, `clients` |
 | `ui/` | Hono API + React app | `engine` types, `recorder`, `compiler` |
 | `app/` | composition root: settings → deps → services; CLI; main | everything |
@@ -92,6 +93,38 @@ table's "may import" column.
   `status`, `reset`, with an optional run key; bare `yes` answers the
   newest open gate. One route on the UI server takes every channel's
   inbound.
+
+## Memory
+
+- `Memory { remember(content, meta), recall(query, limit) }`. Two
+  implementations: `memoryStore()` (word overlap, tests and `MEMORY=none`)
+  and Backboard (`MEMORY=backboard`, one assistant per deployment named by
+  `BACKBOARD_ASSISTANT`).
+- What goes in: a repair that worked (`rememberingRepairer` recalls by
+  site + goal and offers the hints to the next repairer first), a gate a
+  person answered with a note, a step that needed a person. Never a secret,
+  never page content beyond the snapshot the repairer already saw.
+- Memory is advisory. A recalled hint is tried like any other proposal and
+  checked the same way.
+
+## Errors and retries
+
+- Inside a step, every side effect runs through `journaled()`: Restate
+  retries transient failures with backoff, six attempts, then the step
+  fails with the last message.
+- `Unrecoverable` (missing config, bad plan) and `NeedsHuman`/`FlowFailed`
+  are terminal on the first throw. They cross the journal as
+  `TerminalError` codes 460/461 with a JSON body, and come back out as the
+  same class with artifacts intact, so `advance` sees what the step threw.
+- Deps are lazy: the worker boots without every credential, and a missing
+  one fails the step that needed it, not the process.
+
+## Deploy
+
+- The unit is one container (Playwright base image) plus Restate; see
+  `designs/2026-09-19-deploy.md`. The worker self-registers on boot. All
+  config is env; `.env` locally, a Secret in Kubernetes. The UI binds
+  loopback unless `UI_HOST` or `UI_TOKEN` says otherwise.
 
 ## UI
 

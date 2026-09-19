@@ -47,7 +47,7 @@ export type FinalStatus = Extract<RunStatus, "done" | "planned" | "rejected" | "
 export type Advance<S extends string = string> =
   | { kind: "continue"; step: S; result: StepResult }
   | { kind: "waiting"; gate: OpenGate }
-  | { kind: "finished"; status: FinalStatus };
+  | { kind: "finished"; status: FinalStatus; step?: S; result?: StepResult };
 
 export interface Outcome<S extends string = string, M = unknown> {
   status: RunStatus;
@@ -111,7 +111,7 @@ export async function advance<P extends PlanBase, D, M, S extends string>(
       at,
     };
     save();
-    return { kind: "finished", status: "planned" };
+    return { kind: "finished", status: "planned", step: name, result: results[name] };
   }
   try {
     const out = await step.run({
@@ -158,7 +158,7 @@ export async function advance<P extends PlanBase, D, M, S extends string>(
       ...artifacts,
     };
     save();
-    return { kind: "finished", status: "failed" };
+    return { kind: "finished", status: "failed", step: name, result: results[name] };
   }
 }
 

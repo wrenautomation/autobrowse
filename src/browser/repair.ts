@@ -9,9 +9,11 @@
 import type { Page } from "playwright";
 import { z } from "zod";
 import { completeJson, type Llm } from "../llm/types.js";
+import type { Memory } from "../memory/types.js";
 import type { Hints } from "./locate.js";
 
 export interface RepairRequest {
+  site: string;
   /** What the step is trying to do, in words: "click Purchase". */
   goal: string;
   failed: Hints;
@@ -31,6 +33,8 @@ export interface Repairer {
 }
 
 export interface RepairReport extends RepairProposal {
+  site: string;
+  flow: string;
   goal: string;
   failed: Hints;
   url: string;
@@ -114,3 +118,47 @@ export function llmRepairer(llm: Llm): Repairer {
 
 /** Repairs nothing; the default when no model is configured. */
 export const noRepairer: Repairer = { id: "none", propose: async () => null };
+
+/**
+ * Remembers repairs that worked and offers them first. Recall is by site
+ * and goal, so the second time a page changes the fix costs no model
+ * call. Misses fall through to `next`; every success is written back by
+ * `learn`, which the runner calls with the report.
+ */
+export interface LearningRepairer extends Repairer {
+  learn(report: RepairReport): Promise<void>;
+}
+
+export const canLearn = (r: Repairer): r is LearningRepairer => "learn" in r;
+
+const HINT_MARK = "hints=";
+
+export function rememberingRepairer(memory: Memory, next: Repairer): LearningRepairer {
+  return {
+    id: `memory+${next.id}`,
+    async propose(req) {
+      const found = await memory.recall(`${req.site} ${req.goal}`, 3).catch(() => []);
+      for (const m of found) {
+        const at = m.content.indexOf(HINT_MARK);
+        if (at < 0 || !m.content.includes(`goal=${req.goal}`)) continue;
+        try {
+          const hints = JSON.parse(m.content.slice(at + HINT_MARK.length)) as Hints;
+          if (JSON.stringify(hints) !== JSON.stringify(req.failed))
+            return { hints, reason: `remembered: ${m.content.split(HINT_MARK)[0]?.trim()}` };
+        } catch {
+          // not one of ours
+        }
+      }
+      return next.propose(req);
+    },
+    async learn(report) {
+      if (!report.ok) return;
+      await memory
+        .remember(
+          `site=${report.site} goal=${report.goal} repaired (${report.reason}) ${HINT_MARK}${JSON.stringify(report.hints)}`,
+          { site: report.site, goal: report.goal, kind: "repair" },
+        )
+        .catch(() => undefined);
+    },
+  };
+}

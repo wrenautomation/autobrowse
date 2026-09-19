@@ -38,7 +38,7 @@ export {
 export { envSecrets, memorySecrets, type SecretSource } from "./deps/secrets.js";
 export { fakeShell, localShell, type Shell, type ShellResult } from "./deps/shell.js";
 export type { Effects, GateAnswer, GateName } from "./engine/effects.js";
-export { GateOpen } from "./engine/effects.js";
+export { GateOpen, Unrecoverable } from "./engine/effects.js";
 export type { RunEvent, RunRef } from "./engine/events.js";
 export { memoryEffects } from "./engine/memory.js";
 export { type HostDeps, makeRunObject, type RunObject } from "./engine/object.js";

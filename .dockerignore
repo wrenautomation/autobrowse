@@ -1,0 +1,11 @@
+node_modules
+dist
+ui/dist
+ui/node_modules
+recordings
+.env
+*.env
+!.env.example
+designs
+test
+.github

@@ -75,6 +75,22 @@ pnpm autobrowse reset wren-six.com
 ```
 
 `pnpm gates` = lint + typecheck + tests (the Restate test needs Docker).
+`pnpm test:live` runs the calls that cost money (Backboard, the configured
+LLM) when `.env` has the keys; skipped otherwise.
+
+### Containers
+
+```sh
+docker compose up -d --build    # Restate + worker; .env supplies every secret
+open http://localhost:9080      # UI (host side is loopback-only)
+HOST_INGRESS_PORT=18080 HOST_ADMIN_PORT=19070 HOST_UI_PORT=19080 docker compose up -d   # beside another Restate
+```
+
+The worker registers itself with Restate on start (`RESTATE_ADMIN_URL` +
+`RESTATE_ENDPOINT_URL`). `wren` is Lambda behind Restate Cloud;
+autobrowse is a long-lived container because browser steps run for
+minutes and hold a profile. `designs/2026-09-19-deploy.md` has the AWS /
+Kubernetes path.
 
 ## Layout
 
@@ -83,13 +99,15 @@ src/engine/     workflow/step types, effects seam, run (advance/answer), the Res
 src/browser/    session (profiles, Browserbase), lock, flow runner (trace, hand-off, fp.act), locate, repair, flows/
 src/clients/    http.ts (timeouts, retries, safe errors) + one client per API
 src/llm/        Llm seam: anthropic, openai, fake; completeJson
+src/memory/     Memory seam: in-process store, Backboard; what repairs and gate answers taught us
 src/recorder/   observer (in page), browser + terminal capture, redaction, store
 src/compiler/   structure → outline → render (+ polish); output typechecks
 src/channels/   email, webhook, inbound command parser
 src/deps/       SecretSource, Shell: what compiled workflows need
 src/workflows/  one dir per workflow: plan, deps, steps, index
 src/ui/         Hono API (+ SSE bus, bearer, rate limit) and the static SPA
-src/app/        settings, composition root, CLI, worker
+src/app/        settings, composition root (lazy deps), self-registration, CLI, worker
+Dockerfile, compose.yml   the deploy unit; designs/2026-09-19-deploy.md
 ui/             React SPA (Vite); ui/dist is served by the worker
 designs/        architecture and per-workflow design docs
 test/           one file per module; restate.test needs Docker

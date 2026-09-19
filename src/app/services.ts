@@ -2,9 +2,15 @@
 import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Logger } from "pino";
 import { flowRunner } from "../browser/flow.js";
-import { llmRepairer } from "../browser/repair.js";
+import { llmRepairer, noRepairer, rememberingRepairer } from "../browser/repair.js";
 import type { BrowserOptions } from "../browser/session.js";
-import { type Channel, channels, emailChannel, webhookChannel } from "../channels/index.js";
+import {
+  type Channel,
+  channels,
+  emailChannel,
+  memoryChannel,
+  webhookChannel,
+} from "../channels/index.js";
 import { cloudflare } from "../clients/cloudflare.js";
 import { gmailClient } from "../clients/gmail.js";
 import { googleAdmin } from "../clients/google-admin.js";
@@ -12,6 +18,7 @@ import { httpClient } from "../clients/http.js";
 import { domainAvailability } from "../clients/rdap.js";
 import { ssmRosterStore } from "../clients/roster.js";
 import { wrenClient } from "../clients/wren.js";
+import { Unrecoverable } from "../engine/effects.js";
 import { makeRunObject } from "../engine/object.js";
 import { runsRegistry } from "../engine/registry.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
@@ -22,13 +29,30 @@ import {
   type TokenSupplier,
 } from "../google-auth.js";
 import { makeLlm } from "../llm/index.js";
+import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import { type DomainDeps, domainWorkflow } from "../workflows/domain/index.js";
 import type { Settings } from "./config.js";
 
 function required<T>(value: T | undefined, env: string): T {
-  if (value === undefined) throw new Error(`${env} is required`);
+  if (value === undefined) throw new Unrecoverable(`${env} is required`);
   return value;
+}
+
+/**
+ * Build a client the first time a step touches it, so a worker starts
+ * with whatever credentials it has and a missing one fails the step that
+ * needs it (a clear `X is required` in the run), not the whole process.
+ */
+function lazy<T extends object>(make: () => T): T {
+  let real: T | null = null;
+  return new Proxy({} as T, {
+    get(_t, prop) {
+      real ??= make();
+      const v = Reflect.get(real, prop) as unknown;
+      return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(real) : v;
+    },
+  });
 }
 
 export function browserOptions(settings: Settings, headless = true): BrowserOptions {
@@ -71,21 +95,34 @@ export interface App {
   channel: Channel;
   /** The UI's live feed; also one of the channels. */
   bus: EventBus;
+  memory: Memory;
+}
+
+export function memoryFor(settings: Settings, http = httpClient()): Memory {
+  if (settings.memory === "backboard" && settings.backboardApiKey)
+    return backboardMemory({
+      apiKey: settings.backboardApiKey,
+      http,
+      assistant: settings.backboardAssistant,
+    });
+  return memoryStore();
 }
 
 export function buildApp(settings: Settings, log: Logger): App {
   const http = httpClient();
   const llm = llmFor(settings, http);
-  const key = loadServiceAccountKey(
-    required(settings.googleServiceAccount, "GOOGLE_SERVICE_ACCOUNT"),
-  );
-  const admin = required(settings.googleAdminUser, "GOOGLE_ADMIN_USER");
-  // One token supplier per (subject, scopes); each caches its bearer until a minute before expiry.
+  const memory = memoryFor(settings, http);
+
+  // Google: one service-account key, one token supplier per (subject, scopes), each caching its bearer.
   const tokens = new Map<string, TokenSupplier>();
+  let key: ReturnType<typeof loadServiceAccountKey> | null = null;
   const tokenFor = (subject: string, scopes: readonly string[]): TokenSupplier => {
     const k = `${subject} ${scopes.join(" ")}`;
     let t = tokens.get(k);
     if (!t) {
+      key ??= loadServiceAccountKey(
+        required(settings.googleServiceAccount, "GOOGLE_SERVICE_ACCOUNT"),
+      );
       t = serviceAccountToken(key, { scopes, subject });
       tokens.set(k, t);
     }
@@ -96,10 +133,10 @@ export function buildApp(settings: Settings, log: Logger): App {
     scopes: { settings: SCOPES.gmailSettings, send: SCOPES.gmailSend },
     http,
   });
-  const ssm = new SSMClient({ region: settings.awsRegion });
+  const ssm = lazy(() => new SSMClient({ region: settings.awsRegion }));
 
   const list: Channel[] = [];
-  const notifyFrom = settings.notifyFrom ?? settings.notifyTo;
+  const notifyFrom = settings.notifyFrom ?? settings.googleAdminUser;
   if (settings.notifyTo && notifyFrom)
     list.push(emailChannel({ gmail, from: notifyFrom, to: settings.notifyTo }));
   if (settings.webhookUrl)
@@ -112,24 +149,39 @@ export function buildApp(settings: Settings, log: Logger): App {
     );
   if (list.length === 0) log.warn("no channel configured: gates are visible only in the UI/CLI");
   const bus = eventBus();
-  const channel = channels([...list, bus]);
+  const channel = channels([...list, bus, memoryChannel(memory)]);
+
+  const browser = flowRunner(browserOptions(settings), {
+    repairer: rememberingRepairer(memory, llm ? llmRepairer(llm) : noRepairer),
+    onRepair: (r) =>
+      log.warn(
+        { repair: r },
+        `locator ${r.ok ? "repaired" : "not repaired"} in ${r.flow}: ${r.goal}`,
+      ),
+  });
 
   const domainDeps: DomainDeps = {
-    cloudflare: cloudflare({
-      apiToken: required(settings.cloudflareApiToken, "CLOUDFLARE_API_TOKEN"),
-      accountId: required(settings.cloudflareAccountId, "CLOUDFLARE_ACCOUNT_ID"),
-      http,
-    }),
-    google: googleAdmin({
-      token: tokenFor(admin, [
-        SCOPES.directoryDomain,
-        SCOPES.directoryUser,
-        SCOPES.siteVerification,
-      ]),
-      http,
-    }),
+    cloudflare: lazy(() =>
+      cloudflare({
+        apiToken: required(settings.cloudflareApiToken, "CLOUDFLARE_API_TOKEN"),
+        accountId: required(settings.cloudflareAccountId, "CLOUDFLARE_ACCOUNT_ID"),
+        http,
+      }),
+    ),
+    google: lazy(() =>
+      googleAdmin({
+        token: tokenFor(required(settings.googleAdminUser, "GOOGLE_ADMIN_USER"), [
+          SCOPES.directoryDomain,
+          SCOPES.directoryUser,
+          SCOPES.siteVerification,
+        ]),
+        http,
+      }),
+    ),
     gmail,
-    roster: ssmRosterStore({ param: settings.rosterSsmParam, region: settings.awsRegion }),
+    roster: lazy(() =>
+      ssmRosterStore({ param: settings.rosterSsmParam, region: settings.awsRegion }),
+    ),
     wren: wrenClient({
       ingressUrl: settings.restateIngressUrl,
       authToken: settings.restateAuthToken ?? null,
@@ -138,10 +190,7 @@ export function buildApp(settings: Settings, log: Logger): App {
       http,
     }),
     availability: (domain) => domainAvailability(http, domain),
-    browser: flowRunner(browserOptions(settings), {
-      ...(llm ? { repairer: llmRepairer(llm) } : {}),
-      onRepair: (r) => log.warn({ repair: r }, `locator repaired in ${r.flow}: ${r.goal}`),
-    }),
+    browser,
     secrets: {
       put: async (name, value) => {
         await ssm.send(
@@ -162,5 +211,6 @@ export function buildApp(settings: Settings, log: Logger): App {
     services: [runsRegistry, makeRunObject(domainWorkflow, domainDeps, host)],
     channel,
     bus,
+    memory,
   };
 }

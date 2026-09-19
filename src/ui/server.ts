@@ -11,6 +11,12 @@ import { type ApiDeps, api } from "./api.js";
 
 export interface UiServerOptions extends ApiDeps {
   port: number;
+  /**
+   * Interface to bind. Unset: loopback without a token, all interfaces with
+   * one. A container sets it to 0.0.0.0 and lets the host's port mapping
+   * (or a token) do the restricting.
+   */
+  host?: string;
   /** Directory of the built SPA; skipped when missing (API only). */
   distDir: string;
 }
@@ -28,6 +34,6 @@ export function uiApp(opts: UiServerOptions): Hono {
 
 export function startUiServer(opts: UiServerOptions): ServerType {
   const app = uiApp(opts);
-  const hostname = opts.token ? "0.0.0.0" : "127.0.0.1";
+  const hostname = opts.host ?? (opts.token ? "0.0.0.0" : "127.0.0.1");
   return serve({ fetch: app.fetch, port: opts.port, hostname });
 }

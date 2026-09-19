@@ -14,7 +14,16 @@ export type RunEvent =
   | { type: "started"; run: RunRef; at: string }
   | { type: "step"; run: RunRef; at: string; step: string; result: StepResult }
   | { type: "gate-opened"; run: RunRef; at: string; gate: OpenGate }
-  | { type: "gate-answered"; run: RunRef; at: string; gate: string; approved: boolean }
+  | {
+      type: "gate-answered";
+      run: RunRef;
+      at: string;
+      gate: string;
+      step: string;
+      approved: boolean;
+      /** What the person said; a hand-off note is worth remembering. */
+      note: string | null;
+    }
   | { type: "paused"; run: RunRef; at: string }
   | { type: "resumed"; run: RunRef; at: string }
   | { type: "finished"; run: RunRef; at: string; status: RunStatus; summary: string }

@@ -7,6 +7,8 @@
 import * as clients from "@restatedev/restate-sdk-clients";
 import { RestateTestEnvironment } from "@restatedev/restate-sdk-testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { NeedsHuman } from "../src/browser/session.js";
+import { Unrecoverable } from "../src/engine/effects.js";
 import { makeRunObject, type RunObject } from "../src/engine/object.js";
 import { runsRegistry } from "../src/engine/registry.js";
 import { type DomainWorkflow, domainWorkflow } from "../src/workflows/domain/index.js";
@@ -115,5 +117,44 @@ describe("domain run object", () => {
     await expect(object(domain).approve({ name: "purchase" })).rejects.toThrow(/no gate open/);
     await expect(object(domain).run(null)).rejects.toThrow(/no plan/);
     expect(deps.calls).not.toContain("buy second.test");
+  });
+
+  it("an unrecoverable error inside an effect fails the step at once, and NeedsHuman keeps its type", async () => {
+    const domain = "noconfig.test";
+    deps.failCheckWith = new Unrecoverable("CLOUDFLARE_API_TOKEN is required");
+    try {
+      await object(domain).run({ domain, inboxes: inbox });
+      const failed = await until(
+        () => object(domain).status(),
+        (s) => s.outcome?.status === "failed",
+        15_000,
+      );
+      expect(failed.outcome?.results.check).toMatchObject({
+        status: "failed",
+        detail: expect.stringMatching(/CLOUDFLARE_API_TOKEN is required/),
+      });
+    } finally {
+      deps.failCheckWith = null;
+    }
+
+    const human = "handoff.test";
+    const nh = new NeedsHuman("captcha on the registrar page");
+    nh.artifacts = { screenshot: "/tmp/shot.png" };
+    deps.failCheckWith = nh;
+    try {
+      await object(human).run({ domain: human, inboxes: inbox });
+      const waiting = await until(
+        () => object(human).status(),
+        (s) => s.gate !== null,
+        15_000,
+      );
+      expect(waiting.gate).toMatchObject({
+        name: "human",
+        step: "check",
+        screenshot: "/tmp/shot.png",
+      });
+    } finally {
+      deps.failCheckWith = null;
+    }
   });
 });

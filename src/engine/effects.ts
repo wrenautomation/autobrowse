@@ -38,3 +38,16 @@ export class GateOpen extends Error {
     this.name = "GateOpen";
   }
 }
+
+/**
+ * An error no retry will fix: missing configuration, a rejected
+ * credential, a plan that cannot work. The host stops retrying the effect
+ * and the step fails with this message. Transient errors (network, 5xx,
+ * 429) are left to the host's retry policy.
+ */
+export class Unrecoverable extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "Unrecoverable";
+  }
+}

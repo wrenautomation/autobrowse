@@ -16,7 +16,8 @@
     "record": "tsx src/app/cli-record.ts",
     "gates": "pnpm lint && pnpm typecheck && pnpm test",
     "ui:dev": "vite --config ui/vite.config.ts ui",
-    "ui:build": "vite build --config ui/vite.config.ts ui"
+    "ui:build": "vite build --config ui/vite.config.ts ui",
+    "test:live": "LIVE=1 vitest run test/live.test.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",

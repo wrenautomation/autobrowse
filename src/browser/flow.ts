@@ -18,7 +18,7 @@ import type { Page } from "playwright";
 import { expandHome } from "../google-auth.js";
 import { type Hints, locate } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
-import { noRepairer, type Repairer, type RepairReport, snapshotPage } from "./repair.js";
+import { canLearn, noRepairer, type Repairer, type RepairReport, snapshotPage } from "./repair.js";
 import { type BrowserOptions, looksLikeWall, NeedsHuman, openSession } from "./session.js";
 
 /** A site names a persistent profile; any kebab-case string. Known ones have a home page for `login`. */
@@ -89,7 +89,7 @@ export class FlowFailed extends Error {
 export interface RunnerOptions {
   repairer?: Repairer;
   /** Every repair, tried or not, so the flow's source can be fixed for good. */
-  onRepair?: (report: RepairReport & { flow: string }) => void;
+  onRepair?: (report: RepairReport) => void;
   locks?: KeyedMutex;
 }
 
@@ -141,14 +141,17 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               if (a.irreversible)
                 throw new NeedsHuman(`${flow.site}: ${a.goal} (irreversible, not repaired)`);
               const proposal = await repairer.propose({
+                site: flow.site,
                 goal: a.goal,
                 failed: hints,
                 url: page.url(),
                 snapshot: await snapshotPage(page),
               });
               if (!proposal) throw err;
-              const report = {
+              const report: RepairReport = {
                 ...proposal,
+                site: flow.site,
+                flow: `${flow.site}/${flow.name}`,
                 goal: a.goal,
                 failed: hints,
                 url: page.url(),
@@ -158,7 +161,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
                 await doOp(page, proposal.hints, op, timeout);
                 report.ok = true;
               } finally {
-                runner.onRepair?.({ ...report, flow: `${flow.site}/${flow.name}` });
+                runner.onRepair?.(report);
+                if (canLearn(repairer)) await repairer.learn(report);
               }
             }
           },
