@@ -13,6 +13,22 @@ import { browserOptions, credentialsFor, gmailFor, loginFor } from "./services.j
 const SITES = SITE_LOGINS.map((s) => s.site);
 
 export function registerAuthCommands(program: Command, settings: Settings): void {
+  program
+    .command("setup")
+    .description(
+      "Ask once for what is missing (root credentials), store it sealed; the rest is automated",
+    )
+    .action(async () => {
+      const { createInterface } = await import("node:readline/promises");
+      const { runSetup, terminalPrompter } = await import("./setup.js");
+      const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+      try {
+        await runSetup(terminalPrompter(rl, process.stdout), credentialsFor(settings), SITE_LOGINS);
+      } finally {
+        rl.close();
+      }
+    });
+
   const creds = program.command("creds").description("Site credentials for automated sign-in");
   creds
     .command("set <site>")

@@ -67,6 +67,12 @@ export interface FlowPage {
   /** Whether something matching `hints` is on the page right now. */
   has(hints: Hints): Promise<boolean>;
   wait(ms: number): Promise<void>;
+  /** Resolves when the URL matches, or null at the timeout. */
+  waitForUrl(pattern: RegExp, timeoutMs: number): Promise<boolean>;
+  /** The next page the site opens (an OAuth popup), or null when none comes in time. */
+  nextPage(timeoutMs: number): Promise<Page | null>;
+  /** Act on this page from now on (a popup); pass the main page to return. */
+  switchTo(page: Page): void;
   /**
    * Find by hints and do the op. On a miss, ask the repairer for other
    * hints for the same goal and try once more; report the repair either way.
@@ -190,9 +196,13 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           .then(() => true)
           .catch(() => false);
         let signingIn = false;
+        let active = session.page;
         const fp: FlowPage = {
-          page: session.page,
+          get page() {
+            return active;
+          },
           async open(url, o = {}) {
+            active = session.page;
             await settle(session.page, url);
             if (o.allowWall) return;
             const wall = await looksLikeWall(session.page);
@@ -211,24 +221,34 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             const again = await looksLikeWall(session.page);
             if (again) throw new NeedsHuman(`${flow.site}: ${again.detail} after signing in`);
           },
-          url: () => session.page.url(),
+          url: () => active.url(),
           text: async () =>
             (
-              await session.page
+              await active
                 .locator("body")
                 .innerText()
                 .catch(() => "")
             ).slice(0, 20_000),
-          html: async () => (await session.page.content().catch(() => "")).slice(0, 400_000),
+          html: async () => (await active.content().catch(() => "")).slice(0, 400_000),
           has: (hints) =>
-            locate(session.page, hints)
+            locate(active, hints)
               .first()
               .isVisible()
               .catch(() => false),
-          wait: (ms) => session.page.waitForTimeout(ms),
+          wait: (ms) => active.waitForTimeout(ms),
+          waitForUrl: (pattern, timeout) =>
+            active.waitForURL(pattern, { timeout }).then(
+              () => true,
+              () => false,
+            ),
+          nextPage: (timeout) =>
+            session.context.waitForEvent("page", { timeout }).catch(() => null),
+          switchTo(page) {
+            active = page;
+          },
           async act(op, hints, a) {
             const timeout = a.timeoutMs ?? ACT_TIMEOUT_MS;
-            const page = session.page;
+            const page = active;
             try {
               await doOp(page, hints, op, timeout);
               return;

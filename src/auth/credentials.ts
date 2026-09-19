@@ -30,6 +30,8 @@ export const credentialSchema = z.object({
   recoveryCodes: z.array(z.string().min(1)).default([]),
   /** Where the site sends email codes; defaults to `username` when that is an address. */
   codesInbox: z.string().email().optional(),
+  /** Sign in through this identity provider's button instead of the password; the provider's own credential is used. */
+  via: z.enum(["google"]).optional(),
 });
 
 export type Credential = z.infer<typeof credentialSchema>;
@@ -102,10 +104,12 @@ export function envCredentials(env: NodeJS.ProcessEnv = process.env): Credential
       const password = env[key(site, "PASSWORD")];
       if (!username || !password) return null;
       const totpSecret = env[key(site, "TOTP_SECRET")];
+      const via = env[key(site, "VIA")];
       return credentialSchema.parse({
         username,
         password,
         ...(totpSecret ? { totpSecret } : {}),
+        ...(via ? { via } : {}),
       });
     },
     async put(site) {
@@ -121,9 +125,12 @@ export function envCredentials(env: NodeJS.ProcessEnv = process.env): Credential
   };
 }
 
-/** First store that has the site wins; writes go to the first store. */
-export function layeredCredentials(...stores: CredentialStore[]): CredentialStore {
-  const [first] = stores;
+/** First store that has the site wins; writes go to `write`, which defaults to the last store. */
+export function layeredCredentials(
+  stores: CredentialStore[],
+  write: CredentialStore | undefined = stores.at(-1),
+): CredentialStore {
+  const first = write;
   if (!first) throw new Error("layeredCredentials needs at least one store");
   return {
     async get(site) {

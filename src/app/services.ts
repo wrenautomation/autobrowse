@@ -123,7 +123,7 @@ export interface App {
 export function credentialsFor(settings: Settings): CredentialStore {
   const cipher =
     settings.credentialsCipher === "keychain" ? aesGcmCipher(keychainKey()) : plainCipher;
-  return layeredCredentials(envCredentials(), fileCredentials(settings.credentialsFile, cipher));
+  return layeredCredentials([envCredentials(), fileCredentials(settings.credentialsFile, cipher)]);
 }
 
 /** Sign-in for every known site: TOTP from the stored seed, email codes through Gmail, SMS through Twilio. */

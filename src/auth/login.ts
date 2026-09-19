@@ -17,11 +17,19 @@ export interface SignInContext {
   cred: Credential;
   /** A second-factor code of this kind, or throws when none can be had. */
   code(kind: CodeKind, hint?: string): Promise<string>;
+  /** Another site's credential (the identity provider behind an OAuth button), or throws. */
+  credFor(site: string): Promise<Credential>;
 }
 
 export interface SiteLogin {
   site: string;
   home: string;
+  /**
+   * Which stored credential signs in here; default = `site`. Sites behind
+   * the same identity provider name it once: `google` for the admin
+   * console and for every "Sign in with Google" button.
+   */
+  credential?: string;
   /** True when the page shows a signed-in state (avatar, dashboard, no sign-in form). */
   loggedIn(fp: FlowPage): Promise<boolean>;
   signIn(ctx: SignInContext): Promise<void>;
@@ -85,6 +93,135 @@ export function formLogin(site: string, spec: FormLoginSpec): SiteLogin["signIn"
   };
 }
 
+/**
+ * Google's own sign-in pages, wherever they appear: the admin console, or
+ * the popup behind another site's "Google" button. Handles the account
+ * chooser, the password page, and a TOTP challenge.
+ */
+export async function signInToGoogle(ctx: SignInContext): Promise<void> {
+  const { fp, cred } = ctx;
+  const site = "google";
+  await fp.wait(SETTLE_MS);
+  let text = await fp.text();
+  if (/choose an account/i.test(text)) {
+    if (await fp.has({ text: cred.username })) {
+      await fp.act({ kind: "click" }, { text: cred.username }, { goal: "pick the account" });
+    } else {
+      await fp.act(
+        { kind: "click" },
+        { text: "/use another account/i" },
+        { goal: "use another account" },
+      );
+      await fp.wait(SETTLE_MS);
+      text = await fp.text();
+    }
+  }
+  if (await fp.has({ role: "textbox", name: "/email or phone/i" })) {
+    await fp.act(
+      { kind: "fill", value: cred.username },
+      { role: "textbox", name: "/email or phone/i" },
+      { goal: "type the Google email" },
+    );
+    await fp.act(
+      { kind: "click" },
+      { role: "button", name: "/^next$/i" },
+      { goal: "continue past the email" },
+    );
+    await fp.wait(SETTLE_MS);
+    text = await fp.text();
+  }
+  if (/couldn.t find your google account/i.test(text))
+    throw new LoginFailed(site, "unknown account");
+  if (await fp.has({ role: "textbox", name: "/password/i" })) {
+    await fp.act(
+      { kind: "fill", value: cred.password },
+      { role: "textbox", name: "/password/i" },
+      { goal: "type the Google password" },
+    );
+    await fp.act(
+      { kind: "click" },
+      { role: "button", name: "/^next$/i" },
+      { goal: "submit the password" },
+    );
+    await fp.wait(SETTLE_MS);
+    text = await fp.text();
+  }
+  if (/wrong password/i.test(text)) throw new LoginFailed(site, "password rejected");
+  if (/browser or app may not be secure/i.test(text))
+    throw new LoginFailed(site, "Google refused this browser");
+  if (/2-step verification|authenticator|enter the code|verification code/i.test(text)) {
+    if (
+      (await fp.has({ text: "/try another way/i" })) &&
+      !(await fp.has({ role: "textbox", name: "/code/i" }))
+    ) {
+      await fp.act(
+        { kind: "click" },
+        { text: "/try another way/i" },
+        { goal: "choose a different second step" },
+      );
+      await fp.wait(SETTLE_MS);
+      await fp.act(
+        { kind: "click" },
+        { text: "/authenticator app/i" },
+        { goal: "choose the authenticator app" },
+      );
+      await fp.wait(SETTLE_MS);
+    }
+    const code = await ctx.code("totp");
+    await fp.act(
+      { kind: "fill", value: code },
+      { role: "textbox", name: "/code/i" },
+      { goal: "type the verification code" },
+    );
+    await fp.act(
+      { kind: "click" },
+      { role: "button", name: "/^next$/i" },
+      { goal: "submit the code" },
+    );
+    await fp.wait(SETTLE_MS);
+    text = await fp.text();
+  }
+  if (/verify it.s you|confirm your recovery|tap yes on your/i.test(text))
+    throw new LoginFailed(
+      site,
+      "Google asked for a second step this tool cannot answer: enroll TOTP",
+    );
+}
+
+export interface OauthLoginSpec {
+  start: string;
+  /** The "Sign in with Google" button on the site's login page. */
+  button: Hints;
+  /** Which stored credential the provider takes; `google` by default. */
+  provider?: "google";
+  /** The site's page after the round trip. */
+  success: RegExp;
+}
+
+/** Sign in through an identity provider's button: popup or redirect, then back to the site. */
+export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signIn"] {
+  const provider = spec.provider ?? "google";
+  return async (ctx) => {
+    const { fp } = ctx;
+    const main = fp.page;
+    await fp.open(spec.start, { allowWall: true });
+    const popup = fp.nextPage(8_000);
+    await fp.act({ kind: "click" }, spec.button, { goal: `sign in with ${provider}` });
+    const page = await popup;
+    if (page) fp.switchTo(page);
+    else if (
+      !(await fp.waitForUrl(/accounts\.google\.com/, 15_000)) &&
+      !/accounts\.google\.com/.test(fp.url())
+    )
+      throw new LoginFailed(site, `no ${provider} sign-in page after pressing the button`);
+    const cred = await ctx.credFor(provider);
+    await signInToGoogle({ ...ctx, cred });
+    fp.switchTo(main);
+    if (!(await fp.waitForUrl(spec.success, 30_000)) && !spec.success.test(fp.url()))
+      throw new LoginFailed(site, `still on ${fp.url()} after the ${provider} round trip`);
+  };
+}
+
 export interface LoginOptions {
   credentials: CredentialStore;
   codes: CodeSource;
@@ -103,19 +240,25 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
   return async (fp: FlowPage, site: string): Promise<LoginOutcome> => {
     const login = byName.get(site);
     if (!login) return "unknown-site";
-    const cred = await opts.credentials.get(site);
+    const cred = await opts.credentials.get(login.credential ?? site);
     if (!cred) return "no-credential";
     const since = now();
-    await login.signIn({
+    const ctx: SignInContext = {
       fp,
       cred,
       async code(kind, hint) {
         const req = hint ? { site, kind, since, hint } : { site, kind, since };
-        const c = await opts.codes.get(req, cred);
+        const c = await opts.codes.get(req, ctx.cred);
         if (!c) throw new LoginFailed(site, `no ${kind} code available`);
         return c;
       },
-    });
+      async credFor(other) {
+        const c = await opts.credentials.get(other);
+        if (!c) throw new LoginFailed(site, `no credential stored for ${other}`);
+        return c;
+      },
+    };
+    await login.signIn(ctx);
     if (!(await login.loggedIn(fp)))
       throw new LoginFailed(site, "sign-in ran but the page is not signed in");
     return "signed-in";

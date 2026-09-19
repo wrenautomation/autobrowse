@@ -93,7 +93,7 @@ describe("credentials", () => {
       s: { username: "b", password: "2" },
       t: { username: "t", password: "3" },
     });
-    const l = layeredCredentials(a, b);
+    const l = layeredCredentials([a, b], a);
     expect((await l.get("s"))?.username).toBe("a");
     expect((await l.get("t"))?.username).toBe("t");
     await l.put("n", { username: "n", password: "4" });

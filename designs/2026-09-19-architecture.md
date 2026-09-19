@@ -114,7 +114,12 @@ table's "may import" column.
   `login` hook for the site, then opens the URL again. A captcha, a site
   without a stored credential, or a failed sign-in becomes `NeedsHuman`.
 - `SiteLogin` per site: `loggedIn(fp)` and `signIn(ctx)`; `formLogin`
-  writes the common shape. Locator names written `/pattern/i` match
+  writes the common shape; `oauthLogin` presses a provider button (popup
+  or redirect) and runs `signInToGoogle` on the provider's pages. A site's
+  `credential` names which stored credential signs it in: `google` covers
+  the admin console and every "Sign in with Google" button. A credential
+  with `via: "google"` takes the button. Verified live 2026-09-19:
+  Cloudflare through Google. Locator names written `/pattern/i` match
   loosely. A rejected password stops at once (no lockouts).
 - Second factors are `CodeSource`s: TOTP from the stored seed (waits out a
   code about to expire), email codes polled from Gmail after the attempt

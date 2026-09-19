@@ -68,8 +68,8 @@ pnpm worker                     # Restate endpoint on :9081, UI + API on :9080
 restate cloud env tunnel        # expose it to the shared Restate Cloud env, register it
 pnpm ui:dev                     # SPA with hot reload on :5173, proxied to :9080
 
-echo '{"username":"…","password":"…"}' | pnpm autobrowse creds set cloudflare   # stdin, never argv
-pnpm autobrowse login cloudflare               # signs in by itself: password + TOTP/email code
+pnpm autobrowse setup                          # asks once for what is missing (hidden input, sealed store)
+pnpm autobrowse login cloudflare               # signs in by itself: password or the Google button, TOTP/email/SMS code
 pnpm autobrowse enroll-totp cloudflare --url https://dash.cloudflare.com/profile/authentication  # reads the seed, stores it, confirms
 echo '{"provider":"cloudflare"}' > /tmp/bootstrap.json
 pnpm autobrowse run bootstrap cloudflare --plan /tmp/bootstrap.json   # mints CLOUDFLARE_ACCOUNT_ID + API token into .env
