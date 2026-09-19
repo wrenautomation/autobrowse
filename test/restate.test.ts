@@ -1,6 +1,8 @@
 /**
- * DomainProvision under a real Restate: a run parks at the purchase gate,
- * `status` shows it, `approve` resumes it, the flow finishes. Needs Docker.
+ * DomainProvision under a real Restate: a run stops at the purchase gate,
+ * `status` shows it, `approve` moves it on, the flow finishes; pause holds
+ * the next step and play releases it; reset forgets a waiting run. Needs
+ * Docker.
  */
 import * as clients from "@restatedev/restate-sdk-clients";
 import { RestateTestEnvironment } from "@restatedev/restate-sdk-testcontainers";
@@ -24,10 +26,6 @@ const object = (domain: string) =>
   clients
     .connect({ url: env.baseUrl() })
     .objectClient<DomainProvision>({ name: "DomainProvision" }, domain);
-const sender = (domain: string) =>
-  clients
-    .connect({ url: env.baseUrl() })
-    .objectSendClient<DomainProvision>({ name: "DomainProvision" }, domain);
 
 async function until<T>(fn: () => Promise<T>, ok: (v: T) => boolean, ms = 30_000): Promise<T> {
   const deadline = Date.now() + ms;
@@ -39,22 +37,23 @@ async function until<T>(fn: () => Promise<T>, ok: (v: T) => boolean, ms = 30_000
   }
 }
 
+const inbox = [{ local: "will", givenName: "W", familyName: "J" }];
+
 describe("DomainProvision", () => {
-  it("parks at the purchase gate, resumes on approve, finishes", async () => {
+  it("waits at the purchase gate, moves on approve, finishes", async () => {
     const domain = "fresh.test";
-    await sender(domain).run({
-      domain,
-      inboxes: [{ local: "will", givenName: "W", familyName: "J" }],
-    });
-    const parked = await until(
+    await object(domain).run({ domain, inboxes: inbox });
+    const waiting = await until(
       () => object(domain).status(),
       (s) => s.gate !== null,
     );
-    expect(parked.gate?.name).toBe("purchase");
-    expect(parked.outcome?.results.check?.status).toBe("done");
-    expect(deps.notes).toContain("provision fresh.test: approve purchase?");
+    expect(waiting.gate).toMatchObject({ name: "purchase", step: "buy" });
+    expect(waiting.outcome).toMatchObject({ status: "waiting" });
+    expect(waiting.outcome?.results.check?.status).toBe("done");
+    expect(deps.notes).toContain("autobrowse fresh.test: approve purchase?");
+    await expect(object(domain).run(null)).rejects.toThrow(/waiting at a gate/);
 
-    await expect(object(domain).approve({ name: "wrong" })).rejects.toThrow(
+    await expect(object(domain).approve({ name: "human" })).rejects.toThrow(
       /the open gate is purchase/,
     );
     await object(domain).approve({ name: "purchase" });
@@ -65,30 +64,41 @@ describe("DomainProvision", () => {
     expect(finished.gate).toBeNull();
     expect(finished.outcome?.results.buy?.detail).toBe("bought ($10.11)");
     expect(finished.outcome?.results.loops?.status).toBe("done");
-    expect(deps.notes).toContain("provision fresh.test: done");
+    expect(deps.notes).toContain("autobrowse fresh.test: done");
     expect(deps.calls).toContain("buy fresh.test");
   });
 
-  it("cancel ends a parked run and it forgets itself; reset clears a finished one", async () => {
+  it("pause holds the next step; play runs on", async () => {
+    const domain = "paused.test";
+    // Paused before it starts: `run` queues a step that sees the flag and stops.
+    await object(domain).pause();
+    await object(domain).run({ domain, inboxes: inbox, buy: false });
+    await new Promise((r) => setTimeout(r, 1500));
+    const held = await object(domain).status();
+    expect(held.paused).toBe(true);
+    expect(held.outcome).toBeNull();
+    await object(domain).play();
+    const done = await until(
+      () => object(domain).status(),
+      (s) => s.outcome?.status !== undefined && s.outcome.status !== "running",
+    );
+    // buy=false on a free domain fails at buy: the point is that play ran the steps.
+    expect(done.outcome?.results.check?.status).toBe("done");
+    expect(done.outcome?.results.buy?.status).toBe("failed");
+  });
+
+  it("reset forgets a waiting run and a stale step message cannot revive it", async () => {
     const domain = "second.test";
-    await sender(domain).run({
-      domain,
-      inboxes: [{ local: "a", givenName: "A", familyName: "B" }],
-    });
+    await object(domain).run({ domain, inboxes: inbox });
     await until(
       () => object(domain).status(),
       (s) => s.gate !== null,
     );
-    expect(await object(domain).cancel({ note: "changed my mind" })).toBe(true);
-    const s = await until(
-      () => object(domain).status(),
-      (x) => x.gate === null,
-    );
-    expect(s.outcome).toBeNull();
-    expect(s.plan).toBeNull();
-    expect(await object(domain).cancel(null)).toBe(false);
     await object(domain).reset();
+    const s = await object(domain).status();
+    expect(s).toMatchObject({ gate: null, plan: null, outcome: null, paused: false });
     await expect(object(domain).approve({ name: "purchase" })).rejects.toThrow(/no gate open/);
+    await expect(object(domain).run(null)).rejects.toThrow(/no plan/);
     expect(deps.calls).not.toContain("buy second.test");
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cloudflare } from "../src/clients/cloudflare.js";
+import { httpClient } from "../src/clients/http.js";
 
 /** A tiny Cloudflare: one zone, records in memory, the envelope shape of the real API. */
 function fakeApi() {
@@ -70,7 +71,11 @@ function fakeApi() {
 describe("cloudflare client", () => {
   it("upserts records: create, keep, replace", async () => {
     const api = fakeApi();
-    const cf = cloudflare({ apiToken: "t", accountId: "acc", fetch: api.fetchImpl });
+    const cf = cloudflare({
+      apiToken: "t",
+      accountId: "acc",
+      http: httpClient({ fetch: api.fetchImpl }),
+    });
     expect(await cf.zoneId("x.test")).toBe("z1");
     expect(
       await cf.upsertRecord("z1", {
@@ -109,5 +114,7 @@ describe("cloudflare client", () => {
     expect(await cf.registered("x.test")).toBe(false);
     // The token travels in a header, never in the URL.
     expect(api.calls.every((c) => !c.includes("t="))).toBe(true);
+    // The zone name is looked up once, not once per record.
+    expect(api.calls.filter((c) => c === "GET /client/v4/zones/z1")).toHaveLength(1);
   });
 });

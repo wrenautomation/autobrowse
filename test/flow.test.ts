@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parsePlan } from "../src/flow/plan.js";
-import { RESULTS, runFlow, STEPS } from "../src/flow/steps.js";
-import { fakeCloudflare, fakeDeps, fakeEffects, NeedsHuman } from "./fakes.js";
+import { cloudflareBuy } from "../src/browser/flows/cloudflare-buy.js";
+import { googleDkimGenerate } from "../src/browser/flows/google-dkim.js";
+import { parseInboxSpec, parsePlan } from "../src/flow/plan.js";
+import { KEYS, nextStep, runFlow } from "../src/flow/run.js";
+import { STEPS } from "../src/flow/steps.js";
+import { fakeCloudflare, fakeDeps, fakeEffects, NeedsHuman, scriptedAnswers } from "./fakes.js";
 
 const plan = (over: Record<string, unknown> = {}) =>
   parsePlan({
@@ -17,10 +20,11 @@ const plan = (over: Record<string, unknown> = {}) =>
 describe("runFlow", () => {
   it("provisions a free domain end to end after the purchase is approved", async () => {
     const deps = fakeDeps();
-    const { fx, gates } = fakeEffects({ purchase: [{ approved: true, note: null }] });
-    const out = await runFlow(fx, deps, plan());
+    const { fx } = fakeEffects();
+    const { answer, asked } = scriptedAnswers({ purchase: [{}] });
+    const out = await runFlow(fx, deps, plan(), answer);
     expect(out.status).toBe("done");
-    expect(gates).toEqual(["purchase"]);
+    expect(asked).toEqual(["purchase"]);
     expect(Object.keys(out.results)).toEqual([...STEPS]);
     expect(out.results.buy?.detail).toBe("bought ($10.11)");
     expect(deps.calls).toEqual([
@@ -30,9 +34,9 @@ describe("runFlow", () => {
       "dkimGenerate",
       "dkimStart",
       "createUser will@wren-new.test",
-      "secret /provision/inboxes/will@wren-new.test/password",
+      "secret /autobrowse/inboxes/will@wren-new.test/password",
       "createUser hello@wren-new.test",
-      "secret /provision/inboxes/hello@wren-new.test/password",
+      "secret /autobrowse/inboxes/hello@wren-new.test/password",
       "signature will@wren-new.test",
       "signature hello@wren-new.test",
       "warmup will@wren-new.test",
@@ -58,18 +62,20 @@ describe("runFlow", () => {
 
   it("skips the purchase for an owned domain and never opens a gate", async () => {
     const deps = fakeDeps({ cloudflare: fakeCloudflare({ registered: true, zone: "z1" }) });
-    const { fx, gates } = fakeEffects();
-    const out = await runFlow(fx, deps, plan());
+    const { fx } = fakeEffects();
+    const { answer, asked } = scriptedAnswers({});
+    const out = await runFlow(fx, deps, plan(), answer);
     expect(out.status).toBe("done");
-    expect(gates).toEqual([]);
+    expect(asked).toEqual([]);
     expect(out.results.buy?.status).toBe("skipped");
     expect(out.results.zone?.detail).toBe("zone z1");
   });
 
   it("stops as rejected when the purchase is declined", async () => {
     const deps = fakeDeps();
-    const { fx } = fakeEffects({ purchase: [{ approved: false, note: "too pricey" }] });
-    const out = await runFlow(fx, deps, plan());
+    const { fx } = fakeEffects();
+    const { answer } = scriptedAnswers({ purchase: [{ approved: false, note: "too pricey" }] });
+    const out = await runFlow(fx, deps, plan(), answer);
     expect(out.status).toBe("rejected");
     expect(out.results.buy).toMatchObject({ status: "rejected", detail: "too pricey" });
     expect(deps.calls).toEqual([]);
@@ -93,21 +99,61 @@ describe("runFlow", () => {
     expect(deps.calls).toEqual([]);
   });
 
-  it("parks at a human gate when a browser flow needs one, then retries the step", async () => {
+  it("waits at a human gate when a browser flow needs one, then retries the step", async () => {
     let attempts = 0;
     const deps = fakeDeps({ cloudflare: fakeCloudflare({ registered: true, zone: "z1" }) });
-    deps.browser.dkimGenerate = async () => {
+    deps.browser.on(googleDkimGenerate, async () => {
       attempts += 1;
-      if (attempts === 1) throw new NeedsHuman("google admin: login page", "/shots/x.png");
+      deps.calls.push("dkimGenerate");
+      if (attempts === 1) {
+        const err = new NeedsHuman("google admin: login page");
+        err.artifacts = { screenshot: "/shots/x.png", trace: "/shots/x.zip" };
+        throw err;
+      }
       return { name: "google._domainkey", value: "v=DKIM1; p=z" };
-    };
-    const { fx, gates } = fakeEffects({ human: [{ approved: true, note: null }] });
-    const out = await runFlow(fx, deps, plan());
+    });
+    const { fx, state } = fakeEffects();
+    // First: nobody answers, so the flow stops waiting with the artifacts on the gate.
+    const waiting = await runFlow(fx, deps, plan());
+    expect(waiting.status).toBe("waiting");
+    expect(waiting.results["dkim-generate"]).toMatchObject({
+      status: "needs-human",
+      screenshot: "/shots/x.png",
+      trace: "/shots/x.zip",
+    });
+    expect(state.get(KEYS.gate)).toMatchObject({ name: "human", step: "dkim-generate" });
+    // Then the person does the thing and approves: the step reruns, nothing before it does.
+    const { answer, asked } = scriptedAnswers({ human: [{}] });
+    const before = deps.calls.length;
+    const out = await runFlow(fx, deps, plan(), answer);
     expect(out.status).toBe("done");
-    expect(gates).toEqual(["human"]);
+    expect(asked).toEqual(["human"]);
     expect(attempts).toBe(2);
-    expect(deps.notes).toEqual(["provision wren-new.test: needs you at dkim-generate"]);
+    expect(deps.calls.slice(before)[0]).toBe("dkimGenerate");
     expect(out.results["dkim-generate"]?.status).toBe("done");
+    expect(state.get(KEYS.gate)).toBeUndefined();
+  });
+
+  it("a human gate can also be rejected", async () => {
+    const deps = fakeDeps({ cloudflare: fakeCloudflare({ registered: true, zone: "z1" }) });
+    deps.browser.on(googleDkimGenerate, async () => {
+      throw new NeedsHuman("nope");
+    });
+    const { fx } = fakeEffects();
+    const { answer } = scriptedAnswers({ human: [{ approved: false, note: "later" }] });
+    const out = await runFlow(fx, deps, plan(), answer);
+    expect(out.status).toBe("rejected");
+    expect(out.results["dkim-generate"]).toMatchObject({ status: "rejected", detail: "later" });
+  });
+
+  it("a purchase that the Registrar API does not confirm asks a person", async () => {
+    const deps = fakeDeps();
+    deps.browser.on(cloudflareBuy, async () => ({ priceText: null }));
+    const { fx } = fakeEffects();
+    const { answer } = scriptedAnswers({ purchase: [{}] });
+    const out = await runFlow(fx, deps, plan(), answer);
+    expect(out.status).toBe("waiting");
+    expect(out.results.buy?.detail).toMatch(/does not list/);
   });
 
   it("resumes after a failure without redoing finished steps", async () => {
@@ -132,7 +178,9 @@ describe("runFlow", () => {
     expect(second.results.inboxes?.detail).toBe(
       "will@wren-new.test created, hello@wren-new.test created",
     );
-    expect((state.get(RESULTS) as Record<string, { status: string }>).inboxes.status).toBe("done");
+    expect((state.get(KEYS.results) as Record<string, { status: string }>).inboxes.status).toBe(
+      "done",
+    );
   });
 
   it("honours no-handoff and no-warmup", async () => {
@@ -148,6 +196,32 @@ describe("runFlow", () => {
         (c) => c.startsWith("warmup") || c.startsWith("loops") || c === "roster write",
       ),
     ).toBe(false);
+  });
+});
+
+describe("nextStep", () => {
+  it("skips done and skipped, retries needs-human, stops at a verdict", () => {
+    const r = (status: string) => ({ status: status as never, detail: "", at: "" });
+    expect(nextStep({})).toBe("check");
+    expect(nextStep({ check: r("done"), buy: r("skipped") })).toBe("zone");
+    expect(nextStep({ check: r("done"), buy: r("needs-human") })).toBe("buy");
+    expect(nextStep({ check: r("done"), buy: r("rejected") })).toBeNull();
+    expect(nextStep({ check: r("done"), buy: r("failed") })).toBe("buy");
+    expect(nextStep({ check: r("done"), buy: r("planned") })).toBe("buy");
+    const all = Object.fromEntries(STEPS.map((s) => [s, r("done")]));
+    expect(nextStep(all)).toBeNull();
+  });
+});
+
+describe("parseInboxSpec", () => {
+  it("splits local:Given:Family and rejects anything else", () => {
+    expect(parseInboxSpec("will:William:Jin")).toEqual({
+      local: "will",
+      givenName: "William",
+      familyName: "Jin",
+    });
+    expect(() => parseInboxSpec("will:William")).toThrow(/local:Given:Family/);
+    expect(() => parseInboxSpec("Will:W:J")).toThrow();
   });
 });
 

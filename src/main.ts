@@ -9,4 +9,4 @@ const settings = loadSettings();
 const log = pino({ level: settings.logLevel });
 const port = Number(process.env.PORT ?? 9081);
 await serve({ services: buildServices(settings, log), port });
-log.info({ port, browser: settings.browser }, "provision listening");
+log.info({ port, browser: settings.browser }, "autobrowse listening");

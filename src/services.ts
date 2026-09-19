@@ -1,13 +1,12 @@
 /** Every client the flow needs, built once from settings. Secrets stay inside the clients. */
 import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Logger } from "pino";
-import { cloudflareBuy } from "./browser/cloudflare-buy.js";
-import { googleDkimGenerate, googleDkimStart } from "./browser/google-dkim.js";
-import { instantlyWarmup } from "./browser/instantly-warmup.js";
-import { type BrowserOptions, openSession, type Session } from "./browser/session.js";
+import { flowRunner } from "./browser/flow.js";
+import type { BrowserOptions } from "./browser/session.js";
 import { cloudflare } from "./clients/cloudflare.js";
 import { gmailClient } from "./clients/gmail.js";
 import { googleAdmin } from "./clients/google-admin.js";
+import { httpClient } from "./clients/http.js";
 import { domainAvailability } from "./clients/rdap.js";
 import { ssmRosterStore } from "./clients/roster.js";
 import { wrenClient } from "./clients/wren.js";
@@ -26,11 +25,30 @@ function required<T>(value: T | undefined, env: string): T {
   return value;
 }
 
+export function browserOptions(settings: Settings, headless = true): BrowserOptions {
+  return {
+    tier: settings.browser,
+    profilesDir: settings.profilesDir,
+    artifactsDir: settings.artifactsDir,
+    headless,
+    browserbase:
+      settings.browserbaseApiKey && settings.browserbaseProjectId
+        ? {
+            apiKey: settings.browserbaseApiKey,
+            projectId: settings.browserbaseProjectId,
+            http: httpClient(),
+          }
+        : null,
+  };
+}
+
 export function buildDeps(settings: Settings, log: Logger): Deps {
+  const http = httpClient();
   const key = loadServiceAccountKey(
     required(settings.googleServiceAccount, "GOOGLE_SERVICE_ACCOUNT"),
   );
   const admin = required(settings.googleAdminUser, "GOOGLE_ADMIN_USER");
+  // One token supplier per (subject, scopes); each caches its bearer until a minute before expiry.
   const tokens = new Map<string, TokenSupplier>();
   const tokenFor = (subject: string, scopes: readonly string[]): TokenSupplier => {
     const k = `${subject} ${scopes.join(" ")}`;
@@ -44,39 +62,25 @@ export function buildDeps(settings: Settings, log: Logger): Deps {
   const gmail = gmailClient({
     tokenFor,
     scopes: { settings: SCOPES.gmailSettings, send: SCOPES.gmailSend },
+    http,
   });
   const ssm = new SSMClient({ region: settings.awsRegion });
-  const cf = cloudflare({
-    apiToken: required(settings.cloudflareApiToken, "CLOUDFLARE_API_TOKEN"),
-    accountId: required(settings.cloudflareAccountId, "CLOUDFLARE_ACCOUNT_ID"),
-  });
-  const browserOpts: BrowserOptions = {
-    tier: settings.browser,
-    profilesDir: settings.profilesDir,
-    browserbase:
-      settings.browserbaseApiKey && settings.browserbaseProjectId
-        ? { apiKey: settings.browserbaseApiKey, projectId: settings.browserbaseProjectId }
-        : null,
-  };
-  const withSession = async <T>(site: string, fn: (s: Session) => Promise<T>): Promise<T> => {
-    const session = await openSession(site, browserOpts);
-    try {
-      return await fn(session);
-    } finally {
-      await session.close();
-    }
-  };
   const notifyTo = settings.notifyTo;
   const notifyFrom = settings.notifyFrom ?? settings.notifyTo;
 
   return {
-    cloudflare: cf,
+    cloudflare: cloudflare({
+      apiToken: required(settings.cloudflareApiToken, "CLOUDFLARE_API_TOKEN"),
+      accountId: required(settings.cloudflareAccountId, "CLOUDFLARE_ACCOUNT_ID"),
+      http,
+    }),
     google: googleAdmin({
       token: tokenFor(admin, [
         SCOPES.directoryDomain,
         SCOPES.directoryUser,
         SCOPES.siteVerification,
       ]),
+      http,
     }),
     gmail,
     roster: ssmRosterStore({ param: settings.rosterSsmParam, region: settings.awsRegion }),
@@ -85,17 +89,10 @@ export function buildDeps(settings: Settings, log: Logger): Deps {
       authToken: settings.restateAuthToken ?? null,
       githubToken: settings.githubToken ?? null,
       repo: settings.wrenRepo,
+      http,
     }),
-    availability: (domain) => domainAvailability(domain),
-    browser: {
-      buy: (domain) =>
-        withSession("cloudflare", (s) =>
-          cloudflareBuy(s, required(settings.cloudflareAccountId, "CLOUDFLARE_ACCOUNT_ID"), domain),
-        ),
-      dkimGenerate: (domain) => withSession("google-admin", (s) => googleDkimGenerate(s, domain)),
-      dkimStart: (domain) => withSession("google-admin", (s) => googleDkimStart(s, domain)),
-      warmup: (email) => withSession("instantly", (s) => instantlyWarmup(s, email)),
-    },
+    availability: (domain) => domainAvailability(http, domain),
+    browser: flowRunner(browserOptions(settings)),
     secrets: {
       put: async (name, value) => {
         await ssm.send(

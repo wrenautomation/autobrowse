@@ -8,8 +8,7 @@
 import { createSign } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-
-export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
+import type { FetchLike, HttpClient, JsonResponse } from "./clients/http.js";
 
 export const SCOPES = {
   directoryDomain: "https://www.googleapis.com/auth/admin.directory.domain",
@@ -159,25 +158,14 @@ export function serviceAccountToken(key: ServiceAccountKey, opts: TokenOptions):
 
 /** A JSON call with a bearer; the bearer never reaches a URL or an error message. */
 export async function authedJson<T>(
-  doFetch: FetchLike,
+  http: HttpClient,
   token: TokenSupplier,
   url: string,
-  init: { method?: string; body?: unknown } = {},
-): Promise<{ status: number; body: T | null }> {
-  const response = await doFetch(url, {
-    method: init.method ?? "GET",
-    headers: {
-      authorization: `Bearer ${await token()}`,
-      ...(init.body === undefined ? {} : { "content-type": "application/json" }),
-    },
-    ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+  init: { method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: unknown } = {},
+): Promise<JsonResponse<T>> {
+  return http.json<T>(url, {
+    ...(init.method ? { method: init.method } : {}),
+    ...(init.body === undefined ? {} : { body: init.body }),
+    headers: { authorization: `Bearer ${await token()}` },
   });
-  const text = await response.text();
-  let body: T | null = null;
-  try {
-    body = text ? (JSON.parse(text) as T) : null;
-  } catch {
-    body = null;
-  }
-  return { status: response.status, body };
 }

@@ -1,171 +1,199 @@
 /**
- * `DomainProvision/{domain}`: one Virtual Object per domain, so two runs for
- * the same domain serialize and its state (results, memo, open gates) is
- * one place. `run` walks the flow; `approve`/`reject` answer whichever gate
- * it is parked at; `status` is shared and never waits.
+ * `DomainProvision/{domain}`: one Virtual Object per domain, so two runs
+ * for the same domain serialize and its state is in one place.
+ *
+ * Every handler is short. `step` runs one step and sends itself the next,
+ * so between steps the object is free: `pause`, `reset`, `approve` never
+ * queue behind a run for longer than one step. A gate is state, not a
+ * parked invocation; `approve`/`reject` record the answer and send `step`.
+ * A generation number stamps every chained `step`, so a message from a
+ * run that was reset cannot move the run that replaced it.
  */
 import * as restate from "@restatedev/restate-sdk";
-import type { Effects, GateAnswer } from "../flow/effects.js";
+import type { Effects, GateAnswer, GateName } from "../flow/effects.js";
 import { type PlanInput, parsePlan } from "../flow/plan.js";
-import { type Deps, MEMO, RESULTS, type RunOutcome, runFlow } from "../flow/steps.js";
+import {
+  advance,
+  applyAnswer,
+  KEYS,
+  type OpenGate,
+  type Outcome,
+  outcomeOf,
+  summarize,
+} from "../flow/run.js";
+import type { Deps } from "../flow/steps.js";
 
 const PLAN = "plan";
-const GATE = "gate";
 const OUTCOME = "outcome";
-const CANCELLED = "cancelled";
-
-export interface GateState {
-  name: string;
-  awakeableId: string;
-  message: string;
-  openedAt: string;
-}
+const PAUSED = "paused";
+const GEN = "gen";
 
 export interface ProvisionStatus {
   domain: string;
-  plan: unknown;
-  gate: GateState | null;
-  outcome: RunOutcome | null;
+  plan: PlanInput | null;
+  gate: OpenGate | null;
+  paused: boolean;
+  outcome: Outcome | null;
 }
 
-function effects(ctx: restate.ObjectContext, deps: Deps): Effects {
+const SERVICE = { name: "DomainProvision" } as const;
+
+function effects(ctx: restate.ObjectContext): Effects {
   return {
     run: (name, fn) => ctx.run(name, fn),
-    async gate(name, message) {
-      const { id, promise } = ctx.awakeable<GateAnswer>();
-      const openedAt = new Date(await ctx.date.now()).toISOString();
-      ctx.set<GateState>(GATE, { name, awakeableId: id, message, openedAt });
-      await ctx.run("notify gate", () =>
-        deps.notify(
-          `provision ${ctx.key}: approve ${name}?`,
-          `${message}\n\nprovision approve ${ctx.key} ${name}\nprovision reject ${ctx.key} ${name}`,
-        ),
-      );
-      let answer: GateAnswer;
-      try {
-        answer = await promise;
-      } catch (err) {
-        // `cancel` rejected the awakeable: the run ends as rejected and forgets itself.
-        answer = {
-          approved: false,
-          note: `${CANCELLED}: ${err instanceof Error ? err.message : String(err)}`,
-        };
-      }
-      ctx.clear(GATE);
-      return answer;
-    },
     get: (key) => ctx.get(key),
     set: (key, value) => ctx.set(key, value),
+    clear: (key) => ctx.clear(key),
     sleep: (ms) => ctx.sleep(ms),
     now: async () => new Date(await ctx.date.now()),
   };
 }
 
 export function makeDomainProvision(deps: Deps) {
+  /** Queue the next step for this generation. */
+  const next = (ctx: restate.ObjectContext, gen: number) =>
+    ctx.objectSendClient<DomainProvision>(SERVICE, ctx.key).step({ gen });
+
+  const gateOpen = async (ctx: restate.ObjectContext, name: string): Promise<OpenGate> => {
+    const gate = await ctx.get<OpenGate>(KEYS.gate);
+    if (!gate) throw new restate.TerminalError(`no gate open for ${ctx.key}`);
+    if (gate.name !== name)
+      throw new restate.TerminalError(`the open gate is ${gate.name}, not ${name}`);
+    return gate;
+  };
+
+  const answer = async (
+    ctx: restate.ObjectContext,
+    input: { name: string; note?: string },
+    approved: boolean,
+  ): Promise<OpenGate> => {
+    const gate = await gateOpen(ctx, input.name);
+    const a: GateAnswer = {
+      approved,
+      note: input.note ?? null,
+      at: new Date(await ctx.date.now()).toISOString(),
+    };
+    const verdict = await applyAnswer(effects(ctx), gate, a);
+    if (verdict === "rejected") ctx.set(OUTCOME, await outcomeOf(effects(ctx), "rejected"));
+    else next(ctx, (await ctx.get<number>(GEN)) ?? 0);
+    return gate;
+  };
+
   return restate.object({
-    name: "DomainProvision",
+    name: SERVICE.name,
     handlers: {
-      /** Start or resume the flow for this domain with `plan` (omit to reuse the stored one). */
-      run: async (ctx: restate.ObjectContext, input: PlanInput | null): Promise<RunOutcome> => {
+      /** Start or resume the flow with `plan` (omit to reuse the stored one). Returns at once; watch `status`. */
+      run: async (ctx: restate.ObjectContext, input: PlanInput | null): Promise<void> => {
         const stored = await ctx.get<PlanInput>(PLAN);
         const raw = input ?? stored;
         if (!raw) throw new restate.TerminalError("no plan given and none stored for this domain");
-        const plan = parsePlan({ ...raw, domain: ctx.key });
+        parsePlan({ ...raw, domain: ctx.key });
+        if (await ctx.get<OpenGate>(KEYS.gate))
+          throw new restate.TerminalError(`${ctx.key} is waiting at a gate: approve or reject it`);
         ctx.set(PLAN, raw);
-        const outcome = await runFlow(effects(ctx, deps), deps, plan);
-        if (outcome.status === "rejected" && wasCancelled(outcome)) {
-          ctx.clearAll();
-          return outcome;
+        ctx.clear(OUTCOME);
+        const gen = ((await ctx.get<number>(GEN)) ?? 0) + 1;
+        ctx.set(GEN, gen);
+        next(ctx, gen);
+      },
+
+      /** One step, then the next. Internal: `run`, `play` and `approve` send it. */
+      step: async (ctx: restate.ObjectContext, input: { gen: number }): Promise<void> => {
+        const gen = (await ctx.get<number>(GEN)) ?? 0;
+        const raw = await ctx.get<PlanInput>(PLAN);
+        if (input.gen !== gen || !raw) return; // a message from a run that is gone
+        if (await ctx.get<boolean>(PAUSED)) return; // `play` sends the next step
+        const plan = parsePlan({ ...raw, domain: ctx.key });
+        const fx = effects(ctx);
+        const a = await advance(fx, deps, plan);
+        if (a.kind === "continue") {
+          next(ctx, gen);
+          return;
         }
-        ctx.set(OUTCOME, outcome);
-        if (outcome.status === "done") {
-          await ctx.run("notify done", () =>
-            deps.notify(`provision ${ctx.key}: done`, summarize(outcome)),
+        if (a.kind === "waiting") {
+          const g = a.gate;
+          await ctx.run("notify gate", () =>
+            deps.notify(
+              `autobrowse ${ctx.key}: ${g.name === "human" ? `needs you at ${g.step}` : `approve ${g.name}?`}`,
+              [
+                g.prompt,
+                g.screenshot ?? "",
+                g.trace ? `trace: npx playwright show-trace ${g.trace}` : "",
+                "",
+                `autobrowse approve ${ctx.key} ${g.name}`,
+                `autobrowse reject ${ctx.key} ${g.name}`,
+              ]
+                .filter((l) => l !== "")
+                .join("\n"),
+            ),
           );
+          return;
         }
-        return outcome;
+        const outcome = await outcomeOf(fx, a.status);
+        ctx.set(OUTCOME, outcome);
+        await ctx.run("notify finished", () =>
+          deps.notify(`autobrowse ${ctx.key}: ${a.status}`, summarize(outcome)),
+        );
       },
 
-      /**
-       * Forget a finished run so the next `run` starts over. Exclusive, so it
-       * queues behind a run in flight: `cancel` that one first.
-       */
+      /** Stop before the next step. A step in flight finishes first. */
+      pause: async (ctx: restate.ObjectContext): Promise<void> => {
+        ctx.set(PAUSED, true);
+      },
+
+      /** Undo `pause` and run on. */
+      play: async (ctx: restate.ObjectContext): Promise<void> => {
+        if (!(await ctx.get<boolean>(PAUSED))) return;
+        ctx.clear(PAUSED);
+        if (await ctx.get<OpenGate>(KEYS.gate)) return; // the answer will send the next step
+        if (await ctx.get<Outcome>(OUTCOME)) return; // nothing left to run
+        next(ctx, (await ctx.get<number>(GEN)) ?? 0);
+      },
+
+      approve: (ctx: restate.ObjectContext, input: { name: GateName; note?: string }) =>
+        answer(ctx, input, true),
+
+      reject: (ctx: restate.ObjectContext, input: { name: GateName; note?: string }) =>
+        answer(ctx, input, false),
+
+      /** Forget everything about this domain. A step in flight finishes first; its follow-up is ignored. */
       reset: async (ctx: restate.ObjectContext): Promise<void> => {
+        const gen = (await ctx.get<number>(GEN)) ?? 0;
         ctx.clearAll();
+        ctx.set(GEN, gen + 1);
       },
-
-      /** End a run parked at a gate; it forgets itself on the way out. No-op when nothing is parked. */
-      cancel: restate.handlers.object.shared(
-        async (
-          ctx: restate.ObjectSharedContext,
-          input: { note?: string } | null,
-        ): Promise<boolean> => {
-          const gate = await ctx.get<GateState>(GATE);
-          if (!gate) return false;
-          ctx.rejectAwakeable(gate.awakeableId, input?.note ?? "cancelled by operator");
-          return true;
-        },
-      ),
-
-      approve: restate.handlers.object.shared(
-        async (
-          ctx: restate.ObjectSharedContext,
-          input: { name: string; note?: string },
-        ): Promise<GateState> =>
-          answer(ctx, input.name, { approved: true, note: input.note ?? null }),
-      ),
-
-      reject: restate.handlers.object.shared(
-        async (
-          ctx: restate.ObjectSharedContext,
-          input: { name: string; note?: string },
-        ): Promise<GateState> =>
-          answer(ctx, input.name, { approved: false, note: input.note ?? null }),
-      ),
 
       status: restate.handlers.object.shared(
-        async (ctx: restate.ObjectSharedContext): Promise<ProvisionStatus> => ({
-          domain: ctx.key,
-          plan: await ctx.get(PLAN),
-          gate: await ctx.get<GateState>(GATE),
-          outcome: (await ctx.get<RunOutcome>(OUTCOME)) ?? (await partial(ctx)),
-        }),
+        async (ctx: restate.ObjectSharedContext): Promise<ProvisionStatus> => {
+          const outcome = await ctx.get<Outcome>(OUTCOME);
+          const gate = await ctx.get<OpenGate>(KEYS.gate);
+          return {
+            domain: ctx.key,
+            plan: await ctx.get<PlanInput>(PLAN),
+            gate,
+            paused: (await ctx.get<boolean>(PAUSED)) === true,
+            outcome: outcome ?? (await inFlight(ctx, gate)),
+          };
+        },
       ),
     },
   });
 }
 
-async function answer(
+/** Mid-run status: the results so far, without a final verdict. */
+async function inFlight(
   ctx: restate.ObjectSharedContext,
-  name: string,
-  a: GateAnswer,
-): Promise<GateState> {
-  const gate = await ctx.get<GateState>(GATE);
-  if (!gate) throw new restate.TerminalError(`no gate open for ${ctx.key}`);
-  if (gate.name !== name)
-    throw new restate.TerminalError(`the open gate is ${gate.name}, not ${name}`);
-  ctx.resolveAwakeable(gate.awakeableId, a);
-  return gate;
-}
-
-/** Mid-run status: the results so far, without an overall verdict. */
-async function partial(ctx: restate.ObjectSharedContext): Promise<RunOutcome | null> {
-  const results = await ctx.get<RunOutcome["results"]>(RESULTS);
+  gate: OpenGate | null,
+): Promise<Outcome | null> {
+  const results = await ctx.get<Outcome["results"]>(KEYS.results);
   if (!results) return null;
-  return { status: "planned", results, memo: (await ctx.get<RunOutcome["memo"]>(MEMO)) ?? {} };
+  return {
+    status: gate ? "waiting" : "running",
+    results,
+    memo: (await ctx.get<Outcome["memo"]>(KEYS.memo)) ?? {},
+  };
 }
 
-function wasCancelled(outcome: RunOutcome): boolean {
-  return Object.values(outcome.results).some(
-    (r) => r.status === "rejected" && r.detail.startsWith(CANCELLED),
-  );
-}
-
-export function summarize(outcome: RunOutcome): string {
-  const lines = Object.entries(outcome.results).map(
-    ([name, r]) => `${r.status.padEnd(11)} ${name}: ${r.detail}`,
-  );
-  return `${outcome.status}\n${lines.join("\n")}`;
-}
+export { summarize };
 
 export type DomainProvision = ReturnType<typeof makeDomainProvision>;

@@ -3,7 +3,8 @@
  * domain ownership through Site Verification, acting as the super admin.
  * Everything here is get-before-create, so a step can run twice.
  */
-import { authedJson, type FetchLike, type TokenSupplier } from "../google-auth.js";
+import { authedJson, type TokenSupplier } from "../google-auth.js";
+import type { HttpClient } from "./http.js";
 
 const DIRECTORY = "https://admin.googleapis.com/admin/directory/v1";
 const VERIFY = "https://www.googleapis.com/siteVerification/v1";
@@ -42,10 +43,13 @@ export class GoogleAdminError extends Error {
   }
 }
 
-export function googleAdmin(opts: { token: TokenSupplier; fetch?: FetchLike }): GoogleAdminClient {
-  const doFetch = opts.fetch ?? ((u, i) => fetch(u, i));
-  const call = <T>(what: string, url: string, init?: { method?: string; body?: unknown }) =>
-    authedJson<T>(doFetch, opts.token, url, init).then((r) => {
+export function googleAdmin(opts: { token: TokenSupplier; http: HttpClient }): GoogleAdminClient {
+  const call = <T>(
+    what: string,
+    url: string,
+    init?: { method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: unknown },
+  ) =>
+    authedJson<T>(opts.http, opts.token, url, init).then((r) => {
       if (r.status === 404) return null;
       if (r.status >= 400) throw new GoogleAdminError(what, r.status, r.body);
       return r.body as T;
@@ -78,7 +82,7 @@ export function googleAdmin(opts: { token: TokenSupplier; fetch?: FetchLike }): 
     },
     async verifyDomain(domain) {
       const r = await authedJson<{ id?: string; error?: { message?: string } }>(
-        doFetch,
+        opts.http,
         opts.token,
         `${VERIFY}/webResource?verificationMethod=DNS_TXT`,
         { method: "POST", body: { site: { type: "INET_DOMAIN", identifier: domain } } },

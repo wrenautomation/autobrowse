@@ -3,7 +3,7 @@
  * domain. The API covers zones and records; it does not sell domains, so
  * buying is a browser flow (`browser/cloudflare-buy.ts`).
  */
-import type { FetchLike } from "../google-auth.js";
+import { type HttpClient, safeUrl } from "./http.js";
 
 const API = "https://api.cloudflare.com/client/v4";
 
@@ -43,35 +43,43 @@ type Envelope<T> = {
 };
 
 export class CloudflareError extends Error {
+  readonly status: number;
   constructor(what: string, status: number, errors: Array<{ code: number; message: string }> = []) {
     super(
       `cloudflare ${what}: HTTP ${status} ${errors.map((e) => `${e.code} ${e.message}`).join("; ")}`,
     );
     this.name = "CloudflareError";
+    this.status = status;
   }
 }
+
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export function cloudflare(opts: {
   apiToken: string;
   accountId: string;
-  fetch?: FetchLike;
+  http: HttpClient;
 }): CloudflareClient {
-  const doFetch = opts.fetch ?? ((u, i) => fetch(u, i));
-  async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const response = await doFetch(`${API}${path}`, {
+  async function call<T>(method: Method, path: string, body?: unknown): Promise<T> {
+    const r = await opts.http.json<Envelope<T>>(`${API}${path}`, {
       method,
-      headers: {
-        authorization: `Bearer ${opts.apiToken}`,
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      headers: { authorization: `Bearer ${opts.apiToken}` },
+      ...(body === undefined ? {} : { body }),
     });
-    const env = (await response.json()) as Envelope<T>;
-    if (!response.ok || !env.success)
-      throw new CloudflareError(`${method} ${path}`, response.status, env.errors);
-    return env.result;
+    if (!r.ok || !r.body?.success)
+      throw new CloudflareError(`${method} ${safeUrl(`${API}${path}`)}`, r.status, r.body?.errors);
+    return r.body.result;
   }
   const fqdn = (zone: string, name: string) => (name === "@" ? zone : `${name}.${zone}`);
+  // A zone's name never changes; one lookup per zone id per process, not per record.
+  const zoneNames = new Map<string, string>();
+  const zoneName = async (zoneId: string): Promise<string> => {
+    const known = zoneNames.get(zoneId);
+    if (known) return known;
+    const zone = await call<{ name: string }>("GET", `/zones/${zoneId}`);
+    zoneNames.set(zoneId, zone.name);
+    return zone.name;
+  };
 
   return {
     async zoneId(domain) {
@@ -89,7 +97,7 @@ export function cloudflare(opts: {
         );
         return d.name === domain;
       } catch (err) {
-        if (err instanceof CloudflareError && /HTTP 404/.test(err.message)) return false;
+        if (err instanceof CloudflareError && err.status === 404) return false;
         throw err;
       }
     },
@@ -102,7 +110,7 @@ export function cloudflare(opts: {
       return zone.id;
     },
     async listRecords(zoneId, type, name) {
-      const zone = await call<{ name: string }>("GET", `/zones/${zoneId}`);
+      const zone = { name: await zoneName(zoneId) };
       const q = new URLSearchParams();
       if (type) q.set("type", type);
       if (name) q.set("name", fqdn(zone.name, name));
@@ -127,7 +135,7 @@ export function cloudflare(opts: {
       }));
     },
     async upsertRecord(zoneId, record, o = {}) {
-      const zone = await call<{ name: string }>("GET", `/zones/${zoneId}`);
+      const zone = { name: await zoneName(zoneId) };
       const existing = await this.listRecords(zoneId, record.type, record.name);
       const same = existing.find((r) => normalize(r.content) === normalize(record.content));
       if (same) return "kept";

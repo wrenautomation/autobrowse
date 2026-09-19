@@ -7,7 +7,7 @@ import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
 
 const schema = z.object({
-  /** Restate Cloud ingress: provision's own objects and wren's loops share the env. */
+  /** Restate Cloud ingress: autobrowse's own objects and wren's loops share the env. */
   restateIngressUrl: z.string().url(),
   restateAuthToken: z.string().min(1).optional(),
   /** Cloudflare: registrar of record and DNS for every fleet domain. */
@@ -32,7 +32,11 @@ const schema = z.object({
   browserbaseApiKey: z.string().min(1).optional(),
   browserbaseProjectId: z.string().min(1).optional(),
   /** Persistent browser profiles (logins survive between runs). */
-  profilesDir: z.string().min(1).default("~/.config/provision/profiles"),
+  profilesDir: z.string().min(1).default("~/.config/autobrowse/profiles"),
+  /** Screenshots and Playwright traces from flows that needed a person or failed. */
+  artifactsDir: z.string().min(1).default("~/.config/autobrowse/artifacts"),
+  /** Raw Playwright codegen output from `record --flow`; may hold typed secrets, never committed. */
+  recordingsDir: z.string().min(1).default("recordings"),
   logLevel: z.string().default("info"),
 });
 
@@ -56,6 +60,8 @@ export const ENV_KEYS = {
   browserbaseApiKey: "BROWSERBASE_API_KEY",
   browserbaseProjectId: "BROWSERBASE_PROJECT_ID",
   profilesDir: "PROFILES_DIR",
+  artifactsDir: "ARTIFACTS_DIR",
+  recordingsDir: "RECORDINGS_DIR",
   logLevel: "LOG_LEVEL",
 } as const satisfies Record<keyof Settings, string>;
 

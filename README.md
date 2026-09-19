@@ -1,48 +1,39 @@
-# provision
+# autobrowse
 
-Automates the accounts and infrastructure the fleet runs on. Separate from
-`wren` (the campaign system) on purpose: different credentials, different
-runtime (browser sessions, long waits for a human), different release pace.
+Browser and account automation for the fleet: domains, Workspace, inboxes,
+logins, tokens. Recorded browser flows where no API exists, APIs where one
+does, a person in the loop where money, accounts or consent are involved.
+Separate from `wren` (the campaign system) on purpose: different
+credentials, different runtime (browser sessions, waits for a human),
+different release pace.
 
-## What it does
+## How it works
 
-Everything automated. Where a step spends money, creates an account, or
-accepts terms, the flow pauses for approval and resumes on the answer.
-Where a captcha or phone check appears, it hands off and resumes. Every
-flow can run sandboxed: plan and stop before the first irreversible step.
-
-Flows, each one durable, journaled, idempotent, per unit:
-
-- **Domains** — buy, DNS (MX, SPF, DKIM, DMARC, verification).
-- **Google Workspace** — tenant, secondary domains, inboxes, names,
-  signatures, send-as, delegation; service-account scopes.
-- **Email fleet** — warmup enrollment, roster entry, hand the inbox to
-  `wren` (SSM roster + start its loops).
-- **Terminal logins** — the CLI auths a new machine or CI needs (gh, aws,
-  restate, …).
-- **APIs and tokens** — create keys in provider dashboards, store them where
-  the consumer reads them (SSM, GitHub secrets, `.env`).
-
-## How
-
-API first where one exists. Recorded browser flows where none does: record
-the full flow once, build the step off the recording. An agentic browser is
-the fallback when a recorded flow breaks, with screenshots kept on the run.
-
-Durable execution on Restate (approval = an awakeable that waits for days).
-Browser via Playwright, in Browserbase or a container. TypeScript, same
-toolchain and pins as `wren`.
-
-## Coupling to `wren`
-
-Thin: writes the roster to SSM, calls `wren`'s ingress to start loops.
-No imports in either direction.
+- **Durable.** Every flow is a Restate Virtual Object. Each step is one
+  short invocation that sends itself the next, so the object is never
+  busy for longer than one step: `pause`, `reset`, `approve` always get in.
+- **Gated.** A gate is state, not a parked invocation. The step that needs
+  an answer stops the run; `approve`/`reject` record the answer and send
+  the next step. Restate keeps the state for as long as it takes.
+- **Hand-offs.** A browser flow that meets a login, captcha or consent
+  throws `NeedsHuman`. The runner saves a screenshot and a Playwright trace,
+  the run waits at gate `human`, the person does the thing in the
+  persistent profile and approves; the step reruns.
+- **Verified.** A browser step is proved by an API read afterwards (the
+  purchase by the Registrar API, DKIM by the record's shape, the user by
+  Directory). The trace is for the person; the API read is for the machine.
+- **Recorded.** `autobrowse record <site> --flow <name>` runs Playwright
+  codegen on the site's logged-in profile. The recording is transcribed
+  into a typed flow (`src/browser/flows/`) with visible-label selectors;
+  the raw recording stays out of git.
+- **Play/pause.** `pause` holds before the next step; `play` runs on. A
+  dry run stops before the first irreversible step.
 
 ## Flows built
 
-- **Domain** (`designs/2026-09-19-domain-provision.md`): buy → DNS →
-  Workspace → inboxes → signatures → warmup → roster → loops. Gated at the
-  purchase; hands off at logins/captchas/consent; dry run available.
+- **Domain** (`designs/2026-09-19-domain-flow.md`): check → buy → zone →
+  Workspace → verify → mail DNS → DKIM → inboxes → signatures → warmup →
+  roster → loops. Gated at the purchase; hands off at logins/consent.
 
 ## Run
 
@@ -51,17 +42,35 @@ cp .env.example .env            # fill it
 pnpm worker                     # Restate endpoint on :9081
 restate cloud env tunnel        # expose it to the shared Restate Cloud env, register it
 
-pnpm provision record cloudflare        # log in once per site (headed browser)
-pnpm provision record google-admin
-pnpm provision record instantly
+pnpm autobrowse record cloudflare              # log in once per site (headed browser)
+pnpm autobrowse record google-admin
+pnpm autobrowse record instantly
+pnpm autobrowse record cloudflare --flow buy   # codegen a flow on the logged-in profile
 
-pnpm provision domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin --dry-run
-pnpm provision domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin
-pnpm provision status wren-six.com
-pnpm provision approve wren-six.com purchase
-pnpm provision approve wren-six.com human    # after doing what the email asked
-pnpm provision resume wren-six.com           # after a failure
-pnpm provision reset wren-six.com
+pnpm autobrowse domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin --dry-run
+pnpm autobrowse domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin
+pnpm autobrowse status wren-six.com
+pnpm autobrowse approve wren-six.com purchase
+pnpm autobrowse approve wren-six.com human     # after doing what the email asked
+pnpm autobrowse pause wren-six.com
+pnpm autobrowse play wren-six.com
+pnpm autobrowse resume wren-six.com            # after a failure
+pnpm autobrowse reset wren-six.com
 ```
 
 `pnpm gates` = lint + typecheck + tests (the Restate test needs Docker).
+
+## Layout
+
+```
+src/clients/    http.ts (timeouts, retries, safe errors) + one client per API
+src/browser/    session (profiles, Browserbase), lock (one flow per site), flow (runner: tracing, hand-offs), flows/
+src/flow/       plan (zod), effects (host seam), steps (the domain steps), run (advance / answer / resume)
+src/restate/    the DomainProvision object
+test/           fakes + flow, http, lock, cloudflare, roster, restate (Docker)
+```
+
+## Coupling to `wren`
+
+Thin: writes the roster to SSM, dispatches wren's deploy, calls its ingress
+to start loops. No imports in either direction.

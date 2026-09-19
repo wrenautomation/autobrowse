@@ -1,5 +1,5 @@
 {
-  "name": "provision",
+  "name": "autobrowse",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.15.0",
@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "worker": "tsx src/main.ts",
-    "provision": "tsx src/cli.ts",
+    "autobrowse": "tsx src/cli.ts",
     "gates": "pnpm lint && pnpm typecheck && pnpm test"
   },
   "devDependencies": {

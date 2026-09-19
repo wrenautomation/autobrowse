@@ -36,3 +36,12 @@ export const parsePlan = (input: unknown): Plan => planSchema.parse(input);
 
 export const inboxAddress = (plan: Pick<Plan, "domain">, inbox: Pick<Inbox, "local">): string =>
   `${inbox.local}@${plan.domain}`.toLowerCase();
+
+/** `local:Given:Family` from the command line. */
+export function parseInboxSpec(spec: string): Inbox {
+  const parts = spec.split(":");
+  if (parts.length !== 3 || parts.some((p) => p === ""))
+    throw new Error(`inbox must be local:Given:Family, got "${spec}"`);
+  const [local, givenName, familyName] = parts as [string, string, string];
+  return inboxSchema.parse({ local, givenName, familyName });
+}
