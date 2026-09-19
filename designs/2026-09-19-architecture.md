@@ -129,11 +129,25 @@ table's "may import" column.
   is a gate; a guard that is off answers itself "approved". `GUARDS=none`
   runs unattended. `human` is not a guard: it means code could not do it.
 
+## Credential ladder
+
+- One stored password per provider is the root of trust. From it the
+  `bootstrap` workflow mints what the API clients need (Cloudflare: account
+  id off the URL, an API token from the dashboard, verified through
+  `/user/tokens/verify` before it is stored) and writes it through a
+  `SecretSink` (`.env` locally, SSM in prod). The worker's lazy deps pick
+  the new value up without a restart.
+- Minting is one journaled effect: the token exists in the page, the
+  verification call and the sink, never in the journal or a memo.
+
 ## Errors and retries
 
 - Inside a step, every side effect runs through `journaled()`: Restate
-  retries transient failures with backoff, six attempts, then the step
-  fails with the last message.
+  retries transient failures with backoff up to five minutes apart for
+  about a day, then the step fails with the last message. A lid closing,
+  a dropped network, a crashed Chrome (`FlowInterrupted`) are all
+  transient: the flow reruns on a fresh session from the persistent
+  profile. Nothing browser-side is held across invocations.
 - `Unrecoverable` (missing config, bad plan) and `NeedsHuman`/`FlowFailed`
   are terminal on the first throw. They cross the journal as
   `TerminalError` codes 460/461 with a JSON body, and come back out as the

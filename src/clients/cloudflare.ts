@@ -55,6 +55,15 @@ export class CloudflareError extends Error {
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
+/** `GET /user/tokens/verify` with the candidate token: active or not. Never throws on a bad token. */
+export async function verifyCloudflareToken(http: HttpClient, token: string): Promise<boolean> {
+  const r = await http.json<{ success?: boolean; result?: { status?: string } }>(
+    `${API}/user/tokens/verify`,
+    { headers: { authorization: `Bearer ${token}` } },
+  );
+  return r.ok && r.body?.success === true && r.body.result?.status === "active";
+}
+
 export function cloudflare(opts: {
   apiToken: string;
   accountId: string;

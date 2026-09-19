@@ -60,6 +60,9 @@ const schema = z.object({
   memory: z.enum(["backboard", "none"]).default("none"),
   backboardApiKey: z.string().min(1).optional(),
   backboardAssistant: z.string().min(1).default("autobrowse"),
+  /** Where minted credentials go: the local env file, or SSM (prefix `secretsPrefix`). */
+  secretSink: z.enum(["envfile", "ssm"]).default("envfile"),
+  envFile: z.string().min(1).default(".env"),
   /** Which guards stay on: `all`, `none`, or a comma list (purchase, password, irreversible). */
   guards: z.string().default("all"),
   /** Site credentials for automated sign-in; 0600 JSON. Env (`AUTOBROWSE_CRED_*`) is read first. */
@@ -117,6 +120,8 @@ export const ENV_KEYS = {
   memory: "MEMORY",
   backboardApiKey: "BACKBOARD_API_KEY",
   backboardAssistant: "BACKBOARD_ASSISTANT",
+  secretSink: "SECRET_SINK",
+  envFile: "ENV_FILE",
   guards: "GUARDS",
   credentialsFile: "CREDENTIALS_FILE",
   codesInbox: "CODES_INBOX",

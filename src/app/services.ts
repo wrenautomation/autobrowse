@@ -24,7 +24,7 @@ import {
   memoryChannel,
   webhookChannel,
 } from "../channels/index.js";
-import { cloudflare } from "../clients/cloudflare.js";
+import { cloudflare, verifyCloudflareToken } from "../clients/cloudflare.js";
 import { type GmailUserClient, gmailClient } from "../clients/gmail.js";
 import { googleAdmin } from "../clients/google-admin.js";
 import { httpClient } from "../clients/http.js";
@@ -32,6 +32,7 @@ import { domainAvailability } from "../clients/rdap.js";
 import { ssmRosterStore } from "../clients/roster.js";
 import { twilioReader } from "../clients/twilio.js";
 import { wrenClient } from "../clients/wren.js";
+import { envFileSink, type SecretSink } from "../deps/sink.js";
 import { Unrecoverable } from "../engine/effects.js";
 import { parseGuards } from "../engine/guards.js";
 import { makeRunObject } from "../engine/object.js";
@@ -46,6 +47,7 @@ import {
 import { makeLlm } from "../llm/index.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
+import { type BootstrapDeps, bootstrapWorkflow } from "../workflows/bootstrap/index.js";
 import { type DomainDeps, domainWorkflow } from "../workflows/domain/index.js";
 import type { Settings } from "./config.js";
 
@@ -102,7 +104,7 @@ export function llmFor(settings: Settings, http = httpClient()) {
 }
 
 /** The workflows this worker serves. Adding one is one line here. */
-export const WORKFLOWS: readonly AnyWorkflow[] = [domainWorkflow];
+export const WORKFLOWS: readonly AnyWorkflow[] = [domainWorkflow, bootstrapWorkflow];
 
 export interface App {
   services:
@@ -270,9 +272,39 @@ export function buildApp(settings: Settings, log: Logger): App {
     dmarcRua: settings.dmarcRua ?? null,
   };
 
+  const sink: SecretSink =
+    settings.secretSink === "ssm"
+      ? {
+          put: async (name, value) => {
+            await ssm.send(
+              new PutParameterCommand({
+                Name: `/autobrowse/config/${name}`,
+                Value: value,
+                Type: "SecureString",
+                Overwrite: true,
+              }),
+            );
+          },
+        }
+      : envFileSink(settings.envFile);
+  const bootstrapDeps: BootstrapDeps = {
+    browser,
+    sink,
+    current: () => ({
+      cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN ?? settings.cloudflareApiToken ?? null,
+      cloudflareAccountId:
+        process.env.CLOUDFLARE_ACCOUNT_ID ?? settings.cloudflareAccountId ?? null,
+    }),
+    verifyCloudflareToken: (token) => verifyCloudflareToken(http, token),
+  };
+
   const host = { emit: (e: Parameters<Channel["deliver"]>[0]) => channel.deliver(e) };
   return {
-    services: [runsRegistry, makeRunObject(domainWorkflow, domainDeps, host, { guards })],
+    services: [
+      runsRegistry,
+      makeRunObject(domainWorkflow, domainDeps, host, { guards }),
+      makeRunObject(bootstrapWorkflow, bootstrapDeps, host, { guards }),
+    ],
     channel,
     bus,
     memory,

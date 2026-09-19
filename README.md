@@ -71,6 +71,8 @@ pnpm ui:dev                     # SPA with hot reload on :5173, proxied to :9080
 echo '{"username":"…","password":"…"}' | pnpm autobrowse creds set cloudflare   # stdin, never argv
 pnpm autobrowse login cloudflare               # signs in by itself: password + TOTP/email code
 pnpm autobrowse enroll-totp cloudflare --url https://dash.cloudflare.com/profile/authentication  # reads the seed, stores it, confirms
+echo '{"provider":"cloudflare"}' > /tmp/bootstrap.json
+pnpm autobrowse run bootstrap cloudflare --plan /tmp/bootstrap.json   # mints CLOUDFLARE_ACCOUNT_ID + API token into .env
 pnpm autobrowse record buy-domain --site cloudflare --url https://dash.cloudflare.com/ --terminal
 pnpm autobrowse compile buy-domain             # → recordings/buy-domain/outline.json, src/workflows/buy-domain/
 pnpm autobrowse compile buy-domain --no-llm --from-outline
@@ -116,8 +118,8 @@ src/memory/     Memory seam: in-process store, Backboard; what repairs and gate 
 src/recorder/   observer (in page), browser + terminal capture, redaction, store
 src/compiler/   structure → outline → render (+ polish); output typechecks
 src/channels/   email, webhook, inbound command parser
-src/deps/       SecretSource, Shell: what compiled workflows need
-src/workflows/  one dir per workflow: plan, deps, steps, index
+src/deps/       SecretSource, SecretSink (env file / SSM), Shell: what workflows read and write
+src/workflows/  one dir per workflow: plan, deps, steps, index (domain, bootstrap = the credential ladder)
 src/ui/         Hono API (+ SSE bus, bearer, rate limit) and the static SPA
 src/app/        settings, composition root (lazy deps), self-registration, CLI, worker
 Dockerfile, compose.yml   the deploy unit; designs/2026-09-19-deploy.md
