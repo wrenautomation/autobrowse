@@ -68,6 +68,30 @@ table's "may import" column.
 - Output: `recordings/<name>/manifest.json` + screenshots + trace +
   terminal log. Gitignored.
 
+## Explore
+
+- Why: a flow built by rerunning gets one step further per run, a minute
+  each. Explore keeps one browser open and answers a command in a second,
+  and the accessibility tree shows every control on a page at once.
+- `startExplore({site, browser, recordingsDir, port})` opens the site's
+  profile (hidden, headed) and listens on loopback. A command is one JSON
+  body: `open`, `click`, `fill`, `select`, `press` (target = recorder
+  `hints` or a `css` selector, plus `nth`), `type`, `key`, `aria` (tree of
+  the page or one target), `snapshot` (the repairer's view), `text`,
+  `url`, `screenshot`, `eval`, `count`, `note`, `journal`, `save`, `close`.
+- Acts that succeed are journaled as recorder `Action`s (`css` targets as
+  notes, since they have no hints); `save` writes a `Recording` through
+  the recorder's store, so `compile` works on it unchanged. Secrets are
+  redacted by the recorder's rules.
+- Failure artifacts carry the same tree: the runner writes
+  `<stamp>.aria.txt` (URL, then the tree) next to the PNG, so a miss can
+  be diagnosed without opening the image.
+- `locateAll(page, hints)` is the every-match form of `locate` for pages
+  that repeat a row of controls (row i = `nth(i)`).
+- The Cloudflare token form was mapped this way on 2026-09-19 in one
+  sitting: 35 journaled actions, then the flow rewritten once and the
+  bootstrap ran through (`recordings/cloudflare-api-token-explore`).
+
 ## Compiler
 
 - `structure(recording)`: deterministic. Steps split at notes (the person
@@ -159,6 +183,7 @@ table's "may import" column.
   are terminal on the first throw. They cross the journal as
   `TerminalError` codes 460/461 with a JSON body, and come back out as the
   same class with artifacts intact, so `advance` sees what the step threw.
+- Artifacts: screenshot, `aria` (the accessibility tree as text), trace.
 - Deps are lazy: the worker boots without every credential, and a missing
   one fails the step that needed it, not the process.
 

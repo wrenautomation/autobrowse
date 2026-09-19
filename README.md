@@ -38,6 +38,14 @@ Browserbase takes them.
   at capture. `p` pauses (nothing captured), `q` finishes, any other line
   is a note. `--terminal` records the shell leg after. Raw recordings
   stay out of git.
+- **Explored.** `autobrowse explore <site> [--url u]`: one hidden browser
+  stays open on the site and takes commands over loopback, one at a time
+  (`open`, `click`, `fill`, `aria`, `eval`, `save`, `close`). `aria` dumps
+  the page's accessibility tree: every control by role and name, so a
+  whole form is mapped in one look instead of one miss per run. Every act
+  that works is journaled as a recording; `save` writes it, `compile`
+  takes it from there. Failing flows leave the same aria tree next to the
+  screenshot (`<stamp>.aria.txt`).
 - **Compiled.** `autobrowse compile <name>`: recording → `outline.json`
   (steps at notes and navigations, typed inputs vs secrets, irreversible
   verbs, pauses → hand-offs) → a workflow module plus a test that
@@ -73,6 +81,9 @@ pnpm autobrowse login cloudflare               # signs in by itself: password or
 pnpm autobrowse enroll-totp cloudflare --url https://dash.cloudflare.com/profile/authentication  # reads the seed, stores it, confirms
 echo '{"provider":"cloudflare"}' > /tmp/bootstrap.json
 pnpm autobrowse run bootstrap cloudflare --plan /tmp/bootstrap.json   # mints CLOUDFLARE_ACCOUNT_ID + API token into .env
+# map a page by hand or by model: one open browser, one command at a time
+pnpm autobrowse explore cloudflare --url https://dash.cloudflare.com/profile/api-tokens
+curl -s -X POST http://127.0.0.1:9090/ -d '{"cmd":"aria","css":"main"}'
 pnpm autobrowse record buy-domain --site cloudflare --url https://dash.cloudflare.com/ --terminal
 pnpm autobrowse compile buy-domain             # → recordings/buy-domain/outline.json, src/workflows/buy-domain/
 pnpm autobrowse compile buy-domain --no-llm --from-outline
@@ -119,6 +130,7 @@ src/recorder/   observer (in page), browser + terminal capture, redaction, store
 src/compiler/   structure → outline → render (+ polish); output typechecks
 src/channels/   email, webhook, inbound command parser
 src/deps/       SecretSource, SecretSink (env file / SSM), Shell: what workflows read and write
+src/explore/    explore mode: one open browser, a loopback command API, a journal that compiles
 src/workflows/  one dir per workflow: plan, deps, steps, index (domain, bootstrap = the credential ladder)
 src/ui/         Hono API (+ SSE bus, bearer, rate limit) and the static SPA
 src/app/        settings, composition root (lazy deps), self-registration, CLI, worker
