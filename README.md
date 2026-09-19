@@ -38,6 +38,30 @@ toolchain and pins as `wren`.
 Thin: writes the roster to SSM, calls `wren`'s ingress to start loops.
 No imports in either direction.
 
-## Status
+## Flows built
 
-Scaffold only (2026-09-19). Design lives in `designs/` as it is decided.
+- **Domain** (`designs/2026-09-19-domain-provision.md`): buy → DNS →
+  Workspace → inboxes → signatures → warmup → roster → loops. Gated at the
+  purchase; hands off at logins/captchas/consent; dry run available.
+
+## Run
+
+```sh
+cp .env.example .env            # fill it
+pnpm worker                     # Restate endpoint on :9081
+restate cloud env tunnel        # expose it to the shared Restate Cloud env, register it
+
+pnpm provision record cloudflare        # log in once per site (headed browser)
+pnpm provision record google-admin
+pnpm provision record instantly
+
+pnpm provision domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin --dry-run
+pnpm provision domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin
+pnpm provision status wren-six.com
+pnpm provision approve wren-six.com purchase
+pnpm provision approve wren-six.com human    # after doing what the email asked
+pnpm provision resume wren-six.com           # after a failure
+pnpm provision reset wren-six.com
+```
+
+`pnpm gates` = lint + typecheck + tests (the Restate test needs Docker).
