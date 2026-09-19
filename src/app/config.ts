@@ -46,6 +46,12 @@ const schema = z.object({
   /** Every run event, as JSON, to one URL (iMessage/Slack/dashboards). */
   webhookUrl: z.string().url().optional(),
   webhookToken: z.string().min(1).optional(),
+  /** Model behind the compiler's polish and the locator repairer. No key = both off. */
+  llmProvider: z.enum(["anthropic", "openai"]).default("anthropic"),
+  llmModel: z.string().min(1).optional(),
+  anthropicApiKey: z.string().min(1).optional(),
+  openaiApiKey: z.string().min(1).optional(),
+  openaiBaseUrl: z.string().url().optional(),
 });
 
 export type Settings = z.infer<typeof schema>;
@@ -76,6 +82,11 @@ export const ENV_KEYS = {
   uiToken: "UI_TOKEN",
   webhookUrl: "WEBHOOK_URL",
   webhookToken: "WEBHOOK_TOKEN",
+  llmProvider: "LLM_PROVIDER",
+  llmModel: "LLM_MODEL",
+  anthropicApiKey: "ANTHROPIC_API_KEY",
+  openaiApiKey: "OPENAI_API_KEY",
+  openaiBaseUrl: "OPENAI_BASE_URL",
 } as const satisfies Record<keyof Settings, string>;
 
 export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {

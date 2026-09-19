@@ -2,6 +2,7 @@
 import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Logger } from "pino";
 import { flowRunner } from "../browser/flow.js";
+import { llmRepairer } from "../browser/repair.js";
 import type { BrowserOptions } from "../browser/session.js";
 import { type Channel, channels, emailChannel, webhookChannel } from "../channels/index.js";
 import { cloudflare } from "../clients/cloudflare.js";
@@ -20,6 +21,7 @@ import {
   serviceAccountToken,
   type TokenSupplier,
 } from "../google-auth.js";
+import { makeLlm } from "../llm/index.js";
 import { type DomainDeps, domainWorkflow } from "../workflows/domain/index.js";
 import type { Settings } from "./config.js";
 
@@ -45,6 +47,19 @@ export function browserOptions(settings: Settings, headless = true): BrowserOpti
   };
 }
 
+export function llmFor(settings: Settings, http = httpClient()) {
+  return makeLlm(
+    {
+      provider: settings.llmProvider,
+      model: settings.llmModel,
+      anthropicApiKey: settings.anthropicApiKey,
+      openaiApiKey: settings.openaiApiKey,
+      openaiBaseUrl: settings.openaiBaseUrl,
+    },
+    http,
+  );
+}
+
 /** The workflows this worker serves. Adding one is one line here. */
 export const WORKFLOWS: readonly AnyWorkflow[] = [domainWorkflow];
 
@@ -57,6 +72,7 @@ export interface App {
 
 export function buildApp(settings: Settings, log: Logger): App {
   const http = httpClient();
+  const llm = llmFor(settings, http);
   const key = loadServiceAccountKey(
     required(settings.googleServiceAccount, "GOOGLE_SERVICE_ACCOUNT"),
   );
@@ -118,7 +134,10 @@ export function buildApp(settings: Settings, log: Logger): App {
       http,
     }),
     availability: (domain) => domainAvailability(http, domain),
-    browser: flowRunner(browserOptions(settings)),
+    browser: flowRunner(browserOptions(settings), {
+      ...(llm ? { repairer: llmRepairer(llm) } : {}),
+      onRepair: (r) => log.warn({ repair: r }, `locator repaired in ${r.flow}: ${r.goal}`),
+    }),
     secrets: {
       put: async (name, value) => {
         await ssm.send(

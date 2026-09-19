@@ -16,22 +16,45 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright";
 import { expandHome } from "../google-auth.js";
+import { type Hints, locate } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
+import { noRepairer, type Repairer, type RepairReport, snapshotPage } from "./repair.js";
 import { type BrowserOptions, looksLikeWall, NeedsHuman, openSession } from "./session.js";
 
-export type Site = "cloudflare" | "google-admin" | "instantly";
+/** A site names a persistent profile; any kebab-case string. Known ones have a home page for `login`. */
+export type Site = string;
 
-export const SITES: Record<Site, { home: string }> = {
+export const SITES: Record<string, { home: string }> = {
   cloudflare: { home: "https://dash.cloudflare.com/" },
   "google-admin": { home: "https://admin.google.com/" },
   instantly: { home: "https://app.instantly.ai/" },
 };
 
-/** What a flow body gets: the page, plus the two things every flow does. */
+/** One recorded gesture, replayed. */
+export type Op =
+  | { kind: "click" }
+  | { kind: "fill"; value: string }
+  | { kind: "select"; value: string }
+  | { kind: "press"; key: string };
+
+export interface ActOptions {
+  /** In words, for the repairer and the trace: "click Purchase". */
+  goal: string;
+  /** Never repaired: a miss goes to a person. */
+  irreversible?: boolean;
+  timeoutMs?: number;
+}
+
+/** What a flow body gets: the page, plus the things every flow does. */
 export interface FlowPage {
   page: Page;
   /** Navigate, then refuse to continue past a login/captcha wall. */
   open(url: string): Promise<void>;
+  /**
+   * Find by hints and do the op. On a miss, ask the repairer for other
+   * hints for the same goal and try once more; report the repair either way.
+   */
+  act(op: Op, hints: Hints, opts: ActOptions): Promise<void>;
   /** Stop here and ask a person. */
   human(reason: string): never;
 }
@@ -63,8 +86,33 @@ export class FlowFailed extends Error {
   }
 }
 
-export function flowRunner(opts: BrowserOptions, locks = new KeyedMutex()): FlowRunner {
+export interface RunnerOptions {
+  repairer?: Repairer;
+  /** Every repair, tried or not, so the flow's source can be fixed for good. */
+  onRepair?: (report: RepairReport & { flow: string }) => void;
+  locks?: KeyedMutex;
+}
+
+const ACT_TIMEOUT_MS = 15_000;
+
+async function doOp(page: Page, hints: Hints, op: Op, timeout: number): Promise<void> {
+  const target = locate(page, hints);
+  switch (op.kind) {
+    case "click":
+      return target.click({ timeout });
+    case "fill":
+      return target.fill(op.value, { timeout });
+    case "select":
+      return void (await target.selectOption(op.value, { timeout }));
+    case "press":
+      return target.press(op.key, { timeout });
+  }
+}
+
+export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): FlowRunner {
   const artifactsDir = expandHome(opts.artifactsDir);
+  const locks = runner.locks ?? new KeyedMutex();
+  const repairer = runner.repairer ?? noRepairer;
   return {
     run: (flow, input) =>
       locks.withLock(flow.site, async () => {
@@ -82,6 +130,37 @@ export function flowRunner(opts: BrowserOptions, locks = new KeyedMutex()): Flow
             await session.page.goto(url, { waitUntil: "domcontentloaded" });
             const wall = await looksLikeWall(session.page);
             if (wall) throw new NeedsHuman(`${flow.site}: ${wall}`);
+          },
+          async act(op, hints, a) {
+            const timeout = a.timeoutMs ?? ACT_TIMEOUT_MS;
+            const page = session.page;
+            try {
+              await doOp(page, hints, op, timeout);
+              return;
+            } catch (err) {
+              if (a.irreversible)
+                throw new NeedsHuman(`${flow.site}: ${a.goal} (irreversible, not repaired)`);
+              const proposal = await repairer.propose({
+                goal: a.goal,
+                failed: hints,
+                url: page.url(),
+                snapshot: await snapshotPage(page),
+              });
+              if (!proposal) throw err;
+              const report = {
+                ...proposal,
+                goal: a.goal,
+                failed: hints,
+                url: page.url(),
+                ok: false,
+              };
+              try {
+                await doOp(page, proposal.hints, op, timeout);
+                report.ok = true;
+              } finally {
+                runner.onRepair?.({ ...report, flow: `${flow.site}/${flow.name}` });
+              }
+            }
           },
           human(reason) {
             throw new NeedsHuman(`${flow.site}: ${reason}`);

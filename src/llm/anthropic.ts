@@ -1,0 +1,37 @@
+/** Anthropic Messages API over the shared http client; the key lives in a header only. */
+import type { HttpClient } from "../clients/http.js";
+import type { Llm, LlmReply, LlmRequest } from "./types.js";
+
+const URL = "https://api.anthropic.com/v1/messages";
+
+interface MessagesResponse {
+  model: string;
+  content: Array<{ type: string; text?: string }>;
+  usage: { input_tokens: number; output_tokens: number };
+}
+
+export function anthropicLlm(opts: { apiKey: string; model: string; http: HttpClient }): Llm {
+  return {
+    id: `anthropic/${opts.model}`,
+    async complete(req: LlmRequest): Promise<LlmReply> {
+      const r = await opts.http.json<MessagesResponse>(URL, {
+        method: "POST",
+        headers: { "x-api-key": opts.apiKey, "anthropic-version": "2023-06-01" },
+        body: {
+          model: opts.model,
+          max_tokens: req.maxTokens ?? 2048,
+          system: req.json
+            ? `${req.system}\nReply with one JSON object and nothing else.`
+            : req.system,
+          messages: [{ role: "user", content: req.prompt }],
+        },
+      });
+      if (!r.ok || !r.body) throw new Error(`anthropic: HTTP ${r.status}`);
+      return {
+        text: r.body.content.map((c) => c.text ?? "").join(""),
+        usage: { inputTokens: r.body.usage.input_tokens, outputTokens: r.body.usage.output_tokens },
+        model: r.body.model,
+      };
+    },
+  };
+}
