@@ -7,14 +7,17 @@
 import * as clients from "@restatedev/restate-sdk-clients";
 import { RestateTestEnvironment } from "@restatedev/restate-sdk-testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { type DomainProvision, makeDomainProvision } from "../src/restate/domain-provision.js";
-import { fakeDeps } from "./fakes.js";
+import { makeRunObject, type RunObject } from "../src/engine/object.js";
+import { runsRegistry } from "../src/engine/registry.js";
+import { type DomainWorkflow, domainWorkflow } from "../src/workflows/domain/index.js";
+import { fakeDeps, fakeHost } from "./fakes.js";
 
 const deps = fakeDeps();
+const host = fakeHost();
 let env: RestateTestEnvironment;
 beforeAll(async () => {
   env = await RestateTestEnvironment.start({
-    services: [makeDomainProvision(deps)],
+    services: [runsRegistry, makeRunObject(domainWorkflow, deps, host)],
     alwaysReplay: true,
   });
 });
@@ -25,7 +28,11 @@ afterAll(async () => {
 const object = (domain: string) =>
   clients
     .connect({ url: env.baseUrl() })
-    .objectClient<DomainProvision>({ name: "DomainProvision" }, domain);
+    .objectClient<RunObject<DomainWorkflow>>({ name: "domain" }, domain);
+const registry = () =>
+  clients
+    .connect({ url: env.baseUrl() })
+    .objectClient<typeof runsRegistry>({ name: "Runs" }, "all");
 
 async function until<T>(fn: () => Promise<T>, ok: (v: T) => boolean, ms = 30_000): Promise<T> {
   const deadline = Date.now() + ms;
@@ -39,7 +46,7 @@ async function until<T>(fn: () => Promise<T>, ok: (v: T) => boolean, ms = 30_000
 
 const inbox = [{ local: "will", givenName: "W", familyName: "J" }];
 
-describe("DomainProvision", () => {
+describe("domain run object", () => {
   it("waits at the purchase gate, moves on approve, finishes", async () => {
     const domain = "fresh.test";
     await object(domain).run({ domain, inboxes: inbox });
@@ -50,7 +57,7 @@ describe("DomainProvision", () => {
     expect(waiting.gate).toMatchObject({ name: "purchase", step: "buy" });
     expect(waiting.outcome).toMatchObject({ status: "waiting" });
     expect(waiting.outcome?.results.check?.status).toBe("done");
-    expect(deps.notes).toContain("autobrowse fresh.test: approve purchase?");
+    expect(host.subjects()).toContain("fresh.test: approve purchase?");
     await expect(object(domain).run(null)).rejects.toThrow(/waiting at a gate/);
 
     await expect(object(domain).approve({ name: "human" })).rejects.toThrow(
@@ -64,8 +71,16 @@ describe("DomainProvision", () => {
     expect(finished.gate).toBeNull();
     expect(finished.outcome?.results.buy?.detail).toBe("bought ($10.11)");
     expect(finished.outcome?.results.loops?.status).toBe("done");
-    expect(deps.notes).toContain("autobrowse fresh.test: done");
+    expect(host.subjects()).toContain("fresh.test: done");
     expect(deps.calls).toContain("buy fresh.test");
+    const rows = await until(
+      () => registry().list(),
+      (r) => r.some((x) => x.key === domain && x.status === "done"),
+    );
+    expect(rows.find((x) => x.key === domain)).toMatchObject({ workflow: "domain", gate: null });
+    expect(
+      host.events.filter((e) => e.type === "step").map((e) => (e as { step: string }).step),
+    ).toContain("loops");
   });
 
   it("pause holds the next step; play runs on", async () => {

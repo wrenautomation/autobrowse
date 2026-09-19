@@ -4,36 +4,36 @@ import { googleDkimGenerate, googleDkimStart } from "../src/browser/flows/google
 import { instantlyWarmup } from "../src/browser/flows/instantly-warmup.js";
 import { NeedsHuman } from "../src/browser/session.js";
 import type { CloudflareClient, DnsRecord } from "../src/clients/cloudflare.js";
-import type { Effects, GateAnswer, GateName } from "../src/flow/effects.js";
-import type { OpenGate } from "../src/flow/run.js";
-import type { Deps } from "../src/flow/steps.js";
+import type { GateAnswer, GateName } from "../src/engine/effects.js";
+import type { RunEvent } from "../src/engine/events.js";
+import { memoryEffects } from "../src/engine/memory.js";
+import type { OpenGate } from "../src/engine/run.js";
+import type { DomainDeps } from "../src/workflows/domain/index.js";
 
 const NOW = "2026-09-19T12:00:00Z";
 
-/** In-memory host: runs effects straight away, keeps state in a map. */
-export function fakeEffects() {
-  const state = new Map<string, unknown>();
-  const runs: string[] = [];
-  const fx: Effects = {
-    async run(name, fn) {
-      runs.push(name);
-      return fn();
+/** In-memory host with a fixed clock. */
+export const fakeEffects = () => memoryEffects({ now: () => new Date(NOW) });
+
+/** Collects what a run object tells the world; `subjects` mirrors the old notify emails. */
+export function fakeHost() {
+  const events: RunEvent[] = [];
+  return {
+    events,
+    emit: async (e: RunEvent) => {
+      events.push(e);
     },
-    async get(key) {
-      return (state.get(key) as never) ?? null;
-    },
-    set(key, value) {
-      state.set(key, structuredClone(value));
-    },
-    clear(key) {
-      state.delete(key);
-    },
-    async sleep() {},
-    async now() {
-      return new Date(NOW);
-    },
+    subjects: () =>
+      events.flatMap((e) =>
+        e.type === "gate-opened"
+          ? [
+              `${e.run.key}: ${e.gate.name === "human" ? `needs you at ${e.gate.step}` : `approve ${e.gate.name}?`}`,
+            ]
+          : e.type === "finished"
+            ? [`${e.run.key}: ${e.status}`]
+            : [],
+      ),
   };
-  return { fx, state, runs };
 }
 
 /** Scripted gate answers for `runFlow`; records every gate it was asked. */
@@ -120,24 +120,21 @@ export function fakeCloudflare(opts: { registered?: boolean; zone?: string | nul
 }
 
 export function fakeDeps(
-  over: Partial<Deps> & { cloudflare?: ReturnType<typeof fakeCloudflare> } = {},
+  over: Partial<DomainDeps> & { cloudflare?: ReturnType<typeof fakeCloudflare> } = {},
 ) {
   const users = new Set<string>();
   const domains = new Map<string, boolean>();
   const calls: string[] = [];
   let roster =
     '# roster\n[[senders]]\naddress = "old@fleet.test"\ndisplay_name = "Old"\nniches = "all"\n';
-  const notes: string[] = [];
   const bought = new Set<string>();
   const cloudflare = over.cloudflare ?? fakeCloudflare();
   const deps: Deps & {
     calls: string[];
-    notes: string[];
     rosterText: () => string;
     browser: ReturnType<typeof fakeBrowser>;
   } = {
     calls,
-    notes,
     rosterText: () => roster,
     cloudflare: {
       ...cloudflare,
@@ -207,9 +204,6 @@ export function fakeDeps(
       async put(name) {
         calls.push(`secret ${name}`);
       },
-    },
-    notify: async (subject) => {
-      notes.push(subject);
     },
     dmarcRua: "dmarc@fleet.test",
     dnsWaitMs: 0,

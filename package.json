@@ -11,8 +11,9 @@
     "lint:fix": "biome check --write .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "worker": "tsx src/main.ts",
-    "autobrowse": "tsx src/cli.ts",
+    "worker": "tsx src/app/main.ts",
+    "autobrowse": "tsx src/app/cli.ts",
+    "record": "tsx src/app/cli-record.ts",
     "gates": "pnpm lint && pnpm typecheck && pnpm test"
   },
   "devDependencies": {

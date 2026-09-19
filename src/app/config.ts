@@ -38,6 +38,14 @@ const schema = z.object({
   /** Raw Playwright codegen output from `record --flow`; may hold typed secrets, never committed. */
   recordingsDir: z.string().min(1).default("recordings"),
   logLevel: z.string().default("info"),
+  /** Where the Restate endpoint listens; the UI is on `uiPort`. */
+  restatePort: z.coerce.number().int().default(9081),
+  uiPort: z.coerce.number().int().default(9080),
+  /** Bearer the UI and inbound hooks need for anything that changes a run. Unset = local only, no auth. */
+  uiToken: z.string().min(1).optional(),
+  /** Every run event, as JSON, to one URL (iMessage/Slack/dashboards). */
+  webhookUrl: z.string().url().optional(),
+  webhookToken: z.string().min(1).optional(),
 });
 
 export type Settings = z.infer<typeof schema>;
@@ -63,6 +71,11 @@ export const ENV_KEYS = {
   artifactsDir: "ARTIFACTS_DIR",
   recordingsDir: "RECORDINGS_DIR",
   logLevel: "LOG_LEVEL",
+  restatePort: "RESTATE_PORT",
+  uiPort: "UI_PORT",
+  uiToken: "UI_TOKEN",
+  webhookUrl: "WEBHOOK_URL",
+  webhookToken: "WEBHOOK_TOKEN",
 } as const satisfies Record<keyof Settings, string>;
 
 export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {

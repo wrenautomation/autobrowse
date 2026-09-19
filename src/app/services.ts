@@ -1,24 +1,27 @@
-/** Every client the flow needs, built once from settings. Secrets stay inside the clients. */
+/** Composition root: settings → clients → workflow deps → Restate services. Secrets stay inside the clients. */
 import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Logger } from "pino";
-import { flowRunner } from "./browser/flow.js";
-import type { BrowserOptions } from "./browser/session.js";
-import { cloudflare } from "./clients/cloudflare.js";
-import { gmailClient } from "./clients/gmail.js";
-import { googleAdmin } from "./clients/google-admin.js";
-import { httpClient } from "./clients/http.js";
-import { domainAvailability } from "./clients/rdap.js";
-import { ssmRosterStore } from "./clients/roster.js";
-import { wrenClient } from "./clients/wren.js";
-import type { Settings } from "./config.js";
-import type { Deps } from "./flow/steps.js";
+import { flowRunner } from "../browser/flow.js";
+import type { BrowserOptions } from "../browser/session.js";
+import { type Channel, channels, emailChannel, webhookChannel } from "../channels/index.js";
+import { cloudflare } from "../clients/cloudflare.js";
+import { gmailClient } from "../clients/gmail.js";
+import { googleAdmin } from "../clients/google-admin.js";
+import { httpClient } from "../clients/http.js";
+import { domainAvailability } from "../clients/rdap.js";
+import { ssmRosterStore } from "../clients/roster.js";
+import { wrenClient } from "../clients/wren.js";
+import { makeRunObject } from "../engine/object.js";
+import { runsRegistry } from "../engine/registry.js";
+import type { AnyWorkflow } from "../engine/workflow.js";
 import {
   loadServiceAccountKey,
   SCOPES,
   serviceAccountToken,
   type TokenSupplier,
-} from "./google-auth.js";
-import { makeDomainProvision } from "./restate/domain-provision.js";
+} from "../google-auth.js";
+import { type DomainDeps, domainWorkflow } from "../workflows/domain/index.js";
+import type { Settings } from "./config.js";
 
 function required<T>(value: T | undefined, env: string): T {
   if (value === undefined) throw new Error(`${env} is required`);
@@ -42,7 +45,17 @@ export function browserOptions(settings: Settings, headless = true): BrowserOpti
   };
 }
 
-export function buildDeps(settings: Settings, log: Logger): Deps {
+/** The workflows this worker serves. Adding one is one line here. */
+export const WORKFLOWS: readonly AnyWorkflow[] = [domainWorkflow];
+
+export interface App {
+  services:
+    | ReturnType<typeof makeRunObject>[]
+    | Array<ReturnType<typeof makeRunObject> | typeof runsRegistry>;
+  channel: Channel;
+}
+
+export function buildApp(settings: Settings, log: Logger): App {
   const http = httpClient();
   const key = loadServiceAccountKey(
     required(settings.googleServiceAccount, "GOOGLE_SERVICE_ACCOUNT"),
@@ -65,10 +78,23 @@ export function buildDeps(settings: Settings, log: Logger): Deps {
     http,
   });
   const ssm = new SSMClient({ region: settings.awsRegion });
-  const notifyTo = settings.notifyTo;
-  const notifyFrom = settings.notifyFrom ?? settings.notifyTo;
 
-  return {
+  const list: Channel[] = [];
+  const notifyFrom = settings.notifyFrom ?? settings.notifyTo;
+  if (settings.notifyTo && notifyFrom)
+    list.push(emailChannel({ gmail, from: notifyFrom, to: settings.notifyTo }));
+  if (settings.webhookUrl)
+    list.push(
+      webhookChannel({
+        url: settings.webhookUrl,
+        http,
+        ...(settings.webhookToken ? { token: settings.webhookToken } : {}),
+      }),
+    );
+  if (list.length === 0) log.warn("no channel configured: gates are visible only in the UI/CLI");
+  const channel = channels(list);
+
+  const domainDeps: DomainDeps = {
     cloudflare: cloudflare({
       apiToken: required(settings.cloudflareApiToken, "CLOUDFLARE_API_TOKEN"),
       accountId: required(settings.cloudflareAccountId, "CLOUDFLARE_ACCOUNT_ID"),
@@ -105,17 +131,12 @@ export function buildDeps(settings: Settings, log: Logger): Deps {
         );
       },
     },
-    notify: async (subject, text) => {
-      if (!notifyTo || !notifyFrom) {
-        log.warn({ subject }, "NOTIFY_TO unset: not mailed");
-        return;
-      }
-      await gmail.send({ from: notifyFrom, to: notifyTo, subject, text });
-    },
     dmarcRua: settings.dmarcRua ?? null,
   };
-}
 
-export function buildServices(settings: Settings, log: Logger) {
-  return [makeDomainProvision(buildDeps(settings, log))];
+  const host = { emit: (e: Parameters<Channel["deliver"]>[0]) => channel.deliver(e) };
+  return {
+    services: [runsRegistry, makeRunObject(domainWorkflow, domainDeps, host)],
+    channel,
+  };
 }

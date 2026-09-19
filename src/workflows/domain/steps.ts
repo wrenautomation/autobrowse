@@ -1,51 +1,28 @@
 /**
  * The steps of one domain provision, in order. Each is idempotent (get
- * before create) and returns what the next ones need. Outputs live in the
- * memo, which the host persists between steps. A step that runs a browser
- * flow proves the result through an API read afterwards where one exists.
+ * before create) and returns what the next ones need through the memo. A
+ * step that runs a browser flow proves the result through an API read
+ * afterwards where one exists.
  */
 import { randomBytes } from "node:crypto";
-import type { FlowRunner } from "../browser/flow.js";
-import { cloudflareBuy } from "../browser/flows/cloudflare-buy.js";
+import { cloudflareBuy } from "../../browser/flows/cloudflare-buy.js";
 import {
   type DkimRecord,
   googleDkimGenerate,
   googleDkimStart,
-} from "../browser/flows/google-dkim.js";
-import { instantlyWarmup } from "../browser/flows/instantly-warmup.js";
-import { NeedsHuman } from "../browser/session.js";
-import type { CloudflareClient, DnsRecord } from "../clients/cloudflare.js";
-import type { GmailUserClient } from "../clients/gmail.js";
-import type { GoogleAdminClient } from "../clients/google-admin.js";
-import type { Availability } from "../clients/rdap.js";
-import { appendEntries, type RosterStore } from "../clients/roster.js";
-import type { WrenClient } from "../clients/wren.js";
-import { type Effects, type GateAnswer, type GateName, GateOpen } from "./effects.js";
+} from "../../browser/flows/google-dkim.js";
+import { instantlyWarmup } from "../../browser/flows/instantly-warmup.js";
+import { NeedsHuman } from "../../browser/session.js";
+import type { DnsRecord } from "../../clients/cloudflare.js";
+import type { Availability } from "../../clients/rdap.js";
+import { appendEntries } from "../../clients/roster.js";
+import type { Effects } from "../../engine/effects.js";
+import { done, rejected, type StepDef, skipped } from "../../engine/workflow.js";
+import type { DomainDeps } from "./deps.js";
 import { inboxAddress, type Plan } from "./plan.js";
 
-export const STEPS = [
-  "check",
-  "buy",
-  "zone",
-  "workspace-domain",
-  "verify-domain",
-  "mail-dns",
-  "dkim-generate",
-  "dkim-dns",
-  "dkim-start",
-  "inboxes",
-  "signatures",
-  "warmup",
-  "roster",
-  "loops",
-] as const;
-export type StepName = (typeof STEPS)[number];
-
-/** Steps that spend money or create something a person would have to undo. */
-export const IRREVERSIBLE: ReadonlySet<StepName> = new Set(["buy", "inboxes", "roster", "loops"]);
-
 /** Everything the steps learn that later steps need. Never a password: those go from generation to the secret store inside one journaled step. */
-export interface Memo {
+export interface DomainMemo {
   availability?: Availability;
   owned?: boolean;
   zoneId?: string;
@@ -54,46 +31,13 @@ export interface Memo {
   rosterAdded?: string[];
 }
 
-export interface Deps {
-  cloudflare: CloudflareClient;
-  google: GoogleAdminClient;
-  gmail: GmailUserClient;
-  roster: RosterStore;
-  wren: WrenClient;
-  availability: (domain: string) => Promise<Availability>;
-  browser: FlowRunner;
-  /** A secret store for inbox passwords (SSM): `put(name, value)`. */
-  secrets: { put: (name: string, value: string) => Promise<void> };
-  notify: (subject: string, text: string) => Promise<void>;
-  dmarcRua: string | null;
-  /** How long to keep asking Google to see a TXT before giving the human the wheel. */
-  dnsWaitMs?: number;
-}
-
-/** What one step returns. The host adds `at` and the artifacts. */
-export type StepOutput =
-  | { status: "done"; detail: string }
-  | { status: "skipped"; detail: string }
-  | { status: "rejected"; detail: string };
-
-const done = (detail: string): StepOutput => ({ status: "done", detail });
-const skipped = (detail: string): StepOutput => ({ status: "skipped", detail });
-
-export interface StepCtx {
-  fx: Effects;
-  deps: Deps;
-  plan: Plan;
-  memo: Memo;
-  /** The recorded answer, or `GateOpen` so the host can ask. */
-  gate(name: GateName, prompt: string): GateAnswer;
-}
-
-export type Step = (ctx: StepCtx) => Promise<StepOutput>;
-
 export const SECRET_PREFIX = "/autobrowse/inboxes";
 
-export const steps: Record<StepName, Step> = {
-  async check({ fx, deps, plan, memo }) {
+type Step<S extends string> = StepDef<Plan, DomainDeps, DomainMemo, S>;
+
+export const check: Step<"check"> = {
+  name: "check",
+  async run({ fx, deps, plan, memo }) {
     const owned = await fx.run("cloudflare registered", () =>
       deps.cloudflare.registered(plan.domain),
     );
@@ -109,15 +53,19 @@ export const steps: Record<StepName, Step> = {
       throw new Error(`RDAP could not say whether ${plan.domain} is free`);
     return done("available");
   },
+};
 
-  async buy({ fx, deps, plan, memo, gate }) {
+export const buy: Step<"buy"> = {
+  name: "buy",
+  irreversible: true,
+  async run({ fx, deps, plan, memo, gate }) {
     if (memo.owned) return skipped("already owned");
     if (!plan.buy) throw new Error(`${plan.domain} is not owned and buy=false`);
     const answer = gate(
       "purchase",
       `Buy ${plan.domain} at Cloudflare Registrar (renews yearly at the registrar's cost price)?`,
     );
-    if (!answer.approved) return { status: "rejected", detail: answer.note ?? "purchase declined" };
+    if (!answer.approved) return rejected(answer.note ?? "purchase declined");
     const bought = await fx.run("cloudflare buy", () =>
       deps.browser.run(cloudflareBuy, { domain: plan.domain }),
     );
@@ -130,23 +78,32 @@ export const steps: Record<StepName, Step> = {
     memo.owned = true;
     return done(`bought${bought.priceText ? ` (${bought.priceText})` : ""}`);
   },
+};
 
-  async zone({ fx, deps, plan, memo }) {
+export const zone: Step<"zone"> = {
+  name: "zone",
+  async run({ fx, deps, plan, memo }) {
     const existing = await fx.run("zone lookup", () => deps.cloudflare.zoneId(plan.domain));
     memo.zoneId =
       existing ?? (await fx.run("zone create", () => deps.cloudflare.createZone(plan.domain)));
     return done(existing ? `zone ${existing}` : `zone created ${memo.zoneId}`);
   },
+};
 
-  async "workspace-domain"({ fx, deps, plan }) {
+export const workspaceDomain: Step<"workspace-domain"> = {
+  name: "workspace-domain",
+  async run({ fx, deps, plan }) {
     const current = await fx.run("workspace domain get", () => deps.google.getDomain(plan.domain));
     if (current)
       return done(current.verified ? "in Workspace, verified" : "in Workspace, unverified");
     await fx.run("workspace domain add", () => deps.google.addDomain(plan.domain));
     return done("added to Workspace as a secondary domain");
   },
+};
 
-  async "verify-domain"({ fx, deps, plan, memo }) {
+export const verifyDomain: Step<"verify-domain"> = {
+  name: "verify-domain",
+  async run({ fx, deps, plan, memo }) {
     const current = await fx.run("workspace domain verified?", () =>
       deps.google.getDomain(plan.domain),
     );
@@ -168,8 +125,11 @@ export const steps: Record<StepName, Step> = {
       );
     return done("verified by DNS TXT");
   },
+};
 
-  async "mail-dns"({ fx, deps, memo }) {
+export const mailDns: Step<"mail-dns"> = {
+  name: "mail-dns",
+  async run({ fx, deps, memo }) {
     const zoneId = need(memo.zoneId, "zoneId");
     const records: DnsRecord[] = [
       { type: "MX", name: "@", content: "smtp.google.com", priority: 1 },
@@ -191,18 +151,24 @@ export const steps: Record<StepName, Step> = {
     }
     return done(outcomes.join(", "));
   },
+};
 
-  async "dkim-generate"({ fx, deps, plan, memo }) {
+export const dkimGenerate: Step<"dkim-generate"> = {
+  name: "dkim-generate",
+  async run({ fx, deps, plan, memo }) {
     const dkim = await fx.run("dkim generate", () =>
       deps.browser.run(googleDkimGenerate, { domain: plan.domain }),
     );
     if (!/^v=DKIM1;/.test(dkim.value))
-      throw new NeedsHuman(`the admin console showed something that is not a DKIM record`);
+      throw new NeedsHuman("the admin console showed something that is not a DKIM record");
     memo.dkim = dkim;
     return done(`${dkim.name} (${dkim.value.length} chars)`);
   },
+};
 
-  async "dkim-dns"({ fx, deps, memo }) {
+export const dkimDns: Step<"dkim-dns"> = {
+  name: "dkim-dns",
+  async run({ fx, deps, memo }) {
     const zoneId = need(memo.zoneId, "zoneId");
     const dkim = need(memo.dkim, "dkim");
     const o = await fx.run("dns TXT dkim", () =>
@@ -214,8 +180,11 @@ export const steps: Record<StepName, Step> = {
     );
     return done(`TXT ${dkim.name} ${o}`);
   },
+};
 
-  async "dkim-start"({ fx, deps, plan }) {
+export const dkimStart: Step<"dkim-start"> = {
+  name: "dkim-start",
+  async run({ fx, deps, plan }) {
     // Google needs to see the TXT first; give the resolvers a moment before the first try.
     await fx.sleep(
       deps.dnsWaitMs === undefined ? 2 * 60_000 : Math.min(deps.dnsWaitMs, 2 * 60_000),
@@ -225,8 +194,12 @@ export const steps: Record<StepName, Step> = {
     );
     return done(o);
   },
+};
 
-  async inboxes({ fx, deps, plan }) {
+export const inboxes: Step<"inboxes"> = {
+  name: "inboxes",
+  irreversible: true,
+  async run({ fx, deps, plan }) {
     const outcomes: string[] = [];
     for (const inbox of plan.inboxes) {
       const email = inboxAddress(plan, inbox);
@@ -251,8 +224,11 @@ export const steps: Record<StepName, Step> = {
     }
     return done(outcomes.join(", "));
   },
+};
 
-  async signatures({ fx, deps, plan }) {
+export const signatures: Step<"signatures"> = {
+  name: "signatures",
+  async run({ fx, deps, plan }) {
     if (!plan.signatureHtml) return skipped("no signature in the plan");
     const outcomes: string[] = [];
     for (const inbox of plan.inboxes) {
@@ -265,8 +241,11 @@ export const steps: Record<StepName, Step> = {
     }
     return done(outcomes.join(", "));
   },
+};
 
-  async warmup({ fx, deps, plan }) {
+export const warmup: Step<"warmup"> = {
+  name: "warmup",
+  async run({ fx, deps, plan }) {
     if (!plan.warmup) return skipped("warmup=false");
     const outcomes: string[] = [];
     for (const inbox of plan.inboxes) {
@@ -276,8 +255,12 @@ export const steps: Record<StepName, Step> = {
     }
     return done(outcomes.join(", "));
   },
+};
 
-  async roster({ fx, deps, plan, memo }) {
+export const roster: Step<"roster"> = {
+  name: "roster",
+  irreversible: true,
+  async run({ fx, deps, plan, memo }) {
     if (!plan.handoff) return skipped("handoff=false");
     const entries = plan.inboxes.map((i) => ({
       address: inboxAddress(plan, i),
@@ -302,8 +285,12 @@ export const steps: Record<StepName, Step> = {
     if (!deployed) throw new Error("wren did not finish deploying in 15 minutes");
     return done(`added ${added.join(", ")}; wren redeployed`);
   },
+};
 
-  async loops({ fx, deps, plan }) {
+export const loops: Step<"loops"> = {
+  name: "loops",
+  irreversible: true,
+  async run({ fx, deps, plan }) {
     if (!plan.handoff) return skipped("handoff=false");
     const outcomes: string[] = [];
     for (const inbox of plan.inboxes) {
@@ -353,5 +340,3 @@ async function retry<T>(
   }
   throw last;
 }
-
-export { GateOpen };

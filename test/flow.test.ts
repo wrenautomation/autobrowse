@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { cloudflareBuy } from "../src/browser/flows/cloudflare-buy.js";
 import { googleDkimGenerate } from "../src/browser/flows/google-dkim.js";
-import { parseInboxSpec, parsePlan } from "../src/flow/plan.js";
-import { KEYS, nextStep, runFlow } from "../src/flow/run.js";
-import { STEPS } from "../src/flow/steps.js";
+import { KEYS, nextStep, runFlow as run } from "../src/engine/run.js";
+import { domainWorkflow, parseInboxSpec, parsePlan } from "../src/workflows/domain/index.js";
 import { fakeCloudflare, fakeDeps, fakeEffects, NeedsHuman, scriptedAnswers } from "./fakes.js";
+
+const STEPS = domainWorkflow.steps.map((s) => s.name);
+const runFlow = (
+  fx: ReturnType<typeof fakeEffects>["fx"],
+  deps: ReturnType<typeof fakeDeps>,
+  plan: ReturnType<typeof parsePlan>,
+  answer?: Parameters<typeof run>[4],
+) => run(fx, domainWorkflow, deps, plan, answer);
 
 const plan = (over: Record<string, unknown> = {}) =>
   parsePlan({
@@ -57,7 +64,6 @@ describe("runFlow", () => {
     expect(deps.rosterText()).toContain('address = "will@wren-new.test"');
     expect(deps.rosterText()).toContain('address = "old@fleet.test"');
     expect(JSON.stringify(out.memo)).not.toMatch(/password/);
-    expect(deps.notes).toEqual([]);
   });
 
   it("skips the purchase for an owned domain and never opens a gate", async () => {
@@ -202,14 +208,16 @@ describe("runFlow", () => {
 describe("nextStep", () => {
   it("skips done and skipped, retries needs-human, stops at a verdict", () => {
     const r = (status: string) => ({ status: status as never, detail: "", at: "" });
-    expect(nextStep({})).toBe("check");
-    expect(nextStep({ check: r("done"), buy: r("skipped") })).toBe("zone");
-    expect(nextStep({ check: r("done"), buy: r("needs-human") })).toBe("buy");
-    expect(nextStep({ check: r("done"), buy: r("rejected") })).toBeNull();
-    expect(nextStep({ check: r("done"), buy: r("failed") })).toBe("buy");
-    expect(nextStep({ check: r("done"), buy: r("planned") })).toBe("buy");
+    const next = (results: Record<string, ReturnType<typeof r>>) =>
+      nextStep(domainWorkflow, results);
+    expect(next({})).toBe("check");
+    expect(next({ check: r("done"), buy: r("skipped") })).toBe("zone");
+    expect(next({ check: r("done"), buy: r("needs-human") })).toBe("buy");
+    expect(next({ check: r("done"), buy: r("rejected") })).toBeNull();
+    expect(next({ check: r("done"), buy: r("failed") })).toBe("buy");
+    expect(next({ check: r("done"), buy: r("planned") })).toBe("buy");
     const all = Object.fromEntries(STEPS.map((s) => [s, r("done")]));
-    expect(nextStep(all)).toBeNull();
+    expect(next(all)).toBeNull();
   });
 });
 

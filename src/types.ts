@@ -1,0 +1,2 @@
+/** `Omit` that distributes over a union, so each member keeps its own fields. */
+export type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
