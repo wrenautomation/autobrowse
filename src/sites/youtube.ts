@@ -98,7 +98,7 @@ export const youtubeOAuth: OAuthSpec = {
   clientSecret: "GOOGLE_OAUTH_CLIENT_SECRET",
   refreshToken: "YOUTUBE_REFRESH_TOKEN",
   params: { access_type: "offline", prompt: "consent", include_granted_scopes: "true" },
-  consentFlow: "google/oauth-consent",
+  consent: { workflow: "google-oauth-consent" },
 };
 
 export const youtube: SiteApi = {
@@ -226,7 +226,7 @@ export const youtube: SiteApi = {
         "A community post (no official API; autobrowse-only path, YouTube Studio in the browser)",
       request: communityPost,
       irreversible: true,
-      browser: { flow: "youtube/community-post" },
+      browser: { workflow: "youtube-community-post" },
     }),
   ],
   setup: [
@@ -234,7 +234,7 @@ export const youtube: SiteApi = {
       name: "oauth-client",
       makes: ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
       how: {
-        flow: "google/cloud-oauth-client",
+        workflow: "google-cloud-oauth-client",
         input: {
           api: "youtube.googleapis.com",
           redirectUri: "http://127.0.0.1:9400/oauth/callback",

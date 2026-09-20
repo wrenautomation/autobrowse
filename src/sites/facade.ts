@@ -7,8 +7,18 @@
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import type { HttpClient } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
-import { accessTokens, type ConsentInput, runConsent } from "./oauth.js";
-import { type Method, type SetupStep, type SiteApi, SiteError, type SiteRoute } from "./types.js";
+import type { AnyWorkflow } from "../engine/workflow.js";
+import type { Proof } from "../workflows/proof.js";
+import { accessTokens, runConsent } from "./oauth.js";
+import {
+  type Leg,
+  legName,
+  type Method,
+  type SetupStep,
+  type SiteApi,
+  SiteError,
+  type SiteRoute,
+} from "./types.js";
 
 export interface SiteFacadeDeps {
   http: HttpClient;
@@ -18,10 +28,17 @@ export interface SiteFacadeDeps {
   sink: SecretSink;
   runner: FlowRunner;
   flow(name: string): BrowserFlow<never, unknown> | null;
+  /** Compiled workflows by name, run in-process with gates approved (the caller gated the route). */
+  compiled?: {
+    get(name: string): Promise<AnyWorkflow | null>;
+    run(workflow: AnyWorkflow, plan: Record<string, unknown>): Promise<CompiledRun>;
+  };
   /** Loopback port for OAuth redirects. */
   oauthPort?: number;
   now?: () => number;
 }
+
+export type CompiledRun = Pick<Proof, "status" | "steps" | "output">;
 
 export interface RouteRow {
   method: Method;
@@ -98,7 +115,28 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         (o.accessToken && deps.env(o.accessToken)),
     );
   };
-  const routeRow = (s: SiteApi, r: SiteRoute<never, unknown>): RouteRow => {
+  /** The browser leg's runnable, or null when nobody has recorded it yet. */
+  const legOf = async (leg: Leg): Promise<((input: unknown) => Promise<unknown>) | null> => {
+    if ("flow" in leg) {
+      const flow = deps.flow(leg.flow);
+      return flow ? (input) => deps.runner.run(flow as BrowserFlow<unknown, unknown>, input) : null;
+    }
+    const workflow = await deps.compiled?.get(leg.workflow);
+    if (!workflow || !deps.compiled) return null;
+    const { run } = deps.compiled;
+    return async (input) => {
+      const out = await run(workflow, (input ?? {}) as Record<string, unknown>);
+      if (out.status !== "done") {
+        const failed = out.steps.find((x) => x.status !== "done" && x.status !== "skipped");
+        throw new SiteError(
+          502,
+          `${leg.workflow} ${out.status}${failed ? ` at ${failed.name}: ${failed.detail}` : ""}`,
+        );
+      }
+      return out.output;
+    };
+  };
+  const routeRow = async (s: SiteApi, r: SiteRoute<never, unknown>): Promise<RouteRow> => {
     const base = {
       method: r.method,
       path: r.path,
@@ -107,14 +145,14 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     };
     if (r.api && hasToken(s)) return { ...base, via: "api" };
     if (r.browser) {
-      if (!deps.flow(r.browser.flow))
-        return { ...base, via: "none", missing: `flow ${r.browser.flow} not recorded` };
+      if (!(await legOf(r.browser)))
+        return { ...base, via: "none", missing: `${legName(r.browser)} not recorded` };
       return { ...base, via: "browser" };
     }
     if (r.api) return { ...base, via: "none", missing: `no token for ${s.site}` };
     return { ...base, via: "none", missing: "no leg" };
   };
-  const setupRow = (step: SetupStep): SetupRow => {
+  const setupRow = async (step: SetupStep): Promise<SetupRow> => {
     const blockedOn = (step.needs ?? []).filter((n) => !deps.env(n));
     const row: SetupRow = {
       name: step.name,
@@ -124,16 +162,22 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       done: step.makes.every((n) => Boolean(deps.env(n))),
       blockedOn,
     };
-    const flowName = "flow" in step.how ? step.how.flow : step.how.oauth.consentFlow;
-    if (!deps.flow(flowName)) row.unrecorded = flowName;
+    const how = step.how;
+    const leg: Leg =
+      "oauth" in how
+        ? how.oauth.consent
+        : "flow" in how
+          ? { flow: how.flow }
+          : { workflow: how.workflow };
+    if (!(await legOf(leg))) row.unrecorded = legName(leg);
     return row;
   };
   const status = async (s: SiteApi): Promise<SiteRow> => ({
     site: s.site,
     origin: s.origin,
     authed: hasToken(s),
-    routes: s.routes.map((r) => routeRow(s, r)),
-    setup: s.setup.map(setupRow),
+    routes: await Promise.all(s.routes.map((r) => routeRow(s, r))),
+    setup: await Promise.all(s.setup.map(setupRow)),
   });
   return {
     list: () => Promise.all(sites.map(status)),
@@ -156,14 +200,14 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       const token = r.api ? await tokenFor(s) : null;
       if (r.api && token) return r.api(parsed.data as never, { token, http: deps.http });
       if (r.browser) {
-        const flow = deps.flow(r.browser.flow);
-        if (!flow)
+        const run = await legOf(r.browser);
+        if (!run)
           throw new SiteError(
             501,
-            `${method} ${r.path}: flow ${r.browser.flow} not recorded yet; explore it`,
+            `${method} ${r.path}: ${legName(r.browser)} not recorded yet; explore it`,
           );
         const input = r.browser.input ? r.browser.input(parsed.data as never) : parsed.data;
-        const out = await deps.runner.run(flow as BrowserFlow<unknown, unknown>, input);
+        const out = await run(input);
         return r.browser.output ? r.browser.output(out) : out;
       }
       throw new SiteError(501, `${method} ${r.path}: no token for ${name} and no browser leg`);
@@ -174,22 +218,26 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       if (!step) throw new SiteError(404, `no setup step ${stepName} on ${name}`);
       const blocked = (step.needs ?? []).filter((n) => !deps.env(n));
       if (blocked.length) throw new SiteError(409, `${stepName} needs ${blocked.join(", ")} first`);
-      if ("flow" in step.how) {
-        const flow = deps.flow(step.how.flow);
-        if (!flow) throw new SiteError(501, `flow ${step.how.flow} not recorded yet; explore it`);
-        // The flow keeps what it made through the sink it is handed.
-        const input: Record<string, unknown> = { ...(step.how.input ?? {}), sink: deps.sink };
-        await deps.runner.run(flow as BrowserFlow<unknown, unknown>, input);
+      if (!("oauth" in step.how)) {
+        const leg: Leg =
+          "flow" in step.how ? { flow: step.how.flow } : { workflow: step.how.workflow };
+        const run = await legOf(leg);
+        if (!run) throw new SiteError(501, `${legName(leg)} not recorded yet; explore it`);
+        // A hand-written flow keeps what it made through the sink it is handed; a compiled one has the worker's.
+        const input: Record<string, unknown> = {
+          ...(step.how.input ?? {}),
+          ...("flow" in step.how ? { sink: deps.sink } : {}),
+        };
+        await run(input);
         return { made: step.makes };
       }
       const spec = step.how.oauth;
-      const flow = deps.flow(spec.consentFlow) as BrowserFlow<ConsentInput, void> | null;
-      if (!flow) throw new SiteError(501, `flow ${spec.consentFlow} not recorded yet; explore it`);
+      const open = await legOf(spec.consent);
+      if (!open) throw new SiteError(501, `${legName(spec.consent)} not recorded yet; explore it`);
       const got = await runConsent(spec, {
         http: deps.http,
         env: deps.env,
-        runner: deps.runner,
-        flow,
+        open,
         ...(deps.oauthPort ? { port: deps.oauthPort } : {}),
       });
       const made: string[] = [];

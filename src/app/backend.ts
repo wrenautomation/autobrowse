@@ -27,7 +27,7 @@ import { type EventBus, eventBus } from "../ui/bus.js";
 import type { Jobs } from "../ui/jobs.js";
 import { type CompiledCatalog, compiledCatalog } from "../workflows/compiled.js";
 import type { Proof } from "../workflows/proof.js";
-import { proofLine, proveWorkflow, writeProof } from "../workflows/proof.js";
+import { proofLine, proveWorkflow, runCompiled, writeProof } from "../workflows/proof.js";
 import type { Ingress } from "./client.js";
 import type { Settings } from "./config.js";
 import {
@@ -231,6 +231,11 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
     },
     runner: app.browser,
     flow: (name) => BROWSER_FLOWS[name] ?? null,
+    compiled: {
+      get: async (name) => (await app.catalog.get(name))?.workflow ?? null,
+      run: (workflow, plan) =>
+        runCompiled(workflow, app.browser, { plan, sink: app.sink, approve: true }),
+    },
     oauthPort: settings.oauthPort,
   });
   return {

@@ -8,7 +8,6 @@
 
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
-import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import { type HttpClient, HttpError } from "../clients/http.js";
 import type { OAuthSpec } from "./types.js";
 
@@ -79,8 +78,8 @@ export async function runConsent(
   o: {
     http: HttpClient;
     env: (name: string) => string | undefined;
-    runner: FlowRunner;
-    flow: BrowserFlow<ConsentInput, void>;
+    /** Opens the authorize URL in the site's logged-in profile and clicks through to the redirect. */
+    open: (input: ConsentInput) => Promise<unknown>;
     /** Loopback port for the redirect; must match the client's registered redirect URI. */
     port?: number;
     timeoutMs?: number;
@@ -131,7 +130,7 @@ export async function runConsent(
     ...(spec.params ?? {}),
   }))
     url.searchParams.set(k, v);
-  await Promise.all([o.runner.run(o.flow, { url: url.toString() }), code]);
+  await Promise.all([o.open({ url: url.toString() }), code]);
   const body = await tokenCall(o.http, spec.tokenUrl, {
     grant_type: "authorization_code",
     code: await code,

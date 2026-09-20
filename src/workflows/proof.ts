@@ -7,6 +7,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { FlowRunner } from "../browser/flow.js";
+import type { SecretSink } from "../deps/sink.js";
 import { memoryEffects } from "../engine/memory.js";
 import { type Outcome, runFlow } from "../engine/run.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
@@ -24,17 +25,27 @@ export interface Proof {
 }
 
 /** Run the workflow once in this process on its own plan defaults; gates are declined (a proof never buys). */
-export async function proveWorkflow(
+/**
+ * One in-process run of a compiled workflow: in-memory journal, the
+ * worker's browser, the output the last step read (a JSON detail). Gates
+ * answer as told: declined for a proof, approved for a call an orchestrator
+ * has already gated.
+ */
+export async function runCompiled(
   workflow: AnyWorkflow,
   browser: FlowRunner,
-  opts: { plan?: Record<string, unknown>; now?: () => Date } = {},
-): Promise<Proof> {
-  const plan = workflow.plan.parse({ ...(opts.plan ?? {}), dryRun: false });
+  o: { plan?: Record<string, unknown>; sink?: SecretSink; approve?: boolean } = {},
+): Promise<Pick<Proof, "status" | "steps" | "output">> {
+  const plan = workflow.plan.parse({ ...(o.plan ?? {}), dryRun: false });
   const out = await runFlow(
     memoryEffects().fx,
     workflow as never,
-    compiledDeps(browser) as never,
+    compiledDeps(browser, o.sink ? { sink: o.sink } : {}) as never,
     plan,
+    () =>
+      o.approve
+        ? { approved: true, note: "gated by the caller", at: new Date().toISOString() }
+        : null,
   );
   const steps = Object.entries(out.results).flatMap(([name, r]) =>
     r ? [{ name, status: r.status, detail: r.detail }] : [],
@@ -48,12 +59,16 @@ export async function proveWorkflow(
       output = null;
     }
   }
-  return {
-    at: (opts.now ?? (() => new Date()))().toISOString(),
-    status: out.status,
-    steps,
-    output,
-  };
+  return { status: out.status, steps, output };
+}
+
+export async function proveWorkflow(
+  workflow: AnyWorkflow,
+  browser: FlowRunner,
+  opts: { plan?: Record<string, unknown>; now?: () => Date } = {},
+): Promise<Proof> {
+  const run = await runCompiled(workflow, browser, opts.plan ? { plan: opts.plan } : {});
+  return { at: (opts.now ?? (() => new Date()))().toISOString(), ...run };
 }
 
 export async function writeProof(dir: string, proof: Proof): Promise<string> {

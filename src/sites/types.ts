@@ -19,14 +19,22 @@ export interface ApiLeg {
   http: HttpClient;
 }
 
-/** A route's browser leg: the flow by `site/name` and how the request and answer map onto it. */
-export interface BrowserLeg<I, O> {
-  flow: string;
-  /** The flow's input from the request; the request itself when absent. */
+/**
+ * A route's browser leg: a hand-written flow by `site/name`, or a compiled
+ * workflow by name (what a recording becomes), and how the request and the
+ * answer map onto it.
+ */
+export type BrowserLeg<I, O> = Leg & {
+  /** The flow's input (or the workflow's plan) from the request; the request itself when absent. */
   input?: (i: I) => unknown;
-  /** The official response shape from the flow's output; the output itself when absent. */
+  /** The official response shape from what the leg read; the output itself when absent. */
   output?: (o: unknown) => O;
-}
+};
+
+/** A hand-written flow by `site/name`, or a compiled workflow by name (what a recording becomes). */
+export type Leg = { flow: string } | { workflow: string };
+export const legName = (leg: Leg): string =>
+  "flow" in leg ? `flow ${leg.flow}` : `workflow ${leg.workflow}`;
 
 export interface SiteRoute<I = unknown, O = unknown> {
   method: Method;
@@ -50,8 +58,8 @@ export interface SetupStep {
   makes: readonly string[];
   /** Env names it needs first. */
   needs?: readonly string[];
-  /** A browser flow by `site/name` (`linkedin/developer-app`), or an OAuth consent autobrowse drives. */
-  how: { flow: string; input?: Record<string, unknown> } | { oauth: OAuthSpec };
+  /** A browser leg on the developer console (its input is the flow's input or the workflow's plan), or an OAuth consent autobrowse drives. */
+  how: (Leg & { input?: Record<string, unknown> }) | { oauth: OAuthSpec };
   summary: string;
 }
 
@@ -71,8 +79,8 @@ export interface OAuthSpec {
    * token (LinkedIn without programmatic refresh: 60-day tokens; consent again).
    */
   accessToken?: string;
-  /** The flow that clicks through the consent page in the site's logged-in profile. */
-  consentFlow: string;
+  /** The leg that opens the authorize URL (`{url}`) in the site's logged-in profile and clicks through. */
+  consent: Leg;
 }
 
 export interface SiteApi {

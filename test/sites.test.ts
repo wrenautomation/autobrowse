@@ -42,27 +42,39 @@ function fakeFetch(
   return { calls, fetch };
 }
 
-const whoami = defineFlow<Record<string, never>, { sub: string }>({
+const _whoami = defineFlow<Record<string, never>, { sub: string }>({
   site: "linkedin",
   name: "whoami",
   async run() {
     return { sub: "browser-sub" };
   },
 });
-const createPost = defineFlow<{ text: string; visibility: string }, { id: string }>({
+const _createPost = defineFlow<{ text: string; visibility: string }, { id: string }>({
   site: "linkedin",
   name: "create-post",
   async run() {
     return { id: "urn:li:share:9" };
   },
 });
-const consent = defineFlow<{ url: string }, void>({
+const _consent = defineFlow<{ url: string }, void>({
   site: "google",
   name: "oauth-consent",
   async run() {},
 });
 
 const person = "urn:li:person:abc";
+
+/** A compiled catalog whose workflows run through a function per name. */
+function compiledOf(runs: Record<string, (plan: Record<string, unknown>) => Promise<unknown>>) {
+  return {
+    get: async (name: string) => (runs[name] ? ({ name } as never) : null),
+    run: async (w: { name: string }, plan: Record<string, unknown>) => ({
+      status: "done" as const,
+      steps: [],
+      output: (await runs[w.name]?.(plan)) as Record<string, string> | null,
+    }),
+  };
+}
 
 describe("site facade", () => {
   it("matches official paths with {params}", () => {
@@ -130,22 +142,19 @@ describe("site facade", () => {
   });
 
   it("falls to the browser leg without a token, says which flows are unrecorded, and validates like the API", async () => {
-    const browser = fakeBrowser([]);
-    browser.on(whoami, async () => ({ sub: "browser-sub" }));
-    browser.on(createPost, async (i) => {
-      expect(i).toEqual({ text: "hello", visibility: "PUBLIC" });
-      return { id: "urn:li:share:9" };
-    });
-    const flows: Record<string, typeof whoami | typeof createPost> = {
-      "linkedin/whoami": whoami,
-      "linkedin/create-post": createPost,
-    };
     const sites = siteFacade([linkedin], {
       http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
       env: () => undefined,
       sink: memorySink(),
-      runner: browser,
-      flow: (n) => (flows[n] as never) ?? null,
+      runner: fakeBrowser([]),
+      flow: () => null,
+      compiled: compiledOf({
+        "linkedin-whoami": async () => ({ sub: "browser-sub" }),
+        "linkedin-create-post": async (plan) => {
+          expect(plan).toEqual({ text: "hello", visibility: "PUBLIC" });
+          return { id: "urn:li:share:9" };
+        },
+      }),
     });
     expect(await sites.call("linkedin", "GET", "/v2/userinfo", {})).toEqual({ sub: "browser-sub" });
     expect(
@@ -162,7 +171,7 @@ describe("site facade", () => {
       sites.call("linkedin", "GET", "/rest/socialActions/urn:li:share:1", {}),
     ).rejects.toMatchObject({
       status: 501,
-      message: expect.stringMatching(/linkedin\/post-stats not recorded/),
+      message: expect.stringMatching(/workflow linkedin-post-stats not recorded/),
     });
     await expect(sites.call("linkedin", "DELETE", "/rest/posts", {})).rejects.toMatchObject({
       status: 404,
@@ -173,17 +182,17 @@ describe("site facade", () => {
     expect(row.routes.find((r) => r.path === "/v2/userinfo")?.via).toBe("browser");
     expect(row.routes.find((r) => r.path === "/rest/socialActions/{urn}")).toMatchObject({
       via: "none",
-      missing: "flow linkedin/post-stats not recorded",
+      missing: "workflow linkedin-post-stats not recorded",
     });
     // /rest/posts/{urn} has no browser leg: without a token it says so.
     expect(row.routes.find((r) => r.path === "/rest/posts/{urn}")).toMatchObject({ via: "none" });
     expect(row.setup.map((s) => [s.name, s.done, s.blockedOn, s.unrecorded])).toEqual([
-      ["developer-app", false, [], "linkedin/developer-app"],
+      ["developer-app", false, [], "workflow linkedin-developer-app"],
       [
         "consent",
         false,
         ["LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"],
-        "linkedin/oauth-consent",
+        "workflow linkedin-oauth-consent",
       ],
     ]);
   });
@@ -224,7 +233,7 @@ describe("site facade", () => {
     expect(row.authed).toBe(true);
     expect(row.routes.find((r) => r.path === "/studio/communityPosts")).toMatchObject({
       via: "none",
-      missing: "flow youtube/community-post not recorded",
+      missing: "workflow youtube-community-post not recorded",
     });
   });
 
@@ -247,17 +256,6 @@ describe("site facade", () => {
       expect(body).toContain("code=the-code");
       return { body: { access_token: "at", refresh_token: "rt", expires_in: 3600 } };
     });
-    const browser = fakeBrowser([]);
-    browser.on(consent, async ({ url }) => {
-      const u = new URL(url);
-      expect(u.searchParams.get("client_id")).toBe("cid");
-      expect(u.searchParams.get("access_type")).toBe("offline");
-      expect(u.searchParams.get("redirect_uri")).toBe(`http://127.0.0.1:${port}/oauth/callback`);
-      // The consent page redirects to loopback with the code and our state.
-      await fetch(
-        `http://127.0.0.1:${port}/oauth/callback?code=the-code&state=${u.searchParams.get("state")}`,
-      );
-    });
     const env: Record<string, string> = {
       GOOGLE_OAUTH_CLIENT_ID: "cid",
       GOOGLE_OAUTH_CLIENT_SECRET: "cs",
@@ -267,8 +265,23 @@ describe("site facade", () => {
       http: httpClient({ fetch: api.fetch }),
       env: (n) => env[n],
       sink,
-      runner: browser,
-      flow: (n) => (n === "google/oauth-consent" ? (consent as never) : null),
+      runner: fakeBrowser([]),
+      flow: () => null,
+      compiled: compiledOf({
+        "google-oauth-consent": async ({ url }) => {
+          const u = new URL(url as string);
+          expect(u.searchParams.get("client_id")).toBe("cid");
+          expect(u.searchParams.get("access_type")).toBe("offline");
+          expect(u.searchParams.get("redirect_uri")).toBe(
+            `http://127.0.0.1:${port}/oauth/callback`,
+          );
+          // The consent page redirects to loopback with the code and our state.
+          await fetch(
+            `http://127.0.0.1:${port}/oauth/callback?code=the-code&state=${u.searchParams.get("state")}`,
+          );
+          return null;
+        },
+      }),
       oauthPort: port,
     });
     await expect(sites.setup("youtube", "consent")).resolves.toEqual({
@@ -282,24 +295,20 @@ describe("site facade", () => {
 
   it("a consent that is refused or mismatched fails without keeping anything", async () => {
     const port = 9412;
-    const spec = { ...youtube.auth, consentFlow: "google/oauth-consent" } as never;
-    const browser = fakeBrowser([]);
-    browser.on(consent, async () => {
-      await fetch(`http://127.0.0.1:${port}/oauth/callback?error=access_denied&state=x`);
-    });
-    const o = "oauth" in youtube.auth ? youtube.auth.oauth : (spec as never);
+    const o = "oauth" in youtube.auth ? youtube.auth.oauth : (null as never);
     await expect(
       runConsent(o, {
         http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
         env: (n) => ({ GOOGLE_OAUTH_CLIENT_ID: "cid", GOOGLE_OAUTH_CLIENT_SECRET: "cs" })[n],
-        runner: browser,
-        flow: consent,
+        open: async () => {
+          await fetch(`http://127.0.0.1:${port}/oauth/callback?error=access_denied&state=x`);
+        },
         port,
       }),
     ).rejects.toThrow(/state mismatch/);
   });
 
-  it("a setup flow gets the sink and its input", async () => {
+  it("a setup step runs a hand-written flow with the sink, or a compiled workflow with the plan", async () => {
     const app = defineFlow<
       { redirectUri: string; sink: { put(n: string, v: string): Promise<void> } },
       void
@@ -315,7 +324,20 @@ describe("site facade", () => {
       await i.sink.put("LINKEDIN_CLIENT_SECRET", "secret");
     });
     const sink = memorySink();
-    const sites = siteFacade([linkedin], {
+    const handWritten: SiteApi = {
+      ...linkedin,
+      setup: [
+        {
+          ...(linkedin.setup[0] as never),
+          how: {
+            flow: "linkedin/developer-app",
+            input: { redirectUri: "http://127.0.0.1:9400/oauth/callback" },
+          },
+        },
+        linkedin.setup[1] as never,
+      ],
+    };
+    const sites = siteFacade([handWritten], {
       http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
       env: (n) => sink.values[n],
       sink,
@@ -374,5 +396,64 @@ describe("site facade", () => {
       likesSummary: { totalLikes: 2 },
       commentsSummary: { totalFirstLevelComments: 1 },
     });
+  });
+
+  it("a compiled workflow is a browser leg: its plan is the request, its output the answer, gates approved", async () => {
+    const seen: unknown[] = [];
+    const site: SiteApi = {
+      site: "x",
+      origin: "https://api.x.test",
+      auth: { token: "X_TOKEN" },
+      routes: [
+        route({
+          method: "POST",
+          path: "/posts",
+          summary: "post",
+          irreversible: true,
+          request: z.object({ text: z.string() }),
+          browser: { workflow: "x-create-post", output: (o) => ({ id: (o as { id: string }).id }) },
+        }),
+        route({
+          method: "GET",
+          path: "/nothing",
+          summary: "unrecorded",
+          request: z.object({}),
+          browser: { workflow: "x-nothing" },
+        }),
+      ],
+      setup: [],
+    };
+    const workflow = { name: "x-create-post" } as never;
+    const sites = siteFacade([site], {
+      http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+      env: () => undefined,
+      sink: memorySink(),
+      runner: fakeBrowser([]),
+      flow: () => null,
+      compiled: {
+        get: async (name) => (name === "x-create-post" ? workflow : null),
+        run: async (w, plan) => {
+          seen.push([w, plan]);
+          return plan.text === "boom"
+            ? {
+                status: "failed",
+                steps: [{ name: "post", status: "failed", detail: "no button" }],
+                output: null,
+              }
+            : { status: "done", steps: [], output: { id: "p1" } };
+        },
+      },
+    });
+    expect(await sites.call("x", "POST", "/posts", { text: "hi" })).toEqual({ id: "p1" });
+    expect(seen).toEqual([[workflow, { text: "hi" }]]);
+    await expect(sites.call("x", "POST", "/posts", { text: "boom" })).rejects.toMatchObject({
+      status: 502,
+      message: "x-create-post failed at post: no button",
+    });
+    const row = await sites.status("x");
+    expect(row.routes.map((r) => [r.via, r.missing])).toEqual([
+      ["browser", undefined],
+      ["none", "workflow x-nothing not recorded"],
+    ]);
   });
 });

@@ -83,7 +83,7 @@ export const linkedinOAuth: OAuthSpec = {
   clientSecret: "LINKEDIN_CLIENT_SECRET",
   refreshToken: "LINKEDIN_REFRESH_TOKEN",
   accessToken: "LINKEDIN_ACCESS_TOKEN",
-  consentFlow: "linkedin/oauth-consent",
+  consent: { workflow: "linkedin-oauth-consent" },
 };
 
 export const linkedin: SiteApi = {
@@ -104,7 +104,7 @@ export const linkedin: SiteApi = {
           ),
           "v2/userinfo",
         ),
-      browser: { flow: "linkedin/whoami" },
+      browser: { workflow: "linkedin-whoami" },
     }),
     route({
       method: "POST",
@@ -123,7 +123,7 @@ export const linkedin: SiteApi = {
         return { id: res.headers.get("x-restli-id") ?? "" };
       },
       browser: {
-        flow: "linkedin/create-post",
+        workflow: "linkedin-create-post",
         input: (b) => ({ text: b.commentary, visibility: b.visibility }),
       },
     }),
@@ -144,7 +144,10 @@ export const linkedin: SiteApi = {
           "rest/posts",
         );
       },
-      browser: { flow: "linkedin/list-posts", input: (q) => ({ count: q.count, start: q.start }) },
+      browser: {
+        workflow: "linkedin-list-posts",
+        input: (q) => ({ count: q.count, start: q.start }),
+      },
     }),
     route({
       method: "GET",
@@ -172,7 +175,7 @@ export const linkedin: SiteApi = {
           ),
           "rest/socialActions/{urn}",
         ),
-      browser: { flow: "linkedin/post-stats" },
+      browser: { workflow: "linkedin-post-stats" },
     }),
     route({
       method: "GET",
@@ -187,7 +190,7 @@ export const linkedin: SiteApi = {
           ),
           "rest/socialActions/{urn}/comments",
         ),
-      browser: { flow: "linkedin/post-comments" },
+      browser: { workflow: "linkedin-post-comments" },
     }),
     route({
       method: "POST",
@@ -203,7 +206,10 @@ export const linkedin: SiteApi = {
           ),
           "rest/socialActions/{urn}/comments",
         ),
-      browser: { flow: "linkedin/comment", input: (b) => ({ urn: b.urn, text: b.message.text }) },
+      browser: {
+        workflow: "linkedin-comment",
+        input: (b) => ({ urn: b.urn, text: b.message.text }),
+      },
     }),
     route({
       method: "POST",
@@ -227,7 +233,7 @@ export const linkedin: SiteApi = {
       name: "developer-app",
       makes: ["LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"],
       how: {
-        flow: "linkedin/developer-app",
+        workflow: "linkedin-developer-app",
         input: { redirectUri: "http://127.0.0.1:9400/oauth/callback" },
       },
       summary:
