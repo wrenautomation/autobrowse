@@ -1,5 +1,6 @@
 /** Recordings on disk, one in detail with its screenshots, and the compile button: outline + source. */
 import { useState } from "react";
+import { describeOp } from "../../../src/desktop/describe.js";
 import { api, type Compiled, type Proof, type Recording } from "../api.js";
 import { href, useLoad } from "../hooks.js";
 
@@ -158,6 +159,8 @@ function Actions({ rec }: { rec: Recording }) {
         return "⏸ paused";
       case "resume":
         return "▶ resumed";
+      case "desktop":
+        return `desktop: ${describeOp(a.op, a.redacted)}`;
     }
   };
   return (

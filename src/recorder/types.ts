@@ -4,6 +4,8 @@
  * hints survive a redesign and CSS does not. Values are redacted at
  * capture time when the field or the value looks like a secret.
  */
+import type { DesktopOp } from "../desktop/types.js";
+
 export interface LocatorHints {
   tag: string;
   role: string | null;
@@ -34,6 +36,8 @@ interface Base {
 
 export type Action =
   | (Base & { kind: "navigate" })
+  /** An act outside the browser (an app, a menu, a root command); typed text is redacted like input. */
+  | (Base & { kind: "desktop"; op: DesktopOp; redacted: boolean })
   | (Base & { kind: "click"; target: LocatorHints })
   | (Base & { kind: "input"; target: LocatorHints; value: string; redacted: boolean })
   | (Base & { kind: "select"; target: LocatorHints; value: string })

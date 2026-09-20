@@ -8,7 +8,7 @@
  */
 import { planLocator, renderLocator } from "../browser/locate.js";
 import { INTERACTIVE_COMMANDS } from "../deps/shell.js";
-import type { OpValue, Outline, OutlineOp, OutlineStep } from "./outline.js";
+import type { DesktopOutlineOp, OpValue, Outline, OutlineOp, OutlineStep } from "./outline.js";
 import { camel } from "./structure.js";
 
 export interface RenderOptions {
@@ -148,16 +148,95 @@ ${lines.join("\n")}
 };`;
 }
 
+/** A typed value in a desktop step: plan fields off the plan, secrets fetched outside the journal. */
+function renderDesktopValue(v: OpValue): string {
+  switch (v.from) {
+    case "plan":
+      return `plan.${v.field}`;
+    case "secret":
+      return v.key;
+    case "literal":
+      return q(v.text);
+  }
+}
+
+function renderDesktopOp(op: DesktopOutlineOp, i: number): string {
+  const act = (src: string) =>
+    `    await fx.run(${q(`desktop ${i} ${op.kind}`)}, () => ${src}); // ${op.goal}`;
+  switch (op.kind) {
+    case "open":
+      return act(`deps.desktop.open(${q(op.app)})`);
+    case "click":
+      return act(
+        `deps.desktop.click({ ${[
+          ...(op.app ? [`app: ${q(op.app)}`] : []),
+          ...(op.role ? [`role: ${q(op.role)}`] : []),
+          `name: ${q(op.name)}`,
+        ].join(", ")} })`,
+      );
+    case "type":
+      // The journal keeps only that the step ran, never what was typed.
+      return act(`deps.desktop.type(${renderDesktopValue(op.value)}).then(() => undefined)`);
+    case "key":
+      return act(`deps.desktop.key(${q(op.combo)})`);
+    case "shell":
+      return `    await sh(${i}, ${q(op.command)}${op.root ? ", true" : ""}); // ${op.goal}`;
+    case "wait":
+      return `    await fx.sleep(${op.ms});`;
+  }
+}
+
+function renderDesktopStep(step: Extract<OutlineStep, { kind: "desktop" }>): string {
+  const id = camel(step.name);
+  const secrets = [
+    ...new Set(
+      step.ops.flatMap((op) =>
+        op.kind === "type" && op.value.from === "secret" ? [op.value.key] : [],
+      ),
+    ),
+  ];
+  const usesPlan = step.ops.some((op) => op.kind === "type" && op.value.from === "plan");
+  const anyShell = step.ops.some((op) => op.kind === "shell");
+  const gate = step.irreversible
+    ? `    const answer = gate("human", ${q(`Run "${step.name}" (${step.description || "irreversible"})?`)});\n    if (!answer.approved) return rejected(answer.note ?? "declined");\n`
+    : "";
+  const secretLines = secrets.map(
+    (k) =>
+      `    // Outside fx.run on purpose: the journal must never hold it.\n    const ${k} = await deps.secrets.get(${q(k)});`,
+  );
+  const shell = anyShell
+    ? `    // Only the exit code is journaled: command output can hold tokens.
+    const sh = async (i: number, cmd: string, root = false) => {
+      const { code } = await fx.run(\`desktop \${i} shell\`, () => deps.desktop.shell(cmd, root).then((r) => ({ code: r.code })));
+      if (code !== 0) throw new Error(\`\\\`\${cmd}\\\` exited \${code}\`);
+    };
+`
+    : "";
+  const ctx = ["fx", "deps", ...(usesPlan ? ["plan"] : []), ...(step.irreversible ? ["gate"] : [])];
+  return `const ${id}: Step<${q(step.name)}> = {
+  name: ${q(step.name)},${step.irreversible ? "\n  irreversible: true," : ""}
+  async run({ ${ctx.join(", ")} }) {
+${gate}${secretLines.length ? `${secretLines.join("\n")}\n` : ""}${shell}${step.ops.map(renderDesktopOp).join("\n")}
+    return done(${q(step.description || step.name)});
+  },
+};`;
+}
+
 export function render(o: Outline, opts: RenderOptions = {}): Rendered {
   const lib = opts.lib ?? "autobrowse";
   const steps = o.steps.map((s) =>
-    s.kind === "browser" ? renderBrowserStep(o, s) : renderTerminalStep(s),
+    s.kind === "browser"
+      ? renderBrowserStep(o, s)
+      : s.kind === "terminal"
+        ? renderTerminalStep(s)
+        : renderDesktopStep(s),
   );
   const needsHuman = o.steps.some(
     (s) => s.kind === "terminal" && s.commands.some((c) => INTERACTIVE_COMMANDS.test(c)),
   );
   const anyGate = o.steps.some((s) => s.irreversible);
   const anyTerminal = o.steps.some((s) => s.kind === "terminal");
+  const anyDesktop = o.steps.some((s) => s.kind === "desktop");
   const anySecret = o.secrets.length > 0;
   const imports = [
     "defineFlow",
@@ -168,6 +247,7 @@ export function render(o: Outline, opts: RenderOptions = {}): Rendered {
     ...(anyGate ? ["rejected"] : []),
     ...(anySecret ? ["type SecretSource"] : []),
     ...(anyTerminal ? ["type Shell"] : []),
+    ...(anyDesktop ? ["type Desktop"] : []),
     "type StepDef",
   ].sort((a, b) => a.replace("type ", "").localeCompare(b.replace("type ", "")));
 
@@ -179,6 +259,7 @@ export function render(o: Outline, opts: RenderOptions = {}): Rendered {
     "  browser: FlowRunner;",
     ...(anySecret ? ["  secrets: SecretSource;"] : []),
     ...(anyTerminal ? ["  shell: Shell;"] : []),
+    ...(anyDesktop ? ["  desktop: Desktop;"] : []),
   ];
 
   const index = `${banner([
@@ -225,8 +306,10 @@ export const workflow = defineWorkflow<Deps, Memo>()({
       ? [`secrets: memorySecrets({ ${o.secrets.map((s) => `${s.key}: "x"`).join(", ")} })`]
       : []),
     ...(anyTerminal ? ["shell: fakeShell()"] : []),
+    ...(anyDesktop ? ["desktop: fakeDesktop()"] : []),
   ].join(", ");
   const testImports = [
+    ...(anyDesktop ? ["fakeDesktop"] : []),
     ...(anyTerminal ? ["fakeShell"] : []),
     "memoryEffects",
     ...(anySecret ? ["memorySecrets"] : []),

@@ -8,6 +8,7 @@
  * hand or with commands, and `resume`; the agent re-observes and goes on.
  */
 import { z } from "zod";
+import { desktopOpSchema } from "../desktop/types.js";
 import type { ExploreCommand, Explorer } from "../explore/server.js";
 import { completeJson, type Llm, LlmOutputInvalid, type LlmUsage } from "../llm/types.js";
 import { type Digest, digest, hintsFor, pageForModel } from "./digest.js";
@@ -35,6 +36,8 @@ export const stepSchema = z.object({
     /** Read a control's or heading's text and keep it under a name; the compiled flow reads it too. */
     z.object({ cmd: z.literal("read"), ref, as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/) }),
     /** The goal is met (or cannot be): say what happened. */
+    /** Outside the browser: an app, a menu, a key, a shell command on this machine. */
+    z.object({ cmd: z.literal("os"), act: desktopOpSchema, goal: z.string() }),
     z.object({ cmd: z.literal("done"), summary: z.string(), achieved: z.boolean() }),
     /** Something only a person can do (a captcha, a choice with money on it). */
     z.object({ cmd: z.literal("human"), reason: z.string() }),
@@ -90,9 +93,16 @@ Actions, with "cmd" set to exactly one of these words:
   {"cmd":"open","url":"https://..."}
   {"cmd":"key","key":"Escape"}
   {"cmd":"read","ref":n,"as":"camelName"}   (keep an element's text under a name; a workflow built from this run will read it the same way)
+  {"cmd":"os","act":{"op":"tree"},"goal":"why"}   (the desktop, outside the browser: the front app's controls as role "name" lines)
+  {"cmd":"os","act":{"op":"open","app":"System Settings"},"goal":"why"}
+  {"cmd":"os","act":{"op":"click","role":"button","name":"Allow"},"goal":"why"}   (role and name exactly as the tree printed them; "app" narrows to one app)
+  {"cmd":"os","act":{"op":"type","text":"...","secret":false},"goal":"why"}   (secret:true for a password: it is then kept out of the record)
+  {"cmd":"os","act":{"op":"key","combo":"cmd+q"},"goal":"why"}   (return, tab, escape, arrows, or a letter with cmd/shift/alt/ctrl)
+  {"cmd":"os","act":{"op":"shell","command":"...","root":false},"goal":"why"}   (root=true only when the goal needs it; output comes back)
   {"cmd":"done","summary":"what happened","achieved":true|false}
   {"cmd":"human","reason":"why a person must do this"}
 ref is the [n] of a control in the digest; only those numbers exist.
+Use os acts only when the goal is outside the browser (an app, a system setting, a file, a command); look with tree before clicking.
 Control names carry content too: a link named "Name Jane Doe" tells you the name is Jane Doe. When the goal asks you to report or collect something, read it with read{ref,as} first, then quote it in the done summary.
 Rules: never invent values; use only the inputs given. Never buy, delete, or submit money-related forms: return human{reason} instead.
 Prefer the shortest path. When the tree shows the goal is met, return done with achieved=true.
@@ -196,6 +206,7 @@ type Act = Exclude<Step["action"], { cmd: "done" } | { cmd: "human" }>;
 function toCommand(a: Act, page: Digest): ExploreCommand {
   if (a.cmd === "open") return { cmd: "open", url: a.url };
   if (a.cmd === "key") return { cmd: "key", key: a.key };
+  if (a.cmd === "os") return { cmd: "os", act: a.act };
   const ref = page.refs.find((r) => r.n === a.ref);
   if (!ref) throw new Error(`ref ${a.ref} is not on the page; refs go 1..${page.refs.length}`);
   const hints = hintsFor(ref);
@@ -217,9 +228,22 @@ function toCommand(a: Act, page: Digest): ExploreCommand {
 
 /** What a step gave back, when it is worth the model's eyes: the text a read found. */
 function outcome(s: StepRecord): string {
-  const r = s.result as { text?: string } | null;
+  const r = s.result as {
+    text?: string;
+    tree?: string;
+    apps?: string[];
+    code?: number;
+    stdout?: string;
+    stderr?: string;
+  } | null;
   if (s.step?.action.cmd === "read" && r?.text !== undefined)
     return `ok: ${JSON.stringify(r.text.slice(0, 300))}`;
+  if (s.step?.action.cmd === "os" && r) {
+    if (r.tree !== undefined) return `ok, the front app shows:\n${r.tree.slice(0, 6_000)}`;
+    if (r.apps) return `ok: ${r.apps.join(", ")}`;
+    if (r.code !== undefined)
+      return `exit ${r.code}${r.stdout ? `\n${r.stdout.slice(0, 1_500)}` : ""}${r.stderr ? `\nstderr: ${r.stderr.slice(0, 500)}` : ""}`;
+  }
   return "ok";
 }
 
@@ -228,12 +252,14 @@ function describe(s: StepRecord): string {
   const a = s.step.action;
   const at = "ref" in a ? ` [${a.ref}]` : "";
   const what =
-    a.cmd === "open"
-      ? ` ${a.url}`
-      : a.cmd === "fill" || a.cmd === "select"
-        ? ` "${a.value}"`
-        : a.cmd === "read"
-          ? ` as ${a.as}`
-          : "";
+    a.cmd === "os"
+      ? ` ${a.act.op}${"name" in a.act ? ` "${a.act.name}"` : "app" in a.act && a.act.app ? ` ${a.act.app}` : "combo" in a.act ? ` ${a.act.combo}` : "command" in a.act ? ` ${a.act.command.slice(0, 60)}` : ""}`
+      : a.cmd === "open"
+        ? ` ${a.url}`
+        : a.cmd === "fill" || a.cmd === "select"
+          ? ` "${a.value}"`
+          : a.cmd === "read"
+            ? ` as ${a.as}`
+            : "";
   return `${a.cmd}${at}${what}`;
 }

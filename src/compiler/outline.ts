@@ -52,6 +52,27 @@ const opSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("human"), reason: z.string() }),
 ]);
 
+/**
+ * Desktop ops replay through `deps.desktop`. Typed text is a value like a
+ * fill's (plan field, secret, or literal); a root command is irreversible
+ * by default and gated.
+ */
+const desktopOpSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("open"), goal: z.string(), app: z.string() }),
+  z.object({
+    kind: z.literal("click"),
+    goal: z.string(),
+    app: z.string().nullable(),
+    role: z.string().nullable(),
+    name: z.string(),
+    irreversible: z.boolean(),
+  }),
+  z.object({ kind: z.literal("type"), goal: z.string(), value: valueSchema }),
+  z.object({ kind: z.literal("key"), goal: z.string(), combo: z.string() }),
+  z.object({ kind: z.literal("shell"), goal: z.string(), command: z.string(), root: z.boolean() }),
+  z.object({ kind: z.literal("wait"), goal: z.string(), ms: z.number().int().positive() }),
+]);
+
 export const fieldSchema = z.object({
   key: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
   label: z.string(),
@@ -79,6 +100,7 @@ export const stepSchema = z.discriminatedUnion("kind", [
     ops: z.array(opSchema),
   }),
   z.object({ ...stepBase, kind: z.literal("terminal"), commands: z.array(z.string()) }),
+  z.object({ ...stepBase, kind: z.literal("desktop"), ops: z.array(desktopOpSchema) }),
 ]);
 
 export const outlineSchema = z.object({
@@ -93,6 +115,7 @@ export const outlineSchema = z.object({
 export type Outline = z.infer<typeof outlineSchema>;
 export type OutlineStep = Outline["steps"][number];
 export type OutlineOp = z.infer<typeof opSchema>;
+export type DesktopOutlineOp = z.infer<typeof desktopOpSchema>;
 export type OutlineField = z.infer<typeof fieldSchema>;
 export type OpValue = z.infer<typeof valueSchema>;
 

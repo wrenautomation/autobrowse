@@ -19,6 +19,14 @@ import { defineFlow, type FlowPage, flowRunner, type RunnerOptions } from "../br
 import { type Hints, locate, locateAll } from "../browser/locate.js";
 import { snapshotPage } from "../browser/repair.js";
 import { type BrowserOptions, looksLikeWall } from "../browser/session.js";
+import { macDesktop } from "../desktop/mac.js";
+import {
+  type Desktop,
+  type DesktopOp,
+  desktopOpSchema,
+  noDesktop,
+  treeText,
+} from "../desktop/types.js";
 import { type RawAction, redactRaw } from "../recorder/browser.js";
 import { BINDING, OBSERVER_SCRIPT } from "../recorder/observer.js";
 import {
@@ -96,6 +104,8 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   /** Write the journal as a recording under `recordingsDir/<name>`. */
   z.object({ cmd: z.literal("save"), name: z.string().regex(/^[a-z][a-z0-9-]*$/) }),
   z.object({ cmd: z.literal("journal") }),
+  /** An act on the desktop, outside the browser: apps, menus, keys, a root command. */
+  z.object({ cmd: z.literal("os"), act: desktopOpSchema }),
   z.object({ cmd: z.literal("close") }),
 ]);
 export type Command = z.infer<typeof commandSchema>;
@@ -112,6 +122,8 @@ export interface ExploreOptions {
   login?: RunnerOptions["login"];
   /** Delays around acts; null (the default) answers a console at once, an agent passes human pace. */
   pace?: RunnerOptions["pace"];
+  /** The desktop `os` acts run on; this Mac by default, none on a headless host. */
+  desktop?: Desktop;
   now?: () => number;
 }
 
@@ -172,6 +184,49 @@ export async function startExplore(opts: ExploreOptions): Promise<Explorer> {
   return serve(opts, fp, finishFlow);
 }
 
+/** One `os` act against the desktop; the tree comes back as text like `aria` does. */
+async function runDesktop(d: Desktop, a: DesktopOp, shotsDir: string, n: number): Promise<unknown> {
+  switch (a.op) {
+    case "apps":
+      return { apps: await d.apps() };
+    case "open":
+      await d.open(a.app);
+      return { ok: true };
+    case "tree":
+      return { tree: redactText(treeText(await d.tree(a.app, a.depth))) };
+    case "click":
+      await d.click({
+        name: a.name,
+        ...(a.role ? { role: a.role } : {}),
+        ...(a.app ? { app: a.app } : {}),
+      });
+      return { ok: true };
+    case "type":
+      await d.type(a.text);
+      return { ok: true };
+    case "key":
+      await d.key(a.combo);
+      return { ok: true };
+    case "shot": {
+      const file = join(shotsDir, `os-${String(n).padStart(4, "0")}.png`);
+      await d.screenshot(file);
+      return { file };
+    }
+    case "shell": {
+      const r = await d.shell(a.command, a.root ?? false);
+      // Output can hold tokens: masked like everything else that leaves the socket.
+      return {
+        code: r.code,
+        stdout: redactText(r.stdout.slice(0, 4_000)),
+        stderr: redactText(r.stderr.slice(0, 1_000)),
+      };
+    }
+    case "wait":
+      await new Promise((r) => setTimeout(r, a.ms));
+      return { ok: true };
+  }
+}
+
 async function serve(
   opts: ExploreOptions,
   fp: FlowPage,
@@ -183,6 +238,7 @@ async function serve(
   const actions: Action[] = [];
   const shotsDir = join(opts.recordingsDir, `.explore-${opts.site}`);
   mkdirSync(shotsDir, { recursive: true });
+  const desktop = opts.desktop ?? (process.platform === "darwin" ? macDesktop() : noDesktop());
   let shotN = 0;
   let finish: () => void = () => undefined;
   const done = new Promise<void>((resolve) => {
@@ -338,6 +394,20 @@ async function serve(
       case "note":
         journal({ kind: "note", text: c.text });
         return { ok: true };
+      case "os": {
+        const a = c.act;
+        const result = await runDesktop(desktop, a, shotsDir, shotN++);
+        // Looking (apps, tree, shot) is not journaled; acts are, with typed secrets hidden.
+        if (a.op !== "apps" && a.op !== "tree" && a.op !== "shot") {
+          const redacted = a.op === "type" && (a.secret === true || looksLikeSecretValue(a.text));
+          journal({
+            kind: "desktop",
+            op: redacted && a.op === "type" ? { ...a, text: REDACTED } : a,
+            redacted,
+          });
+        }
+        return result;
+      }
       case "pause":
         paused = true;
         handActs = 0;

@@ -86,6 +86,16 @@ Browserbase takes them.
   that works is journaled as a recording; `save` writes it, `compile`
   takes it from there. Failing flows leave the same aria tree next to the
   screenshot (`<stamp>.aria.txt`).
+- **Desktop.** The same session takes `{"cmd":"os","act":{…}}`: apps,
+  the front app's controls as a tree (`tree`, like `aria`), `click` by role
+  and name, `type`, `key` ("cmd+shift+4", "return"), `shot`, and `shell`
+  with `root:true` for a command that needs it. Desktop acts are journaled
+  beside browser acts and compile to a `desktop` step that replays through
+  `deps.desktop`; typed passwords (`secret:true`) never enter the record.
+  Root goes through one audited helper (`autobrowse desktop setup` prints
+  the three commands that install it; every root command lands in
+  `/var/log/autobrowse-root.log`). macOS grants Accessibility to the app
+  running node once, by hand; `desktop setup` says whether it has.
 - **Devices.** `PHONE_NUMBER` links your own phone through the Mac it is
   paired with: SMS codes are read from Messages, "tap Yes" nudges go back
   over iMessage. Twilio is the rented-number twin. `setup` checks the two

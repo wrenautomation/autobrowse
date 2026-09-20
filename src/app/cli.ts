@@ -5,11 +5,13 @@
  * gets `run <workflow> <key> --plan file.json`; `domain` has its own flags.
  */
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { Command } from "commander";
 import type { GateName } from "../engine/effects.js";
 import { summarize } from "../engine/run.js";
 import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
 import { registerAuthCommands } from "./cli-auth.js";
+import { registerDesktopCommands } from "./cli-desktop.js";
 import { registerRecordCommands } from "./cli-record.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
@@ -202,6 +204,7 @@ program
 
 registerRecordCommands(program, settings);
 registerAuthCommands(program, settings);
+registerDesktopCommands(program, tmpdir());
 
 program.parseAsync().catch((err: unknown) => {
   console.error(

@@ -10,7 +10,7 @@
 import type { Hints } from "../browser/locate.js";
 import { INTERACTIVE_COMMANDS } from "../deps/shell.js";
 import type { Action, LocatorHints, Recording } from "../recorder/types.js";
-import type { Outline, OutlineField, OutlineOp, OutlineStep } from "./outline.js";
+import type { DesktopOutlineOp, Outline, OutlineField, OutlineOp, OutlineStep } from "./outline.js";
 
 export const IRREVERSIBLE_CLICK =
   /\b(buy|purchase|pay|checkout|complete (order|purchase)|place order|confirm|create|generate|register|delete|remove|revoke|deploy|send|publish|submit)\b/i;
@@ -18,6 +18,7 @@ export const IRREVERSIBLE_COMMAND =
   /^(rm|rmdir|terraform (apply|destroy)|tofu (apply|destroy)|aws .* (delete|create|put)|gh (repo|release) (create|delete)|git push|kubectl (apply|delete)|docker (rm|rmi))\b/;
 
 type BrowserStep = Extract<OutlineStep, { kind: "browser" }>;
+type DesktopStep = Extract<OutlineStep, { kind: "desktop" }>;
 
 /** Longest step name; a note is a sentence, a name is a handle. Cut at a word. */
 const NAME_MAX = 40;
@@ -112,14 +113,96 @@ export function structure(rec: Recording): Outline {
   };
   const add = (op: OutlineOp) => open().ops.push(op);
 
+  // Desktop acts in a row make one desktop step; a browser act after closes it.
+  let desktop: DesktopStep | null = null;
+  const curDesktop = (): DesktopStep | null => desktop;
+  const closeDesktop = () => {
+    const d = curDesktop();
+    if (d?.ops.length) {
+      d.irreversible = d.ops.some(
+        (o) => (o.kind === "click" && o.irreversible) || (o.kind === "shell" && o.root),
+      );
+      steps.push(d);
+    }
+    desktop = null;
+  };
+  const addDesktop = (op: DesktopOutlineOp) => {
+    let d = curDesktop();
+    if (!d) {
+      close();
+      d = desktop = {
+        kind: "desktop",
+        name: stepName(pendingName ?? "desktop"),
+        description: pendingDescription ?? "on the desktop",
+        irreversible: false,
+        proof: null,
+        ops: [],
+      };
+      pendingName = pendingDescription = null;
+    }
+    d.ops.push(op);
+  };
+
   for (const a of rec.actions as Action[]) {
+    if (a.kind !== "desktop" && a.kind !== "note") closeDesktop();
     switch (a.kind) {
+      case "desktop": {
+        const op = a.op;
+        switch (op.op) {
+          case "open":
+            addDesktop({ kind: "open", goal: `open ${op.app}`, app: op.app });
+            break;
+          case "click":
+            addDesktop({
+              kind: "click",
+              goal: `click ${op.role ?? "control"} "${op.name}"`,
+              app: op.app ?? null,
+              role: op.role ?? null,
+              name: op.name,
+              irreversible: IRREVERSIBLE_CLICK.test(op.name),
+            });
+            break;
+          case "type": {
+            const label = `typed text ${(curDesktop()?.ops.filter((o) => o.kind === "type").length ?? 0) + 1}`;
+            const key = fieldKey(camel(label));
+            if (a.redacted) secrets.push({ key, label });
+            else fields.push({ key, label, example: op.text });
+            addDesktop({
+              kind: "type",
+              goal: `type ${label}`,
+              value: a.redacted ? { from: "secret", key } : { from: "plan", field: key },
+            });
+            break;
+          }
+          case "key":
+            addDesktop({ kind: "key", goal: `press ${op.combo}`, combo: op.combo });
+            break;
+          case "shell":
+            addDesktop({
+              kind: "shell",
+              goal: `run ${op.command.split(/\s+/)[0] ?? "command"}`,
+              command: op.command,
+              root: op.root ?? false,
+            });
+            break;
+          case "wait":
+            addDesktop({ kind: "wait", goal: `wait ${op.ms}ms`, ms: op.ms });
+            break;
+          // Looking is not a step: apps, tree, shot.
+          case "apps":
+          case "tree":
+          case "shot":
+            break;
+        }
+        break;
+      }
       case "navigate":
         if (cur()?.ops.length) close();
         pendingUrl = a.url;
         break;
       case "note":
         close();
+        closeDesktop();
         // A short note is a name ("Checkout"); a sentence (an agent's thought) describes the step, and the page names it.
         pendingName = isSentence(a.text)
           ? pendingUrl
@@ -206,6 +289,7 @@ export function structure(rec: Recording): Outline {
     }
   }
   close();
+  closeDesktop();
 
   if (rec.commands.length) {
     const interactive = rec.commands.filter((c) => INTERACTIVE_COMMANDS.test(c));

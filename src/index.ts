@@ -37,6 +37,15 @@ export {
 } from "./compiler/index.js";
 export { envSecrets, memorySecrets, type SecretSource } from "./deps/secrets.js";
 export { fakeShell, localShell, type Shell, type ShellResult } from "./deps/shell.js";
+export { macDesktop } from "./desktop/mac.js";
+export {
+  type Desktop,
+  type DesktopNode,
+  type DesktopOp,
+  fakeDesktop,
+  noDesktop,
+  treeText,
+} from "./desktop/types.js";
 export type { Effects, GateAnswer, GateName } from "./engine/effects.js";
 export { GateOpen, Unrecoverable } from "./engine/effects.js";
 export type { RunEvent, RunRef } from "./engine/events.js";

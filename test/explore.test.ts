@@ -3,8 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { compile } from "../src/compiler/index.js";
+import { fakeDesktop } from "../src/desktop/types.js";
 import { startExplore } from "../src/explore/server.js";
 import { loadRecording } from "../src/recorder/store.js";
+
+const desktop = fakeDesktop([
+  { role: "window", name: "General", value: null, enabled: true, depth: 0 },
+  { role: "checkbox", name: "Remote Login", value: "0", enabled: true, depth: 1 },
+]);
 
 const PAGE = `data:text/html,${encodeURIComponent(
   `<label>Domain <input id="d"></label><label>Password <input type="password" id="p"></label><button id="go" onclick="document.title='clicked'">Buy now</button>`,
@@ -30,6 +36,7 @@ describe("explore mode", () => {
     ({ done, token } = await startExplore({
       site: "scratch",
       port,
+      desktop,
       recordingsDir: join(dir, "recordings"),
       browser: {
         tier: "local",
@@ -92,10 +99,34 @@ describe("explore mode", () => {
       (await send({ cmd: "eval", js: "document.querySelector('#p').value" })).body.result,
     ).toBe("hunter2hunter2");
 
+    // Desktop acts share the session and the journal; looking is not journaled, typed secrets are hidden.
+    const tree = (await send({ cmd: "os", act: { op: "tree" } })).body.tree as string;
+    expect(tree).toContain('- checkbox "Remote Login": 0');
+    expect(
+      (await send({ cmd: "os", act: { op: "click", role: "checkbox", name: "Remote Login" } }))
+        .body,
+    ).toEqual({ ok: true });
+    expect((await send({ cmd: "os", act: { op: "click", name: "Nope" } })).status).toBe(500);
+    await send({ cmd: "os", act: { op: "type", text: "hunter2hunter2", secret: true } });
+    await send({ cmd: "os", act: { op: "shell", command: "true" } });
+    expect(desktop.acts.map((a) => a.op)).toEqual(["click", "type", "shell"]);
+
     const saved = await send({ cmd: "save", name: "buy" });
-    expect(saved.body.actions).toBe(4);
+    expect(saved.body.actions).toBe(7);
     const rec = await loadRecording(join(dir, "recordings"), "buy");
-    expect(rec.actions.map((a) => a.kind)).toEqual(["navigate", "input", "input", "click"]);
+    expect(rec.actions.map((a) => a.kind)).toEqual([
+      "navigate",
+      "input",
+      "input",
+      "click",
+      "desktop",
+      "desktop",
+      "desktop",
+    ]);
+    const typed = rec.actions[5];
+    expect(
+      typed.kind === "desktop" && typed.redacted && typed.op.op === "type" && typed.op.text,
+    ).toBe("<redacted>");
     const pw = rec.actions[2];
     expect(pw.kind === "input" && pw.value).toBe("<redacted>");
     const compiled = await compile(rec);
