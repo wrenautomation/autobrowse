@@ -109,7 +109,8 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("note"), text: z.string() }),
   /** Write the journal as a recording under `recordingsDir/<name>`. */
   z.object({ cmd: z.literal("save"), name: z.string().regex(/^[a-z][a-z0-9-]*$/) }),
-  z.object({ cmd: z.literal("journal") }),
+  /** What is recorded so far; `last` = only the newest n. */
+  z.object({ cmd: z.literal("journal"), last: z.number().int().positive().optional() }),
   /** An act on the desktop, outside the browser: apps, menus, keys, a root command. */
   z.object({ cmd: z.literal("os"), act: desktopOpSchema }),
   z.object({ cmd: z.literal("close") }),
@@ -494,7 +495,7 @@ async function serve(
         return { paused: false, handActs };
       }
       case "journal":
-        return { actions };
+        return { total: actions.length, actions: c.last ? actions.slice(-c.last) : actions };
       case "save": {
         const rec: Recording = {
           name: c.name,

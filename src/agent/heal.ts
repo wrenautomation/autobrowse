@@ -9,7 +9,7 @@
  * Hand-written workflows have no outline, so they are reported, not touched.
  * Off unless AUTO_HEAL is set; `autobrowse heal <failure>` runs one by hand.
  */
-import { readdirSync } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { FailureRecord } from "../browser/session.js";
 import { loadOutline, saveOutline, writeRendered } from "../compiler/index.js";
@@ -55,7 +55,7 @@ export async function locateFailure(
 ): Promise<Located | null> {
   let names: string[];
   try {
-    names = readdirSync(compiledDir, { withFileTypes: true })
+    names = (await readdir(compiledDir, { withFileTypes: true }))
       .filter((d) => d.isDirectory())
       .map((d) => d.name);
   } catch {

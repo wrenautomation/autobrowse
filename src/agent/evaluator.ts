@@ -5,7 +5,7 @@
  * Proposals out: a site and a goal each, one click from an agent
  * session. The model ranks and words; the code gathers and bounds.
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import type { FailureRecord } from "../browser/session.js";
@@ -39,21 +39,24 @@ export interface Evidence {
 }
 
 /** Every `*.failure.json` under the artifacts dir, newest first, capped. */
-export function readFailures(artifactsDir: string, limit = 50): FailureRecord[] {
+export async function readFailures(artifactsDir: string, limit = 50): Promise<FailureRecord[]> {
   let names: string[];
   try {
-    names = readdirSync(artifactsDir).filter((f) => f.endsWith(".failure.json"));
+    names = (await readdir(artifactsDir)).filter((f) => f.endsWith(".failure.json"));
   } catch {
     return [];
   }
-  const records: FailureRecord[] = [];
-  for (const f of names) {
-    try {
-      records.push(JSON.parse(readFileSync(join(artifactsDir, f), "utf8")) as FailureRecord);
-    } catch {
-      // a half-written or foreign file is not evidence
-    }
-  }
+  const records = (
+    await Promise.all(
+      names.map(async (f) => {
+        try {
+          return JSON.parse(await readFile(join(artifactsDir, f), "utf8")) as FailureRecord;
+        } catch {
+          return null; // a half-written or foreign file is not evidence
+        }
+      }),
+    )
+  ).filter((r): r is FailureRecord => r !== null);
   return records.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
 }
 

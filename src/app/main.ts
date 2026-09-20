@@ -198,7 +198,7 @@ async function proveCompiled(workflow: string) {
   const found = await app.catalog.get(workflow);
   if (!found) throw new Error(`compiled workflow ${workflow} did not load`);
   const proof = await proveWorkflow(found.workflow, app.browser);
-  writeProof(found.dir, proof);
+  await writeProof(found.dir, proof);
   return proof;
 }
 if (llm && settings.evaluateEveryHours > 0 && app.channel.note) {
@@ -227,7 +227,7 @@ if (llm && settings.evaluateEveryHours > 0 && app.channel.note) {
   scheduleEvaluator({
     everyHours: settings.evaluateEveryHours,
     evidence: async () => ({
-      failures: readFailures(expandHome(settings.artifactsDir)),
+      failures: await readFailures(expandHome(settings.artifactsDir)),
       sessions: agent?.list() ?? [],
       recordings: (await listRecordings(recordingsDir)).map((r) => ({
         name: r.name,

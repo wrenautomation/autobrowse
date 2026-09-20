@@ -52,9 +52,9 @@ export function needsFor(
 /** A device this system leans on; `check` says what works and what the person does once. */
 export interface DeviceLink {
   name: string;
-  check(): { ok: boolean; fix: string[] };
+  check(): Promise<{ ok: boolean; fix: string[] }>;
   /** Put the person in front of the switch (open the settings pane). */
-  guide?: () => void;
+  guide?: () => Promise<void>;
 }
 
 export interface SetupOptions {
@@ -120,12 +120,12 @@ export async function runSetup(
     }
   }
   for (const d of opts.devices ?? []) {
-    const r = d.check();
+    const r = await d.check();
     devices[d.name] = r.ok;
     io.say(`\n${d.name}: ${r.ok ? "linked" : "not yet"}`);
     for (const line of r.fix) io.say(`  once: ${line}`);
     if (!r.ok && d.guide) {
-      d.guide();
+      await d.guide();
       io.say("  (the settings pane is open; run setup again after)");
     }
   }

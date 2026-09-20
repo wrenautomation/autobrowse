@@ -7,7 +7,8 @@
  * deps are the browser runner only (a recording is a browser chore;
  * anything with an API belongs in wren).
  */
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as restate from "@restatedev/restate-sdk";
@@ -47,17 +48,17 @@ export async function loadCompiledWorkflows(
 ): Promise<CompiledWorkflow[]> {
   if (!existsSync(root)) return [];
   const out: CompiledWorkflow[] = [];
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
+  for (const entry of await readdir(root, { withFileTypes: true })) {
     if (!entry.isDirectory() || HAND_WRITTEN.has(entry.name)) continue;
     const dir = join(root, entry.name);
     const file = ["index.ts", "index.js"].map((f) => join(dir, f)).find((f) => existsSync(f));
     if (!file) continue;
     try {
       // The mtime in the URL makes a rewritten flow a new module; the old one stays cached, harmless.
-      const url = `${pathToFileURL(file).href}?v=${statSync(file).mtimeMs}`;
+      const url = `${pathToFileURL(file).href}?v=${(await stat(file)).mtimeMs}`;
       const mod = (await import(url)) as Record<string, unknown>;
       const workflow = mod.workflow ?? Object.values(mod).find(isWorkflow);
-      if (isWorkflow(workflow)) out.push({ workflow, dir, proof: readProof(dir) });
+      if (isWorkflow(workflow)) out.push({ workflow, dir, proof: await readProof(dir) });
     } catch (err) {
       onError(dir, err);
     }

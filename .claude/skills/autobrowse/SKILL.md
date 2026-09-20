@@ -52,7 +52,7 @@ Act (journaled):
 
 Session:
 - `{"cmd":"pause"}` / `{"cmd":"resume"}` — a person acts by hand in between; those acts land in the journal too.
-- `{"cmd":"journal"}` — what is recorded so far.
+- `{"cmd":"journal","last":5}` — what is recorded so far (`total` and the newest `last`; omit `last` for all).
 - `{"cmd":"save","name":"site-what-it-does"}` — writes `recordings/<name>/`. Then `pnpm autobrowse compile <name>`.
 - `{"cmd":"close"}`.
 

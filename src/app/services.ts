@@ -205,12 +205,12 @@ export function devicesFor(settings: Settings): DeviceLink[] {
   return [
     {
       name: `phone ${phone.number}`,
-      check() {
-        const st = phoneStatus(phone.dbPath);
+      async check() {
+        const st = await phoneStatus(phone.dbPath);
         return { ok: st.read && st.send, fix: st.fix };
       },
-      guide: () => {
-        if (!phoneStatus(phone.dbPath).read) openFullDiskAccessPane();
+      guide: async () => {
+        if (!(await phoneStatus(phone.dbPath)).read) await openFullDiskAccessPane();
       },
     },
   ];

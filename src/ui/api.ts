@@ -310,7 +310,7 @@ export function api(deps: ApiDeps): Hono {
     try {
       return c.json(
         await proposeWorkflows(deps.llm, {
-          failures: readFailures(deps.artifactsDir),
+          failures: await readFailures(deps.artifactsDir),
           sessions: deps.agent?.list() ?? [],
           recordings,
         }),

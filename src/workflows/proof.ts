@@ -4,7 +4,7 @@
  * workflow, read at boot, shown on the Runs page. A flow without a proof
  * is a draft; one whose proof failed says which step to repair.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { FlowRunner } from "../browser/flow.js";
 import { memoryEffects } from "../engine/memory.js";
@@ -56,15 +56,15 @@ export async function proveWorkflow(
   };
 }
 
-export function writeProof(dir: string, proof: Proof): string {
+export async function writeProof(dir: string, proof: Proof): Promise<string> {
   const file = join(dir, PROOF_FILE);
-  writeFileSync(file, `${JSON.stringify(proof, null, 2)}\n`);
+  await writeFile(file, `${JSON.stringify(proof, null, 2)}\n`);
   return file;
 }
 
-export function readProof(dir: string): Proof | null {
+export async function readProof(dir: string): Promise<Proof | null> {
   try {
-    return JSON.parse(readFileSync(join(dir, PROOF_FILE), "utf8")) as Proof;
+    return JSON.parse(await readFile(join(dir, PROOF_FILE), "utf8")) as Proof;
   } catch {
     return null;
   }

@@ -234,6 +234,11 @@ describe("pause: a person's hand acts land in the journal", () => {
       const r = kinds.indexOf("resume");
       expect(p).toBeGreaterThan(-1);
       expect(kinds.slice(p + 1, r)).toContain("click");
+      const tail = (await ex.exec({ cmd: "journal", last: 1 })) as {
+        total: number;
+        actions: unknown[];
+      };
+      expect(tail).toMatchObject({ total: kinds.length, actions: [expect.anything()] });
     } finally {
       await ex.exec({ cmd: "close" }).catch(() => undefined);
       await ex.done;

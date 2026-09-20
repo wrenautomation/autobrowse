@@ -6,7 +6,8 @@
  * saved recording is what lasts.
  */
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExploreCommand, Explorer } from "../explore/server.js";
 import type { Llm } from "../llm/types.js";
@@ -114,14 +115,32 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
   const sessions = new Map<string, Live>();
   const now = o.now ?? (() => new Date());
   const base = o.basePort ?? 9100;
+  // The disk copy is a convenience; the live view is the truth. Writes go
+  // off the loop, one at a time per session, and a burst of steps lands as
+  // the newest view once rather than a queue of stale ones.
+  const writing = new Map<string, { again: boolean }>();
   const persist = (view: SessionView) => {
     if (!o.dir) return;
-    try {
-      mkdirSync(o.dir, { recursive: true });
-      writeFileSync(join(o.dir, `${view.id}.json`), JSON.stringify(view, null, 2));
-    } catch {
-      // the disk copy is a convenience; the live view is the truth
+    const dir = o.dir;
+    const w = writing.get(view.id);
+    if (w) {
+      w.again = true;
+      return;
     }
+    const entry = { again: false };
+    writing.set(view.id, entry);
+    void (async () => {
+      do {
+        entry.again = false;
+        try {
+          await mkdir(dir, { recursive: true });
+          await writeFile(join(dir, `${view.id}.json`), JSON.stringify(view, null, 2));
+        } catch {
+          // see above
+        }
+      } while (entry.again);
+      writing.delete(view.id);
+    })();
   };
   if (o.dir && existsSync(o.dir)) {
     for (const f of readdirSync(o.dir).filter((f) => f.endsWith(".json"))) {

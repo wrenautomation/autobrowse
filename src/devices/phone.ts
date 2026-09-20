@@ -12,8 +12,9 @@
  * Disk Access (to read the database) and once for Automation of
  * Messages (to send). `phoneStatus` says which is missing and opens the pane.
  */
-import { execFile, spawnSync } from "node:child_process";
-import { accessSync, constants } from "node:fs";
+import { execFile } from "node:child_process";
+import { constants } from "node:fs";
+import { access } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Message, MessageReader } from "../auth/codes.js";
@@ -133,25 +134,24 @@ export interface PhoneStatus {
 }
 
 /** Which legs work, and the one-time steps for the ones that do not. */
-export function phoneStatus(dbPath = DEFAULT_DB): PhoneStatus {
+export async function phoneStatus(dbPath = DEFAULT_DB): Promise<PhoneStatus> {
   const fix: string[] = [];
   let read = false;
   try {
-    accessSync(dbPath, constants.R_OK);
-    const r = spawnSync("sqlite3", ["-readonly", dbPath, "select 1"], { encoding: "utf8" });
-    if (r.status !== 0) throw new Error(r.stderr);
+    await access(dbPath, constants.R_OK);
+    const r = await run("sqlite3", ["-readonly", dbPath, "select 1"]);
+    if (r.code !== 0) throw new Error(r.stderr);
     read = true;
   } catch {
     fix.push(
       "Reading SMS: System Settings → Privacy & Security → Full Disk Access → turn on the app this runs from (Terminal, iTerm, VS Code, ...). Then iPhone → Settings → Messages → Text Message Forwarding → this Mac on.",
     );
   }
-  const probe = spawnSync(
-    "osascript",
-    ["-e", 'tell application "Messages" to get id of 1st account whose service type = iMessage'],
-    { encoding: "utf8" },
-  );
-  const send = probe.status === 0;
+  const probe = await run("osascript", [
+    "-e",
+    'tell application "Messages" to get id of 1st account whose service type = iMessage',
+  ]);
+  const send = probe.code === 0;
   if (!send)
     fix.push(
       "Sending to the phone: open Messages.app signed in to iMessage; the first send asks once to allow Automation of Messages. Say yes.",
@@ -160,7 +160,7 @@ export function phoneStatus(dbPath = DEFAULT_DB): PhoneStatus {
 }
 
 /** Opens the Full Disk Access pane so the one click is one click. macOS only; elsewhere a no-op. */
-export function openFullDiskAccessPane(): void {
+export async function openFullDiskAccessPane(): Promise<void> {
   if (process.platform !== "darwin") return;
-  spawnSync("open", ["x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"]);
+  await run("open", ["x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"]);
 }

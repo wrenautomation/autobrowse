@@ -9,8 +9,14 @@ trips", "options first class, not inconvenient".
 ## Concurrency rules now in code
 
 - Nothing blocks the event loop past a launch. `src/devices/phone.ts`
-  reads chat.db and sends iMessages with `execFile` (30 s cap), never
-  `execFileSync`. The remaining sync fs is small and per request.
+  reads chat.db, sends iMessages and probes access with `execFile` (30 s
+  cap), never `spawnSync`. Anything read per request or per step is
+  `fs/promises`: the compiled catalog (readdir + stat + proof per
+  workflow), failure records (read in parallel), heal's outline scan,
+  proof write, session views (one coalescing writer per session: a burst
+  of steps lands as the newest view once). What stays sync is one-shot
+  and tiny: boot reads, the budget ledger and credential file (atomic
+  rename), `.env` sink, failure artifacts, CLI commands.
 - One driver per page. The explore server runs commands through one
   promise chain (`src/explore/server.ts`); pause, resume, journal, url,
   pages and close skip the queue so a person can always stop the machine.

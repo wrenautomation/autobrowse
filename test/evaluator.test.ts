@@ -18,14 +18,14 @@ const failure = (n: number, over: Partial<FailureRecord> = {}): FailureRecord =>
 });
 
 describe("evaluator", () => {
-  it("reads failure records newest first and skips junk", () => {
+  it("reads failure records newest first and skips junk", async () => {
     const dir = mkdtempSync(join(tmpdir(), "eval-"));
     writeFileSync(join(dir, "a.failure.json"), JSON.stringify(failure(1)));
     writeFileSync(join(dir, "b.failure.json"), JSON.stringify(failure(3)));
     writeFileSync(join(dir, "c.failure.json"), "{not json");
     writeFileSync(join(dir, "d.png"), "x");
-    expect(readFailures(dir).map((f) => f.at.slice(8, 10))).toEqual(["23", "21"]);
-    expect(readFailures("/nowhere/at/all")).toEqual([]);
+    expect((await readFailures(dir)).map((f) => f.at.slice(8, 10))).toEqual(["23", "21"]);
+    expect(await readFailures("/nowhere/at/all")).toEqual([]);
   });
   it("hands the model grouped evidence and returns ranked proposals", async () => {
     const llm = fakeLlm([

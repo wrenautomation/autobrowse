@@ -46,9 +46,9 @@ describe("proveWorkflow", () => {
       output: { title: "Example Domain" },
     });
     const dir = mkdtempSync(join(tmpdir(), "proof-"));
-    writeProof(dir, proof);
-    expect(readProof(dir)).toEqual(proof);
-    expect(readProof(join(dir, "nope"))).toBeNull();
+    await writeProof(dir, proof);
+    expect(await readProof(dir)).toEqual(proof);
+    expect(await readProof(join(dir, "nope"))).toBeNull();
     expect(proofLine(proof)).toBe('proven 2026-09-20T05:00 → {"title":"Example Domain"}');
   });
   it("records the failing step when the flow breaks", async () => {
