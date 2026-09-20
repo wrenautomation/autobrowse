@@ -155,8 +155,7 @@ pnpm autobrowse setup                          # asks once for what is missing (
 pnpm autobrowse login cloudflare               # signs in by itself: password or the Google button, TOTP/email/SMS code
 pnpm autobrowse workspace-logo logo.png   # the org logo across Gmail/Calendar/Drive (320×132 PNG < 30 KB)
 pnpm autobrowse enroll-totp cloudflare --url https://dash.cloudflare.com/profile/authentication  # reads the seed, stores it, confirms
-echo '{"provider":"cloudflare"}' > /tmp/bootstrap.json
-pnpm autobrowse run bootstrap cloudflare --plan /tmp/bootstrap.json   # mints CLOUDFLARE_ACCOUNT_ID + API token into .env
+pnpm autobrowse run bootstrap cloudflare --plan '{"provider":"cloudflare"}'   # mints CLOUDFLARE_ACCOUNT_ID + API token into .env (--plan: JSON, a file, or -)
 # map a page by hand or by model: one open browser, one command at a time (token printed at start)
 pnpm autobrowse explore cloudflare --url https://dash.cloudflare.com/profile/api-tokens
 curl -s -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9090/ -d '{"cmd":"aria","hints":{"css":"main"}}'

@@ -43,15 +43,29 @@ program
       );
   });
 
+/** A plan as typed (`{"domain":"x.com"}`), from a file, or piped in (`-`). */
+async function readPlan(arg: string): Promise<unknown> {
+  const text = arg.trim().startsWith("{")
+    ? arg
+    : arg === "-"
+      ? await new Promise<string>((r) => {
+          let buf = "";
+          process.stdin
+            .setEncoding("utf8")
+            .on("data", (c) => (buf += c))
+            .on("end", () => r(buf));
+        })
+      : await readFile(arg, "utf8");
+  return JSON.parse(text);
+}
+
 program
   .command("run <workflow> <key>")
-  .description("Start a run from a plan file (JSON); omit --plan to resume the stored one")
-  .option("--plan <file>")
-  .option("--dry-run")
+  .description("Start a run from a plan (JSON); omit --plan to resume the stored one")
+  .option("--plan <json|file>", "inline JSON, a file path, or - for stdin")
+  .option("--dry-run", "plan only; stop before the first irreversible step")
   .action(async (workflow: string, key: string, o: { plan?: string; dryRun?: boolean }) => {
-    const plan = o.plan
-      ? (JSON.parse(await readFile(o.plan, "utf8")) as Record<string, unknown>)
-      : null;
+    const plan = o.plan ? ((await readPlan(o.plan)) as Record<string, unknown>) : null;
     await api.run(workflow, key).run(plan ? { ...plan, dryRun: o.dryRun ?? false } : null);
     console.log(
       `${plan ? "started" : "resumed"} ${workflow}/${key}; watch: autobrowse status ${workflow} ${key}`,
@@ -63,7 +77,7 @@ program
   .description(
     "Run a workflow in this process, no Restate: real browser, in-memory journal. Gates answer approved unless --ask. The proof a compiled recording works.",
   )
-  .option("--plan <file>", "plan JSON; default {}")
+  .option("--plan <json|file>", "inline JSON, a file path, or - for stdin; default {}")
   .option("--dry-run", "plan only; stop before the first irreversible step")
   .option("--ask", "stop at the first gate instead of approving it")
   .option("--headed", "show the browser")
@@ -85,7 +99,7 @@ program
       if (!workflow) throw new Error(`unknown workflow ${name}; see: autobrowse workflows`);
       if (WORKFLOWS.includes(workflow))
         throw new Error(`${name} needs the worker's deps (APIs); run it with: autobrowse run`);
-      const raw = o.plan ? (JSON.parse(await readFile(o.plan, "utf8")) as object) : {};
+      const raw = o.plan ? ((await readPlan(o.plan)) as object) : {};
       const plan = workflow.plan.parse({ ...raw, dryRun: o.dryRun ?? false });
       const browser = flowRunner(
         browserOptions(settings, o.headed ? false : settings.browserHeadless),
