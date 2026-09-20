@@ -10,6 +10,12 @@ export function StatusPage() {
   const rows: Array<[string, string]> = [
     ["model", s.llm],
     [
+      "model budget",
+      s.budget
+        ? `${s.budget.usedToday.toLocaleString()} of ${s.budget.cap.toLocaleString()} tokens today${s.budget.usedToday >= s.budget.cap ? " · spent: model calls fail until UTC midnight" : ""}`
+        : "no daily cap (LLM_DAILY_TOKENS)",
+    ],
+    [
       "browser",
       `${s.browser.tier} (${s.browser.channel}, ${s.browser.headless ? "headless" : "headed"}, ${s.browser.pace} pace)`,
     ],

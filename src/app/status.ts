@@ -8,6 +8,8 @@ import type { Settings } from "./config.js";
 
 export interface Status {
   llm: string;
+  /** The daily token cap and today's spend; null when LLM_DAILY_TOKENS=0 or there is no model. */
+  budget: { cap: number; usedToday: number } | null;
   browser: { tier: string; headless: boolean; pace: string; channel: string };
   memory: string;
   channels: string[];
@@ -23,7 +25,13 @@ export interface Status {
 
 export function statusOf(
   settings: Settings,
-  live: { llm: string | null; memory: string; workflows: string[]; since?: Date },
+  live: {
+    llm: string | null;
+    budget?: { cap: number; usedToday: number } | null;
+    memory: string;
+    workflows: string[];
+    since?: Date;
+  },
 ): Status {
   const channels: string[] = [];
   const notifyFrom = settings.notifyFrom ?? settings.googleAdminUser;
@@ -39,6 +47,7 @@ export function statusOf(
     codes.push("sms:twilio");
   return {
     llm: live.llm ?? "none",
+    budget: live.budget ?? null,
     browser: {
       tier: settings.browser,
       headless: settings.browserHeadless,

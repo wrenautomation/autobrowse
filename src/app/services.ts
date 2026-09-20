@@ -1,5 +1,6 @@
 /** Composition root: settings → clients → workflow deps → Restate services. Secrets stay inside the clients. */
 
+import { join } from "node:path";
 import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Logger } from "pino";
 import {
@@ -54,12 +55,14 @@ import { makeRunObject } from "../engine/object.js";
 import { runsRegistry } from "../engine/registry.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import {
+  expandHome,
   loadServiceAccountKey,
   SCOPES,
   serviceAccountToken,
   type TokenSupplier,
 } from "../google-auth.js";
-import { makeLlm } from "../llm/index.js";
+import { type BudgetedLlm, budgetedLlm, fileLedger } from "../llm/budget.js";
+import { type Llm, makeLlm } from "../llm/index.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import { type BootstrapDeps, bootstrapWorkflow } from "../workflows/bootstrap/index.js";
@@ -120,8 +123,9 @@ export function browserOptions(
   };
 }
 
-export function llmFor(settings: Settings, http = httpClient()) {
-  return makeLlm(
+/** The model behind everything, under the daily cap when one is set (`LLM_DAILY_TOKENS`). */
+export function llmFor(settings: Settings, http = httpClient()): BudgetedLlm | Llm | null {
+  const llm = makeLlm(
     {
       provider: settings.llmProvider,
       model: settings.llmModel,
@@ -131,6 +135,18 @@ export function llmFor(settings: Settings, http = httpClient()) {
     },
     http,
   );
+  if (!llm || settings.llmDailyTokens === 0) return llm;
+  return budgetedLlm(llm, {
+    dailyTokens: settings.llmDailyTokens,
+    ledger: fileLedger(join(expandHome(settings.artifactsDir), "llm-budget.json")),
+  });
+}
+
+/** The cap and today's spend, for the status page; null when there is no cap. */
+export function budgetOf(llm: Llm | null): { cap: number; usedToday: number } | null {
+  if (!llm || !("usedToday" in llm)) return null;
+  const b = llm as BudgetedLlm;
+  return { cap: b.cap, usedToday: b.usedToday() };
 }
 
 /** The hand-written workflows; compiled ones are found per run by the Compiled object (see workflows/compiled.ts). */

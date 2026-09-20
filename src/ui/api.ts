@@ -60,6 +60,8 @@ export interface ApiDeps {
   linq?: { client: LinqClient; to: string; secret?: string };
   /** What the worker is made of (vendor names, channels); shown on the Status page. */
   status?: Status;
+  /** Today's model spend against the cap, read live; absent = as the status says. */
+  budget?(): Status["budget"];
 }
 
 const agentStart = z.object({

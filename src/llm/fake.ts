@@ -5,7 +5,10 @@ export interface FakeLlm extends Llm {
   requests: LlmRequest[];
 }
 
-export function fakeLlm(replies: Array<string | object>): FakeLlm {
+export function fakeLlm(
+  replies: Array<string | object>,
+  usage = { inputTokens: 10, outputTokens: 5 },
+): FakeLlm {
   const queue = [...replies];
   const requests: LlmRequest[] = [];
   return {
@@ -16,7 +19,7 @@ export function fakeLlm(replies: Array<string | object>): FakeLlm {
       const next = queue.shift();
       if (next === undefined) throw new Error("fakeLlm: no reply scripted for this call");
       const text = typeof next === "string" ? next : JSON.stringify(next);
-      return { text, usage: { inputTokens: 10, outputTokens: 5 }, model: "fake" };
+      return { text, usage: { ...usage }, model: "fake" };
     },
   };
 }

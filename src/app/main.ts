@@ -16,6 +16,7 @@ import { registerDeployment } from "./register.js";
 import { initSentry } from "./sentry.js";
 import {
   browserOptions,
+  budgetOf,
   buildApp,
   COMPILED_DIR,
   COMPILED_LIB,
@@ -70,6 +71,7 @@ const agent = llm
 const linq = linqFor(settings);
 const status = statusOf(settings, {
   llm: llm?.id ?? null,
+  budget: budgetOf(llm),
   memory: app.memory.id,
   workflows: (await app.workflows()).map((w) => w.name),
 });
@@ -92,6 +94,7 @@ startUiServer({
   workflows: app.workflows,
   proofs: app.proofs,
   prove: proveCompiled,
+  budget: () => budgetOf(llm),
   ingress: ingress({
     url: settings.restateIngressUrl,
     authToken: settings.restateAuthToken ?? null,

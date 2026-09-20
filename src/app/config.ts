@@ -63,6 +63,8 @@ const schema = z.object({
   anthropicApiKey: z.string().min(1).optional(),
   openaiApiKey: z.string().min(1).optional(),
   openaiBaseUrl: z.string().url().optional(),
+  /** Tokens (in + out) every model call may spend per UTC day, all processes together; 0 = no cap. */
+  llmDailyTokens: z.coerce.number().int().min(0).default(3_000_000),
   /** Memory between runs (repairs that worked, hand-off notes). `none` keeps it in-process. */
   memory: z.enum(["backboard", "none"]).default("none"),
   backboardApiKey: z.string().min(1).optional(),
@@ -164,6 +166,7 @@ export const ENV_KEYS = {
   anthropicApiKey: "ANTHROPIC_API_KEY",
   openaiApiKey: "OPENAI_API_KEY",
   openaiBaseUrl: "OPENAI_BASE_URL",
+  llmDailyTokens: "LLM_DAILY_TOKENS",
   memory: "MEMORY",
   backboardApiKey: "BACKBOARD_API_KEY",
   backboardAssistant: "BACKBOARD_ASSISTANT",
