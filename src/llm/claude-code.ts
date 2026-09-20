@@ -1,0 +1,100 @@
+/**
+ * Claude Code as the model: `claude -p` in headless mode, one process per
+ * call. No API key, the person's own subscription; the same Llm seam as the
+ * API drivers, so the explorer, compiler and repairer do not know. Nothing
+ * on disk is touched: the call runs with tools off and a scratch cwd.
+ * Slower to start (~2s per call) than the API; the right pick when steps
+ * are few and the person is already paying for Claude Code.
+ */
+import { execFile } from "node:child_process";
+import { tmpdir } from "node:os";
+import type { Llm, LlmReply, LlmRequest } from "./types.js";
+
+export interface ClaudeCodeOptions {
+  model: string;
+  /** The `claude` binary; default from PATH. */
+  bin?: string;
+  cwd?: string;
+  timeoutMs?: number;
+  /** Test seam: what `claude -p` prints. */
+  run?: (
+    args: string[],
+    stdin: string,
+    opts: { cwd: string; timeoutMs: number },
+  ) => Promise<string>;
+}
+
+/** What `claude -p --output-format json` prints; only what we read. */
+interface HeadlessResult {
+  type?: string;
+  subtype?: string;
+  is_error?: boolean;
+  result?: string;
+  usage?: { input_tokens?: number; output_tokens?: number };
+}
+
+function spawnClaude(bin: string) {
+  return (args: string[], stdin: string, o: { cwd: string; timeoutMs: number }) =>
+    new Promise<string>((resolve, reject) => {
+      const child = execFile(
+        bin,
+        args,
+        { cwd: o.cwd, timeout: o.timeoutMs, maxBuffer: 16 * 1024 * 1024, env: process.env },
+        (err, stdout, stderr) => {
+          if (err)
+            reject(
+              new Error(`claude -p: ${err.message}${stderr ? `: ${stderr.slice(0, 400)}` : ""}`),
+            );
+          else resolve(stdout);
+        },
+      );
+      child.stdin?.end(stdin);
+    });
+}
+
+export function claudeCodeLlm(o: ClaudeCodeOptions): Llm {
+  const bin = o.bin ?? "claude";
+  const run = o.run ?? spawnClaude(bin);
+  const cwd = o.cwd ?? tmpdir();
+  const timeoutMs = o.timeoutMs ?? 180_000;
+  return {
+    id: `claude-code:${o.model}`,
+    async complete(req: LlmRequest): Promise<LlmReply> {
+      const system = req.json
+        ? `${req.system}\n\nReply with one JSON object and nothing else.`
+        : req.system;
+      const args = [
+        "-p",
+        "--output-format",
+        "json",
+        "--model",
+        o.model,
+        "--system-prompt",
+        system,
+        "--tools",
+        "",
+        "--no-session-persistence",
+      ];
+      const out = await run(args, req.prompt, { cwd, timeoutMs });
+      let parsed: HeadlessResult;
+      try {
+        parsed = JSON.parse(out) as HeadlessResult;
+      } catch {
+        throw new Error(`claude -p: not JSON: ${out.slice(0, 200)}`);
+      }
+      if (parsed.is_error || typeof parsed.result !== "string") {
+        throw new Error(
+          `claude -p: ${parsed.subtype ?? "error"}: ${(parsed.result ?? "").slice(0, 300)}`,
+        );
+      }
+      return {
+        text: parsed.result,
+        usage: {
+          inputTokens: parsed.usage?.input_tokens ?? 0,
+          outputTokens: parsed.usage?.output_tokens ?? 0,
+        },
+        model: o.model,
+      };
+    },
+  };
+}

@@ -1,0 +1,2 @@
+# gh api repos/{owner}/{repo} --jq '"repo:\(.owner.login)@\(.owner.id)/\(.name)@\(.id)"'
+github_sub_prefix = "repo:wrenautomation@329093254/autobrowse@1376739078"

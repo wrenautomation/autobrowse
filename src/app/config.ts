@@ -58,7 +58,7 @@ const schema = z.object({
   webhookUrl: z.string().url().optional(),
   webhookToken: z.string().min(1).optional(),
   /** Model behind the compiler's polish and the locator repairer. No key = both off. */
-  llmProvider: z.enum(["anthropic", "openai"]).default("anthropic"),
+  llmProvider: z.enum(["anthropic", "openai", "claude-code"]).default("anthropic"),
   llmModel: z.string().min(1).optional(),
   anthropicApiKey: z.string().min(1).optional(),
   openaiApiKey: z.string().min(1).optional(),

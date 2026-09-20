@@ -68,7 +68,9 @@ Browserbase takes them.
   compiled, proven (one run on its own, `proof.json` beside the flow, shown on
   the Runs page), and you hear what got built or where it needs you.
   `autobrowse try <name> --prove` or "prove" on the Runs page writes the
-  same proof by hand. Every model call counts against `LLM_DAILY_TOKENS`
+  same proof by hand. `LLM_PROVIDER=claude-code` runs every model call through headless Claude
+  Code on your subscription, no API key (`designs/2026-09-21-claude-code-driver.md`).
+  Every model call counts against `LLM_DAILY_TOKENS`
   (3M a day by default, one ledger for worker and CLI); over it, calls
   fail loudly until UTC midnight, so an unattended night cannot run up a bill. The agent's `human` is a pause with a prompt: do the
   captcha or the purchase in the window, resume, it goes on.
