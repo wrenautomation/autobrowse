@@ -67,3 +67,18 @@ a broken flow → terminal 461, artifacts in the message; anything else
 retries under the run objects' schedule. These handler names are the
 contract wren calls when it takes over the domain workflow's API steps.
 The `domain` run object stays until wren owns the orchestration.
+
+### wren side (2026-09-20, later)
+
+Done on wren branch `provision-domain`, PR #1
+(https://github.com/wrenautomation/wren/pull/1), not merged: package
+`@wren/provision` with a `Domain/{domain}` virtual object that runs the
+same fourteen steps. API effects in `ctx.run`, DNS waits in `ctx.sleep`,
+browser legs as calls to `browser` (460/461 → a `human` gate with the
+artifacts), gates as state answered by `approve`/`reject`. Roster handoff
+appends to the SSM parameter and recycles the Lambda so cold starts load
+it, then starts `SendScheduler`/`InboxScheduler` through object clients,
+no GitHub redeploy. Once it has run for real once, delete
+`src/workflows/domain/` and the API clients here that only it used
+(`cloudflare`, `google-admin`, `rdap`, `roster`, `wren`; `gmail` stays
+for the code reader).
