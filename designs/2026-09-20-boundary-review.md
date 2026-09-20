@@ -78,7 +78,10 @@ browser legs as calls to `browser` (460/461 → a `human` gate with the
 artifacts), gates as state answered by `approve`/`reject`. Roster handoff
 appends to the SSM parameter and recycles the Lambda so cold starts load
 it, then starts `SendScheduler`/`InboxScheduler` through object clients,
-no GitHub redeploy. Once it has run for real once, delete
-`src/workflows/domain/` and the API clients here that only it used
-(`cloudflare`, `google-admin`, `rdap`, `roster`, `wren`; `gmail` stays
-for the code reader).
+no GitHub redeploy. Merged 2026-09-21 (rebased on main; the Domain
+object binds only when its settings are set).
+
+**Decision 2026-09-21 (William): nothing is deleted.** `src/workflows/
+domain/` and the API clients stay as presets: a complete hand-written
+workflow to copy from, with real gates, DNS waits and proofs. wren owns
+the live orchestration; autobrowse keeps the reference.
