@@ -65,3 +65,35 @@ Both shapes now exist: A (Claude Code as the model behind the built-in
 agent, `LLM_PROVIDER=claude-code`) for unattended runs on the box; B for a
 person working with Claude Code on a laptop, who wants it to drive.
 
+
+## Shape B revised: a skill, not always-on tools (2026-09-21)
+
+William: "not sure about mcp, that's token intensive, what about skill".
+Right. An MCP server's tool list (name, description, input schema per
+tool) is loaded into every Claude Code session in the directory, whether
+or not the browser is touched. A skill costs one frontmatter line until
+it is invoked, then its body once.
+
+`.claude/skills/autobrowse/` is the primary path now:
+
+- `SKILL.md`: when to use it, the command set in a page, the rules
+  (`keep` for secrets, never `raw` on a key page, no LinkedIn, no
+  password changes, save then compile).
+- `scripts/start.sh <site> [url] [port]`: `pnpm autobrowse explore` in
+  the background, waits for the token file, prints the port. Idempotent
+  on an open port.
+- `scripts/cmd.sh <port> '<json>'`: one curl, token from the file.
+- `scripts/stop.sh [port]`.
+
+To make that clean, `explore` writes its bearer token to
+`$TMPDIR/autobrowse/explore-<port>.token` (0600, removed with the
+session) instead of printing it: a log gets pasted, a file does not.
+
+`.mcp.json` is gone; `autobrowse mcp` stays as an opt-in for MCP clients
+(`claude mcp add …`). Same socket, same journal under both.
+
+Where to attack: `start.sh` finds the process by `pgrep -f "explore <site>
+--port <port>"`, which two sessions with the same site and port cannot
+have anyway; the skill is loaded from this repo's `.claude/`, so a session
+started in the parent directory sees it under a path prefix; Claude Code
+must be told the site profile names (listed in the skill, not derived).

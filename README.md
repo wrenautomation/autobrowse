@@ -91,11 +91,17 @@ Browserbase takes them.
   SSM in prod) under that name. The journal keeps the element and the env
   name, never the value; a compiled `keep` op does the same through
   `deps.sink`, outside the run's journal. The agent has `keep{ref,env}`.
-- **Claude Code.** `autobrowse mcp` (registered by `.mcp.json`) gives
-  Claude Code the session as tools: `start`, `aria`, `click`, `fill`,
-  `open`, `os`, `command`, `save`, `close`. Same journal, same redaction,
-  same compile. `LLM_PROVIDER=claude-code` is the other direction: Claude
-  Code as the model behind the built-in agent.
+- **Claude Code.** The skill in `.claude/skills/autobrowse/` teaches
+  Claude Code the explore session: `scripts/start.sh <site> [url]`, then
+  `scripts/cmd.sh <port> '{"cmd":…}'`, `save`, `stop.sh`. It costs context
+  only when invoked; an MCP server's tool schemas would sit in every
+  session. `autobrowse mcp` still exists for clients that want tools
+  (`claude mcp add autobrowse -- pnpm autobrowse mcp`), off by default.
+  Same journal, same redaction, same compile. `LLM_PROVIDER=claude-code`
+  is the other direction: Claude Code as the model behind the built-in
+  agent. `explore` leaves its bearer token in
+  `$TMPDIR/autobrowse/explore-<port>.token` (owner-only) for the session's
+  life, never in its output.
 - **Desktop.** The same session takes `{"cmd":"os","act":{…}}`: apps,
   the front app's controls as a tree (`tree`, like `aria`), `click` by role
   and name, `type`, `key` ("cmd+shift+4", "return"), `shot`, and `shell`

@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { existsSync, statSync } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -40,6 +41,7 @@ describe("explore mode", () => {
       port,
       desktop,
       sink,
+      tokenFile: join(dir, "explore.token"),
       recordingsDir: join(dir, "recordings"),
       browser: {
         tier: "local",
@@ -53,8 +55,15 @@ describe("explore mode", () => {
   afterAll(async () => {
     await send({ cmd: "close" }).catch(() => undefined);
     await done;
+    expect(existsSync(join(dir, "explore.token"))).toBe(false); // gone with the session
     await new Promise((r) => setTimeout(r, 500)); // Chrome still flushes its profile
     await rm(dir, { recursive: true, force: true, maxRetries: 5 });
+  });
+
+  it("leaves the bearer token in an owner-only file for the session's life", async () => {
+    const file = join(dir, "explore.token");
+    expect(await readFile(file, "utf8")).toBe(token);
+    expect(statSync(file).mode & 0o777).toBe(0o600);
   });
 
   it("takes commands one at a time, journals the ones that work, and saves a compilable recording", async () => {

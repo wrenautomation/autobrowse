@@ -14,7 +14,8 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
     .option("--url <url>", "start here")
     .option("--port <port>", "loopback port", "9090")
     .action(async (site: string, o: { url?: string; port: string }) => {
-      const { startExplore } = await import("../explore/server.js");
+      const { startExplore, tokenFileFor } = await import("../explore/server.js");
+      const tokenFile = tokenFileFor(Number(o.port));
       const ex = await startExplore({
         site,
         browser: browserOptions(settings, false),
@@ -22,9 +23,11 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
         port: Number(o.port),
         login: loginFor(settings, gmailFor(settings)),
         sink: sinkFor(settings),
+        tokenFile,
       });
+      // The token lives in an owner-only file, not in this output: logs get pasted, files do not.
       console.log(
-        `exploring ${site} on http://127.0.0.1:${ex.port}\ntoken ${ex.token}\ncurl -s -X POST -H "Authorization: Bearer ${ex.token}" http://127.0.0.1:${ex.port}/ -d '{"cmd":"aria"}'`,
+        `exploring ${site} on http://127.0.0.1:${ex.port}\ntoken file ${tokenFile}\ncurl -s -X POST -H "Authorization: Bearer $(cat ${tokenFile})" http://127.0.0.1:${ex.port}/ -d '{"cmd":"aria"}'`,
       );
       if (o.url)
         await fetch(`http://127.0.0.1:${ex.port}/`, {

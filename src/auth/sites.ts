@@ -269,4 +269,50 @@ const aws: SiteLogin = {
   },
 };
 
-export const SITE_LOGINS: readonly SiteLogin[] = [cloudflare, google, googleAdmin, instantly, aws];
+/**
+ * Claude Console (platform.claude.com): the account was made with
+ * "Continue with Google", so the stored `google` credential signs in through
+ * that button (a popup). Mapped 2026-09-21 in explore mode.
+ */
+const ANTHROPIC_HOME = /platform\.claude\.com\/(?!login)/;
+const anthropic: SiteLogin = {
+  site: "anthropic",
+  home: "https://platform.claude.com/dashboard",
+  ask: "Your Claude Console account (platform.claude.com), where API keys are minted",
+  via: ["google"],
+  loggedIn: async (fp) => ANTHROPIC_HOME.test(fp.url()),
+  signIn: oauthLogin("anthropic", {
+    start: "https://platform.claude.com/login",
+    button: { role: "button", name: "/google/i" },
+    success: ANTHROPIC_HOME,
+  }),
+};
+
+/**
+ * Twilio Console: the account was made with "Sign up with Google" (no
+ * password exists); the same button on the sign-up page signs an existing
+ * Google-linked account in. Mapped 2026-09-21.
+ */
+const TWILIO_HOME = /console\.twilio\.com\/account\//;
+const twilio: SiteLogin = {
+  site: "twilio",
+  home: "https://console.twilio.com/",
+  ask: "Your Twilio account (console.twilio.com), for the rented number",
+  via: ["google"],
+  loggedIn: async (fp) => TWILIO_HOME.test(fp.url()),
+  signIn: oauthLogin("twilio", {
+    start: "https://www.twilio.com/try-twilio",
+    button: { role: "button", name: "/google/i" },
+    success: TWILIO_HOME,
+  }),
+};
+
+export const SITE_LOGINS: readonly SiteLogin[] = [
+  cloudflare,
+  google,
+  googleAdmin,
+  instantly,
+  aws,
+  anthropic,
+  twilio,
+];

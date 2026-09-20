@@ -6,13 +6,15 @@
  * already understands. The person at the keyboard may be a model.
  *
  * The socket drives a signed-in browser, so it is loopback only and every
- * request carries the bearer token printed at start. What comes back is
+ * request carries the bearer token the CLI leaves in an owner-only file
+ * (`tokenFileFor(port)`) for the session's life. What comes back is
  * masked like a transcript (tokens, keys) unless a command asks for raw.
  */
 import { randomBytes } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import { join, relative } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join, relative } from "node:path";
 import type { Page } from "playwright";
 import { z } from "zod";
 import { defineFlow, type FlowPage, flowRunner, type RunnerOptions } from "../browser/flow.js";
@@ -129,8 +131,17 @@ export interface ExploreOptions {
   desktop?: Desktop;
   /** Where `keep` puts a secret read off the page (.env locally, SSM in prod). */
   sink?: SecretSink;
+  /**
+   * Where the bearer token is written (owner-only) for the session's life, so a
+   * shell beside the process reads it instead of a log: see `tokenFileFor`.
+   */
+  tokenFile?: string;
   now?: () => number;
 }
+
+/** The token file the CLI uses for a port: `$TMPDIR/autobrowse/explore-<port>.token`. */
+export const tokenFileFor = (port: number): string =>
+  join(tmpdir(), "autobrowse", `explore-${port}.token`);
 
 export interface Explorer {
   port: number;
@@ -492,9 +503,14 @@ async function serve(
     });
   });
   await new Promise<void>((resolve) => server.listen(opts.port, "127.0.0.1", resolve));
+  if (opts.tokenFile) {
+    mkdirSync(dirname(opts.tokenFile), { recursive: true, mode: 0o700 });
+    writeFileSync(opts.tokenFile, token, { mode: 0o600 });
+  }
   page.context().on("close", () => finish());
   void done.then(() => {
     server.close();
+    if (opts.tokenFile) rmSync(opts.tokenFile, { force: true });
     finishFlow();
   });
   return {
