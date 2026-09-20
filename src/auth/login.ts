@@ -57,6 +57,19 @@ export interface SiteLogin {
   signInHere?: { at: RegExp; run(ctx: SignInContext): Promise<void> };
   /** How this site's authenticator setup page walks, when it is known; `enroll-totp` guesses otherwise. */
   totpSetup?: TotpSetupSpec;
+  /** How this site's change-password page walks, for `creds rotate`. */
+  passwordChange?: PasswordChangeSpec;
+}
+
+/** The change-password page: fields to fill, the submit, what the page says after. */
+export interface PasswordChangeSpec {
+  url: string | ((cred: Credential) => string);
+  /** The current password, when the page asks for it on the form itself. */
+  current?: Hints;
+  next: Hints;
+  confirm?: Hints;
+  submit: Hints;
+  done: RegExp;
 }
 
 /** The clicks from the two-factor page to the seed, then to the code box. */
@@ -120,6 +133,15 @@ export function formLogin(site: string, spec: FormLoginSpec): SiteLogin["signIn"
     await fp.act({ kind: "click" }, spec.submit, { goal: "submit login form" });
     await fp.wait(SETTLE_MS);
     let text = await fp.text();
+    if (spec.rejected?.test(text) && cred.previousPassword) {
+      // A rotation the site took without saying so: the one before still works once.
+      await fp.act({ kind: "fill", value: cred.previousPassword }, spec.password, {
+        goal: "type the previous password",
+      });
+      await fp.act({ kind: "click" }, spec.submit, { goal: "submit login form" });
+      await fp.wait(SETTLE_MS);
+      text = await fp.text();
+    }
     if (spec.rejected?.test(text)) throw new LoginFailed(site, "password rejected");
     if (spec.code && (spec.code.asks ? spec.code.asks.test(text) : await fp.has(spec.code.field))) {
       const c = await code(spec.code.kind, spec.code.hint);
@@ -186,19 +208,21 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
   // you... Complete sign-in using your passkey", challenge/pk). There is
   // no passkey here; the selection page offers the password (mapped 2026-09-19).
   if (/using your passkey/i.test(text) || /challenge\/pk/.test(fp.url())) {
+    // "Try another way" on a sign-in, "More ways to verify" on a re-auth.
     await fp.act(
       { kind: "click" },
-      { role: "button", name: "/try another way/i" },
+      { role: "button", name: "/try another way|more ways to verify/i" },
       { goal: "skip the passkey" },
     );
     await fp.waitForUrl(/challenge\/selection/, 10_000);
-    await fp.act(
-      { kind: "click" },
-      { role: "link", name: "/enter your password/i" },
-      { goal: "sign in with the password instead" },
-    );
-    await fp.waitForUrl(/challenge\/pwd/, 10_000);
     await fp.wait(SETTLE_MS);
+    // The password when it is offered; otherwise the second steps below (our TOTP).
+    const password = choice("Enter your password");
+    if (await fp.has(password, 3_000)) {
+      await fp.act({ kind: "click" }, password, { goal: "sign in with the password instead" });
+      await fp.waitForUrl(/challenge\/pwd/, 10_000);
+      await fp.wait(SETTLE_MS);
+    }
     text = await fp.text();
   }
   if (await fp.has({ role: "textbox", name: "/password/i" }, RENDER_MS)) {
@@ -212,6 +236,17 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
       { role: "button", name: "/^next$/i" },
       { goal: "submit the password" },
     );
+    await fp.waitForUrl((u) => !/challenge\/pwd/.test(u), 10_000);
+    await fp.wait(SETTLE_MS);
+    text = await fp.text();
+  }
+  if (/wrong password/i.test(text) && cred.previousPassword) {
+    await fp.act(
+      { kind: "fill", value: cred.previousPassword },
+      { role: "textbox", name: "/password/i" },
+      { goal: "type the previous Google password" },
+    );
+    await fp.act({ kind: "click" }, { role: "button", name: "/^next$/i" }, { goal: "submit it" });
     await fp.waitForUrl((u) => !/challenge\/pwd/.test(u), 10_000);
     await fp.wait(SETTLE_MS);
     text = await fp.text();

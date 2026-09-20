@@ -177,7 +177,8 @@ export interface Wall {
 
 export async function looksLikeWall(page: Page): Promise<Wall | null> {
   const url = page.url();
-  if (/accounts\.google\.com|\/login|\/sign-in|signin/i.test(url))
+  // A sign-in path segment, not a substring: myaccount's /signinoptions/ is a settings page.
+  if (/accounts\.google\.com\/|\/(login|sign-?in)(\/|\?|#|$)/i.test(url))
     return { kind: "login", detail: `login page: ${url}` };
   const text = (
     await page

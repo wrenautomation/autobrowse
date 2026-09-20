@@ -8,6 +8,7 @@ import {
   formLogin,
   LoginFailed,
   oauthLogin,
+  type PasswordChangeSpec,
   type SignInContext,
   type SiteLogin,
   signInToGoogle,
@@ -72,6 +73,16 @@ const GOOGLE_TOTP_SETUP: TotpSetupSpec = {
   done: /authenticator app added|authenticator app.*(on|set up)|turned on/i,
 };
 
+/** Mapped 2026-09-19: re-auth happens on the way in (signInHere), then two boxes and a button. */
+const GOOGLE_PASSWORD_CHANGE: PasswordChangeSpec = {
+  url: (cred) =>
+    `https://myaccount.google.com/signinoptions/password?authuser=${encodeURIComponent(cred.username)}`,
+  next: { role: "textbox", name: "New password" },
+  confirm: { role: "textbox", name: "Confirm new password" },
+  submit: { role: "button", name: "Change password" },
+  done: /password changed|password was changed|your password has been changed|sign in with your new password|security checkup|myaccount\.google\.com\/(security|signinoptions\/password\?)/i,
+};
+
 /** Google re-asks for the password on security pages; answer on the spot. */
 const GOOGLE_SIGN_IN_HERE = { at: /accounts\.google\.com/, run: signInToGoogle };
 
@@ -93,6 +104,7 @@ const google: SiteLogin = {
   },
   signInHere: GOOGLE_SIGN_IN_HERE,
   totpSetup: GOOGLE_TOTP_SETUP,
+  passwordChange: GOOGLE_PASSWORD_CHANGE,
 };
 
 /**
@@ -125,6 +137,7 @@ const googleAdmin: SiteLogin = {
   },
   signInHere: GOOGLE_SIGN_IN_HERE,
   totpSetup: GOOGLE_TOTP_SETUP,
+  passwordChange: GOOGLE_PASSWORD_CHANGE,
 };
 
 const instantly: SiteLogin = {

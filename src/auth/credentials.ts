@@ -13,6 +13,8 @@ import { type Cipher, isSealed, plainCipher } from "./cipher.js";
 export const credentialSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
+  /** The password before the last rotation: tried once when the site rejects the current one. */
+  previousPassword: z.string().min(1).optional(),
   /** Base32 TOTP seed (the site's "manual entry key", spaces and dashes allowed); never a 6-digit code. */
   totpSecret: z
     .string()
