@@ -28,7 +28,7 @@ export {
   layeredCredentials,
   memoryCredentials,
 } from "./credentials.js";
-export { readSecretFromPage, storeSeed } from "./enroll.js";
+export { enrollTotpFlow, readSecretFromPage, storeSeed } from "./enroll.js";
 export {
   type FormLoginSpec,
   formLogin,

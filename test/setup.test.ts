@@ -24,7 +24,8 @@ describe("setup", () => {
   it("needs one google credential for every site behind it, providers first", () => {
     const needs = needsFor(SITE_LOGINS);
     expect(needs[0]?.name).toBe("google");
-    expect(needs[0]?.sites).toContain("google-admin");
+    expect(needs[0]?.sites).toContain("google");
+    expect(needs.map((n) => n.name)).toContain("google-admin");
     expect(needs.find((n) => n.name === "cloudflare")?.viaChoices).toEqual(["google"]);
   });
   it("stores a via credential without asking for a password, skips what is left empty", async () => {
@@ -35,11 +36,12 @@ describe("setup", () => {
       "", // google
       "y",
       "admin@x.co", // cloudflare via google
+      "", // google-admin skipped
       "", // instantly skipped
     ]);
     const out = await runSetup(io, store, SITE_LOGINS);
     expect(out.stored).toEqual(["google", "cloudflare"]);
-    expect(out.skipped).toEqual(["instantly"]);
+    expect(out.skipped).toEqual(["google-admin", "instantly"]);
     expect((await store.get("cloudflare"))?.via).toBe("google");
     expect(asked.filter((q) => q.startsWith("hidden")).length).toBe(2);
   });
@@ -47,11 +49,12 @@ describe("setup", () => {
     const store = memoryCredentials({
       google: { username: "a", password: "b" },
       cloudflare: { username: "-", password: "-", via: "google" },
+      "google-admin": { username: "e", password: "f" },
       instantly: { username: "c", password: "d" },
     });
     const { io, asked, said } = scripted([]);
     await runSetup(io, store, SITE_LOGINS);
     expect(asked).toEqual([]);
-    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(3);
+    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(4);
   });
 });

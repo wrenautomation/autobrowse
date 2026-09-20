@@ -85,8 +85,37 @@ export function parseOtpauth(uri: string): TotpParams {
 }
 
 const OTPAUTH = /otpauth:\/\/totp\/[^\s"'<>]+/i;
-/** 16+ base32 characters, optionally in spaced or dashed groups of 4. */
-const MANUAL_KEY = /\b(?:[A-Z2-7]{4}[\s-]?){4,}[A-Z2-7]*\b/;
+/**
+ * 16+ base32 characters in one case, optionally in spaced or dashed groups
+ * of 4. One case because a page prints its key in one case, and the words
+ * around it ("Make sure Time based") are mixed: they must not join the run.
+ */
+const MANUAL_KEYS = [
+  /\b(?:[a-z2-7]{4}[\s-]?){4,}[a-z2-7]*\b/g,
+  /\b(?:[A-Z2-7]{4}[\s-]?){4,}[A-Z2-7]*\b/g,
+];
+/**
+ * Seed lengths sites hand out, most common first (Google/Cloudflare 32,
+ * GitHub/Microsoft 16, AWS 64). A run is cut to the first of these some
+ * prefix of its groups adds up to, so a 4-letter word after the key
+ * ("then") does not join it. A wrong cut fails the confirm step, nothing worse.
+ */
+const SEED_LENGTHS = [32, 16, 64, 26, 52, 20, 24, 40];
+
+function manualKey(text: string): string | null {
+  for (const re of MANUAL_KEYS)
+    for (const m of text.matchAll(re)) {
+      const tokens = m[0].trim().split(/[\s-]+/);
+      const prefixes = tokens.map((_, i) => tokens.slice(0, i + 1).join(""));
+      for (const len of SEED_LENGTHS) {
+        const key = prefixes.find((p) => p.length === len);
+        if (key) return key.toUpperCase();
+      }
+      const whole = tokens.join("");
+      if (whole.length >= 16 && whole.length % 2 === 0) return whole.toUpperCase();
+    }
+  return null;
+}
 
 /** The seed in page text or HTML: a URI wins, then a manual-entry key. Null when neither is there. */
 export function findTotpSecret(text: string): string | null {
@@ -98,8 +127,5 @@ export function findTotpSecret(text: string): string | null {
       // fall through to a manual key
     }
   }
-  const key = text.toUpperCase().match(MANUAL_KEY);
-  if (!key) return null;
-  const secret = key[0].replace(/[\s-]/g, "");
-  return secret.length >= 16 && secret.length % 2 === 0 ? secret : null;
+  return manualKey(text);
 }

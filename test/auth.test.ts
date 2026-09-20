@@ -63,10 +63,17 @@ describe("totp", () => {
         '<img src="data:..."><a href="otpauth://totp/X:a?secret=JBSWY3DPEHPK3PXP&amp;issuer=X">',
       ),
     ).toBe("JBSWY3DPEHPK3PXP");
-    expect(findTotpSecret("Can't scan? Enter this key: jbsw y3dp ehpk 3pxp jbsw y3dp")).toBe(
-      "JBSWY3DPEHPK3PXPJBSWY3DP",
+    expect(findTotpSecret("Can't scan? Enter this key: jbsw y3dp ehpk 3pxp")).toBe(
+      "JBSWY3DPEHPK3PXP",
     );
     expect(findTotpSecret("Welcome back, nothing to see")).toBeNull();
+  });
+  it("keeps the key apart from the 4-letter words after it", () => {
+    const google =
+      "Enter your email address and this key (spaces don’t matter): jbsw y3dp ehpk 3pxp jbsw y3dp ehpk 3pxp Make sure Time based is selected Tap Add to finish";
+    expect(findTotpSecret(google)).toBe("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP");
+    expect(findTotpSecret("key: jbsw y3dp ehpk 3pxp then tap add")).toBe("JBSWY3DPEHPK3PXP");
+    expect(findTotpSecret("MAKE SURE TIME BASED IS SELECTED")).toBeNull();
   });
 });
 

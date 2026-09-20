@@ -42,6 +42,21 @@ export interface SiteLogin {
   /** True when the page shows a signed-in state (avatar, dashboard, no sign-in form). */
   loggedIn(fp: FlowPage): Promise<boolean>;
   signIn(ctx: SignInContext): Promise<void>;
+  /** How this site's authenticator setup page walks, when it is known; `enroll-totp` guesses otherwise. */
+  totpSetup?: TotpSetupSpec;
+}
+
+/** The clicks from the two-factor page to the seed, then to the code box. */
+export interface TotpSetupSpec {
+  url: string;
+  /** In order, until the seed is on the page ("Set up authenticator", "Can't scan it?"). */
+  reveal: Hints[];
+  /** From the seed to the code box ("Next"), if any. */
+  toCode?: Hints[];
+  code: Hints;
+  confirm: Hints;
+  /** Text that means the site accepted the code. */
+  done: RegExp;
 }
 
 /** The step where a code is asked: which field, how to submit, what kind of code. */

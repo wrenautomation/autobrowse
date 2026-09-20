@@ -5,7 +5,7 @@
  */
 import { readFileSync } from "node:fs";
 import type { Command } from "commander";
-import { credentialSchema, readSecretFromPage, SITE_LOGINS, storeSeed } from "../auth/index.js";
+import { credentialSchema, enrollTotpFlow, SITE_LOGINS } from "../auth/index.js";
 import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
 import type { Settings } from "./config.js";
 import { browserOptions, credentialsFor, devicesFor, gmailFor, loginFor } from "./services.js";
@@ -74,10 +74,11 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       const login = SITE_LOGINS.find((s) => s.site === site);
       if (!login) throw new Error(`unknown site ${site}; one of ${SITES.join(", ")}`);
       const opts = browserOptions(settings, !o.headed);
-      const cred = await credentialsFor(settings).get(site);
+      const credName = login.credential ?? site;
+      const cred = await credentialsFor(settings).get(credName);
       if (!cred && !o.headed)
         throw new Error(
-          `no credential for ${site}: \`autobrowse creds set ${site}\`, or --headed to log in by hand`,
+          `no credential for ${site}: \`autobrowse creds set ${credName}\`, or --headed to log in by hand`,
         );
       const runner = flowRunner(opts, { login: loginFor(settings, gmailFor(settings)) });
       const check = defineFlow<undefined, string>({
@@ -98,54 +99,17 @@ export function registerAuthCommands(program: Command, settings: Settings): void
   program
     .command("enroll-totp <site>")
     .description(
-      "On the site's authenticator setup page, read the seed, store it, and confirm with a generated code",
+      "Turn on an authenticator for the site ourselves: read the seed off its setup page, store it sealed, confirm with a generated code",
     )
-    .requiredOption("--url <url>", "the two-factor setup page")
+    .option("--url <url>", "the two-factor setup page, when the site's walk is not known")
     .option("--headed", "show the browser")
-    .action(async (site: string, o: { url: string; headed?: boolean }) => {
-      const store = credentialsFor(settings);
+    .action(async (site: string, o: { url?: string; headed?: boolean }) => {
+      const login = SITE_LOGINS.find((s) => s.site === site) ?? { site };
       const runner = flowRunner(browserOptions(settings, !o.headed), {
         login: loginFor(settings, gmailFor(settings)),
       });
-      const enroll = defineFlow<undefined, string>({
-        site,
-        name: "enroll-totp",
-        async run(fp) {
-          await fp.open(o.url);
-          // Many sites hide the seed behind a "set up" button; press the obvious one once.
-          let secret = await readSecretFromPage(fp);
-          if (!secret) {
-            const started = await fp
-              .act(
-                { kind: "click" },
-                { role: "button", name: "/set up|add|enable|turn on/i" },
-                { goal: "start authenticator setup" },
-              )
-              .then(
-                () => true,
-                () => false,
-              );
-            if (started) {
-              await fp.wait(1_500);
-              secret = await readSecretFromPage(fp);
-            }
-          }
-          if (!secret) return fp.human("no TOTP seed visible on the page");
-          const code = await storeSeed(store, site, secret);
-          await fp.act(
-            { kind: "fill", value: code },
-            { role: "textbox" },
-            { goal: "type the first code" },
-          );
-          await fp.act(
-            { kind: "click" },
-            { role: "button", name: "/verify|confirm|continue|enable|activate/i" },
-            { goal: "confirm authenticator" },
-          );
-          await fp.wait(1_500);
-          return `seed stored for ${site}; page now says: ${(await fp.text()).slice(0, 200).replace(/\s+/g, " ")}`;
-        },
-      });
-      console.log(await runner.run(enroll, undefined));
+      console.log(
+        await runner.run(enrollTotpFlow(login, credentialsFor(settings), o.url), undefined),
+      );
     });
 }

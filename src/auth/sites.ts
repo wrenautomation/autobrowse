@@ -11,6 +11,7 @@ import {
   type SignInContext,
   type SiteLogin,
   signInToGoogle,
+  type TotpSetupSpec,
 } from "./login.js";
 
 const CLOUDFLARE_HOME = /dash\.cloudflare\.com\/[0-9a-f]{32}/;
@@ -54,24 +55,65 @@ const cloudflare: SiteLogin = {
   },
 };
 
-/** accounts.google.com fronts every Google surface; the admin console is one of them. */
+/** Where any Google account turns on an authenticator app. Mapped 2026-09-19 in explore mode. */
+const GOOGLE_TOTP_SETUP: TotpSetupSpec = {
+  url: "https://myaccount.google.com/two-step-verification/authenticator",
+  reveal: [
+    { role: "button", name: "Set up authenticator" },
+    { role: "button", name: "/can.t scan it/i" },
+  ],
+  toCode: [{ role: "button", name: "Next" }],
+  code: { role: "textbox", name: "/enter code/i" },
+  confirm: { role: "button", name: "Verify" },
+  done: /authenticator app added|authenticator app.*(on|set up)|turned on/i,
+};
+
+/** The personal Google account: what "Sign in with Google" buttons use. */
+const google: SiteLogin = {
+  site: "google",
+  home: "https://myaccount.google.com/",
+  loggedIn: async (fp) =>
+    /myaccount\.google\.com/.test(fp.url()) && !/accounts\.google\.com/.test(fp.url()),
+  async signIn(ctx) {
+    await ctx.fp.open(
+      "https://accounts.google.com/ServiceLogin?continue=https://myaccount.google.com/",
+      { allowWall: true },
+    );
+    await signInToGoogle(ctx);
+    if (!(await ctx.fp.waitForUrl(/myaccount\.google\.com/, 30_000)))
+      throw new LoginFailed("google", `still on ${ctx.fp.url()} after Google sign-in`);
+  },
+  totpSetup: GOOGLE_TOTP_SETUP,
+};
+
+/**
+ * The Workspace admin console: its own credential, a Workspace admin of
+ * the domains (a personal Gmail signs in fine and then gets "Sign in with
+ * an administrator account").
+ */
 const googleAdmin: SiteLogin = {
   site: "google-admin",
-  credential: "google",
   home: "https://admin.google.com/",
   loggedIn: async (fp) =>
-    /admin\.google\.com/.test(fp.url()) && !/accounts\.google\.com/.test(fp.url()),
+    /admin\.google\.com/.test(fp.url()) &&
+    !/accounts\.google\.com/.test(fp.url()) &&
+    !(await fp.has({ text: "/administrator account/i" })),
   async signIn(ctx) {
     await ctx.fp.open(
       "https://accounts.google.com/ServiceLogin?continue=https://admin.google.com/",
-      {
-        allowWall: true,
-      },
+      { allowWall: true },
     );
     await signInToGoogle(ctx);
     if (!(await ctx.fp.waitForUrl(/admin\.google\.com/, 30_000)))
       throw new LoginFailed("google-admin", `still on ${ctx.fp.url()} after Google sign-in`);
+    await ctx.fp.wait(1_500);
+    if (await ctx.fp.has({ text: "/administrator account/i" }))
+      throw new LoginFailed(
+        "google-admin",
+        `${ctx.cred.username} is not a Workspace admin; store the admin account as credential "google-admin"`,
+      );
   },
+  totpSetup: GOOGLE_TOTP_SETUP,
 };
 
 const instantly: SiteLogin = {
@@ -95,4 +137,4 @@ const instantly: SiteLogin = {
   }),
 };
 
-export const SITE_LOGINS: readonly SiteLogin[] = [cloudflare, googleAdmin, instantly];
+export const SITE_LOGINS: readonly SiteLogin[] = [cloudflare, google, googleAdmin, instantly];
