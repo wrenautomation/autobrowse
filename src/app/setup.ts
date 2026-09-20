@@ -20,7 +20,9 @@ export interface Need {
   name: string;
   /** Which sites this credential signs in. */
   sites: string[];
-  /** Offered when the site can also go through a provider's button. */
+  /** What setup says, in the site's own words. */
+  ask: string;
+  /** Offered when a site behind this credential can also go through a provider's button. */
   viaChoices: Array<"google">;
 }
 
@@ -33,15 +35,14 @@ export function needsFor(
   const byName = new Map<string, Need>();
   for (const s of sites) {
     const name = s.credential ?? s.site;
-    const need = byName.get(name) ?? { name, sites: [], viaChoices: [] };
+    const need = byName.get(name) ?? { name, sites: [], ask: s.ask ?? name, viaChoices: [] };
     need.sites.push(s.site);
+    for (const v of s.via ?? []) if (!need.viaChoices.includes(v)) need.viaChoices.push(v);
     byName.set(name, need);
   }
   for (const p of providers)
-    if (!byName.has(p)) byName.set(p, { name: p, sites: [], viaChoices: [] });
-  for (const need of byName.values())
-    if (!providers.has(need.name))
-      need.viaChoices = [...providers].filter((p): p is "google" => p === "google");
+    if (!byName.has(p))
+      byName.set(p, { name: p, sites: [], ask: `Your ${p} account`, viaChoices: [] });
   // Providers first: a site behind a button needs its provider stored.
   return [...byName.values()].sort(
     (a, b) => Number(providers.has(b.name)) - Number(providers.has(a.name)),
@@ -75,37 +76,36 @@ export async function runSetup(
       io.say(`${need.name}: stored`);
       continue;
     }
-    const who = need.sites.length ? ` (signs in ${need.sites.join(", ")})` : " (identity provider)";
-    io.say(`\n${need.name}${who}`);
+    io.say(`\n${need.name}: ${need.ask}`);
     if (need.viaChoices.length) {
+      const provider = need.viaChoices[0] as "google";
       const via = (
-        await io.ask(
-          `  sign in with ${need.viaChoices.join("/")} button instead of a password? [y/N] `,
-        )
+        await io.ask(`  do you log in there with the "Sign in with ${provider}" button? [y/N] `)
       )
         .trim()
         .toLowerCase();
       if (via === "y" || via === "yes") {
-        const provider = need.viaChoices[0] as "google";
-        const username = (await io.ask(`  ${provider} account email (for the record): `)).trim();
+        const username = (await io.ask(`  which ${provider} account (email): `)).trim();
         // A via credential carries no password of its own; the provider's does the work.
         await store.put(need.name, { username: username || "-", password: "-", via: provider });
         stored.push(need.name);
         continue;
       }
     }
-    const username = (await io.ask("  username/email (empty = skip): ")).trim();
+    const username = (await io.ask("  email (empty = skip for now): ")).trim();
     if (!username) {
       skipped.push(need.name);
       continue;
     }
-    const password = await io.askHidden("  password: ");
+    const password = await io.askHidden("  password (typed hidden): ");
     if (!password) {
       skipped.push(need.name);
       continue;
     }
     const totp = (
-      await io.askHidden("  authenticator seed if 2FA is already on (empty = none): ")
+      await io.askHidden(
+        "  already using an authenticator app there? paste its setup key, else empty (enroll-totp turns one on later): ",
+      )
     ).trim();
     try {
       await store.put(need.name, {

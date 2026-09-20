@@ -61,6 +61,18 @@ describe("flowRunner", () => {
     });
     await expect(runner.run(bug, undefined)).rejects.toBeInstanceOf(FlowFailed);
   }, 60_000);
+  it("a flow that ends on Chrome's offline page is FlowInterrupted, not FlowFailed", async () => {
+    const offline = defineFlow<undefined, void>({
+      site: "scratch",
+      name: "offline",
+      async run(fp) {
+        // An unresolvable host lands on chrome-error://; a flow check failing there is the leg, not the site.
+        await fp.page.goto("http://no-such-host.invalid/").catch(() => undefined);
+        throw new Error("still on the sign-in page");
+      },
+    });
+    await expect(runner.run(offline, undefined)).rejects.toBeInstanceOf(FlowInterrupted);
+  }, 60_000);
 });
 
 describe("pace", () => {

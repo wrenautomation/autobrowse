@@ -46,6 +46,8 @@ const cloudflareGoogle = oauthLogin("cloudflare", {
 const cloudflare: SiteLogin = {
   site: "cloudflare",
   home: "https://dash.cloudflare.com/",
+  ask: "Your Cloudflare account (dash.cloudflare.com), where the domains get registered",
+  via: ["google"],
   // A signed-in dashboard URL carries the 32-hex account id; the bare host is the pre-redirect state.
   loggedIn: async (fp) =>
     CLOUDFLARE_HOME.test(fp.url()) && !(await fp.has({ role: "textbox", name: "Password" })),
@@ -57,7 +59,9 @@ const cloudflare: SiteLogin = {
 
 /** Where any Google account turns on an authenticator app. Mapped 2026-09-19 in explore mode. */
 const GOOGLE_TOTP_SETUP: TotpSetupSpec = {
-  url: "https://myaccount.google.com/two-step-verification/authenticator",
+  // authuser= names the account: a profile with two Google accounts would otherwise get the first.
+  url: (cred) =>
+    `https://myaccount.google.com/two-step-verification/authenticator?authuser=${encodeURIComponent(cred.username)}`,
   reveal: [
     { role: "button", name: "Set up authenticator" },
     { role: "button", name: "/can.t scan it/i" },
@@ -68,10 +72,14 @@ const GOOGLE_TOTP_SETUP: TotpSetupSpec = {
   done: /authenticator app added|authenticator app.*(on|set up)|turned on/i,
 };
 
+/** Google re-asks for the password on security pages; answer on the spot. */
+const GOOGLE_SIGN_IN_HERE = { at: /accounts\.google\.com/, run: signInToGoogle };
+
 /** The personal Google account: what "Sign in with Google" buttons use. */
 const google: SiteLogin = {
   site: "google",
   home: "https://myaccount.google.com/",
+  ask: 'Your Google account: the one behind every "Sign in with Google" button',
   loggedIn: async (fp) =>
     /myaccount\.google\.com/.test(fp.url()) && !/accounts\.google\.com/.test(fp.url()),
   async signIn(ctx) {
@@ -83,6 +91,7 @@ const google: SiteLogin = {
     if (!(await ctx.fp.waitForUrl(/myaccount\.google\.com/, 30_000)))
       throw new LoginFailed("google", `still on ${ctx.fp.url()} after Google sign-in`);
   },
+  signInHere: GOOGLE_SIGN_IN_HERE,
   totpSetup: GOOGLE_TOTP_SETUP,
 };
 
@@ -94,6 +103,7 @@ const google: SiteLogin = {
 const googleAdmin: SiteLogin = {
   site: "google-admin",
   home: "https://admin.google.com/",
+  ask: "A Google Workspace admin (admin.google.com) for the mail domains; a personal Gmail is refused there",
   loggedIn: async (fp) =>
     /admin\.google\.com/.test(fp.url()) &&
     !/accounts\.google\.com/.test(fp.url()) &&
@@ -113,12 +123,14 @@ const googleAdmin: SiteLogin = {
         `${ctx.cred.username} is not a Workspace admin; store the admin account as credential "google-admin"`,
       );
   },
+  signInHere: GOOGLE_SIGN_IN_HERE,
   totpSetup: GOOGLE_TOTP_SETUP,
 };
 
 const instantly: SiteLogin = {
   site: "instantly",
   home: "https://app.instantly.ai/",
+  ask: "Your Instantly login (app.instantly.ai), for warmup",
   loggedIn: async (fp) => /app\.instantly\.ai\/app/.test(fp.url()),
   signIn: formLogin("instantly", {
     start: "https://app.instantly.ai/auth/login",

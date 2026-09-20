@@ -125,6 +125,9 @@ const TRANSIENT =
   /target (page|context|browser) has been closed|browser has been closed|target closed|connection closed|websocket|socket hang up|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|net::ERR_(INTERNET_DISCONNECTED|NETWORK_CHANGED|CONNECTION_(RESET|CLOSED|REFUSED)|NAME_NOT_RESOLVED|TIMED_OUT|ADDRESS_UNREACHABLE)|browser process (crashed|exited)|Protocol error.*(Target|Session) closed/i;
 
 /** Sleep, a dropped network, a crashed or closed browser: retry, do not fail. */
+/** Chrome's own error page (no internet, DNS gone): the leg is down, whatever the flow was doing. */
+const OFFLINE_PAGE = /^chrome-error:\/\//;
+
 export function isTransientBrowserError(err: unknown): boolean {
   const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
   return TRANSIENT.test(msg);
@@ -245,22 +248,26 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           async open(url, o = {}) {
             active = session.page;
             await settle(session.page, url);
+            if (OFFLINE_PAGE.test(session.page.url()))
+              throw new Error(`net::ERR_INTERNET_DISCONNECTED opening ${url}`);
             if (o.allowWall) return;
-            const wall = await looksLikeWall(session.page);
-            if (!wall) return;
-            if (wall.kind === "captcha" || !runner.login || signingIn)
-              throw new NeedsHuman(`${flow.site}: ${wall.detail}`);
-            signingIn = true;
-            try {
-              const outcome = await runner.login(fp, flow.site);
-              if (outcome !== "signed-in")
-                throw new NeedsHuman(`${flow.site}: ${wall.detail} (${outcome})`);
-            } finally {
-              signingIn = false;
+            // Twice: a security page asks for the password again right after a sign-in.
+            for (let attempt = 1; ; attempt++) {
+              const wall = await looksLikeWall(session.page);
+              if (!wall) return;
+              const after = attempt > 1 ? " after signing in" : "";
+              if (wall.kind === "captcha" || !runner.login || signingIn || attempt > 2)
+                throw new NeedsHuman(`${flow.site}: ${wall.detail}${after}`);
+              signingIn = true;
+              try {
+                const outcome = await runner.login(fp, flow.site);
+                if (outcome !== "signed-in")
+                  throw new NeedsHuman(`${flow.site}: ${wall.detail} (${outcome})`);
+              } finally {
+                signingIn = false;
+              }
+              await settle(session.page, url);
             }
-            await settle(session.page, url);
-            const again = await looksLikeWall(session.page);
-            if (again) throw new NeedsHuman(`${flow.site}: ${again.detail} after signing in`);
           },
           url: () => active.url(),
           text: async () =>
@@ -375,7 +382,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             err.artifacts = artifacts;
             throw err;
           }
-          if (isTransientBrowserError(err))
+          if (isTransientBrowserError(err) || OFFLINE_PAGE.test(active.url()))
             throw new FlowInterrupted(`${flow.site}/${flow.name}`, err, artifacts);
           throw new FlowFailed(`${flow.site}/${flow.name}`, err, artifacts);
         } finally {

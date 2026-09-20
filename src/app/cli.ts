@@ -136,6 +136,8 @@ registerRecordCommands(program, settings);
 registerAuthCommands(program, settings);
 
 program.parseAsync().catch((err: unknown) => {
-  console.error(err instanceof Error ? err.message : String(err));
+  console.error(
+    err instanceof Error ? (process.env.AUTOBROWSE_DEBUG ? err.stack : err.message) : String(err),
+  );
   process.exitCode = 1;
 });

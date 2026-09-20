@@ -80,7 +80,10 @@ export function enrollTotpFlow(
     site: login.site,
     name: "enroll-totp",
     async run(fp) {
-      await fp.open(spec.url);
+      const cred = await store.get(credName);
+      if (!cred)
+        throw new LoginFailed(login.site, `enroll TOTP: no credential stored for ${credName}`);
+      await fp.open(typeof spec.url === "string" ? spec.url : spec.url(cred));
       let secret = await readSecretWithin(fp, RENDER_MS);
       for (const step of spec.reveal) {
         if (secret) break;

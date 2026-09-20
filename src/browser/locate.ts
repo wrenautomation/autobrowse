@@ -37,6 +37,15 @@ export function planLocator(h: Hints): LocatorPlan | null {
   return null;
 }
 
+/** In generated code: a `/pattern/flags` name is a regex literal, anything else a string. */
+function qName(name: string): string {
+  const p = namePattern(name);
+  return typeof p === "string" ? JSON.stringify(p) : p.toString();
+}
+function exact(name: string): string {
+  return typeof namePattern(name) === "string" ? ", { exact: true }" : "";
+}
+
 /** A name written `/pattern/flags` matches loosely; anything else is exact. */
 export function namePattern(name: string): string | RegExp {
   const m = name.match(/^\/(.+)\/([a-z]*)$/s);
@@ -64,10 +73,18 @@ export function applyLocator(page: Page, plan: LocatorPlan): Locator {
         ? page.getByLabel(name, { exact: true })
         : page.getByLabel(name);
     }
-    case "placeholder":
-      return page.getByPlaceholder(plan.value, { exact: true });
-    case "text":
-      return page.getByText(plan.value, { exact: true });
+    case "placeholder": {
+      const name = namePattern(plan.value);
+      return typeof name === "string"
+        ? page.getByPlaceholder(name, { exact: true })
+        : page.getByPlaceholder(name);
+    }
+    case "text": {
+      const name = namePattern(plan.value);
+      return typeof name === "string"
+        ? page.getByText(name, { exact: true })
+        : page.getByText(name);
+    }
     case "id":
       return page.locator(`#${CSS.escape(plan.value)}`);
   }
@@ -95,14 +112,14 @@ export function renderLocator(plan: LocatorPlan, page = "page"): string {
       return `${page}.getByTestId(${q(plan.value)})`;
     case "role":
       return plan.name
-        ? `${page}.getByRole(${q(plan.role)}, { name: ${q(plan.name)}, exact: true })`
+        ? `${page}.getByRole(${q(plan.role)}, { name: ${qName(plan.name)}${typeof namePattern(plan.name) === "string" ? ", exact: true" : ""} })`
         : `${page}.getByRole(${q(plan.role)})`;
     case "label":
-      return `${page}.getByLabel(${q(plan.value)}, { exact: true })`;
+      return `${page}.getByLabel(${qName(plan.value)}${exact(plan.value)})`;
     case "placeholder":
-      return `${page}.getByPlaceholder(${q(plan.value)}, { exact: true })`;
+      return `${page}.getByPlaceholder(${qName(plan.value)}${exact(plan.value)})`;
     case "text":
-      return `${page}.getByText(${q(plan.value)}, { exact: true })`;
+      return `${page}.getByText(${qName(plan.value)}${exact(plan.value)})`;
     case "id":
       return `${page}.locator(${q(`#${plan.value}`)})`;
   }

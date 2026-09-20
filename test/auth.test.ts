@@ -308,12 +308,47 @@ describe("loginProvider", () => {
   });
 });
 
+describe("loginProvider on the site's own sign-in page", () => {
+  it("answers in place instead of opening home", async () => {
+    const calls: string[] = [];
+    const site: SiteLogin = {
+      site: "s",
+      home: "https://site.test/",
+      loggedIn: async () => true,
+      async signIn() {
+        calls.push("signIn");
+      },
+      signInHere: {
+        at: /accounts\.site\.test/,
+        async run() {
+          calls.push("here");
+        },
+      },
+    };
+    const login = loginProvider([site], {
+      credentials: memoryCredentials({ s: { username: "u", password: "p" } }),
+      codes: totpSource(),
+    });
+    const onWall = fakePage({
+      text: [],
+      present: () => true,
+      url: "https://accounts.site.test/pwd",
+    });
+    onWall.fp.waitForUrl = async () => false; // the page never leaves the sign-in surface
+    await expect(login(onWall.fp, "s")).rejects.toThrow(/still on/);
+    expect(calls).toEqual(["here"]);
+    const elsewhere = fakePage({ text: [], present: () => true, url: "https://site.test/x" });
+    expect(await login(elsewhere.fp, "s")).toBe("signed-in");
+    expect(calls).toEqual(["here", "signIn"]);
+  });
+});
+
 describe("signInToGoogle second step", () => {
   const base = { username: "u@gmail.com", password: "p" };
   const page = (present: (h: Hints) => boolean) =>
     fakePage({
       text: ["2-Step Verification Choose how you want to sign in", "welcome"],
-      present,
+      present: (h) => !/switch account/i.test(String(h.name)) && present(h),
       url: "https://accounts.google.com/v3/signin/challenge/selection?x",
     });
   const ctx = (
@@ -329,11 +364,29 @@ describe("signInToGoogle second step", () => {
     ...(notify ? { notify } : {}),
     credFor: async () => base,
   });
+  it("switches account when the profile is signed in as someone else", async () => {
+    const { fp, acts } = fakePage({
+      text: [
+        "Hi Other other@gmail.com Enter your password",
+        "Choose an account other@gmail.com Use another account",
+        "Sign in Email or phone",
+        "welcome",
+      ],
+      present: (h) => !/password/i.test(String(h.name)) && h.text !== "u@gmail.com",
+      url: "https://accounts.google.com/v3/signin/challenge/pwd?x",
+    });
+    await signInToGoogle(ctx(fp, ["totp"]));
+    expect(acts.slice(0, 3).map((a) => `${a.op.kind} ${a.hints.name ?? a.hints.text}`)).toEqual([
+      "click /switch account/i",
+      "click /use another account/i",
+      "fill /email or phone/i",
+    ]);
+  });
   it("asks for the SMS when a phone or Twilio can read it", async () => {
     const { fp, acts } = page((h) => !/email|password/i.test(String(h.name)));
     await signInToGoogle(ctx(fp, ["sms"]));
     expect(acts.map((a) => `${a.op.kind} ${a.hints.name ?? a.hints.css}`)).toEqual([
-      'click [role=link]:not([aria-disabled="true"]):has-text("verification code at"):has-text("••82")',
+      'click :is(a,button,[role=link],[role=button]):not([aria-disabled="true"]):has-text("verification code at"):has-text("••82")',
       "fill /code/i",
       "click /^next$/i",
     ]);
@@ -346,8 +399,8 @@ describe("signInToGoogle second step", () => {
         notes.push(t);
       }),
     );
-    expect(acts.map((a) => `${a.op.kind} ${a.hints.name}`)).toEqual([
-      "click /tap yes on your phone/i",
+    expect(acts.map((a) => `${a.op.kind} ${a.hints.css}`)).toEqual([
+      'click :is(a,button,[role=link],[role=button]):not([aria-disabled="true"]):has-text("Tap Yes on your phone")',
     ]);
     expect(notes[0]).toMatch(/tap Yes/);
   });

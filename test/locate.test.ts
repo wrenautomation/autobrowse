@@ -34,5 +34,9 @@ describe("planLocator", () => {
       'page.getByRole("button", { name: "Say \\"hi\\"", exact: true })',
     );
     expect(renderLocator({ by: "id", value: "go" })).toBe('page.locator("#go")');
+    expect(renderLocator({ by: "role", role: "link", name: "/use another/i" })).toBe(
+      'page.getByRole("link", { name: /use another/i })',
+    );
+    expect(renderLocator({ by: "text", value: "/admin/i" })).toBe("page.getByText(/admin/i)");
   });
 });

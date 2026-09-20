@@ -5,7 +5,15 @@
  */
 import { readFileSync } from "node:fs";
 import type { Command } from "commander";
-import { credentialSchema, enrollTotpFlow, SITE_LOGINS } from "../auth/index.js";
+import {
+  credentialSchema,
+  enrollTotpFlow,
+  ingest,
+  parseCredentialLines,
+  SITE_LOGINS,
+  takeClipboard,
+  takeFile,
+} from "../auth/index.js";
 import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
 import type { Settings } from "./config.js";
 import { browserOptions, credentialsFor, devicesFor, gmailFor, loginFor } from "./services.js";
@@ -52,6 +60,25 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       }
       await credentialsFor(settings).put(site, parsed.data);
       console.log(`stored credential for ${site}`);
+    });
+  creds
+    .command("paste <site>")
+    .description(
+      "Store what is on the clipboard: `email password [authenticator key]`; the clipboard is emptied after",
+    )
+    .action(async (site: string) => {
+      const lines = parseCredentialLines(takeClipboard(), site);
+      if (lines.length !== 1) throw new Error("the clipboard must hold exactly one line");
+      console.log(`stored: ${(await ingest(credentialsFor(settings), lines)).join(", ")}`);
+    });
+  creds
+    .command("import <file>")
+    .description(
+      "Store every line of a scratch file (`site email password [authenticator key]`), then shred the file",
+    )
+    .action(async (file: string) => {
+      const lines = parseCredentialLines(takeFile(file));
+      console.log(`stored: ${(await ingest(credentialsFor(settings), lines)).join(", ")}`);
     });
   creds
     .command("list")

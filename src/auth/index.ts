@@ -29,6 +29,7 @@ export {
   memoryCredentials,
 } from "./credentials.js";
 export { enrollTotpFlow, readSecretFromPage, storeSeed } from "./enroll.js";
+export { ingest, parseCredentialLines, takeClipboard, takeFile } from "./ingest.js";
 export {
   type FormLoginSpec,
   formLogin,

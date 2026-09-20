@@ -39,16 +39,30 @@ export interface SiteLogin {
    * console and for every "Sign in with Google" button.
    */
   credential?: string;
+  /**
+   * What setup says when it asks for this credential, in the site's own
+   * terms ("A Google Workspace admin for your domains"). Default: the site name.
+   */
+  ask?: string;
+  /** Identity providers whose button this site's `signIn` can use instead of a password. */
+  via?: readonly ["google"];
   /** True when the page shows a signed-in state (avatar, dashboard, no sign-in form). */
   loggedIn(fp: FlowPage): Promise<boolean>;
   signIn(ctx: SignInContext): Promise<void>;
+  /**
+   * The site's own sign-in surface (accounts.google.com). A wall there is
+   * answered where the page is: a security page asks for the password
+   * again even though `home` is signed in, so `signIn` would find nothing to do.
+   */
+  signInHere?: { at: RegExp; run(ctx: SignInContext): Promise<void> };
   /** How this site's authenticator setup page walks, when it is known; `enroll-totp` guesses otherwise. */
   totpSetup?: TotpSetupSpec;
 }
 
 /** The clicks from the two-factor page to the seed, then to the code box. */
 export interface TotpSetupSpec {
-  url: string;
+  /** The setup page; a function when the URL must name the account (Google's `authuser=`). */
+  url: string | ((cred: Credential) => string);
   /** In order, until the seed is on the page ("Set up authenticator", "Can't scan it?"). */
   reveal: Hints[];
   /** From the seed to the code box ("Next"), if any. */
@@ -131,6 +145,14 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
   const site = "google";
   await fp.wait(SETTLE_MS);
   let text = await fp.text();
+  // A profile already signed in as someone else: the page names that
+  // account, with a link "<other> selected. Switch account".
+  const switchLink = { role: "link", name: "/switch account/i" } as const;
+  if (!text.toLowerCase().includes(cred.username.toLowerCase()) && (await fp.has(switchLink))) {
+    await fp.act({ kind: "click" }, switchLink, { goal: `switch to ${cred.username}` });
+    await fp.wait(SETTLE_MS);
+    text = await fp.text();
+  }
   if (/choose an account/i.test(text)) {
     if (await fp.has({ text: cred.username })) {
       await fp.act({ kind: "click" }, { text: cred.username }, { goal: "pick the account" });
@@ -190,13 +212,18 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
       { role: "button", name: "/^next$/i" },
       { goal: "submit the password" },
     );
+    await fp.waitForUrl((u) => !/challenge\/pwd/.test(u), 10_000);
     await fp.wait(SETTLE_MS);
     text = await fp.text();
   }
   if (/wrong password/i.test(text)) throw new LoginFailed(site, "password rejected");
   if (/browser or app may not be secure/i.test(text))
     throw new LoginFailed(site, "Google refused this browser");
-  if (/2-step verification|authenticator|enter the code|verification code/i.test(text)) {
+  // Only while still on a challenge: the destination itself may talk about codes (the 2SV settings).
+  if (
+    /accounts\.google\.com/.test(fp.url()) &&
+    /2-step verification|authenticator|enter the code|verification code/i.test(text)
+  ) {
     await googleSecondStep(ctx);
     await fp.wait(SETTLE_MS);
     text = await fp.text();
@@ -240,6 +267,11 @@ async function toSelection(fp: FlowPage): Promise<void> {
  *   3. device prompt        (a person's phone)        "Tap Yes on your phone or tablet", after a note to that phone
  * Google shows the steps as links on challenge/selection; "Try another way" opens it.
  */
+/** A step on the selection page: a link on some accounts, a button on others; a greyed one does not count. */
+const choice = (text: string): Hints => ({
+  css: `:is(a,button,[role=link],[role=button]):not([aria-disabled="true"]):has-text("${text}")`,
+});
+
 async function googleSecondStep(ctx: SignInContext): Promise<void> {
   const { fp } = ctx;
   const site = "google";
@@ -247,11 +279,9 @@ async function googleSecondStep(ctx: SignInContext): Promise<void> {
   if (ctx.offers("totp")) {
     if (!/challenge\/totp/.test(fp.url())) {
       await toSelection(fp);
-      await fp.act(
-        { kind: "click" },
-        { role: "link", name: "/authenticator app/i" },
-        { goal: "choose the authenticator app" },
-      );
+      await fp.act({ kind: "click" }, choice("authenticator app"), {
+        goal: "choose the authenticator app",
+      });
       await fp.wait(SETTLE_MS);
     }
     return submitCode(fp, await ctx.code("totp"));
@@ -261,9 +291,7 @@ async function googleSecondStep(ctx: SignInContext): Promise<void> {
   // greys out one it was given minutes ago ("for your security"). Only a
   // live link to the phone we can read counts.
   const tail = ctx.inbox("sms")?.slice(-2);
-  const smsLink = {
-    css: `[role=link]:not([aria-disabled="true"]):has-text("verification code at"):has-text("••${tail}")`,
-  };
+  const smsLink: Hints = { css: `${choice("verification code at").css}:has-text("••${tail}")` };
   if (ctx.offers("sms") && tail && (await fp.has(smsLink))) {
     await fp.act({ kind: "click" }, smsLink, { goal: "have Google text the code" });
     await fp.wait(SETTLE_MS);
@@ -273,11 +301,9 @@ async function googleSecondStep(ctx: SignInContext): Promise<void> {
   }
   if (ctx.notify) {
     const before = fp.url();
-    await fp.act(
-      { kind: "click" },
-      { role: "link", name: "/tap yes on your phone/i" },
-      { goal: "ask the phone for a Yes" },
-    );
+    await fp.act({ kind: "click" }, choice("Tap Yes on your phone"), {
+      goal: "ask the phone for a Yes",
+    });
     // The page says where the prompt went ("Open the YouTube app on Apple iPhone 12"); pass it on.
     await fp.wait(SETTLE_MS);
     const where = (await fp.text()).match(/open the .{1,60}? app on [^\n.]{1,60}/i)?.[0];
@@ -371,6 +397,13 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
         return c;
       },
     };
+    const here = login.signInHere;
+    if (here?.at.test(fp.url())) {
+      await here.run(ctx);
+      if (!(await fp.waitForUrl((u) => !here.at.test(u), 30_000)))
+        throw new LoginFailed(site, `still on ${fp.url()} after signing in`);
+      return "signed-in";
+    }
     await login.signIn(ctx);
     if (!(await login.loggedIn(fp)))
       throw new LoginFailed(site, "sign-in ran but the page is not signed in");
