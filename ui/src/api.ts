@@ -6,6 +6,7 @@
 
 import type { Proposal } from "../../src/agent/evaluator.js";
 import type { SessionView, StartRequest } from "../../src/agent/sessions.js";
+import type { Status } from "../../src/app/status.js";
 import type { Compiled } from "../../src/compiler/index.js";
 import type { RunEvent } from "../../src/engine/events.js";
 import type { RunStatusView } from "../../src/engine/object.js";
@@ -21,6 +22,7 @@ export type {
   RunStatusView,
   SessionView,
   StartRequest,
+  Status,
 };
 
 export interface WorkflowInfo {
@@ -66,6 +68,7 @@ const post = (path: string, body?: unknown) =>
   call(path, { method: "POST", body: body === undefined ? null : JSON.stringify(body) });
 
 export const api = {
+  status: () => call<Status | null>("/api/status"),
   workflows: () => call<WorkflowInfo[]>("/api/workflows"),
   runs: () => call<RunRow[]>("/api/runs"),
   run: (workflow: string, key: string) =>

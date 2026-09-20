@@ -16,6 +16,7 @@ import { proposeWorkflows, readFailures } from "../agent/evaluator.js";
 import { readFailure, repairRequest } from "../agent/repair.js";
 import type { AgentSessions } from "../agent/sessions.js";
 import type { Ingress } from "../app/client.js";
+import type { Status } from "../app/status.js";
 import type { FailureRecord } from "../browser/session.js";
 import { parseCommand } from "../channels/commands.js";
 import {
@@ -51,6 +52,8 @@ export interface ApiDeps {
   llm?: Llm;
   /** Linq: replies to the operator's iMessages; `secret` verifies the webhook. */
   linq?: { client: LinqClient; to: string; secret?: string };
+  /** What the worker is made of (vendor names, channels); shown on the Status page. */
+  status?: Status;
 }
 
 const agentStart = z.object({
@@ -109,6 +112,8 @@ export function api(deps: ApiDeps): Hono {
   app.use("/hooks/linq", (c, next) =>
     deps.linq?.secret ? next() : bearerAuth(deps.token)(c, next),
   );
+
+  app.get("/api/status", (c) => c.json(deps.status ?? null));
 
   app.get("/api/workflows", (c) =>
     c.json(

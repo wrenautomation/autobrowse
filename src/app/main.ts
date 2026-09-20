@@ -24,6 +24,7 @@ import {
   loginFor,
   paceFor,
 } from "./services.js";
+import { statusOf } from "./status.js";
 
 const root = loadEnvFile();
 const settings = loadSettings();
@@ -66,7 +67,14 @@ const agent = llm
     })
   : undefined;
 const linq = linqFor(settings);
+const status = statusOf(settings, {
+  llm: llm?.id ?? null,
+  memory: app.memory.id,
+  workflows: app.workflows.map((w) => w.name),
+});
+log.info(status, "autobrowse setup");
 startUiServer({
+  status,
   ...(agent ? { agent } : {}),
   ...(llm ? { llm } : {}),
   ...(linq

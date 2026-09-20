@@ -5,6 +5,7 @@ import { AgentPage, ExplorePage } from "./pages/Explore.js";
 import { RecordingPage, RecordingsPage } from "./pages/Recordings.js";
 import { RunPage } from "./pages/Run.js";
 import { RunsPage } from "./pages/Runs.js";
+import { StatusPage } from "./pages/Status.js";
 
 export function App() {
   const route = useRoute();
@@ -25,6 +26,7 @@ export function App() {
           {nav("runs", "Runs")}
           {nav("recordings", "Recordings")}
           {nav("explore", "Explore")}
+          {nav("status", "Status")}
         </nav>
         <span className="spacer" />
         <TokenBox />
@@ -40,6 +42,8 @@ export function App() {
           <AgentPage id={a} />
         ) : page === "explore" ? (
           <ExplorePage />
+        ) : page === "status" ? (
+          <StatusPage />
         ) : (
           <RunsPage version={version} />
         )}
