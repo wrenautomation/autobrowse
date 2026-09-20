@@ -149,6 +149,7 @@ if (llm && settings.evaluateEveryHours > 0 && app.channel.note) {
         name: r.name,
         site: r.site,
       })),
+      workflows: (await app.workflows()).map((w) => ({ name: w.name, description: w.description })),
     }),
     propose: (e) => proposeWorkflows(llm, e),
     notify: note,

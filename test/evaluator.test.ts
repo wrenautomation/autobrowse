@@ -56,12 +56,14 @@ describe("evaluator", () => {
         },
       ],
       recordings: [{ name: "google-name", site: "google" }],
+      workflows: [{ name: "domain", description: "Buy a domain" }],
     });
     expect(proposals.map((p) => p.title)).toEqual(["Google admin re-auth", "b"]);
     const prompt = llm.requests[0]?.prompt ?? "";
     expect(prompt).toContain("FLOW FAILURES (3)");
     expect(prompt).toContain("google-admin/set-logo failed");
     expect(prompt).toContain("(saved as google-name)");
+    expect(prompt).toContain("WORKFLOWS THAT ALREADY RUN (1):\n- domain: Buy a domain");
   });
   it("asks nothing when there is no evidence", async () => {
     const llm = fakeLlm([]);
