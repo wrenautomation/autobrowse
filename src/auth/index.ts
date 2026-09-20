@@ -32,6 +32,7 @@ export { enrollTotpFlow, readSecretFromPage, storeSeed } from "./enroll.js";
 export { ingest, parseCredentialLines, takeClipboard, takeFile } from "./ingest.js";
 export type { PasskeySetupSpec, PasswordChangeSpec } from "./login.js";
 export {
+  credentialFor,
   type FormLoginSpec,
   formLogin,
   LoginFailed,
@@ -40,6 +41,7 @@ export {
   type LoginProvider,
   loginProvider,
   oauthLogin,
+  resolveLogin,
   type SignInContext,
   type SiteLogin,
   signInToGoogle,

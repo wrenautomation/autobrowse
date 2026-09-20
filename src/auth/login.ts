@@ -422,14 +422,32 @@ export interface LoginOptions {
 export type LoginOutcome = "signed-in" | "no-credential" | "unknown-site";
 
 /**
+ * A site name may carry an account: `google@ops` is the google login with
+ * the credential and browser profile "google@ops". One profile per
+ * identity, so two accounts on one site never meet in a chooser. A bare
+ * name keeps the spec's own credential (or the site name) and profile.
+ */
+export function resolveLogin(sites: readonly SiteLogin[], name: string): SiteLogin | null {
+  const at = name.indexOf("@");
+  const base = sites.find((s) => s.site === (at < 0 ? name : name.slice(0, at)));
+  if (!base) return null;
+  return at < 0 ? base : { ...base, site: name, credential: name };
+}
+
+/** The credential a site name signs in with. */
+export function credentialFor(sites: readonly SiteLogin[], name: string): string {
+  const login = resolveLogin(sites, name);
+  return login?.credential ?? name;
+}
+
+/**
  * The runner's hook: on a login wall for `site`, sign in with what the
  * store has. `LoginFailed` (or a NeedsHuman from inside) propagates.
  */
 export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
-  const byName = new Map(sites.map((s) => [s.site, s]));
   const now = opts.now ?? (() => new Date());
   return async (fp: FlowPage, site: string): Promise<LoginOutcome> => {
-    const login = byName.get(site);
+    const login = resolveLogin(sites, site);
     if (!login) return "unknown-site";
     const cred = await opts.credentials.get(login.credential ?? site);
     if (!cred) return "no-credential";

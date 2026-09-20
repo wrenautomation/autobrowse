@@ -38,6 +38,21 @@ Browserbase takes them.
   at capture. `p` pauses (nothing captured), `q` finishes, any other line
   is a note. `--terminal` records the shell leg after. Raw recordings
   stay out of git.
+- **Explored.** `autobrowse agent <site> "<goal>"` finds the way itself:
+  each step the model sees the URL and a digest of the page (numbered
+  controls, headings, a little text; ~700 tokens), picks one act, the
+  code runs it and journals it. `done` or `human` ends it; the journal is
+  a recording, `compile` makes it a deterministic flow. Explore by agent
+  once, then run the flow forever. `pause`/`resume` over loopback lets a
+  person step in mid-run; the agent re-reads the page when it resumes.
+- **Self-repairing.** Every flow failure writes `<stamp>.failure.json`
+  (site, URL, last goal, error). `autobrowse repair <that file>` starts
+  the agent on that page toward the flow's goal and records the way
+  through; compile it, splice it in. The loop: run → fail → explore →
+  compile → run.
+- **Accounts.** A site name may carry an account: `google@ops` is the
+  google walk with credential and browser profile `google@ops`. One
+  profile per identity, so two accounts never meet in a chooser.
 - **Explored.** `autobrowse explore <site> [--url u]`: one hidden browser
   stays open on the site and takes commands over loopback, one at a time
   (`open`, `click`, `fill`, `aria`, `eval`, `save`, `close`). `aria` dumps
@@ -89,6 +104,9 @@ pnpm autobrowse run bootstrap cloudflare --plan /tmp/bootstrap.json   # mints CL
 # map a page by hand or by model: one open browser, one command at a time (token printed at start)
 pnpm autobrowse explore cloudflare --url https://dash.cloudflare.com/profile/api-tokens
 curl -s -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9090/ -d '{"cmd":"aria","hints":{"css":"main"}}'
+pnpm autobrowse agent google "open Personal info and report the display name" --save google-name   # model explores, journal → recording
+pnpm autobrowse repair ~/.config/autobrowse/artifacts/google-x-2026-….failure.json   # agent picks up where a flow stopped
+pnpm autobrowse creds paste google@ops            # a second account: `email password [key]` on the clipboard
 pnpm autobrowse record buy-domain --site cloudflare --url https://dash.cloudflare.com/ --terminal
 pnpm autobrowse compile buy-domain             # → recordings/buy-domain/outline.json, src/workflows/buy-domain/
 pnpm autobrowse compile buy-domain --no-llm --from-outline

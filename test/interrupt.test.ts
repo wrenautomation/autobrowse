@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -59,7 +59,13 @@ describe("flowRunner", () => {
         throw new Error("no purchasable row");
       },
     });
-    await expect(runner.run(bug, undefined)).rejects.toBeInstanceOf(FlowFailed);
+    const failed = await runner.run(bug, undefined).catch((e: FlowFailed) => e);
+    expect(failed).toBeInstanceOf(FlowFailed);
+    const record = JSON.parse(
+      readFileSync((failed as FlowFailed).artifacts.failure as string, "utf8"),
+    );
+    expect(record).toMatchObject({ site: "scratch", flow: "bug", kind: "failed", goal: null });
+    expect(record.error).toBe("no purchasable row");
   }, 60_000);
   it("a flow that ends on Chrome's offline page is FlowInterrupted, not FlowFailed", async () => {
     const offline = defineFlow<undefined, void>({

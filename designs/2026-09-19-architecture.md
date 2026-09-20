@@ -95,6 +95,36 @@ table's "may import" column.
   sitting: 35 journaled actions, then the flow rewritten once and the
   bootstrap ran through (`recordings/cloudflare-api-token-explore`).
 
+## Agent
+
+`src/agent/`. `exploreWithAgent` drives one explore session: `url` +
+`aria` → `digest` → one model call (`stepSchema`: thought + action) →
+one explore command → journal. The model points at controls by ref
+number; `digest.ts` turns the aria tree into `[n] role "name" [attrs]`
+lines (actionable roles only), headings, and deduplicated text, and
+resolves a ref back to `{role, name, nth}`: the recorder's own hints, so
+the compiled flow uses the same locator the agent used. A malformed
+reply or a ref not on the page is a failed step the model sees next
+turn, not the end of the run. `done{achieved}` / `human{reason}` end it.
+Budget: `maxSteps`, `maxRefs`. The explore server's `pause`/`resume`
+gate each step (`resumed()`), so a person can act by hand and the agent
+re-observes.
+
+`FailureRecord` (`<stamp>.failure.json`, every flow failure: site, flow,
+url, last act goal, error, kind) is the seam between deterministic and
+exploratory: `autobrowse repair <file>` opens the agent on that URL with
+the flow's goal. Run → fail → explore → compile → run is the self-building
+loop; the evaluator that decides *which* recurring need deserves a flow
+is not built.
+
+## Accounts
+
+`resolveLogin(sites, "google@ops")` = the google `SiteLogin` with `site`
+and `credential` set to `google@ops`. Profile dir = site name, so the
+account gets its own cookies; `credentialFor` is what passkeys and the
+login provider use. Bare names behave as before (`cloudflare` → credential
+`google` via the button).
+
 ## Compiler
 
 - `structure(recording)`: deterministic. Steps split at notes (the person

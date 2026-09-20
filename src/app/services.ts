@@ -6,6 +6,7 @@ import {
   aesGcmCipher,
   type CredentialStore,
   codeSources,
+  credentialFor,
   envCredentials,
   fileCredentials,
   keychainKey,
@@ -91,8 +92,7 @@ export function browserOptions(
   return {
     // The site's account's passkeys ride along in its session.
     passkeys: async (site) => {
-      const name = SITE_LOGINS.find((s) => s.site === site)?.credential ?? site;
-      return (await store.get(name))?.passkeys ?? [];
+      return (await store.get(credentialFor(SITE_LOGINS, site)))?.passkeys ?? [];
     },
     tier: settings.browser,
     profilesDir: settings.profilesDir,

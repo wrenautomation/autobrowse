@@ -12,6 +12,7 @@ import {
   enrollTotpFlow,
   ingest,
   parseCredentialLines,
+  resolveLogin,
   rotatePasswordFlow,
   SITE_LOGINS,
   takeClipboard,
@@ -22,6 +23,14 @@ import type { Settings } from "./config.js";
 import { browserOptions, credentialsFor, devicesFor, gmailFor, loginFor } from "./services.js";
 
 const SITES = SITE_LOGINS.map((s) => s.site);
+const KNOWN = `one of ${SITES.join(", ")}, or <site>@<account> for a second account`;
+
+/** A site name (or `site@account`) as a login, or a clear error. */
+function loginNamed(site: string) {
+  const login = resolveLogin(SITE_LOGINS, site);
+  if (!login) throw new Error(`unknown site ${site}; ${KNOWN}`);
+  return login;
+}
 
 export function registerAuthCommands(program: Command, settings: Settings): void {
   program
@@ -71,8 +80,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     )
     .option("--headed", "show the browser")
     .action(async (site: string, o: { headed?: boolean }) => {
-      const login = SITE_LOGINS.find((s) => s.site === site);
-      if (!login) throw new Error(`unknown site ${site}; one of ${SITES.join(", ")}`);
+      const login = loginNamed(site);
       const runner = flowRunner(
         browserOptions(settings, o.headed ? false : settings.browserHeadless),
         {
@@ -114,12 +122,11 @@ export function registerAuthCommands(program: Command, settings: Settings): void
   program
     .command("login <site>")
     .description(
-      `Sign in to a site with the stored credential (headless). With --headed and no credential, a person logs in and closes the window. Sites: ${SITES.join(", ")}`,
+      `Sign in to a site with the stored credential (headless). With --headed and no credential, a person logs in and closes the window. Sites: ${KNOWN}`,
     )
     .option("--headed", "show the browser")
     .action(async (site: string, o: { headed?: boolean }) => {
-      const login = SITE_LOGINS.find((s) => s.site === site);
-      if (!login) throw new Error(`unknown site ${site}; one of ${SITES.join(", ")}`);
+      const login = loginNamed(site);
       const opts = browserOptions(settings, o.headed ? false : settings.browserHeadless);
       const credName = login.credential ?? site;
       const cred = await credentialsFor(settings).get(credName);
@@ -165,8 +172,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     )
     .option("--headed", "show the browser")
     .action(async (site: string, o: { headed?: boolean }) => {
-      const login = SITE_LOGINS.find((s) => s.site === site);
-      if (!login) throw new Error(`unknown site ${site}; one of ${SITES.join(", ")}`);
+      const login = loginNamed(site);
       const runner = flowRunner(
         browserOptions(settings, o.headed ? false : settings.browserHeadless),
         {
@@ -184,7 +190,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .option("--url <url>", "the two-factor setup page, when the site's walk is not known")
     .option("--headed", "show the browser")
     .action(async (site: string, o: { url?: string; headed?: boolean }) => {
-      const login = SITE_LOGINS.find((s) => s.site === site) ?? { site };
+      const login = resolveLogin(SITE_LOGINS, site) ?? { site };
       const runner = flowRunner(
         browserOptions(settings, o.headed ? false : settings.browserHeadless),
         {

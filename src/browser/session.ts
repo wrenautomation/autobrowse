@@ -27,6 +27,22 @@ export interface Artifacts {
   /** The accessibility tree as text, next to the PNG: every control by role and name. */
   aria?: string;
   trace?: string;
+  /** The failure as data (site, flow, url, last goal, error): what `autobrowse repair` starts from. */
+  failure?: string;
+}
+
+/** What a flow left behind when it stopped: enough for an agent to pick up where it fell. */
+export interface FailureRecord {
+  site: string;
+  flow: string;
+  url: string;
+  /** The goal of the last act the flow attempted, when there was one. */
+  goal: string | null;
+  error: string;
+  kind: "failed" | "human" | "interrupted";
+  at: string;
+  screenshot?: string;
+  aria?: string;
 }
 
 export type Tier = "local" | "browserbase";

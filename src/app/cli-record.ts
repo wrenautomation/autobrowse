@@ -1,6 +1,7 @@
 /** `autobrowse login <site>` and `autobrowse record <name>`: the recorder's command line. */
 import { join } from "node:path";
 import type { Command } from "commander";
+import type { FailureRecord } from "../browser/session.js";
 import type { Settings } from "./config.js";
 import { browserOptions, gmailFor, llmFor, loginFor } from "./services.js";
 
@@ -73,50 +74,49 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
         goal: string,
         o: { url?: string; input?: string[]; save?: string; maxSteps: string; port: string },
       ) => {
-        const { startExplore } = await import("../explore/server.js");
-        const { exploreWithAgent } = await import("../agent/explorer.js");
-        const llm = llmFor(settings);
-        if (!llm) throw new Error("the agent needs a model: set LLM_PROVIDER and its key");
-        const ex = await startExplore({
+        await runAgent(settings, {
           site,
-          browser: browserOptions(settings, false),
-          recordingsDir: settings.recordingsDir,
-          port: Number(o.port),
-          login: loginFor(settings, gmailFor(settings)),
-        });
-        console.log(
-          `agent on ${site}; pause/resume: curl -s -X POST -H "Authorization: Bearer ${ex.token}" http://127.0.0.1:${ex.port}/ -d '{"cmd":"pause"}'`,
-        );
-        if (o.url) await ex.exec({ cmd: "open", url: o.url });
-        const inputs = Object.fromEntries(
-          (o.input ?? []).map((kv) => {
-            const i = kv.indexOf("=");
-            return [kv.slice(0, i), kv.slice(i + 1)];
-          }),
-        );
-        const result = await exploreWithAgent({
-          explorer: ex,
-          llm,
           goal,
-          inputs,
+          url: o.url ?? null,
+          inputs: parseInputs(o.input),
+          save: o.save ?? slug(goal),
           maxSteps: Number(o.maxSteps),
-          onStep: (r) =>
-            console.log(
-              `${r.n}. ${r.step?.thought ?? "(unparsable reply)"}\n   ${r.step?.action.cmd ?? "-"} ${r.error ? `✗ ${r.error}` : "✓"}`,
-            ),
+          port: Number(o.port),
         });
-        console.log(`${result.achieved ? "achieved" : "not achieved"}: ${result.summary}`);
-        console.log(`tokens in ${result.usage.inputTokens} out ${result.usage.outputTokens}`);
-        const name =
-          o.save ??
-          goal
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "-")
-            .replace(/^-|-$/g, "")
-            .slice(0, 40);
-        const saved = (await ex.exec({ cmd: "save", name })) as { dir: string };
-        console.log(`recording: ${saved.dir}  →  pnpm autobrowse compile ${name}`);
-        await ex.exec({ cmd: "close" });
+      },
+    );
+
+  program
+    .command("repair <failure> [goal]")
+    .description(
+      "A flow stopped (its <stamp>.failure.json is under the artifacts dir): the agent picks up on that page toward the flow's goal, or the goal you give, and records the way through",
+    )
+    .option("--input <k=v...>", "named values the goal may use")
+    .option("--max-steps <n>", "step budget", "25")
+    .option("--port <port>", "loopback port", "9090")
+    .action(
+      async (
+        failure: string,
+        goal: string | undefined,
+        o: { input?: string[]; maxSteps: string; port: string },
+      ) => {
+        const { readFileSync } = await import("node:fs");
+        const record = JSON.parse(readFileSync(failure, "utf8")) as FailureRecord;
+        const aim =
+          goal ??
+          (record.goal
+            ? `finish what the flow "${record.flow}" was doing: its next act was "${record.goal}"`
+            : `finish what the flow "${record.flow}" was doing`);
+        console.log(`repairing ${record.site}/${record.flow} (${record.kind}: ${record.error})`);
+        await runAgent(settings, {
+          site: record.site,
+          goal: `${aim}. The flow stopped here with: ${record.error}`,
+          url: record.url,
+          inputs: parseInputs(o.input),
+          save: slug(`${record.flow}-repair`),
+          maxSteps: Number(o.maxSteps),
+          port: Number(o.port),
+        });
       },
     );
 
@@ -160,4 +160,72 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
         );
       },
     );
+}
+
+interface AgentRun {
+  site: string;
+  goal: string;
+  url: string | null;
+  inputs: Record<string, string>;
+  save: string;
+  maxSteps: number;
+  port: number;
+}
+
+/** One agent session: explore server up, agent to the goal, journal saved as a recording. */
+async function runAgent(settings: Settings, r: AgentRun): Promise<void> {
+  const { startExplore } = await import("../explore/server.js");
+  const { exploreWithAgent } = await import("../agent/explorer.js");
+  const llm = llmFor(settings);
+  if (!llm) throw new Error("the agent needs a model: set LLM_PROVIDER and its key");
+  const ex = await startExplore({
+    site: r.site,
+    browser: browserOptions(settings, false),
+    recordingsDir: settings.recordingsDir,
+    port: r.port,
+    login: loginFor(settings, gmailFor(settings)),
+  });
+  console.log(
+    `agent on ${r.site}; pause/resume: curl -s -X POST -H "Authorization: Bearer ${ex.token}" http://127.0.0.1:${ex.port}/ -d '{"cmd":"pause"}'`,
+  );
+  try {
+    if (r.url) await ex.exec({ cmd: "open", url: r.url });
+    const result = await exploreWithAgent({
+      explorer: ex,
+      llm,
+      goal: r.goal,
+      inputs: r.inputs,
+      maxSteps: r.maxSteps,
+      onStep: (s) =>
+        console.log(
+          `${s.n}. ${s.step?.thought ?? "(unparsable reply)"}\n   ${s.step?.action.cmd ?? "-"} ${s.error ? `✗ ${s.error}` : "✓"}`,
+        ),
+    });
+    console.log(`${result.achieved ? "achieved" : "not achieved"}: ${result.summary}`);
+    console.log(`tokens in ${result.usage.inputTokens} out ${result.usage.outputTokens}`);
+    const saved = (await ex.exec({ cmd: "save", name: r.save })) as { dir: string };
+    console.log(`recording: ${saved.dir}  →  pnpm autobrowse compile ${r.save}`);
+  } finally {
+    await ex.exec({ cmd: "close" });
+  }
+}
+
+function parseInputs(kvs: string[] | undefined): Record<string, string> {
+  return Object.fromEntries(
+    (kvs ?? []).map((kv) => {
+      const i = kv.indexOf("=");
+      return i < 0 ? [kv, ""] : [kv.slice(0, i), kv.slice(i + 1)];
+    }),
+  );
+}
+
+/** A recording name from free text: lowercase, dashes, starts with a letter. */
+function slug(text: string): string {
+  const s = text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40)
+    .replace(/-$/, "");
+  return /^[a-z]/.test(s) ? s : `r-${s}`;
 }

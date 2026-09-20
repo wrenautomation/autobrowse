@@ -23,6 +23,7 @@ import { canLearn, noRepairer, type Repairer, type RepairReport, snapshotPage } 
 import {
   type Artifacts,
   type BrowserOptions,
+  type FailureRecord,
   looksLikeWall,
   NeedsHuman,
   openSession,
@@ -251,6 +252,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           throw err;
         });
         const stamp = `${flow.site}-${flow.name}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+        let lastGoal: string | null = null;
         mkdirSync(artifactsDir, { recursive: true });
         // Tracing is best effort: a CDP-attached context may refuse it.
         const tracing = await session.context.tracing
@@ -325,6 +327,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             active = page;
           },
           async act(op, hints, a) {
+            lastGoal = a.goal;
             const timeout = a.timeoutMs ?? ACT_TIMEOUT_MS;
             const page = active;
             try {
@@ -397,11 +400,31 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             )
               artifacts.trace = trace;
           }
+          const kind: FailureRecord["kind"] =
+            err instanceof NeedsHuman
+              ? "human"
+              : isTransientBrowserError(err) || OFFLINE_PAGE.test(active.url())
+                ? "interrupted"
+                : "failed";
+          // The failure as data: `autobrowse repair <this file>` hands it to the agent.
+          const record: FailureRecord = {
+            site: flow.site,
+            flow: flow.name,
+            url: active.url(),
+            goal: lastGoal,
+            error: redactText(err instanceof Error ? err.message : String(err)),
+            kind,
+            at: new Date().toISOString(),
+            ...(artifacts.screenshot ? { screenshot: artifacts.screenshot } : {}),
+            ...(artifacts.aria ? { aria: artifacts.aria } : {}),
+          };
+          artifacts.failure = join(artifactsDir, `${stamp}.failure.json`);
+          writeFileSync(artifacts.failure, JSON.stringify(record, null, 2));
           if (err instanceof NeedsHuman) {
             err.artifacts = artifacts;
             throw err;
           }
-          if (isTransientBrowserError(err) || OFFLINE_PAGE.test(active.url()))
+          if (kind === "interrupted")
             throw new FlowInterrupted(`${flow.site}/${flow.name}`, err, artifacts);
           throw new FlowFailed(`${flow.site}/${flow.name}`, err, artifacts);
         } finally {

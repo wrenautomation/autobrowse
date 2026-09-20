@@ -7,6 +7,7 @@ import {
   base32Decode,
   type CodeKind,
   codeSources,
+  credentialFor,
   extractCode,
   findTotpSecret,
   formLogin,
@@ -16,6 +17,7 @@ import {
   memoryCredentials,
   messageSource,
   parseOtpauth,
+  resolveLogin,
   type SignInContext,
   type SiteLogin,
   signInToGoogle,
@@ -443,5 +445,28 @@ describe("sealed credential file", () => {
     await expect(
       fileCredentials(file, aesGcmCipher(Buffer.alloc(32, 8))).get("new"),
     ).rejects.toThrow();
+  });
+});
+
+describe("resolveLogin", () => {
+  const sites = [
+    { site: "google", home: "https://g", loggedIn: async () => true, signIn: async () => {} },
+    {
+      site: "cf",
+      home: "https://c",
+      credential: "google",
+      loggedIn: async () => true,
+      signIn: async () => {},
+    },
+  ] as const;
+  it("a bare name is the spec itself", () => {
+    expect(resolveLogin(sites, "google")).toBe(sites[0]);
+    expect(credentialFor(sites, "cf")).toBe("google");
+    expect(credentialFor(sites, "other")).toBe("other");
+  });
+  it("site@account is the same walk with its own credential and profile", () => {
+    const l = resolveLogin(sites, "google@ops");
+    expect(l).toMatchObject({ site: "google@ops", credential: "google@ops", home: "https://g" });
+    expect(resolveLogin(sites, "nope@x")).toBeNull();
   });
 });
