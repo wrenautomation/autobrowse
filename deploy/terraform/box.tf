@@ -32,16 +32,12 @@ resource "aws_security_group" "box" {
   }
 }
 
-# Every secret the worker reads, as one JSON object; deploy/scripts/push-secrets.sh
-# writes it. Terraform only creates the slot and never sees the content again.
-resource "aws_ssm_parameter" "env" {
-  name  = "${local.ssm_root}/env"
-  type  = "SecureString"
-  tier  = "Advanced"
-  value = "{}"
-  lifecycle {
-    ignore_changes = [value]
-  }
+# The env store: one SecureString per name under this path, written by
+# `autobrowse env push` from a laptop and by the worker's `keep` (prod sink),
+# read by the deploy script on the box. Parameters are data, not resources.
+locals {
+  env_store_path = "/autobrowse/config"
+  env_store_arn  = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.me.account_id}:parameter${local.env_store_path}"
 }
 
 resource "aws_ecr_repository" "worker" {
@@ -96,13 +92,18 @@ data "aws_kms_alias" "ssm" {
 
 data "aws_iam_policy_document" "box" {
   statement {
-    sid       = "ReadOwnEnv"
-    actions   = ["ssm:GetParameter"]
-    resources = [aws_ssm_parameter.env.arn]
+    sid       = "ReadEnvStore"
+    actions   = ["ssm:GetParametersByPath", "ssm:GetParameter"]
+    resources = [local.env_store_arn, "${local.env_store_arn}/*"]
   }
   statement {
-    sid       = "DecryptSsm"
-    actions   = ["kms:Decrypt"]
+    sid       = "MintIntoEnvStore"
+    actions   = ["ssm:PutParameter"]
+    resources = ["${local.env_store_arn}/*"]
+  }
+  statement {
+    sid       = "SsmKey"
+    actions   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
     resources = [data.aws_kms_alias.ssm.target_key_arn]
   }
 }
@@ -149,15 +150,16 @@ resource "aws_instance" "box" {
     region    = var.region
     account   = data.aws_caller_identity.me.account_id
     volume_id = aws_ebs_volume.data.id
-    env_param = aws_ssm_parameter.env.name
-    ecr       = aws_ecr_repository.worker.repository_url
-    compose   = file("${path.module}/../compose.prod.yml")
+    ecr           = aws_ecr_repository.worker.repository_url
+    compose       = file("${path.module}/../compose.prod.yml")
+    deploy_script = file("${path.module}/../scripts/on-box-deploy.sh")
   })
 
   tags = { Name = "${local.prefix}-box" }
 
   lifecycle {
-    ignore_changes = [ami]
+    # A stopped box reports no public IP; without this, a plan while it sleeps would replace it.
+    ignore_changes = [ami, associate_public_ip_address]
   }
 }
 

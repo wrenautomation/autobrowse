@@ -91,6 +91,16 @@ Browserbase takes them.
   SSM in prod) under that name. The journal keeps the element and the env
   name, never the value; a compiled `keep` op does the same through
   `deps.sink`, outside the run's journal. The agent has `keep{ref,env}`.
+- **Env store.** Secrets travel through SSM Parameter Store, one
+  SecureString per name under `/autobrowse/config` (KMS at rest, IAM at
+  the door, every read in CloudTrail; no extra vendor). `autobrowse env
+  push TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN` sends local `.env` keys up;
+  `env push --from deploy/prod.env` sends a whole file; the box reads the
+  store on every deploy. Back down on any machine with AWS access: `env
+  get NAME` puts one value on the clipboard for a minute (Universal
+  Clipboard carries it to a phone), `env pull` merges all of them into a
+  0600 `.env`, `eval "$(autobrowse env pull --export)"` loads a shell.
+  `env ls` prints names only; nothing prints a value unless `--print`.
 - **Claude Code.** The skill in `.claude/skills/autobrowse/` teaches
   Claude Code the explore session: `scripts/start.sh <site> [url]`, then
   `scripts/cmd.sh <port> '{"cmd":…}'`, `save`, `stop.sh`. It costs context

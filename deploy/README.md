@@ -16,7 +16,7 @@ A deploy starts it, ships, and stops it again if it found it stopped.
    the request-identity key: `restate cloud login`, then
    `deploy/scripts/identity-key.py --env >> deploy/prod.env` (or copy it from
    Developers > Security).
-3. `cp deploy/prod.env.example deploy/prod.env`, fill it, `deploy/scripts/push-secrets.sh`.
+3. `cp deploy/prod.env.example deploy/prod.env`, fill it, `pnpm autobrowse env push --from deploy/prod.env`.
    `UI_TOKEN` is required. Site credentials go in as `AUTOBROWSE_CRED_<SITE>_*`
    (`CREDENTIALS_CIPHER=none`: no Keychain on Linux).
 4. GitHub, repo settings: secrets `AWS_DEPLOY_ROLE_ARN`, `ECR_REPOSITORY`,
@@ -39,8 +39,10 @@ this way on 2026-09-21 (Google button, stored `google` credential).
 - UI: the `ui_forward` output, then `http://localhost:9080` with the token.
 - Shell: `aws ssm start-session --target <instance_id>`; logs with
   `docker logs -f autobrowse-worker-1`.
-- Secrets changed: `push-secrets.sh`, then redeploy (push, or
-  `aws ssm send-command … autobrowse-deploy`).
+- Secrets changed: `pnpm autobrowse env push NAME…` (from `.env`) or
+  `--from deploy/prod.env`, then redeploy (push, or
+  `aws ssm send-command … autobrowse-deploy`). `pnpm autobrowse env ls|get|pull`
+  reads them back on any machine with AWS access.
 - Recordings are made on a laptop; copy the directory to `/data/recordings`
   (`aws ssm` port forward + `scp` through it, or S3) and compile from the UI.
 - Passkeys cannot ride in env. A site whose credential holds one (google-admin)

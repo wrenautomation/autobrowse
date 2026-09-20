@@ -42,9 +42,20 @@ jobs:
         env: { AUTOBROWSE_INSTANCE_ID: "${{ secrets.INSTANCE_ID }}" }
       - name: deploy on the box
         run: |
+          # Ship the current deploy script first, then run it: an edit to it lands without a rebuild.
+          python3 - "$GITHUB_SHA" > /tmp/params.json <<'PY'
+          import json, sys
+          script = open("deploy/scripts/on-box-deploy.sh").read()
+          cmds = [
+            "cat > /usr/local/bin/autobrowse-deploy.new <<'AUTOBROWSE_DEPLOY_EOF'\n" + script + "\nAUTOBROWSE_DEPLOY_EOF",
+            "chmod +x /usr/local/bin/autobrowse-deploy.new && mv /usr/local/bin/autobrowse-deploy.new /usr/local/bin/autobrowse-deploy",
+            f"/usr/local/bin/autobrowse-deploy {sys.argv[1]}",
+          ]
+          print(json.dumps({"commands": cmds}))
+          PY
           id="$(aws ssm send-command --instance-ids "$INSTANCE_ID" \
             --document-name AWS-RunShellScript --comment "deploy $GITHUB_SHA" \
-            --parameters "commands=[\"/usr/local/bin/autobrowse-deploy $GITHUB_SHA\"]" \
+            --parameters file:///tmp/params.json \
             --query Command.CommandId --output text)"
           for _ in $(seq 1 60); do
             sleep 5

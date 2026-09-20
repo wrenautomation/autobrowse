@@ -12,10 +12,11 @@ import { summarize } from "../engine/run.js";
 import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
 import { registerAuthCommands } from "./cli-auth.js";
 import { registerDesktopCommands } from "./cli-desktop.js";
+import { registerEnvCommands } from "./cli-env.js";
 import { registerRecordCommands } from "./cli-record.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
-import { COMPILED_DIR, WORKFLOWS } from "./services.js";
+import { COMPILED_DIR, envStoreFor, WORKFLOWS } from "./services.js";
 
 loadEnvFile();
 const settings = loadSettings();
@@ -221,6 +222,7 @@ program
 
 registerRecordCommands(program, settings);
 registerAuthCommands(program, settings);
+registerEnvCommands(program, settings, { store: () => envStoreFor(settings) });
 registerDesktopCommands(program, tmpdir());
 
 program.parseAsync().catch((err: unknown) => {

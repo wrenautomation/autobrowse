@@ -13,9 +13,9 @@ output "ci_role_arn" {
   value       = aws_iam_role.ci.arn
 }
 
-output "ssm_env_param" {
-  description = "deploy/scripts/push-secrets.sh writes here."
-  value       = aws_ssm_parameter.env.name
+output "env_store_path" {
+  description = "The env store: `autobrowse env push` writes here, the box reads it at deploy."
+  value       = local.env_store_path
 }
 
 output "ui_forward" {

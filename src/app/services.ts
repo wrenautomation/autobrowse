@@ -41,6 +41,7 @@ import { domainAvailability } from "../clients/rdap.js";
 import { ssmRosterStore } from "../clients/roster.js";
 import { twilioReader } from "../clients/twilio.js";
 import { wrenClient } from "../clients/wren.js";
+import { type EnvStore, ssmEnvStore } from "../deps/env-store.js";
 import { envFileSink, type SecretSink } from "../deps/sink.js";
 import {
   openFullDiskAccessPane,
@@ -281,24 +282,21 @@ export function paceFor(settings: Settings): Pace | null {
   return settings.pace === "fast" ? null : HUMAN_PACE;
 }
 
-/** Where minted secrets go: SSM under /autobrowse/config in prod, the env file otherwise. */
+/** Where minted secrets go: the env store (SSM) in prod, the env file otherwise. */
 export function sinkFor(
   settings: Settings,
   ssm: SSMClient = lazy(() => new SSMClient({ region: settings.awsRegion })),
 ): SecretSink {
   if (settings.secretSink !== "ssm") return envFileSink(settings.envFile);
-  return {
-    put: async (name, value) => {
-      await ssm.send(
-        new PutParameterCommand({
-          Name: `/autobrowse/config/${name}`,
-          Value: value,
-          Type: "SecureString",
-          Overwrite: true,
-        }),
-      );
-    },
-  };
+  return { put: (name, value) => envStoreFor(settings, ssm).put(name, value) };
+}
+
+/** The store `autobrowse env` and prod's sink share: SSM under /autobrowse/config. */
+export function envStoreFor(
+  settings: Settings,
+  ssm: SSMClient = lazy(() => new SSMClient({ region: settings.awsRegion })),
+): EnvStore {
+  return ssmEnvStore(ssm);
 }
 
 export function memoryFor(settings: Settings, http = httpClient()): Memory {

@@ -32,34 +32,11 @@ cat > /opt/autobrowse/compose.yml <<'COMPOSE'
 ${compose}
 COMPOSE
 
-# What CI runs after every push to main (and what this boot runs once):
-# fresh env from SSM, pull the image, restart the worker.
+# What CI runs after every push to main (and what this boot runs once). CI
+# re-ships deploy/scripts/on-box-deploy.sh before each run, so this copy only
+# matters for the first boot.
 cat > /usr/local/bin/autobrowse-deploy <<'DEPLOY'
-#!/bin/bash
-set -euo pipefail
-cd /opt/autobrowse
-export ECR_IMAGE="${ecr}:$${1:-latest}"
-aws ecr get-login-password --region ${region} \
-  | docker login --username AWS --password-stdin ${account}.dkr.ecr.${region}.amazonaws.com >/dev/null
-# SSM holds one JSON object; the container wants KEY=VALUE lines. Never echoed.
-aws ssm get-parameter --region ${region} --name "${env_param}" --with-decryption \
-  --query Parameter.Value --output text \
-  | python3 -c 'import json,sys,os
-# A multi-line value (a service-account JSON) cannot live in an env file:
-# it goes to its own 0600 file and the variable names the path.
-for k, v in json.load(sys.stdin).items():
-    if "\n" in v or v.lstrip().startswith("{"):
-        path = f"/data/env/{k.lower()}.json"
-        with open(path, "w") as f: f.write(v)
-        os.chmod(path, 0o600); os.chown(path, 1000, 1000)
-        v = path
-    print(f"{k}={v}")' > /data/env/.env.tmp
-chmod 600 /data/env/.env.tmp
-mv /data/env/.env.tmp /data/env/.env
-docker compose pull --quiet
-docker compose up -d --remove-orphans
-docker image prune -f >/dev/null
-echo "deployed $ECR_IMAGE"
+${deploy_script}
 DEPLOY
 chmod +x /usr/local/bin/autobrowse-deploy
 
