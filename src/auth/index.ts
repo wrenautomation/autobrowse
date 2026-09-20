@@ -33,11 +33,14 @@ export {
   type FormLoginSpec,
   formLogin,
   LoginFailed,
+  type LoginOptions,
   type LoginOutcome,
   type LoginProvider,
   loginProvider,
+  oauthLogin,
   type SignInContext,
   type SiteLogin,
+  signInToGoogle,
 } from "./login.js";
 export { SITE_LOGINS } from "./sites.js";
 export { base32Decode, findTotpSecret, parseOtpauth, totp, totpRemainingMs } from "./totp.js";

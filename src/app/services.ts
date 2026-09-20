@@ -25,6 +25,7 @@ import {
   channels,
   emailChannel,
   memoryChannel,
+  phoneChannel,
   webhookChannel,
 } from "../channels/index.js";
 import { cloudflare, verifyCloudflareToken } from "../clients/cloudflare.js";
@@ -36,6 +37,12 @@ import { ssmRosterStore } from "../clients/roster.js";
 import { twilioReader } from "../clients/twilio.js";
 import { wrenClient } from "../clients/wren.js";
 import { envFileSink, type SecretSink } from "../deps/sink.js";
+import {
+  openFullDiskAccessPane,
+  type PhoneOptions,
+  phoneReader,
+  phoneStatus,
+} from "../devices/phone.js";
 import { Unrecoverable } from "../engine/effects.js";
 import { parseGuards } from "../engine/guards.js";
 import { makeRunObject } from "../engine/object.js";
@@ -53,6 +60,7 @@ import { type EventBus, eventBus } from "../ui/bus.js";
 import { type BootstrapDeps, bootstrapWorkflow } from "../workflows/bootstrap/index.js";
 import { type DomainDeps, domainWorkflow } from "../workflows/domain/index.js";
 import type { Settings } from "./config.js";
+import type { DeviceLink } from "./setup.js";
 
 function required<T>(value: T | undefined, env: string): T {
   if (value === undefined) throw new Unrecoverable(`${env} is required`);
@@ -129,7 +137,39 @@ export function credentialsFor(settings: Settings): CredentialStore {
   return layeredCredentials([envCredentials(), fileCredentials(settings.credentialsFile, cipher)]);
 }
 
-/** Sign-in for every known site: TOTP from the stored seed, email codes through Gmail, SMS through Twilio. */
+/** The paired phone, when one is configured: reader, notifier and channel share these options. */
+export function phoneFor(settings: Settings): PhoneOptions | null {
+  if (!settings.phoneNumber) return null;
+  return {
+    number: settings.phoneNumber,
+    ...(settings.phoneMessagesDb ? { dbPath: settings.phoneMessagesDb } : {}),
+  };
+}
+
+/** What `setup` checks and guides: the phone link when a number is configured. */
+export function devicesFor(settings: Settings): DeviceLink[] {
+  const phone = phoneFor(settings);
+  if (!phone) return [];
+  return [
+    {
+      name: `phone ${phone.number}`,
+      check() {
+        const st = phoneStatus(phone.dbPath);
+        return { ok: st.read && st.send, fix: st.fix };
+      },
+      guide: () => {
+        if (!phoneStatus(phone.dbPath).read) openFullDiskAccessPane();
+      },
+    },
+  ];
+}
+
+/**
+ * Sign-in for every known site: TOTP from the stored seed, email codes
+ * through Gmail, SMS from the paired phone and/or Twilio (both first
+ * class; the phone is asked first), device prompts by a note over every
+ * channel that reaches a person (phone, email).
+ */
 export function loginFor(
   settings: Settings,
   gmail: GmailUserClient,
@@ -143,6 +183,9 @@ export function loginFor(
       ...(settings.codesInbox ? { inbox: settings.codesInbox } : {}),
     }),
   ];
+  const phone = phoneFor(settings);
+  if (phone)
+    sources.push(messageSource({ kind: "sms", inbox: phone.number, reader: phoneReader(phone) }));
   if (settings.twilioAccountSid && settings.twilioAuthToken && settings.twilioNumber)
     sources.push(
       messageSource({
@@ -155,9 +198,13 @@ export function loginFor(
         }),
       }),
     );
+  const people = channelsFor(settings, gmail, http).filter((c) => c.note);
+  const all = channels(people);
+  const notify = people.length && all.note ? all.note.bind(all) : undefined;
   return loginProvider(SITE_LOGINS, {
     credentials: credentialsFor(settings),
     codes: codeSources(...sources),
+    ...(notify ? { notify } : {}),
   });
 }
 
@@ -198,18 +245,18 @@ export function gmailFor(settings: Settings, http = httpClient()): GmailUserClie
   });
 }
 
-export function buildApp(settings: Settings, log: Logger): App {
-  const http = httpClient();
-  const llm = llmFor(settings, http);
-  const memory = memoryFor(settings, http);
-  const tokenFor = googleTokens(settings);
-  const gmail = gmailFor(settings, http);
-  const ssm = lazy(() => new SSMClient({ region: settings.awsRegion }));
-
+/** The ways to reach people and systems, from settings: email, the paired phone, a webhook. */
+export function channelsFor(
+  settings: Settings,
+  gmail: GmailUserClient,
+  http = httpClient(),
+): Channel[] {
   const list: Channel[] = [];
   const notifyFrom = settings.notifyFrom ?? settings.googleAdminUser;
   if (settings.notifyTo && notifyFrom)
     list.push(emailChannel({ gmail, from: notifyFrom, to: settings.notifyTo }));
+  const phone = phoneFor(settings);
+  if (phone) list.push(phoneChannel(phone));
   if (settings.webhookUrl)
     list.push(
       webhookChannel({
@@ -218,6 +265,18 @@ export function buildApp(settings: Settings, log: Logger): App {
         ...(settings.webhookToken ? { token: settings.webhookToken } : {}),
       }),
     );
+  return list;
+}
+
+export function buildApp(settings: Settings, log: Logger): App {
+  const http = httpClient();
+  const llm = llmFor(settings, http);
+  const memory = memoryFor(settings, http);
+  const tokenFor = googleTokens(settings);
+  const gmail = gmailFor(settings, http);
+  const ssm = lazy(() => new SSMClient({ region: settings.awsRegion }));
+
+  const list = channelsFor(settings, gmail, http);
   if (list.length === 0) log.warn("no channel configured: gates are visible only in the UI/CLI");
   const bus = eventBus();
   const channel = channels([...list, bus, memoryChannel(memory)]);

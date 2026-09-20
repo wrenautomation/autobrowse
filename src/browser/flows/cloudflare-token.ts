@@ -4,8 +4,7 @@
  * hand; now the credential ladder does them. Mapped against the live
  * dashboard in explore mode on 2026-09-19 (recordings/cloudflare-api-token-explore).
  */
-import type { Page } from "playwright";
-import { defineFlow } from "../flow.js";
+import { defineFlow, type FlowPage } from "../flow.js";
 
 /**
  * One permission row, mapped 2026-09-19 in explore mode. Rows repeat the
@@ -13,22 +12,36 @@ import { defineFlow } from "../flow.js";
  *   button "Resources"            Downshift; options carry role=option
  *   textbox "Permissions"         Downshift with a typed filter
  *   combobox "Permissions levels" React Select; its input is hidden, so
- *                                 click the `.react-select__control` that
- *                                 owns it; the menu is `.react-select__menu`
+ *                                 the `.react-select__control` that owns
+ *                                 it is clicked; the menu is `.react-select__menu`
+ * Everything goes through `fp.act`: paced, repaired, in the artifacts.
  */
-async function fillPermissionRow(page: Page, i: number, p: TokenPermission): Promise<void> {
-  const option = (text: string) => page.locator(`[role=listbox] [role=option]:text-is("${text}")`);
-  await page.getByRole("button", { name: "Resources" }).nth(i).click({ timeout: 15_000 });
-  await option(p.scope).click({ timeout: 10_000 });
-  const filter = page.getByRole("textbox", { name: "Permissions" }).nth(i);
-  await filter.fill(p.name, { timeout: 15_000 });
-  await option(p.name).click({ timeout: 10_000 });
-  const level = page
-    .locator('input[aria-label="Permissions levels"]')
-    .nth(i)
-    .locator("xpath=ancestor::*[contains(@class,'react-select__control')][1]");
-  await level.click({ timeout: 15_000 });
-  await page.locator(`.react-select__menu >> text="${p.level}"`).click({ timeout: 10_000 });
+async function fillPermissionRow(fp: FlowPage, i: number, p: TokenPermission): Promise<void> {
+  const option = (text: string) => ({ css: `[role=listbox] [role=option]:text-is("${text}")` });
+  await fp.act(
+    { kind: "click" },
+    { role: "button", name: "Resources", nth: i },
+    { goal: `row ${i}: open the scope menu` },
+  );
+  await fp.act({ kind: "click" }, option(p.scope), { goal: `row ${i}: scope ${p.scope}` });
+  await fp.act(
+    { kind: "fill", value: p.name },
+    { role: "textbox", name: "Permissions", nth: i },
+    { goal: `row ${i}: filter permissions` },
+  );
+  await fp.act({ kind: "click" }, option(p.name), { goal: `row ${i}: permission ${p.name}` });
+  await fp.act(
+    { kind: "click" },
+    {
+      css: `input[aria-label="Permissions levels"] >> nth=${i} >> xpath=ancestor::*[contains(@class,'react-select__control')][1]`,
+    },
+    { goal: `row ${i}: open the level menu` },
+  );
+  await fp.act(
+    { kind: "click" },
+    { css: `.react-select__menu >> text="${p.level}"` },
+    { goal: `row ${i}: level ${p.level}` },
+  );
 }
 
 /** A signed-in dashboard URL carries the account id. */
@@ -83,7 +96,11 @@ export const cloudflareApiToken = defineFlow<TokenInput, TokenResult>({
       { goal: "choose the custom token template" },
     );
     // The name box has no label; it is the form's `name` input.
-    await fp.page.locator('input[name="name"]').fill(name, { timeout: 15_000 });
+    await fp.act(
+      { kind: "fill", value: name },
+      { css: 'input[name="name"]' },
+      { goal: "name the token" },
+    );
     for (const [i, p] of permissions.entries()) {
       if (i > 0)
         await fp.act(
@@ -91,7 +108,7 @@ export const cloudflareApiToken = defineFlow<TokenInput, TokenResult>({
           { role: "button", name: "Add more" },
           { goal: "add a permission row" },
         );
-      await fillPermissionRow(fp.page, i, p);
+      await fillPermissionRow(fp, i, p);
     }
     await fp.act(
       { kind: "click" },

@@ -7,6 +7,11 @@ import type { RunEvent } from "../engine/events.js";
 export interface Channel {
   name: string;
   deliver(event: RunEvent): Promise<void>;
+  /**
+   * A bare line to the person, outside any run: "tap Yes on your phone".
+   * Channels that reach a person carry it; a webhook or memory does not.
+   */
+  note?(text: string): Promise<void>;
 }
 
 /** Fan out to every channel; one failing never stops the others or the run. */
@@ -15,6 +20,9 @@ export function channels(list: Channel[]): Channel {
     name: "all",
     async deliver(event) {
       await Promise.allSettled(list.map((c) => c.deliver(event)));
+    },
+    async note(text) {
+      await Promise.allSettled(list.map((c) => c.note?.(text)));
     },
   };
 }

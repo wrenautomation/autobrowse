@@ -18,6 +18,8 @@ const hintsSchema = z.object({
   testId: z.string().nullable().optional(),
   href: z.string().nullable().optional(),
   inputType: z.string().nullable().optional(),
+  css: z.string().nullable().optional(),
+  nth: z.number().int().nonnegative().nullable().optional(),
 });
 
 /** Where a fill's text comes from at run time. */

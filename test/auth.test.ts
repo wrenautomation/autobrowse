@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { envCredentials, fileCredentials, layeredCredentials } from "../src/auth/credentials.js";
 import {
   base32Decode,
+  type CodeKind,
   codeSources,
   extractCode,
   findTotpSecret,
@@ -15,7 +16,9 @@ import {
   memoryCredentials,
   messageSource,
   parseOtpauth,
+  type SignInContext,
   type SiteLogin,
+  signInToGoogle,
   totp,
   totpRemainingMs,
   totpSource,
@@ -173,7 +176,10 @@ describe("code sources", () => {
     expect(await src.get({ site: "s", kind: "email", since: new Date(0) }, cred)).toBeNull();
   });
   it("first source with an answer wins", async () => {
-    const src = codeSources({ get: async () => null }, { get: async () => "9" });
+    const src = codeSources(
+      { get: async () => null, offers: () => false },
+      { get: async () => "9", offers: () => true },
+    );
     expect(await src.get({ site: "s", kind: "sms", since: new Date(0) }, cred)).toBe("9");
   });
 });
@@ -190,6 +196,9 @@ function fakePage(script: { text: string[]; present: (h: Hints) => boolean; url?
     html: async () => "",
     has: async (h) => script.present(h),
     wait: async () => {},
+    waitForUrl: async () => true,
+    nextPage: async () => null,
+    switchTo() {},
     async act(op, hints) {
       acts.push({ op, hints });
       if (op.kind === "click") i++;
@@ -279,16 +288,64 @@ describe("loginProvider", () => {
   it("reports a missing credential and a missing code", async () => {
     const login = loginProvider([site], {
       credentials: memoryCredentials(),
-      codes: { get: async () => null },
+      codes: { get: async () => null, offers: () => false },
     });
     expect(await login(fakePage({ text: [], present: () => true }).fp, "s")).toBe("no-credential");
     const withCred = loginProvider([site], {
       credentials: memoryCredentials({ s: { username: "u", password: "p" } }),
-      codes: { get: async () => null },
+      codes: { get: async () => null, offers: () => false },
     });
     await expect(withCred(fakePage({ text: [], present: () => true }).fp, "s")).rejects.toThrow(
       /no totp code/,
     );
+  });
+});
+
+describe("signInToGoogle second step", () => {
+  const base = { username: "u@gmail.com", password: "p" };
+  const page = (present: (h: Hints) => boolean) =>
+    fakePage({
+      text: ["2-Step Verification Choose how you want to sign in", "welcome"],
+      present,
+      url: "https://accounts.google.com/v3/signin/challenge/selection?x",
+    });
+  const ctx = (
+    fp: FlowPage,
+    kinds: CodeKind[],
+    notify?: (t: string) => Promise<void>,
+  ): SignInContext => ({
+    fp,
+    cred: base,
+    code: async (kind) => (kinds.includes(kind) ? "123456" : Promise.reject(new Error("none"))),
+    offers: (kind) => kinds.includes(kind),
+    ...(notify ? { notify } : {}),
+    credFor: async () => base,
+  });
+  it("asks for the SMS when a phone or Twilio can read it", async () => {
+    const { fp, acts } = page((h) => !/email|password/i.test(String(h.name)));
+    await signInToGoogle(ctx(fp, ["sms"]));
+    expect(acts.map((a) => `${a.op.kind} ${a.hints.name ?? a.hints.text}`)).toEqual([
+      "click /verification code at/i",
+      "fill /code/i",
+      "click /^next$/i",
+    ]);
+  });
+  it("pings the phone for a Tap Yes when only a phone is linked", async () => {
+    const notes: string[] = [];
+    const { fp, acts } = page((h) => !/email|password/i.test(String(h.name)));
+    await signInToGoogle(
+      ctx(fp, [], async (t) => {
+        notes.push(t);
+      }),
+    );
+    expect(acts.map((a) => `${a.op.kind} ${a.hints.name}`)).toEqual([
+      "click /tap yes on your phone/i",
+    ]);
+    expect(notes[0]).toMatch(/tap Yes/);
+  });
+  it("says what to set up when nothing can answer", async () => {
+    const { fp } = page((h) => !/email|password/i.test(String(h.name)));
+    await expect(signInToGoogle(ctx(fp, []))).rejects.toThrow(/enroll TOTP, link a phone/);
   });
 });
 

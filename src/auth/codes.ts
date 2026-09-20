@@ -20,6 +20,8 @@ export interface CodeRequest {
 
 export interface CodeSource {
   get(req: CodeRequest, cred: Credential): Promise<string | null>;
+  /** Could this source answer for that kind and credential? Lets a sign-in pick its second step before asking. */
+  offers(kind: CodeKind, cred: Credential): boolean;
 }
 
 export interface Message {
@@ -29,7 +31,7 @@ export interface Message {
   at: Date;
 }
 
-/** An inbox this system can read: Gmail through the API, SMS through Linq or Twilio. */
+/** An inbox this system can read: Gmail through the API, SMS through the paired phone or Twilio. */
 export interface MessageReader {
   recent(inbox: string, since: Date): Promise<Message[]>;
 }
@@ -55,6 +57,7 @@ export function totpSource(opts: TotpSourceOptions = {}): CodeSource {
   const minLeft = opts.minRemainingMs ?? 5_000;
   const sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   return {
+    offers: (kind, cred) => kind === "totp" && Boolean(cred.totpSecret),
     async get(req, cred) {
       if (req.kind !== "totp" || !cred.totpSecret) return null;
       const left = totpRemainingMs(now());
@@ -81,11 +84,13 @@ export function messageSource(opts: MessageSourceOptions): CodeSource {
   const sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const pollMs = opts.pollMs ?? 3_000;
   const timeoutMs = opts.timeoutMs ?? 90_000;
+  const inboxFor = (cred: Credential) =>
+    cred.codesInbox ?? opts.inbox ?? (cred.username.includes("@") ? cred.username : null);
   return {
+    offers: (kind, cred) => kind === opts.kind && inboxFor(cred) !== null,
     async get(req, cred) {
       if (req.kind !== opts.kind) return null;
-      const inbox =
-        cred.codesInbox ?? opts.inbox ?? (cred.username.includes("@") ? cred.username : null);
+      const inbox = inboxFor(cred);
       if (!inbox) return null;
       const deadline = now() + timeoutMs;
       const hint = req.hint?.toLowerCase();
@@ -108,6 +113,7 @@ export function messageSource(opts: MessageSourceOptions): CodeSource {
 /** First source with an answer wins. */
 export function codeSources(...sources: CodeSource[]): CodeSource {
   return {
+    offers: (kind, cred) => sources.some((s) => s.offers(kind, cred)),
     async get(req, cred) {
       for (const s of sources) {
         const c = await s.get(req, cred);
@@ -118,4 +124,4 @@ export function codeSources(...sources: CodeSource[]): CodeSource {
   };
 }
 
-export const noCodes: CodeSource = { get: async () => null };
+export const noCodes: CodeSource = { get: async () => null, offers: () => false };

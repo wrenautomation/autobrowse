@@ -16,6 +16,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright";
 import { expandHome } from "../google-auth.js";
+import { redactText } from "../recorder/redact.js";
 import { type Hints, locate } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
 import { canLearn, noRepairer, type Repairer, type RepairReport, snapshotPage } from "./repair.js";
@@ -74,7 +75,7 @@ export interface FlowPage {
   has(hints: Hints): Promise<boolean>;
   wait(ms: number): Promise<void>;
   /** Resolves when the URL matches, or null at the timeout. */
-  waitForUrl(pattern: RegExp, timeoutMs: number): Promise<boolean>;
+  waitForUrl(pattern: RegExp | ((url: string) => boolean), timeoutMs: number): Promise<boolean>;
   /** The next page the site opens (an OAuth popup), or null when none comes in time. */
   nextPage(timeoutMs: number): Promise<Page | null>;
   /** Act on this page from now on (a popup); pass the main page to return. */
@@ -276,10 +277,14 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               .catch(() => false),
           wait: (ms) => active.waitForTimeout(ms),
           waitForUrl: (pattern, timeout) =>
-            active.waitForURL(pattern, { timeout }).then(
-              () => true,
-              () => false,
-            ),
+            active
+              .waitForURL(pattern instanceof RegExp ? pattern : (u) => pattern(u.toString()), {
+                timeout,
+              })
+              .then(
+                () => true,
+                () => false,
+              ),
           nextPage: (timeout) =>
             session.context.waitForEvent("page", { timeout }).catch(() => null),
           switchTo(page) {
@@ -344,7 +349,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             .ariaSnapshot({ timeout: 5_000 })
             .catch(() => null);
           if (tree !== null) {
-            writeFileSync(aria, `${session.page.url()}\n\n${tree}`);
+            writeFileSync(aria, redactText(`${session.page.url()}\n\n${tree}`));
             artifacts.aria = aria;
           }
           if (tracing) {

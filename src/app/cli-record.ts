@@ -2,7 +2,7 @@
 import { join } from "node:path";
 import type { Command } from "commander";
 import type { Settings } from "./config.js";
-import { browserOptions, llmFor } from "./services.js";
+import { browserOptions, gmailFor, llmFor, loginFor } from "./services.js";
 
 export function registerRecordCommands(program: Command, settings: Settings): void {
   program
@@ -19,13 +19,15 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
         browser: browserOptions(settings, false),
         recordingsDir: settings.recordingsDir,
         port: Number(o.port),
+        login: loginFor(settings, gmailFor(settings)),
       });
       console.log(
-        `exploring ${site} on http://127.0.0.1:${ex.port}  (POST {"cmd":"aria"} … {"cmd":"close"})`,
+        `exploring ${site} on http://127.0.0.1:${ex.port}\ntoken ${ex.token}\ncurl -s -X POST -H "Authorization: Bearer ${ex.token}" http://127.0.0.1:${ex.port}/ -d '{"cmd":"aria"}'`,
       );
       if (o.url)
         await fetch(`http://127.0.0.1:${ex.port}/`, {
           method: "POST",
+          headers: { authorization: `Bearer ${ex.token}` },
           body: JSON.stringify({ cmd: "open", url: o.url }),
         });
       await ex.done;

@@ -73,8 +73,11 @@ table's "may import" column.
 - Why: a flow built by rerunning gets one step further per run, a minute
   each. Explore keeps one browser open and answers a command in a second,
   and the accessibility tree shows every control on a page at once.
-- `startExplore({site, browser, recordingsDir, port})` opens the site's
-  profile (hidden, headed) and listens on loopback. A command is one JSON
+- `startExplore({site, browser, recordingsDir, port, login})` runs as one
+  long flow (the runner owns the session: walls are signed through,
+  popups tracked) and listens on loopback with a bearer token printed at
+  start, since the socket drives a signed-in browser. Text that leaves
+  it is masked like a transcript unless a command says `raw`. A command is one JSON
   body: `open`, `click`, `fill`, `select`, `press` (target = recorder
   `hints` or a `css` selector, plus `nth`), `type`, `key`, `aria` (tree of
   the page or one target), `snapshot` (the repairer's view), `text`,
@@ -109,6 +112,31 @@ table's "may import" column.
   fields, order, or clears a flag.
 - The outline is saved beside the recording; `compile --from-outline`
   re-renders an edited one without the model.
+
+## Devices
+
+- A device is something a person owns that a second step can lean on.
+  `src/devices/` holds leaves (no engine, no channels): today the phone.
+- `devices/phone.ts`: the personal phone paired with this Mac. In: SMS and
+  iMessages from Messages' own database (`chat.db`, read with the sqlite3
+  tool; `attributedBody` decoded when `text` is empty), as a
+  `MessageReader`, so it is a code source like Gmail and Twilio. Out: an
+  iMessage sent by Messages.app over AppleScript (`phoneNotifier`). The
+  one-time steps macOS demands (Full Disk Access, Automation of Messages)
+  are found by `phoneStatus` and `setup` opens the pane.
+- Twilio is the rented-number twin behind the same `MessageReader`. Both
+  are first class; the phone is asked first.
+- Second steps a device answers (mapped on Google, 2026-09-19): an
+  authenticator code (our TOTP seed) → an SMS code (phone or Twilio) → a
+  device prompt ("Tap Yes on your phone": the flow clicks it, a note goes
+  to the person over every channel that reaches one, the page is watched
+  for two minutes). `CodeSource.offers(kind, cred)` lets the sign-in pick
+  its step on the page before asking. Passkeys are skipped ("Try another
+  way"); owning one is the next step (see Rules).
+- Hints have two last resorts, `css` and `nth`, so widgets that hide
+  their control (React Select) and repeated rows still go through
+  `fp.act`: paced, repaired, in the artifacts. The recorder never
+  captures them; explore writes them; the compiler keeps them.
 
 ## Channels
 

@@ -46,6 +46,10 @@ Browserbase takes them.
   that works is journaled as a recording; `save` writes it, `compile`
   takes it from there. Failing flows leave the same aria tree next to the
   screenshot (`<stamp>.aria.txt`).
+- **Devices.** `PHONE_NUMBER` links your own phone through the Mac it is
+  paired with: SMS codes are read from Messages, "tap Yes" nudges go back
+  over iMessage. Twilio is the rented-number twin. `setup` checks the two
+  one-time macOS switches and opens the pane.
 - **Compiled.** `autobrowse compile <name>`: recording → `outline.json`
   (steps at notes and navigations, typed inputs vs secrets, irreversible
   verbs, pauses → hand-offs) → a workflow module plus a test that
@@ -81,9 +85,9 @@ pnpm autobrowse login cloudflare               # signs in by itself: password or
 pnpm autobrowse enroll-totp cloudflare --url https://dash.cloudflare.com/profile/authentication  # reads the seed, stores it, confirms
 echo '{"provider":"cloudflare"}' > /tmp/bootstrap.json
 pnpm autobrowse run bootstrap cloudflare --plan /tmp/bootstrap.json   # mints CLOUDFLARE_ACCOUNT_ID + API token into .env
-# map a page by hand or by model: one open browser, one command at a time
+# map a page by hand or by model: one open browser, one command at a time (token printed at start)
 pnpm autobrowse explore cloudflare --url https://dash.cloudflare.com/profile/api-tokens
-curl -s -X POST http://127.0.0.1:9090/ -d '{"cmd":"aria","css":"main"}'
+curl -s -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9090/ -d '{"cmd":"aria","hints":{"css":"main"}}'
 pnpm autobrowse record buy-domain --site cloudflare --url https://dash.cloudflare.com/ --terminal
 pnpm autobrowse compile buy-domain             # → recordings/buy-domain/outline.json, src/workflows/buy-domain/
 pnpm autobrowse compile buy-domain --no-llm --from-outline
@@ -130,6 +134,7 @@ src/recorder/   observer (in page), browser + terminal capture, redaction, store
 src/compiler/   structure → outline → render (+ polish); output typechecks
 src/channels/   email, webhook, inbound command parser
 src/deps/       SecretSource, SecretSink (env file / SSM), Shell: what workflows read and write
+src/devices/    what a person owns and a second step leans on: the paired phone (SMS in, iMessage out)
 src/explore/    explore mode: one open browser, a loopback command API, a journal that compiles
 src/workflows/  one dir per workflow: plan, deps, steps, index (domain, bootstrap = the credential ladder)
 src/ui/         Hono API (+ SSE bus, bearer, rate limit) and the static SPA

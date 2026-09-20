@@ -8,7 +8,7 @@ import type { Command } from "commander";
 import { credentialSchema, readSecretFromPage, SITE_LOGINS, storeSeed } from "../auth/index.js";
 import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
 import type { Settings } from "./config.js";
-import { browserOptions, credentialsFor, gmailFor, loginFor } from "./services.js";
+import { browserOptions, credentialsFor, devicesFor, gmailFor, loginFor } from "./services.js";
 
 const SITES = SITE_LOGINS.map((s) => s.site);
 
@@ -23,7 +23,14 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       const { runSetup, terminalPrompter } = await import("./setup.js");
       const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
       try {
-        await runSetup(terminalPrompter(rl, process.stdout), credentialsFor(settings), SITE_LOGINS);
+        await runSetup(
+          terminalPrompter(rl, process.stdout),
+          credentialsFor(settings),
+          SITE_LOGINS,
+          {
+            devices: devicesFor(settings),
+          },
+        );
       } finally {
         rl.close();
       }

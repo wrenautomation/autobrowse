@@ -78,6 +78,15 @@ const schema = z.object({
     .default(process.platform === "darwin" ? "keychain" : "none"),
   /** Inbox that receives email one-time codes when a credential does not name one. */
   codesInbox: z.string().email().optional(),
+  /**
+   * A personal phone paired with this Mac (E.164): SMS codes are read from
+   * Messages' database, notes go back over iMessage. Local, no vendor.
+   */
+  phoneNumber: z
+    .string()
+    .regex(/^\+\d{8,15}$/)
+    .optional(),
+  phoneMessagesDb: z.string().min(1).optional(),
   /** A Twilio number we own, for SMS one-time codes (E.164). All three or none. */
   twilioAccountSid: z.string().min(1).optional(),
   twilioAuthToken: z.string().min(1).optional(),
@@ -136,6 +145,8 @@ export const ENV_KEYS = {
   credentialsFile: "CREDENTIALS_FILE",
   credentialsCipher: "CREDENTIALS_CIPHER",
   codesInbox: "CODES_INBOX",
+  phoneNumber: "PHONE_NUMBER",
+  phoneMessagesDb: "PHONE_MESSAGES_DB",
   twilioAccountSid: "TWILIO_ACCOUNT_SID",
   twilioAuthToken: "TWILIO_AUTH_TOKEN",
   twilioNumber: "TWILIO_NUMBER",

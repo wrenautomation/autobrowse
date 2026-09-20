@@ -15,6 +15,14 @@ export interface LocatorHints {
   testId: string | null;
   href: string | null;
   inputType: string | null;
+  /**
+   * Last resorts, never captured by the recorder: a CSS selector when a
+   * widget hides its control (React Select), and which match when a form
+   * repeats a row of controls. Explore mode writes them; the compiler
+   * keeps them.
+   */
+  css?: string | null;
+  nth?: number | null;
 }
 
 interface Base {

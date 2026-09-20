@@ -11,5 +11,8 @@ export function emailChannel(opts: { gmail: GmailUserClient; from: string; to: s
       if (!r) return;
       await opts.gmail.send({ from: opts.from, to: opts.to, subject: r.subject, text: r.text });
     },
+    async note(text) {
+      await opts.gmail.send({ from: opts.from, to: opts.to, subject: "autobrowse", text });
+    },
   };
 }

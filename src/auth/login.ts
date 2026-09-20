@@ -17,6 +17,13 @@ export interface SignInContext {
   cred: Credential;
   /** A second-factor code of this kind, or throws when none can be had. */
   code(kind: CodeKind, hint?: string): Promise<string>;
+  /** Whether a code of this kind can be had, so the sign-in picks that step on the page. */
+  offers(kind: CodeKind): boolean;
+  /**
+   * A note to the person's phone, for a step only a device can answer
+   * ("Tap Yes on your phone"). Absent when no phone is linked.
+   */
+  notify?: (text: string) => Promise<void>;
   /** Another site's credential (the identity provider behind an OAuth button), or throws. */
   credFor(site: string): Promise<Credential>;
 }
@@ -132,6 +139,25 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
   }
   if (/couldn.t find your google account/i.test(text))
     throw new LoginFailed(site, "unknown account");
+  // An account with a passkey is asked for it first ("Verifying it's
+  // you... Complete sign-in using your passkey", challenge/pk). There is
+  // no passkey here; the selection page offers the password (mapped 2026-09-19).
+  if (/using your passkey/i.test(text) || /challenge\/pk/.test(fp.url())) {
+    await fp.act(
+      { kind: "click" },
+      { role: "button", name: "/try another way/i" },
+      { goal: "skip the passkey" },
+    );
+    await fp.waitForUrl(/challenge\/selection/, 10_000);
+    await fp.act(
+      { kind: "click" },
+      { role: "link", name: "/enter your password/i" },
+      { goal: "sign in with the password instead" },
+    );
+    await fp.waitForUrl(/challenge\/pwd/, 10_000);
+    await fp.wait(SETTLE_MS);
+    text = await fp.text();
+  }
   if (await fp.has({ role: "textbox", name: "/password/i" })) {
     await fp.act(
       { kind: "fill", value: cred.password },
@@ -150,42 +176,97 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
   if (/browser or app may not be secure/i.test(text))
     throw new LoginFailed(site, "Google refused this browser");
   if (/2-step verification|authenticator|enter the code|verification code/i.test(text)) {
-    if (
-      (await fp.has({ text: "/try another way/i" })) &&
-      !(await fp.has({ role: "textbox", name: "/code/i" }))
-    ) {
-      await fp.act(
-        { kind: "click" },
-        { text: "/try another way/i" },
-        { goal: "choose a different second step" },
-      );
-      await fp.wait(SETTLE_MS);
-      await fp.act(
-        { kind: "click" },
-        { text: "/authenticator app/i" },
-        { goal: "choose the authenticator app" },
-      );
-      await fp.wait(SETTLE_MS);
-    }
-    const code = await ctx.code("totp");
-    await fp.act(
-      { kind: "fill", value: code },
-      { role: "textbox", name: "/code/i" },
-      { goal: "type the verification code" },
-    );
-    await fp.act(
-      { kind: "click" },
-      { role: "button", name: "/^next$/i" },
-      { goal: "submit the code" },
-    );
+    await googleSecondStep(ctx);
     await fp.wait(SETTLE_MS);
     text = await fp.text();
   }
   if (/verify it.s you|confirm your recovery|tap yes on your/i.test(text))
-    throw new LoginFailed(
-      site,
-      "Google asked for a second step this tool cannot answer: enroll TOTP",
+    throw new LoginFailed(site, "Google asked for a second step this tool cannot answer");
+}
+
+/** A 6+ digit code goes into the code box and Next. */
+async function submitCode(fp: FlowPage, code: string): Promise<void> {
+  await fp.act(
+    { kind: "fill", value: code },
+    { role: "textbox", name: "/code/i" },
+    { goal: "type the verification code" },
+  );
+  await fp.act(
+    { kind: "click" },
+    { role: "button", name: "/^next$/i" },
+    { goal: "submit the code" },
+  );
+}
+
+/** Google's "Choose how you want to sign in" list, or the step it landed on by itself. */
+async function toSelection(fp: FlowPage): Promise<void> {
+  if (/challenge\/selection/.test(fp.url())) return;
+  if (await fp.has({ text: "/try another way/i" })) {
+    await fp.act(
+      { kind: "click" },
+      { text: "/try another way/i" },
+      { goal: "see the other second steps" },
     );
+    await fp.waitForUrl(/challenge\/selection/, 10_000);
+    await fp.wait(SETTLE_MS);
+  }
+}
+
+/**
+ * The second step, by what this system can answer (mapped 2026-09-19):
+ *   1. authenticator code   (our TOTP seed)          "Get a verification code from the Google Authenticator app"
+ *   2. SMS code             (paired phone or Twilio)  "Get a verification code at (•••) •••-••18"
+ *   3. device prompt        (a person's phone)        "Tap Yes on your phone or tablet", after a note to that phone
+ * Google shows the steps as links on challenge/selection; "Try another way" opens it.
+ */
+async function googleSecondStep(ctx: SignInContext): Promise<void> {
+  const { fp } = ctx;
+  const site = "google";
+  const codeBox = { role: "textbox", name: "/code/i" } as const;
+  if (ctx.offers("totp")) {
+    if (!/challenge\/totp/.test(fp.url())) {
+      await toSelection(fp);
+      await fp.act(
+        { kind: "click" },
+        { role: "link", name: "/authenticator app/i" },
+        { goal: "choose the authenticator app" },
+      );
+      await fp.wait(SETTLE_MS);
+    }
+    return submitCode(fp, await ctx.code("totp"));
+  }
+  if (ctx.offers("sms")) {
+    await toSelection(fp);
+    await fp.act(
+      { kind: "click" },
+      { role: "link", name: "/verification code at/i" },
+      { goal: "have Google text the code" },
+    );
+    await fp.wait(SETTLE_MS);
+    if (!(await fp.has(codeBox)))
+      throw new LoginFailed(site, "no code box after asking for the SMS");
+    return submitCode(fp, await ctx.code("sms", "google"));
+  }
+  if (ctx.notify) {
+    await toSelection(fp);
+    const before = fp.url();
+    await fp.act(
+      { kind: "click" },
+      { role: "link", name: "/tap yes on your phone/i" },
+      { goal: "ask the phone for a Yes" },
+    );
+    await ctx.notify(`Google sign-in for ${ctx.cred.username}: tap Yes on your phone`);
+    const moved = await fp.waitForUrl(
+      (u) => !/accounts\.google\.com\/v3\/signin\/challenge/.test(u) && u !== before,
+      120_000,
+    );
+    if (!moved) throw new LoginFailed(site, "no Yes from the phone within two minutes");
+    return;
+  }
+  throw new LoginFailed(
+    site,
+    "Google wants a second step and none is set up: enroll TOTP, link a phone, or configure Twilio",
+  );
 }
 
 export interface OauthLoginSpec {
@@ -225,6 +306,7 @@ export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signI
 export interface LoginOptions {
   credentials: CredentialStore;
   codes: CodeSource;
+  notify?: (text: string) => Promise<void>;
   now?: () => Date;
 }
 
@@ -252,6 +334,8 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
         if (!c) throw new LoginFailed(site, `no ${kind} code available`);
         return c;
       },
+      offers: (kind) => opts.codes.offers(kind, ctx.cred),
+      ...(opts.notify ? { notify: opts.notify } : {}),
       async credFor(other) {
         const c = await opts.credentials.get(other);
         if (!c) throw new LoginFailed(site, `no credential stored for ${other}`);

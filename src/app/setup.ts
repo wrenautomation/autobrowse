@@ -48,11 +48,25 @@ export function needsFor(
   );
 }
 
+/** A device this system leans on; `check` says what works and what the person does once. */
+export interface DeviceLink {
+  name: string;
+  check(): { ok: boolean; fix: string[] };
+  /** Put the person in front of the switch (open the settings pane). */
+  guide?: () => void;
+}
+
+export interface SetupOptions {
+  devices?: readonly DeviceLink[];
+}
+
 export async function runSetup(
   io: Prompter,
   store: CredentialStore,
   sites: readonly SiteLogin[],
-): Promise<{ stored: string[]; skipped: string[] }> {
+  opts: SetupOptions = {},
+): Promise<{ stored: string[]; skipped: string[]; devices: Record<string, boolean> }> {
+  const devices: Record<string, boolean> = {};
   const stored: string[] = [];
   const skipped: string[] = [];
   const have = new Set(await store.list());
@@ -105,13 +119,23 @@ export async function runSetup(
       skipped.push(need.name);
     }
   }
+  for (const d of opts.devices ?? []) {
+    const r = d.check();
+    devices[d.name] = r.ok;
+    io.say(`\n${d.name}: ${r.ok ? "linked" : "not yet"}`);
+    for (const line of r.fix) io.say(`  once: ${line}`);
+    if (!r.ok && d.guide) {
+      d.guide();
+      io.say("  (the settings pane is open; run setup again after)");
+    }
+  }
   io.say("");
   if (stored.length) io.say(`stored: ${stored.join(", ")}`);
   if (skipped.length) io.say(`skipped: ${skipped.join(", ")} (run setup again any time)`);
   io.say(
     "next: `autobrowse login <site> --headed` once per site, then `autobrowse enroll-totp <site>` where 2FA is off",
   );
-  return { stored, skipped };
+  return { stored, skipped, devices };
 }
 
 /** Terminal prompter: hidden input mutes echo through the readline output hook. */
