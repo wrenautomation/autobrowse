@@ -58,6 +58,11 @@ export interface AgentOptions {
   maxSteps?: number;
   /** A person said stop: the loop ends before its next step. */
   stopped?: () => boolean;
+  /**
+   * The model needs a person (a captcha, money). Resolve true once they
+   * have done it and the agent should go on; false (or absent) ends the run.
+   */
+  onHuman?: (reason: string) => Promise<boolean>;
   /** Most controls the model sees per step. */
   maxRefs?: number;
   onStep?: (r: StepRecord) => void;
@@ -144,6 +149,13 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
         o.onStep?.(rec);
         continue;
       }
+    }
+    if (step.action.cmd === "human" && o.onHuman) {
+      await o.explorer.exec({ cmd: "note", text: `needs a person: ${step.action.reason}` });
+      steps.push(rec);
+      o.onStep?.(rec);
+      if (await o.onHuman(step.action.reason)) continue;
+      return { achieved: false, summary: step.action.reason, steps, usage };
     }
     if (step.action.cmd === "done" || step.action.cmd === "human") {
       await o.explorer.exec({ cmd: "note", text: step.thought });

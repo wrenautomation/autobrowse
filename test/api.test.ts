@@ -205,6 +205,7 @@ describe("api: agent sessions", () => {
           goal: req.goal,
           inputs: req.inputs ?? {},
           status: "running",
+          prompt: null,
           steps: [],
           achieved: null,
           summary: null,

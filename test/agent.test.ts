@@ -112,6 +112,25 @@ describe("exploreWithAgent", () => {
     expect(llm.requests[1]?.prompt).toContain("FAILED: you gave up");
     expect(r).toMatchObject({ achieved: false, summary: "no name" });
   });
+  it("with onHuman, a human step continues after the person says so", async () => {
+    const { ex } = fakeExplorer(['- button "Buy now"']);
+    const llm = fakeLlm([
+      { thought: "money", action: { cmd: "human", reason: "a purchase" } },
+      { thought: "bought by hand", action: { cmd: "done", summary: "bought", achieved: true } },
+    ]);
+    const asked: string[] = [];
+    const r = await exploreWithAgent({
+      explorer: ex,
+      llm,
+      goal: "buy it",
+      onHuman: async (reason) => {
+        asked.push(reason);
+        return true;
+      },
+    });
+    expect(asked).toEqual(["a purchase"]);
+    expect(r).toMatchObject({ achieved: true, summary: "bought" });
+  });
   it("hands over on human", async () => {
     const { ex } = fakeExplorer(['- button "Buy now"']);
     const llm = fakeLlm([{ thought: "money", action: { cmd: "human", reason: "a purchase" } }]);

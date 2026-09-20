@@ -14,6 +14,8 @@ export type SessionStatus =
   | "starting"
   | "running"
   | "paused"
+  /** The agent asked for a person; the browser is theirs until they resume. */
+  | "needs-human"
   | "done"
   | "stopped"
   | "failed"
@@ -30,6 +32,8 @@ export interface SessionView {
   goal: string;
   inputs: Record<string, string>;
   status: SessionStatus;
+  /** Why the agent asked for a person, while `needs-human`. */
+  prompt: string | null;
   steps: StepView[];
   achieved: boolean | null;
   summary: string | null;
@@ -112,6 +116,7 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
         goal: req.goal,
         inputs: req.inputs ?? {},
         status: "starting",
+        prompt: null,
         steps: [],
         achieved: null,
         summary: null,
@@ -140,6 +145,17 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
             inputs: view.inputs,
             maxSteps: req.maxSteps ?? o.maxSteps ?? 25,
             stopped: () => live.stopFlag,
+            // The model's `human` is a pause with a prompt, not the end: the
+            // person does the thing in the window and resumes.
+            onHuman: async (reason) => {
+              view.status = "needs-human";
+              view.prompt = reason;
+              await ex.exec({ cmd: "pause" });
+              await ex.resumed();
+              view.prompt = null;
+              if (!live.stopFlag) view.status = "running";
+              return !live.stopFlag;
+            },
             onStep: (r) => {
               const step: StepView = { ...r, screenshot: null };
               view.steps.push(step);
@@ -174,7 +190,8 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
     async resume(id) {
       const live = must(id);
       await open(live).exec({ cmd: "resume" });
-      if (live.view.status === "paused") live.view.status = "running";
+      if (live.view.status === "paused" || live.view.status === "needs-human")
+        live.view.status = "running";
       return live.view;
     },
     async stop(id) {

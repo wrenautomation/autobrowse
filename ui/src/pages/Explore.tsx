@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { api, type SessionView } from "../api.js";
 import { href, useLoad } from "../hooks.js";
 
-const LIVE = new Set(["starting", "running", "paused"]);
+const LIVE = new Set(["starting", "running", "paused", "needs-human"]);
 
 export function ExplorePage() {
   const { data, error, reload } = useLoad(() => api.agents(), []);
@@ -65,6 +65,7 @@ function pillClass(status: SessionView["status"]): string {
   if (status === "done") return "done";
   if (status === "running" || status === "starting") return "running";
   if (status === "paused") return "waiting";
+  if (status === "needs-human") return "needs-human";
   if (status === "failed") return "failed";
   return "";
 }
@@ -194,13 +195,13 @@ export function AgentPage({ id }: { id: string }) {
               pause (I take over)
             </button>
           )}
-          {data.status === "paused" && (
+          {(data.status === "paused" || data.status === "needs-human") && (
             <button
               type="button"
               className="primary"
               onClick={() => act(() => api.agentAction(id, "resume"))}
             >
-              resume (agent goes on)
+              {data.status === "needs-human" ? "done, agent goes on" : "resume (agent goes on)"}
             </button>
           )}
           {live && (
@@ -239,6 +240,11 @@ export function AgentPage({ id }: { id: string }) {
           )}
           {msg && <span className="error">{msg}</span>}
         </div>
+        {data.status === "needs-human" && (
+          <p>
+            <strong>needs you:</strong> {data.prompt}. Do it in the browser window, then resume.
+          </p>
+        )}
         {data.status === "paused" && (
           <p className="muted">
             The browser window is yours: click and type; every act is journaled. Resume when done.

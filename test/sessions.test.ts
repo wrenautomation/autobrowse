@@ -98,6 +98,21 @@ describe("agentSessions", () => {
     expect(stopped.summary).toBe("stopped by a person");
     expect(stopped.steps.length).toBeLessThan(10);
   });
+  it("human = a pause with a prompt; resume lets the agent go on", async () => {
+    const { ex } = fakeExplorer();
+    const llm = fakeLlm([
+      { thought: "captcha", action: { cmd: "human", reason: "a captcha" } },
+      { thought: "past it", action: { cmd: "done", summary: "through", achieved: true } },
+    ]);
+    const s = agentSessions({ llm, open: async () => ex, basePort: 9700 });
+    const v = await s.start({ site: "site", goal: "g" });
+    for (let i = 0; i < 20 && s.get(v.id)?.status !== "needs-human"; i++) await tick();
+    expect(s.get(v.id)).toMatchObject({ status: "needs-human", prompt: "a captcha" });
+    expect(ex.paused()).toBe(true);
+    await s.resume(v.id);
+    for (let i = 0; i < 20 && s.get(v.id)?.status !== "done"; i++) await tick();
+    expect(s.get(v.id)).toMatchObject({ status: "done", achieved: true, prompt: null });
+  });
   it("ports do not collide between live sessions", async () => {
     const llm = fakeLlm([{ thought: "x", action: { cmd: "done", summary: "s", achieved: true } }]);
     const s = agentSessions({ llm, open: async () => fakeExplorer().ex, basePort: 9600 });
