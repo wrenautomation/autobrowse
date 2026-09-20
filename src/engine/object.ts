@@ -162,19 +162,46 @@ export type RunObjectDefinition<W extends AnyWorkflow> = restate.VirtualObjectDe
   RunObject<W>
 >;
 
+/** What a run needs, found from the object key: the workflow, its deps, and how the run is named to people. */
+export interface Resolved<W extends AnyWorkflow> {
+  workflow: W;
+  deps: DepsOf<W>;
+  ref: RunRef;
+}
+
+/** One workflow, one object named after it: the hand-written case. */
 export function makeRunObject<W extends AnyWorkflow>(
   workflow: W,
   deps: DepsOf<W>,
   host: HostDeps,
   opts: AdvanceOptions = {},
 ): RunObjectDefinition<W> {
-  const service = { name: workflow.name } as const;
+  return makeRunObjectFrom(
+    workflow.name,
+    async (key) => ({ workflow, deps, ref: { workflow: workflow.name, key } }),
+    host,
+    opts,
+  );
+}
+
+/**
+ * A run object whose workflow is found per invocation from the key, so one
+ * object can serve many workflows (the compiled ones, loaded from disk).
+ * `resolve` throws a TerminalError for a key that names nothing.
+ */
+export function makeRunObjectFrom<W extends AnyWorkflow>(
+  name: string,
+  resolve: (key: string) => Promise<Resolved<W>>,
+  host: HostDeps,
+  opts: AdvanceOptions = {},
+): RunObjectDefinition<W> {
+  const service = { name } as const;
   type Self = RunObject<W>;
 
-  const emit = async (ctx: restate.ObjectContext, e: EventBody) => {
+  const emit = async (ctx: restate.ObjectContext, ref: RunRef, e: EventBody) => {
     const event = {
       ...e,
-      run: { workflow: workflow.name, key: ctx.key } satisfies RunRef,
+      run: ref,
       at: new Date(await ctx.date.now()).toISOString(),
     } as RunEvent;
     if (host.registry !== false)
@@ -187,7 +214,7 @@ export function makeRunObject<W extends AnyWorkflow>(
 
   const gateOpen = async (ctx: restate.ObjectContext, name: string): Promise<OpenGate> => {
     const gate = await ctx.get<OpenGate>(KEYS.gate);
-    if (!gate) throw new restate.TerminalError(`no gate open for ${workflow.name}/${ctx.key}`);
+    if (!gate) throw new restate.TerminalError(`no gate open for ${name}/${ctx.key}`);
     if (gate.name !== name)
       throw new restate.TerminalError(`the open gate is ${gate.name}, not ${name}`);
     return gate;
@@ -198,6 +225,7 @@ export function makeRunObject<W extends AnyWorkflow>(
     input: { name: GateName; note?: string },
     approved: boolean,
   ): Promise<OpenGate> => {
+    const { workflow, ref } = await resolve(ctx.key);
     const gate = await gateOpen(ctx, input.name);
     const a: GateAnswer = {
       approved,
@@ -206,7 +234,7 @@ export function makeRunObject<W extends AnyWorkflow>(
     };
     const fx = effects(ctx);
     const verdict = await applyAnswer(fx, gate, a);
-    await emit(ctx, {
+    await emit(ctx, ref, {
       type: "gate-answered",
       gate: gate.name,
       step: gate.step,
@@ -216,7 +244,7 @@ export function makeRunObject<W extends AnyWorkflow>(
     if (verdict === "rejected") {
       const outcome = await outcomeOf(fx, workflow, "rejected");
       ctx.set(OUTCOME, outcome);
-      await emit(ctx, { type: "finished", status: "rejected", summary: summarize(outcome) });
+      await emit(ctx, ref, { type: "finished", status: "rejected", summary: summarize(outcome) });
     } else next(ctx, (await ctx.get<number>(GEN)) ?? 0);
     return gate;
   };
@@ -226,6 +254,7 @@ export function makeRunObject<W extends AnyWorkflow>(
     handlers: {
       /** Start or resume the run with `plan` (omit to reuse the stored one). Returns at once; watch `status`. */
       run: async (ctx: restate.ObjectContext, input: PlanOf<W> | null): Promise<void> => {
+        const { workflow, ref } = await resolve(ctx.key);
         const stored = await ctx.get<PlanOf<W>>(PLAN);
         const raw = input ?? stored;
         if (!raw) throw new restate.TerminalError("no plan given and none stored for this run");
@@ -237,7 +266,7 @@ export function makeRunObject<W extends AnyWorkflow>(
         ctx.clear(OUTCOME);
         const gen = ((await ctx.get<number>(GEN)) ?? 0) + 1;
         ctx.set(GEN, gen);
-        await emit(ctx, { type: "started" });
+        await emit(ctx, ref, { type: "started" });
         next(ctx, gen);
       },
 
@@ -247,36 +276,38 @@ export function makeRunObject<W extends AnyWorkflow>(
         const raw = await ctx.get<PlanOf<W>>(PLAN);
         if (input.gen !== gen || !raw) return; // a message from a run that is gone
         if (await ctx.get<boolean>(PAUSED)) return; // `play` sends the next step
+        const { workflow, deps, ref } = await resolve(ctx.key);
         const plan = workflow.plan.parse(raw);
         const fx = effects(ctx);
         const a = await advance(fx, workflow, deps, plan, opts);
         if (a.kind === "continue") {
-          await emit(ctx, { type: "step", step: a.step, result: a.result });
+          await emit(ctx, ref, { type: "step", step: a.step, result: a.result });
           next(ctx, gen);
           return;
         }
         if (a.kind === "waiting") {
-          await emit(ctx, { type: "gate-opened", gate: a.gate });
+          await emit(ctx, ref, { type: "gate-opened", gate: a.gate });
           return;
         }
-        if (a.step && a.result) await emit(ctx, { type: "step", step: a.step, result: a.result });
+        if (a.step && a.result)
+          await emit(ctx, ref, { type: "step", step: a.step, result: a.result });
         const outcome = await outcomeOf(fx, workflow, a.status);
         ctx.set(OUTCOME, outcome);
-        await emit(ctx, { type: "finished", status: a.status, summary: summarize(outcome) });
+        await emit(ctx, ref, { type: "finished", status: a.status, summary: summarize(outcome) });
       },
 
       /** Stop before the next step. A step in flight finishes first. */
       pause: async (ctx: restate.ObjectContext): Promise<void> => {
         if (await ctx.get<boolean>(PAUSED)) return;
         ctx.set(PAUSED, true);
-        await emit(ctx, { type: "paused" });
+        await emit(ctx, (await resolve(ctx.key)).ref, { type: "paused" });
       },
 
       /** Undo `pause` and run on. */
       play: async (ctx: restate.ObjectContext): Promise<void> => {
         if (!(await ctx.get<boolean>(PAUSED))) return;
         ctx.clear(PAUSED);
-        await emit(ctx, { type: "resumed" });
+        await emit(ctx, (await resolve(ctx.key)).ref, { type: "resumed" });
         if (await ctx.get<OpenGate>(KEYS.gate)) return; // the answer will send the next step
         if (await ctx.get<Outcome>(OUTCOME)) return; // nothing left to run
         next(ctx, (await ctx.get<number>(GEN)) ?? 0);
@@ -293,16 +324,17 @@ export function makeRunObject<W extends AnyWorkflow>(
         const gen = (await ctx.get<number>(GEN)) ?? 0;
         ctx.clearAll();
         ctx.set(GEN, gen + 1);
-        await emit(ctx, { type: "reset" });
+        await emit(ctx, (await resolve(ctx.key)).ref, { type: "reset" });
       },
 
       status: restate.handlers.object.shared(
         async (ctx: restate.ObjectSharedContext): Promise<RunStatusView> => {
+          const { workflow, ref } = await resolve(ctx.key);
           const outcome = await ctx.get<Outcome>(OUTCOME);
           const gate = await ctx.get<OpenGate>(KEYS.gate);
           return {
-            workflow: workflow.name,
-            key: ctx.key,
+            workflow: ref.workflow,
+            key: ref.key,
             plan: await ctx.get(PLAN),
             gate,
             paused: (await ctx.get<boolean>(PAUSED)) === true,

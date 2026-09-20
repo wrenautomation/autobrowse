@@ -71,7 +71,7 @@ const linq = linqFor(settings);
 const status = statusOf(settings, {
   llm: llm?.id ?? null,
   memory: app.memory.id,
-  workflows: app.workflows.map((w) => w.name),
+  workflows: (await app.workflows()).map((w) => w.name),
 });
 log.info(status, "autobrowse setup");
 startUiServer({
@@ -103,7 +103,7 @@ startUiServer({
 });
 async function compileRecording(rec: Recording) {
   const out = await compile(rec, { llm, lib: COMPILED_LIB });
-  // Written where the worker loads from: restart, and it is on the Runs page.
+  // Written where the Compiled object loads from: it is on the Runs page at once.
   await writeRendered(join(COMPILED_DIR, out.outline.name), out);
   return out;
 }
@@ -124,15 +124,11 @@ if (llm && settings.evaluateEveryHours > 0 && app.channel.note) {
               .name,
           }),
           prove: async (workflow: string) => {
-            const { loadCompiledWorkflows } = await import("../workflows/compiled.js");
             const { proofLine, proveWorkflow, writeProof } = await import("../workflows/proof.js");
-            const found = (await loadCompiledWorkflows(COMPILED_DIR)).find(
-              (c) => c.workflow.name === workflow,
-            );
+            const found = await app.catalog.get(workflow);
             if (!found) throw new Error(`compiled workflow ${workflow} did not load`);
             const proof = await proveWorkflow(found.workflow, app.browser);
-            writeProof(found.dir, proof);
-            app.proofs[workflow] = proof;
+            writeProof(found.dir, proof); // the catalog reads it back on the next listing
             return proofLine(proof);
           },
         }

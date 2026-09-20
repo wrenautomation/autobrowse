@@ -11,15 +11,35 @@ import { NeedsHuman } from "../src/browser/session.js";
 import { Unrecoverable } from "../src/engine/effects.js";
 import { makeRunObject, type RunObject } from "../src/engine/object.js";
 import { runsRegistry } from "../src/engine/registry.js";
+import {
+  type CompiledCatalog,
+  type CompiledWorkflow,
+  compiledKey,
+  makeCompiledRunObject,
+} from "../src/workflows/compiled.js";
 import { type DomainWorkflow, domainWorkflow } from "../src/workflows/domain/index.js";
-import { fakeDeps, fakeHost } from "./fakes.js";
+import { workflow as exampleTitle } from "../src/workflows/example-title/index.js";
+import { fakeBrowser, fakeDeps, fakeHost } from "./fakes.js";
 
 const deps = fakeDeps();
 const host = fakeHost();
+/** A catalog a test can add to while Restate is up: what a compile does on disk. */
+const shelf = new Map<string, CompiledWorkflow>();
+const catalog: CompiledCatalog = {
+  list: async () => [...shelf.values()],
+  get: async (name) => shelf.get(name) ?? null,
+  proofs: async () => ({}),
+};
+const browserCalls: string[] = [];
+const browser = fakeBrowser(browserCalls);
 let env: RestateTestEnvironment;
 beforeAll(async () => {
   env = await RestateTestEnvironment.start({
-    services: [runsRegistry, makeRunObject(domainWorkflow, deps, host)],
+    services: [
+      runsRegistry,
+      makeRunObject(domainWorkflow, deps, host),
+      makeCompiledRunObject({ catalog, browser, host }),
+    ],
     alwaysReplay: true,
   });
 });
@@ -31,6 +51,10 @@ const object = (domain: string) =>
   clients
     .connect({ url: env.baseUrl() })
     .objectClient<RunObject<DomainWorkflow>>({ name: "domain" }, domain);
+const compiled = (workflow: string, key: string) =>
+  clients
+    .connect({ url: env.baseUrl() })
+    .objectClient<RunObject<typeof exampleTitle>>({ name: "Compiled" }, compiledKey(workflow, key));
 const registry = () =>
   clients
     .connect({ url: env.baseUrl() })
@@ -176,5 +200,27 @@ describe("domain run object", () => {
     } finally {
       deps.failCheckWith = null;
     }
+  });
+});
+
+describe("Compiled object", () => {
+  it("runs a flow that appeared after boot, under its own name in events and the registry", async () => {
+    await expect(compiled("example-title", "k1").run({ dryRun: false })).rejects.toThrow(
+      /no compiled workflow named example-title/,
+    );
+    shelf.set("example-title", { dir: "", workflow: exampleTitle, proof: null });
+    browser.on({ name: "read-main-heading" } as never, async () => ({ title: "Example Domain" }));
+    await compiled("example-title", "k1").run({ dryRun: false });
+    const finished = await until(
+      () => compiled("example-title", "k1").status(),
+      (s) => s.outcome?.status === "done",
+    );
+    expect(finished).toMatchObject({ workflow: "example-title", key: "k1" });
+    expect(host.subjects()).toContain("k1: done");
+    const rows = await until(
+      () => registry().list(),
+      (r) => r.some((x) => x.workflow === "example-title" && x.key === "k1"),
+    );
+    expect(rows.find((x) => x.workflow === "example-title")).toMatchObject({ status: "done" });
   });
 });

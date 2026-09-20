@@ -46,8 +46,9 @@ Browserbase takes them.
   each step the model sees the URL and a digest of the page (numbered
   controls, headings, a little text; ~700 tokens), picks one act, the
   code runs it and journals it. `done` or `human` ends it; the journal is
-  a recording, `compile` makes it a deterministic flow that registers
-  itself at the next boot; `autobrowse try <name>` runs it in-process.
+  a recording, `compile` makes it a deterministic flow the worker serves
+  at once (one `Compiled` object keyed `<workflow>/<key>`, loaded from
+  disk per run, so no restart); `autobrowse try <name>` runs it in-process.
   Explore by agent once, then run the flow forever. `pause`/`resume` over loopback lets a
   person step in mid-run: while paused the browser is theirs and every
   click and keystroke lands in the same journal; the agent re-reads the
@@ -126,7 +127,7 @@ pnpm autobrowse agent google "open Personal info and report the display name" --
 pnpm autobrowse repair ~/.config/autobrowse/artifacts/google-x-2026-….failure.json   # agent picks up where a flow stopped
 pnpm autobrowse creds paste google@ops            # a second account: `email password [key]` on the clipboard
 pnpm autobrowse record buy-domain --site cloudflare --url https://dash.cloudflare.com/ --terminal
-pnpm autobrowse compile buy-domain             # → recordings/buy-domain/outline.json, src/workflows/buy-domain/ (registers itself at boot)
+pnpm autobrowse compile buy-domain             # → recordings/buy-domain/outline.json, src/workflows/buy-domain/ (on the Runs page at once; no restart)
 pnpm autobrowse try google-name                # run a compiled workflow here, no Restate: the proof it is deterministic
 pnpm autobrowse compile buy-domain --no-llm --from-outline
 

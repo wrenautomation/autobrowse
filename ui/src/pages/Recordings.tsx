@@ -88,8 +88,7 @@ export function RecordingPage({ name }: { name: string }) {
           <div className="row">
             <strong>{compiled.outline.name}</strong>
             <span className="muted">
-              written to src/workflows/{compiled.outline.name}; restart the worker and it is on the
-              Runs page
+              written to src/workflows/{compiled.outline.name}; it is on the Runs page now
             </span>
             <span className="muted">
               {compiled.outline.steps

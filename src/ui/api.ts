@@ -40,9 +40,10 @@ import { bearerAuth, rateLimit } from "./auth.js";
 import type { EventBus } from "./bus.js";
 
 export interface ApiDeps {
-  workflows: readonly AnyWorkflow[];
-  /** Compiled workflows' proof runs by name; absent = hand-written. */
-  proofs?: Record<string, Proof | null>;
+  /** The workflows a run may name; a function when compiled ones come and go without a restart. */
+  workflows: readonly AnyWorkflow[] | (() => Promise<readonly AnyWorkflow[]>);
+  /** Compiled workflows' proof runs by name; a name absent here is hand-written. */
+  proofs?: Record<string, Proof | null> | (() => Promise<Record<string, Proof | null>>);
   ingress: Ingress;
   bus: EventBus;
   recordingsDir: string;
@@ -105,7 +106,11 @@ function serveUnder(root: string, file: string): Response | null {
 
 export function api(deps: ApiDeps): Hono {
   const app = new Hono();
-  const byName = new Map(deps.workflows.map((w) => [w.name, w]));
+  const workflows = async () =>
+    typeof deps.workflows === "function" ? deps.workflows() : deps.workflows;
+  const proofs = async () =>
+    typeof deps.proofs === "function" ? deps.proofs() : (deps.proofs ?? {});
+  const find = async (name: string) => (await workflows()).find((w) => w.name === name) ?? null;
   const runOf = (workflow: string, key: string) => deps.ingress.run(workflow, key);
 
   app.use("/api/*", bearerAuth(deps.token));
@@ -118,30 +123,31 @@ export function api(deps: ApiDeps): Hono {
 
   app.get("/api/status", (c) => c.json(deps.status ?? null));
 
-  app.get("/api/workflows", (c) =>
-    c.json(
-      deps.workflows.map((w) => ({
+  app.get("/api/workflows", async (c) => {
+    const proven = await proofs();
+    return c.json(
+      (await workflows()).map((w) => ({
         name: w.name,
         description: w.description,
         steps: w.steps.map((s) => ({ name: s.name, irreversible: s.irreversible ?? false })),
         plan: z.toJSONSchema(w.plan, { io: "input", unrepresentable: "any" }),
         // Hand-written flows are proven by their tests; compiled ones by one run after compiling.
-        proof: deps.proofs && w.name in deps.proofs ? (deps.proofs[w.name] ?? null) : undefined,
+        proof: w.name in proven ? (proven[w.name] ?? null) : undefined,
       })),
-    ),
-  );
+    );
+  });
 
   app.get("/api/runs", async (c) => c.json(await deps.ingress.registry().list()));
 
   app.get("/api/runs/:workflow/:key", async (c) => {
     const { workflow, key } = c.req.param();
-    if (!byName.has(workflow)) return c.json({ error: "unknown workflow" }, 404);
+    if (!(await find(workflow))) return c.json({ error: "unknown workflow" }, 404);
     return c.json(await runOf(workflow, key).status());
   });
 
   app.post("/api/runs/:workflow/:key", async (c) => {
     const { workflow, key } = c.req.param();
-    const w = byName.get(workflow);
+    const w = await find(workflow);
     if (!w) return c.json({ error: "unknown workflow" }, 404);
     if (!KEY.test(key)) return c.json({ error: "bad key" }, 400);
     const body = await c.req.json().catch(() => null);
@@ -153,7 +159,7 @@ export function api(deps: ApiDeps): Hono {
 
   app.post("/api/runs/:workflow/:key/:action", async (c) => {
     const { workflow, key, action } = c.req.param();
-    if (!byName.has(workflow)) return c.json({ error: "unknown workflow" }, 404);
+    if (!(await find(workflow))) return c.json({ error: "unknown workflow" }, 404);
     if (!isAction(action)) return c.json({ error: "unknown action" }, 404);
     const body = actionBody.safeParse((await c.req.json().catch(() => ({}))) ?? {});
     if (!body.success) return c.json({ error: "bad body", issues: body.error.issues }, 400);
@@ -345,7 +351,7 @@ export function api(deps: ApiDeps): Hono {
 
   /** What a person typed on any channel becomes a command; the answer is one line for that channel. */
   async function inbound(text: string): Promise<string> {
-    const cmd = parseCommand(text, { workflows: [...byName.keys()] });
+    const cmd = parseCommand(text, { workflows: (await workflows()).map((w) => w.name) });
     if (!cmd) return "say yes, no, pause, play, status or reset, optionally with <workflow> <key>";
     const rows = await deps.ingress.registry().list();
     const target: RunRow | undefined = cmd.run

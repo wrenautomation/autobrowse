@@ -114,7 +114,7 @@ export async function buildProposals(
     await o
       .notify(
         outcome.workflow
-          ? `autobrowse built \`${outcome.workflow}\` from "${p.title}": ${outcome.summary}. It is on the Runs page after the next restart.`
+          ? `autobrowse built \`${outcome.workflow}\` from "${p.title}": ${outcome.summary}. It is on the Runs page.`
           : `autobrowse could not build "${p.title}" on its own: ${outcome.summary}. Session ${outcome.session} in Explore.`,
       )
       .catch(() => undefined);

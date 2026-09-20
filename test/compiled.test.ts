@@ -2,7 +2,12 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadCompiledWorkflows } from "../src/workflows/compiled.js";
+import {
+  compiledCatalog,
+  compiledKey,
+  loadCompiledWorkflows,
+  splitCompiledKey,
+} from "../src/workflows/compiled.js";
 
 describe("loadCompiledWorkflows", () => {
   it("loads every dir exporting a workflow, skips hand-written names and broken modules", async () => {
@@ -32,5 +37,35 @@ describe("loadCompiledWorkflows", () => {
     expect(found[0]?.proof?.status).toBe("done");
     expect(errors).toEqual(["broken"]);
     expect(await loadCompiledWorkflows(join(root, "nope"))).toEqual([]);
+  });
+});
+
+describe("compiledCatalog", () => {
+  it("sees a new flow and a rewritten one without a restart", async () => {
+    const root = mkdtempSync(join(tmpdir(), "wf-"));
+    const catalog = compiledCatalog(root);
+    expect(await catalog.list()).toEqual([]);
+    mkdirSync(join(root, "one"));
+    const file = join(root, "one", "index.ts");
+    writeFileSync(file, `export const workflow = { name: "one", description: "v1", steps: [] };`);
+    expect((await catalog.get("one"))?.workflow.description).toBe("v1");
+    // A rewrite lands with a later mtime; the loader keys the import on it.
+    await new Promise((r) => setTimeout(r, 20));
+    writeFileSync(file, `export const workflow = { name: "one", description: "v2", steps: [] };`);
+    expect((await catalog.get("one"))?.workflow.description).toBe("v2");
+    expect(await catalog.get("two")).toBeNull();
+    expect(await catalog.proofs()).toEqual({ one: null });
+  });
+});
+
+describe("compiled keys", () => {
+  it("joins and splits, keeping slashes inside the run key", () => {
+    expect(splitCompiledKey(compiledKey("google-name", "a/b"))).toEqual({
+      workflow: "google-name",
+      key: "a/b",
+    });
+    expect(() => splitCompiledKey("nokey")).toThrow(/<workflow>\/<key>/);
+    expect(() => splitCompiledKey("w/")).toThrow();
+    expect(() => splitCompiledKey("/k")).toThrow();
   });
 });

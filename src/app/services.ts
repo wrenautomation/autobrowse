@@ -63,7 +63,11 @@ import { makeLlm } from "../llm/index.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import { type BootstrapDeps, bootstrapWorkflow } from "../workflows/bootstrap/index.js";
-import { compiledDeps, loadCompiledWorkflows } from "../workflows/compiled.js";
+import {
+  type CompiledCatalog,
+  compiledCatalog,
+  makeCompiledRunObject,
+} from "../workflows/compiled.js";
 import { type DomainDeps, domainWorkflow } from "../workflows/domain/index.js";
 import type { Proof } from "../workflows/proof.js";
 import type { Settings } from "./config.js";
@@ -139,10 +143,11 @@ export const COMPILED_LIB = "../../index.js";
 export interface App {
   services: Array<ReturnType<typeof makeRunObject> | typeof runsRegistry | BrowserService>;
   channel: Channel;
-  /** Hand-written plus compiled: what the UI and CLI list. */
-  workflows: readonly AnyWorkflow[];
+  /** Hand-written plus compiled, as of now: a compile shows up at once. */
+  workflows(): Promise<readonly AnyWorkflow[]>;
   /** Compiled workflows' last proof runs by name (hand-written ones have none). */
-  proofs: Record<string, Proof | null>;
+  proofs(): Promise<Record<string, Proof | null>>;
+  catalog: CompiledCatalog;
   /** The worker's browser runner: what compiled flows and proof runs use. */
   browser: FlowRunner;
   /** The UI's live feed; also one of the channels. */
@@ -410,24 +415,28 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   };
 
   const host = { emit: (e: Parameters<Channel["deliver"]>[0]) => channel.deliver(e) };
-  const compiled = await loadCompiledWorkflows(COMPILED_DIR, (dir, err) =>
+  const catalog = compiledCatalog(COMPILED_DIR, (dir, err) =>
     log.warn(
       { dir, err: err instanceof Error ? err.message : String(err) },
       "compiled workflow not loaded",
     ),
   );
   const taken = new Set(WORKFLOWS.map((w) => w.name));
-  const extra = compiled.filter((c) => {
-    if (taken.has(c.workflow.name)) {
-      log.warn(
-        { dir: c.dir },
-        `compiled workflow ${c.workflow.name} clashes with a hand-written one; skipped`,
-      );
+  /** Compiled flows, minus any that clashes with a hand-written name (said once per boot). */
+  const warned = new Set<string>();
+  const compiledNow = async () =>
+    (await catalog.list()).filter((c) => {
+      if (!taken.has(c.workflow.name)) return true;
+      if (!warned.has(c.dir)) {
+        warned.add(c.dir);
+        log.warn(
+          { dir: c.dir },
+          `compiled workflow ${c.workflow.name} clashes with a hand-written one; skipped`,
+        );
+      }
       return false;
-    }
-    taken.add(c.workflow.name);
-    return true;
-  });
+    });
+  const extra = await compiledNow();
   if (extra.length) log.info({ compiled: extra.map((c) => c.workflow.name) }, "compiled workflows");
   return {
     services: [
@@ -436,13 +445,14 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       browserService({ runner: browser }),
       makeRunObject(domainWorkflow, domainDeps, host, { guards }),
       makeRunObject(bootstrapWorkflow, bootstrapDeps, host, { guards }),
-      ...extra.map((c) =>
-        makeRunObject(c.workflow as never, compiledDeps(browser) as never, host, { guards }),
-      ),
+      // Every compiled flow, present and future, runs under this one object.
+      makeCompiledRunObject({ catalog, browser, host, opts: { guards } }),
     ],
     channel,
-    workflows: [...WORKFLOWS, ...extra.map((c) => c.workflow)],
-    proofs: Object.fromEntries(extra.map((c) => [c.workflow.name, c.proof])),
+    workflows: async () => [...WORKFLOWS, ...(await compiledNow()).map((c) => c.workflow)],
+    proofs: async () =>
+      Object.fromEntries((await compiledNow()).map((c) => [c.workflow.name, c.proof])),
+    catalog,
     browser,
     bus,
     memory,
