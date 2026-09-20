@@ -51,7 +51,11 @@ if (settings.restateAdminUrl && settings.restateEndpointUrl) {
   log.info({ deployment: reg.id, services: reg.services }, "registered with restate");
 }
 
-const llm = llmFor(settings);
+// The person hears once a day when the model budget is spent; `app` exists by the time any call is made.
+const llm = llmFor(settings, undefined, (err) => {
+  log.warn({ used: err.used, cap: err.cap }, "model budget spent");
+  void app.channel.note?.(`autobrowse: ${err.message}`).catch(() => undefined);
+});
 const agent = llm
   ? agentSessions({
       llm,

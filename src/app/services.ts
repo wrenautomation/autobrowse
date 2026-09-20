@@ -61,7 +61,7 @@ import {
   serviceAccountToken,
   type TokenSupplier,
 } from "../google-auth.js";
-import { type BudgetedLlm, budgetedLlm, fileLedger } from "../llm/budget.js";
+import { type BudgetExceeded, type BudgetedLlm, budgetedLlm, fileLedger } from "../llm/budget.js";
 import { type Llm, makeLlm } from "../llm/index.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
@@ -124,7 +124,11 @@ export function browserOptions(
 }
 
 /** The model behind everything, under the daily cap when one is set (`LLM_DAILY_TOKENS`). */
-export function llmFor(settings: Settings, http = httpClient()): BudgetedLlm | Llm | null {
+export function llmFor(
+  settings: Settings,
+  http = httpClient(),
+  onExceeded?: (err: BudgetExceeded) => void,
+): BudgetedLlm | Llm | null {
   const llm = makeLlm(
     {
       provider: settings.llmProvider,
@@ -139,6 +143,7 @@ export function llmFor(settings: Settings, http = httpClient()): BudgetedLlm | L
   return budgetedLlm(llm, {
     dailyTokens: settings.llmDailyTokens,
     ledger: fileLedger(join(expandHome(settings.artifactsDir), "llm-budget.json")),
+    ...(onExceeded ? { onExceeded } : {}),
   });
 }
 

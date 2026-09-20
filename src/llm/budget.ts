@@ -74,9 +74,16 @@ export function fileLedger(path: string): Ledger {
 
 export function budgetedLlm(
   inner: Llm,
-  o: { dailyTokens: number; ledger: Ledger; now?: () => Date },
+  o: {
+    dailyTokens: number;
+    ledger: Ledger;
+    now?: () => Date;
+    /** Told once per day, the first time a call is refused: the person should hear it. */
+    onExceeded?: (err: BudgetExceeded) => void;
+  },
 ): BudgetedLlm {
   const now = o.now ?? (() => new Date());
+  let toldFor: string | null = null;
   const today = (): DayLedger => {
     const l = o.ledger.read();
     const day = dayOf(now());
@@ -96,8 +103,16 @@ export function budgetedLlm(
     cap: o.dailyTokens,
     usedToday: () => used(today()),
     async complete(req: LlmRequest): Promise<LlmReply> {
-      const before = used(today());
-      if (before >= o.dailyTokens) throw new BudgetExceeded(before, o.dailyTokens);
+      const l = today();
+      const before = used(l);
+      if (before >= o.dailyTokens) {
+        const err = new BudgetExceeded(before, o.dailyTokens);
+        if (toldFor !== l.day) {
+          toldFor = l.day;
+          o.onExceeded?.(err);
+        }
+        throw err;
+      }
       const reply = await inner.complete(req);
       add(reply.usage);
       return reply;
