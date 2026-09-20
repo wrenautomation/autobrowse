@@ -42,6 +42,7 @@ const llm = llmFor(settings);
 const agent = llm
   ? agentSessions({
       llm,
+      dir: join(expandHome(settings.recordingsDir), ".sessions"),
       open: (site, port) =>
         startExplore({
           site,

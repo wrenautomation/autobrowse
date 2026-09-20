@@ -1,3 +1,6 @@
+import { mkdtempSync, readdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { agentSessions } from "../src/agent/sessions.js";
 import type { ExploreCommand, Explorer } from "../src/explore/server.js";
@@ -112,6 +115,22 @@ describe("agentSessions", () => {
     await s.resume(v.id);
     for (let i = 0; i < 20 && s.get(v.id)?.status !== "done"; i++) await tick();
     expect(s.get(v.id)).toMatchObject({ status: "done", achieved: true, prompt: null });
+  });
+  it("views persist to disk and come back closed after a restart", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sessions-"));
+    const llm = fakeLlm([{ thought: "x", action: { cmd: "done", summary: "s", achieved: true } }]);
+    const first = agentSessions({ llm, open: async () => fakeExplorer().ex, basePort: 9650, dir });
+    const v = await first.start({ site: "a", goal: "persisted" });
+    for (let i = 0; i < 20 && first.get(v.id)?.status !== "done"; i++) await tick();
+    expect(readdirSync(dir)).toEqual([`${v.id}.json`]);
+    // A second session dies mid-run (no done reply scripted): it is "running" on disk.
+    const stuck = agentSessions({ llm: fakeLlm([]), open: async () => fakeExplorer().ex, dir });
+    const w = await stuck.start({ site: "b", goal: "interrupted" }).catch(() => null);
+    await tick();
+    const again = agentSessions({ llm, open: async () => fakeExplorer().ex, dir });
+    const views = again.list();
+    expect(views.find((x) => x.id === v.id)).toMatchObject({ status: "done", goal: "persisted" });
+    if (w) expect(views.find((x) => x.id === w.id)?.status).toMatch(/closed|failed/);
   });
   it("ports do not collide between live sessions", async () => {
     const llm = fakeLlm([{ thought: "x", action: { cmd: "done", summary: "s", achieved: true } }]);

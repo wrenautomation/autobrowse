@@ -6,6 +6,8 @@
  * saved recording is what lasts.
  */
 import { randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Explorer } from "../explore/server.js";
 import type { Llm } from "../llm/types.js";
 import { type AgentResult, exploreWithAgent, type StepRecord } from "./explorer.js";
@@ -74,6 +76,12 @@ export interface SessionsOptions {
   basePort?: number;
   maxSteps?: number;
   now?: () => Date;
+  /**
+   * Where session views are written (one JSON per session) so the list,
+   * and the evaluator's evidence, survive a worker restart. Sessions that
+   * were live when the process died come back as closed.
+   */
+  dir?: string;
 }
 
 interface Live {
@@ -83,10 +91,41 @@ interface Live {
   finished: Promise<void>;
 }
 
+const LIVE_STATES = new Set<SessionStatus>(["starting", "running", "paused", "needs-human"]);
+
 export function agentSessions(o: SessionsOptions): AgentSessions {
   const sessions = new Map<string, Live>();
   const now = o.now ?? (() => new Date());
   const base = o.basePort ?? 9100;
+  const persist = (view: SessionView) => {
+    if (!o.dir) return;
+    try {
+      mkdirSync(o.dir, { recursive: true });
+      writeFileSync(join(o.dir, `${view.id}.json`), JSON.stringify(view, null, 2));
+    } catch {
+      // the disk copy is a convenience; the live view is the truth
+    }
+  };
+  if (o.dir && existsSync(o.dir)) {
+    for (const f of readdirSync(o.dir).filter((f) => f.endsWith(".json"))) {
+      try {
+        const view = JSON.parse(readFileSync(join(o.dir, f), "utf8")) as SessionView;
+        if (LIVE_STATES.has(view.status)) {
+          view.status = "closed";
+          view.error = view.error ?? "the worker restarted while this session was live";
+          persist(view);
+        }
+        sessions.set(view.id, {
+          view,
+          explorer: null,
+          stopFlag: true,
+          finished: Promise.resolve(),
+        });
+      } catch {
+        // not a session file
+      }
+    }
+  }
 
   const freePort = () => {
     const used = new Set(
@@ -129,6 +168,7 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
       };
       const live: Live = { view, explorer: null, stopFlag: false, finished: Promise.resolve() };
       sessions.set(id, live);
+      persist(view);
       live.finished = (async () => {
         try {
           const ex = await o.open(req.site, view.port);
@@ -159,6 +199,7 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
             onStep: (r) => {
               const step: StepView = { ...r, screenshot: null };
               view.steps.push(step);
+              persist(view);
               // Off the loop: the picture arrives when it arrives.
               void ex
                 .exec({ cmd: "screenshot" })
@@ -176,10 +217,14 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
           view.error = err instanceof Error ? err.message : String(err);
           view.status = "failed";
         }
+        persist(view);
       })();
       return view;
     },
-    list: () => [...sessions.values()].map((s) => s.view),
+    list: () =>
+      [...sessions.values()]
+        .map((s) => s.view)
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt)),
     get: (id) => sessions.get(id)?.view ?? null,
     async pause(id) {
       const live = must(id);
@@ -206,6 +251,7 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
       const saved = (await open(live).exec({ cmd: "save", name })) as { dir: string };
       live.view.recording = saved.dir;
       live.view.recordingName = name;
+      persist(live.view);
       return live.view;
     },
     async close(id) {
@@ -217,6 +263,7 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
         await live.explorer.exec({ cmd: "close" }).catch(() => undefined);
       }
       live.view.status = "closed";
+      persist(live.view);
       return live.view;
     },
   };
