@@ -13,6 +13,7 @@ import { startUiServer } from "../ui/server.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
 import { registerDeployment } from "./register.js";
+import { initSentry } from "./sentry.js";
 import {
   browserOptions,
   buildApp,
@@ -27,7 +28,14 @@ import {
 const root = loadEnvFile();
 const settings = loadSettings();
 const log = pino({ level: settings.logLevel });
+const sentry = settings.sentryDsn
+  ? initSentry({ dsn: settings.sentryDsn, environment: settings.sentryEnvironment })
+  : null;
 const app = await buildApp(settings, log);
+if (sentry) {
+  app.bus.subscribe((_seq, e) => void sentry.event(e));
+  log.info({ environment: settings.sentryEnvironment }, "sentry on");
+}
 await serve({ services: app.services, port: settings.restatePort });
 log.info({ port: settings.restatePort, browser: settings.browser }, "autobrowse restate endpoint");
 if (settings.restateAdminUrl && settings.restateEndpointUrl) {
@@ -105,8 +113,10 @@ if (llm && settings.evaluateEveryHours > 0 && app.channel.note) {
     }),
     propose: (e) => proposeWorkflows(llm, e),
     notify: app.channel.note.bind(app.channel),
-    onError: (err) =>
-      log.warn({ err: err instanceof Error ? err.message : String(err) }, "evaluator"),
+    onError: (err) => {
+      log.warn({ err: err instanceof Error ? err.message : String(err) }, "evaluator");
+      sentry?.error(err, { where: "evaluator" });
+    },
   });
   log.info({ everyHours: settings.evaluateEveryHours }, "evaluator scheduled");
 }

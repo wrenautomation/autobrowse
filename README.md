@@ -189,6 +189,9 @@ channel, and a reply on any of them is a command (`yes`, `no`, `pause`,
   `LINQ_WEBHOOK_SECRET`; the same chats serve SMS one-time codes)
 - a webhook (`WEBHOOK_URL`)
 
+With `SENTRY_DSN` set, failed runs, failed steps and crashes become
+Sentry issues tagged workflow/key/step.
+
 ## Coupling to `wren`
 
 Thin: writes the roster to SSM, dispatches wren's deploy, calls its ingress

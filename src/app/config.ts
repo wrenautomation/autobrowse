@@ -70,6 +70,9 @@ const schema = z.object({
   envFile: z.string().min(1).default(".env"),
   /** Which guards stay on: `all`, `none`, or a comma list (purchase, password, irreversible). */
   guards: z.string().default("all"),
+  /** Sentry: failed runs, failed steps and crashes become issues. Off when unset. */
+  sentryDsn: z.string().url().optional(),
+  sentryEnvironment: z.string().min(1).default("local"),
   /** Run the evaluator every N hours and tell the person what deserves a workflow; 0 = off. */
   evaluateEveryHours: z.coerce.number().min(0).default(0),
   /** Site credentials for automated sign-in; 0600 JSON. Env (`AUTOBROWSE_CRED_*`) is read first. */
@@ -159,6 +162,8 @@ export const ENV_KEYS = {
   secretSink: "SECRET_SINK",
   envFile: "ENV_FILE",
   guards: "GUARDS",
+  sentryDsn: "SENTRY_DSN",
+  sentryEnvironment: "SENTRY_ENVIRONMENT",
   evaluateEveryHours: "EVALUATE_EVERY_HOURS",
   credentialsFile: "CREDENTIALS_FILE",
   credentialsCipher: "CREDENTIALS_CIPHER",
