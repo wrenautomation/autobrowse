@@ -109,14 +109,14 @@ function renderBrowserStep(o: Outline, step: Extract<OutlineStep, { kind: "brows
 const ${id}Flow = defineFlow<${Input}, ${reads.length ? "Record<string, string>" : "void"}>({
   site: ${q(o.site)},
   name: ${q(step.name)},
-  async run(fp, input) {
-${flowLines.join("\n") || "    void input;"}
+  async run(fp${inputArgs ? ", input" : ""}) {
+${flowLines.join("\n") || "    void fp;"}
   },
 });
 
 const ${id}: Step<${q(step.name)}> = {
   name: ${q(step.name)},${step.irreversible ? "\n  irreversible: true," : ""}
-  async run({ fx, deps, plan${step.irreversible ? ", gate" : ""} }) {
+  async run({ fx, deps${fields.length ? ", plan" : ""}${step.irreversible ? ", gate" : ""} }) {
 ${gate}${secretLines.length ? `${secretLines.join("\n")}\n` : ""}    ${reads.length ? "const out = " : ""}await fx.run(${q(`browser ${step.name}`)}, () => deps.browser.run(${id}Flow, { ${inputArgs} }));
 ${proof}
     return done(${reads.length ? "JSON.stringify(out)" : q(step.description || step.name)});

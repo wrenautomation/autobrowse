@@ -10,6 +10,7 @@ import type { FlowRunner } from "../browser/flow.js";
 import { memoryEffects } from "../engine/memory.js";
 import { type Outcome, runFlow } from "../engine/run.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
+import { compiledDeps } from "./compiled-deps.js";
 
 export const PROOF_FILE = "proof.json";
 
@@ -29,7 +30,12 @@ export async function proveWorkflow(
   opts: { plan?: Record<string, unknown>; now?: () => Date } = {},
 ): Promise<Proof> {
   const plan = workflow.plan.parse({ ...(opts.plan ?? {}), dryRun: false });
-  const out = await runFlow(memoryEffects().fx, workflow as never, { browser } as never, plan);
+  const out = await runFlow(
+    memoryEffects().fx,
+    workflow as never,
+    compiledDeps(browser) as never,
+    plan,
+  );
   const steps = Object.entries(out.results).flatMap(([name, r]) =>
     r ? [{ name, status: r.status, detail: r.detail }] : [],
   );

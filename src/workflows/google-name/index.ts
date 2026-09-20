@@ -26,7 +26,7 @@ export type OpenPersonalInfoInput = Record<string, never>;
 const openPersonalInfoFlow = defineFlow<OpenPersonalInfoInput, void>({
   site: "google",
   name: "open-personal-info",
-  async run(fp, input) {
+  async run(fp) {
     await fp.open("https://myaccount.google.com/");
     await fp.act(
       { kind: "click" },
@@ -38,7 +38,7 @@ const openPersonalInfoFlow = defineFlow<OpenPersonalInfoInput, void>({
 
 const openPersonalInfo: Step<"open-personal-info"> = {
   name: "open-personal-info",
-  async run({ fx, deps, plan }) {
+  async run({ fx, deps }) {
     await fx.run("browser open-personal-info", () => deps.browser.run(openPersonalInfoFlow, {}));
     // TODO: prove the result through an API read where one exists.
     return done("Navigate to the Personal info page by clicking the 'Personal info' menuitem.");

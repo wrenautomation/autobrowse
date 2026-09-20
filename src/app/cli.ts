@@ -66,7 +66,7 @@ program
       name: string,
       o: { plan?: string; dryRun?: boolean; ask?: boolean; headed?: boolean; prove?: boolean },
     ) => {
-      const { loadCompiledWorkflows } = await import("../workflows/compiled.js");
+      const { compiledDeps, loadCompiledWorkflows } = await import("../workflows/compiled.js");
       const { memoryEffects } = await import("../engine/memory.js");
       const { runFlow } = await import("../engine/run.js");
       const { flowRunner } = await import("../browser/flow.js");
@@ -100,7 +100,7 @@ program
       const out = await runFlow(
         memoryEffects().fx,
         workflow as never,
-        { browser } as never,
+        compiledDeps(browser) as never,
         plan,
         () =>
           o.ask ? null : { approved: true, note: "autobrowse try", at: new Date().toISOString() },

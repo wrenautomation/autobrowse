@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   compiledCatalog,
+  compiledDeps,
   compiledKey,
   loadCompiledWorkflows,
   splitCompiledKey,
@@ -67,5 +68,20 @@ describe("compiled keys", () => {
     expect(() => splitCompiledKey("nokey")).toThrow(/<workflow>\/<key>/);
     expect(() => splitCompiledKey("w/")).toThrow();
     expect(() => splitCompiledKey("/k")).toThrow();
+  });
+});
+
+describe("compiledDeps", () => {
+  it("serves a redacted value from AUTOBROWSE_<KEY> and names the variable when it is missing", async () => {
+    const browser = { run: async () => undefined } as never;
+    process.env.AUTOBROWSE_CARD_CVV = "123";
+    try {
+      const deps = compiledDeps(browser);
+      expect(await deps.secrets.get("cardCvv")).toBe("123");
+      await expect(deps.secrets.get("apiKey")).rejects.toThrow(/set AUTOBROWSE_API_KEY/);
+      expect((await deps.shell.run("echo hi")).code).toBe(0);
+    } finally {
+      delete process.env.AUTOBROWSE_CARD_CVV;
+    }
   });
 });

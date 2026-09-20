@@ -8,14 +8,17 @@ export interface SecretSource {
   get(key: string): Promise<string>;
 }
 
-/** `MY_SECRET` from the environment, `prefix` first: `AUTOBROWSE_MY_SECRET`. */
+/** A key as the recorder names it (`cardCvv`) → `AUTOBROWSE_CARD_CVV` in the environment. */
 export function envSecrets(
   env: NodeJS.ProcessEnv = process.env,
   prefix = "AUTOBROWSE_",
 ): SecretSource {
   return {
     async get(key) {
-      const name = `${prefix}${key.replace(/[^a-zA-Z0-9]+/g, "_").toUpperCase()}`;
+      const name = `${prefix}${key
+        .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+        .replace(/[^a-zA-Z0-9]+/g, "_")
+        .toUpperCase()}`;
       const value = env[name];
       if (!value) throw new Error(`secret ${key}: set ${name}`);
       return value;

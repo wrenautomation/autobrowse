@@ -26,7 +26,7 @@ export type ReadMainHeadingInput = Record<string, never>;
 const readMainHeadingFlow = defineFlow<ReadMainHeadingInput, Record<string, string>>({
   site: "example",
   name: "read-main-heading",
-  async run(fp, input) {
+  async run(fp) {
     await fp.open("https://example.com/");
     const out: Record<string, string> = {};
     out.title = await fp.read({ role: "heading", name: "Example Domain" }); // page.getByRole("heading", { name: "Example Domain", exact: true })
@@ -36,7 +36,7 @@ const readMainHeadingFlow = defineFlow<ReadMainHeadingInput, Record<string, stri
 
 const readMainHeading: Step<"read-main-heading"> = {
   name: "read-main-heading",
-  async run({ fx, deps, plan }) {
+  async run({ fx, deps }) {
     const out = await fx.run("browser read-main-heading", () =>
       deps.browser.run(readMainHeadingFlow, {}),
     );

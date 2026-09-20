@@ -15,7 +15,10 @@ import type { FlowRunner } from "../browser/flow.js";
 import { type HostDeps, makeRunObjectFrom, type RunObjectDefinition } from "../engine/object.js";
 import type { AdvanceOptions } from "../engine/run.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
+import { type CompiledDeps, compiledDeps } from "./compiled-deps.js";
 import { type Proof, readProof } from "./proof.js";
+
+export { type CompiledDeps, compiledDeps };
 
 /** Hand-written workflows, wired with their own deps in services.ts. */
 export const HAND_WRITTEN = new Set(["domain", "bootstrap"]);
@@ -59,11 +62,6 @@ export async function loadCompiledWorkflows(
     }
   }
   return out;
-}
-
-/** What a compiled workflow needs: the runner, nothing else. */
-export function compiledDeps(browser: FlowRunner): { browser: FlowRunner } {
-  return { browser };
 }
 
 /** The object every compiled workflow runs under; its key is `<workflow>/<run key>`. */
