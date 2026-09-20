@@ -22,6 +22,8 @@ export interface CodeSource {
   get(req: CodeRequest, cred: Credential): Promise<string | null>;
   /** Could this source answer for that kind and credential? Lets a sign-in pick its second step before asking. */
   offers(kind: CodeKind, cred: Credential): boolean;
+  /** Where the code would land (a number, an address), so a page that lists several can be matched to it. */
+  inbox(kind: CodeKind, cred: Credential): string | null;
 }
 
 export interface Message {
@@ -58,6 +60,7 @@ export function totpSource(opts: TotpSourceOptions = {}): CodeSource {
   const sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   return {
     offers: (kind, cred) => kind === "totp" && Boolean(cred.totpSecret),
+    inbox: () => null,
     async get(req, cred) {
       if (req.kind !== "totp" || !cred.totpSecret) return null;
       const left = totpRemainingMs(now());
@@ -88,6 +91,7 @@ export function messageSource(opts: MessageSourceOptions): CodeSource {
     cred.codesInbox ?? opts.inbox ?? (cred.username.includes("@") ? cred.username : null);
   return {
     offers: (kind, cred) => kind === opts.kind && inboxFor(cred) !== null,
+    inbox: (kind, cred) => (kind === opts.kind ? inboxFor(cred) : null),
     async get(req, cred) {
       if (req.kind !== opts.kind) return null;
       const inbox = inboxFor(cred);
@@ -114,6 +118,7 @@ export function messageSource(opts: MessageSourceOptions): CodeSource {
 export function codeSources(...sources: CodeSource[]): CodeSource {
   return {
     offers: (kind, cred) => sources.some((s) => s.offers(kind, cred)),
+    inbox: (kind, cred) => sources.find((s) => s.offers(kind, cred))?.inbox(kind, cred) ?? null,
     async get(req, cred) {
       for (const s of sources) {
         const c = await s.get(req, cred);
@@ -124,4 +129,8 @@ export function codeSources(...sources: CodeSource[]): CodeSource {
   };
 }
 
-export const noCodes: CodeSource = { get: async () => null, offers: () => false };
+export const noCodes: CodeSource = {
+  get: async () => null,
+  offers: () => false,
+  inbox: () => null,
+};

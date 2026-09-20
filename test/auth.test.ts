@@ -177,8 +177,8 @@ describe("code sources", () => {
   });
   it("first source with an answer wins", async () => {
     const src = codeSources(
-      { get: async () => null, offers: () => false },
-      { get: async () => "9", offers: () => true },
+      { get: async () => null, offers: () => false, inbox: () => null },
+      { get: async () => "9", offers: () => true, inbox: () => "x" },
     );
     expect(await src.get({ site: "s", kind: "sms", since: new Date(0) }, cred)).toBe("9");
   });
@@ -288,12 +288,12 @@ describe("loginProvider", () => {
   it("reports a missing credential and a missing code", async () => {
     const login = loginProvider([site], {
       credentials: memoryCredentials(),
-      codes: { get: async () => null, offers: () => false },
+      codes: { get: async () => null, offers: () => false, inbox: () => null },
     });
     expect(await login(fakePage({ text: [], present: () => true }).fp, "s")).toBe("no-credential");
     const withCred = loginProvider([site], {
       credentials: memoryCredentials({ s: { username: "u", password: "p" } }),
-      codes: { get: async () => null, offers: () => false },
+      codes: { get: async () => null, offers: () => false, inbox: () => null },
     });
     await expect(withCred(fakePage({ text: [], present: () => true }).fp, "s")).rejects.toThrow(
       /no totp code/,
@@ -318,14 +318,15 @@ describe("signInToGoogle second step", () => {
     cred: base,
     code: async (kind) => (kinds.includes(kind) ? "123456" : Promise.reject(new Error("none"))),
     offers: (kind) => kinds.includes(kind),
+    inbox: (kind) => (kind === "sms" && kinds.includes(kind) ? "+15555550182" : null),
     ...(notify ? { notify } : {}),
     credFor: async () => base,
   });
   it("asks for the SMS when a phone or Twilio can read it", async () => {
     const { fp, acts } = page((h) => !/email|password/i.test(String(h.name)));
     await signInToGoogle(ctx(fp, ["sms"]));
-    expect(acts.map((a) => `${a.op.kind} ${a.hints.name ?? a.hints.text}`)).toEqual([
-      "click /verification code at/i",
+    expect(acts.map((a) => `${a.op.kind} ${a.hints.name ?? a.hints.css}`)).toEqual([
+      'click [role=link]:not([aria-disabled="true"]):has-text("verification code at"):has-text("••82")',
       "fill /code/i",
       "click /^next$/i",
     ]);

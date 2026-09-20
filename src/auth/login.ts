@@ -19,6 +19,8 @@ export interface SignInContext {
   code(kind: CodeKind, hint?: string): Promise<string>;
   /** Whether a code of this kind can be had, so the sign-in picks that step on the page. */
   offers(kind: CodeKind): boolean;
+  /** Where that code would land, to match against a page that masks numbers ("•••-••82"). */
+  inbox(kind: CodeKind): string | null;
   /**
    * A note to the person's phone, for a step only a device can answer
    * ("Tap Yes on your phone"). Absent when no phone is linked.
@@ -75,6 +77,10 @@ export class LoginFailed extends Error {
 }
 
 const SETTLE_MS = 1_500;
+/** How long a sign-in page gets to render its next step before it counts as absent. */
+const RENDER_MS = 8_000;
+/** How long a person gets to tap Yes on their phone. */
+const PROMPT_MS = 180_000;
 
 export function formLogin(site: string, spec: FormLoginSpec): SiteLogin["signIn"] {
   return async ({ fp, cred, code }) => {
@@ -123,7 +129,7 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
       text = await fp.text();
     }
   }
-  if (await fp.has({ role: "textbox", name: "/email or phone/i" })) {
+  if (await fp.has({ role: "textbox", name: "/email or phone/i" }, RENDER_MS)) {
     await fp.act(
       { kind: "fill", value: cred.username },
       { role: "textbox", name: "/email or phone/i" },
@@ -158,7 +164,7 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
     await fp.wait(SETTLE_MS);
     text = await fp.text();
   }
-  if (await fp.has({ role: "textbox", name: "/password/i" })) {
+  if (await fp.has({ role: "textbox", name: "/password/i" }, RENDER_MS)) {
     await fp.act(
       { kind: "fill", value: cred.password },
       { role: "textbox", name: "/password/i" },
@@ -235,32 +241,39 @@ async function googleSecondStep(ctx: SignInContext): Promise<void> {
     }
     return submitCode(fp, await ctx.code("totp"));
   }
-  if (ctx.offers("sms")) {
-    await toSelection(fp);
-    await fp.act(
-      { kind: "click" },
-      { role: "link", name: "/verification code at/i" },
-      { goal: "have Google text the code" },
-    );
+  await toSelection(fp);
+  // Google lists every phone it knows, masked to the last two digits, and
+  // greys out one it was given minutes ago ("for your security"). Only a
+  // live link to the phone we can read counts.
+  const tail = ctx.inbox("sms")?.slice(-2);
+  const smsLink = {
+    css: `[role=link]:not([aria-disabled="true"]):has-text("verification code at"):has-text("••${tail}")`,
+  };
+  if (ctx.offers("sms") && tail && (await fp.has(smsLink))) {
+    await fp.act({ kind: "click" }, smsLink, { goal: "have Google text the code" });
     await fp.wait(SETTLE_MS);
-    if (!(await fp.has(codeBox)))
+    if (!(await fp.has(codeBox, RENDER_MS)))
       throw new LoginFailed(site, "no code box after asking for the SMS");
     return submitCode(fp, await ctx.code("sms", "google"));
   }
   if (ctx.notify) {
-    await toSelection(fp);
     const before = fp.url();
     await fp.act(
       { kind: "click" },
       { role: "link", name: "/tap yes on your phone/i" },
       { goal: "ask the phone for a Yes" },
     );
-    await ctx.notify(`Google sign-in for ${ctx.cred.username}: tap Yes on your phone`);
+    // The page says where the prompt went ("Open the YouTube app on Apple iPhone 12"); pass it on.
+    await fp.wait(SETTLE_MS);
+    const where = (await fp.text()).match(/open the .{1,60}? app on [^\n.]{1,60}/i)?.[0];
+    await ctx.notify(
+      `Google sign-in for ${ctx.cred.username}: ${where ?? "tap Yes on your phone"} and tap Yes`,
+    );
     const moved = await fp.waitForUrl(
       (u) => !/accounts\.google\.com\/v3\/signin\/challenge/.test(u) && u !== before,
-      120_000,
+      PROMPT_MS,
     );
-    if (!moved) throw new LoginFailed(site, "no Yes from the phone within two minutes");
+    if (!moved) throw new LoginFailed(site, "no Yes from the phone within three minutes");
     return;
   }
   throw new LoginFailed(
@@ -335,6 +348,7 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
         return c;
       },
       offers: (kind) => opts.codes.offers(kind, ctx.cred),
+      inbox: (kind) => opts.codes.inbox(kind, ctx.cred),
       ...(opts.notify ? { notify: opts.notify } : {}),
       async credFor(other) {
         const c = await opts.credentials.get(other);

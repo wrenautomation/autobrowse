@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
 import type { HttpClient } from "../clients/http.js";
 import { expandHome } from "../google-auth.js";
+import { virtualAuthenticator } from "./webauthn.js";
 
 /** A page needs a person: login, captcha, consent, or a layout nobody planned for. */
 export class NeedsHuman extends Error {
@@ -70,6 +71,7 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
     );
   }
   const page = context.pages()[0] ?? (await context.newPage());
+  virtualAuthenticator(context);
   return {
     context,
     page,

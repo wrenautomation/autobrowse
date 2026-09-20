@@ -137,7 +137,7 @@ export function phoneStatus(dbPath = DEFAULT_DB): PhoneStatus {
   }
   const probe = spawnSync(
     "osascript",
-    ["-e", 'tell application "Messages" to get name of 1st account'],
+    ["-e", 'tell application "Messages" to get id of 1st account whose service type = iMessage'],
     { encoding: "utf8" },
   );
   const send = probe.status === 0;

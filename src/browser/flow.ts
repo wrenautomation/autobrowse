@@ -72,7 +72,8 @@ export interface FlowPage {
   /** Raw markup, capped; for things the eye cannot see (an otpauth link behind a QR). */
   html(): Promise<string>;
   /** Whether something matching `hints` is on the page right now. */
-  has(hints: Hints): Promise<boolean>;
+  /** Visible now, or within `withinMs` when given (a page still rendering its next step). */
+  has(hints: Hints, withinMs?: number): Promise<boolean>;
   wait(ms: number): Promise<void>;
   /** Resolves when the URL matches, or null at the timeout. */
   waitForUrl(pattern: RegExp | ((url: string) => boolean), timeoutMs: number): Promise<boolean>;
@@ -270,11 +271,19 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
                 .catch(() => "")
             ).slice(0, 20_000),
           html: async () => (await active.content().catch(() => "")).slice(0, 400_000),
-          has: (hints) =>
-            locate(active, hints)
-              .first()
-              .isVisible()
-              .catch(() => false),
+          has: (hints, withinMs = 0) =>
+            withinMs > 0
+              ? locate(active, hints)
+                  .first()
+                  .waitFor({ state: "visible", timeout: withinMs })
+                  .then(
+                    () => true,
+                    () => false,
+                  )
+              : locate(active, hints)
+                  .first()
+                  .isVisible()
+                  .catch(() => false),
           wait: (ms) => active.waitForTimeout(ms),
           waitForUrl: (pattern, timeout) =>
             active
