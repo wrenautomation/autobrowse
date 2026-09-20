@@ -86,6 +86,11 @@ table's "may import" column.
   notes, since they have no hints); `save` writes a `Recording` through
   the recorder's store, so `compile` works on it unchanged. Secrets are
   redacted by the recorder's rules.
+- `pause`/`resume`: between them the page is a person's. The recorder's
+  observer script is on the page, its binding journals clicks, inputs
+  (redacted) and navigations only while paused; `resume` reports how many
+  hand acts there were. `exec()` is the same command set in-process, what
+  the agent and the UI's console call.
 - Failure artifacts carry the same tree: the runner writes
   `<stamp>.aria.txt` (URL, then the tree) next to the PNG, so a miss can
   be diagnosed without opening the image.
