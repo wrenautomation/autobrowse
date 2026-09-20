@@ -1,0 +1,35 @@
+# autobrowse on AWS
+
+One t3.medium box, the worker container from ECR, `/data` on its own volume,
+secrets in SSM, no inbound port. Restate Cloud reaches the worker through the
+tunnel the worker dials; you reach the UI through SSM port forwarding. Roughly
+$30/month (instance) + $2 (volume) + pennies (ECR, SSM Advanced parameter).
+
+## Once
+
+1. `aws login` (same account and region as wren). `cd deploy/terraform && tofu init && tofu apply`.
+   wren's terraform must already be applied: this reads its GitHub OIDC provider.
+2. Restate Cloud, the wren env: Developers > API keys > a **Full** key
+   (`RESTATE_AUTH_TOKEN`); Developers > Security > the request-identity key
+   (`RESTATE_IDENTITY_KEY`); the env id (`RESTATE_ENVIRONMENT_ID`, `env_…`).
+3. `cp deploy/prod.env.example deploy/prod.env`, fill it, `deploy/scripts/push-secrets.sh`.
+   `UI_TOKEN` is required. Site credentials go in as `AUTOBROWSE_CRED_<SITE>_*`
+   (`CREDENTIALS_CIPHER=none`: no Keychain on Linux).
+4. GitHub, repo settings: secrets `AWS_DEPLOY_ROLE_ARN`, `ECR_REPOSITORY`,
+   `INSTANCE_ID` from `tofu output`; an environment named `production`;
+   variable `DEPLOY_ENABLED=true`. Until the variable is set, the deploy
+   workflow is a no-op, so main can keep moving before the box exists.
+5. Push main (or run `deploy` by hand). The box pulls the image, reads the
+   env, starts the worker; the worker dials the tunnel and registers itself.
+
+## After
+
+- UI: the `ui_forward` output, then `http://localhost:9080` with the token.
+- Shell: `aws ssm start-session --target <instance_id>`; logs with
+  `docker logs -f autobrowse-worker-1`.
+- Secrets changed: `push-secrets.sh`, then redeploy (push, or
+  `aws ssm send-command … autobrowse-deploy`).
+- Recordings are made on a laptop; copy the directory to `/data/recordings`
+  (`aws ssm` port forward + `scp` through it, or S3) and compile from the UI.
+- Persistent browser profiles live in `/data/profiles`: one worker, one box.
+  `BROWSER=browserbase` moves the browser out and lets the box shrink.

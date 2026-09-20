@@ -9,3 +9,6 @@ recordings/
 screenshots/
 test/.generated-*/
 ui/dist/
+deploy/terraform/.terraform/
+deploy/terraform/*.tfstate*
+deploy/terraform/*.tfvars

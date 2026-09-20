@@ -12,6 +12,7 @@ import type { Recording } from "../recorder/types.js";
 import { startUiServer } from "../ui/server.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
+import { cloudAdminUrl, planEndpoint } from "./endpoint.js";
 import { registerDeployment } from "./register.js";
 import { initSentry } from "./sentry.js";
 import {
@@ -39,12 +40,36 @@ if (sentry) {
   app.bus.subscribe((_seq, e) => void sentry.event(e));
   log.info({ environment: settings.sentryEnvironment }, "sentry on");
 }
-await serve({ services: app.services, port: settings.restatePort });
-log.info({ port: settings.restatePort, browser: settings.browser }, "autobrowse restate endpoint");
-if (settings.restateAdminUrl && settings.restateEndpointUrl) {
+const plan = planEndpoint(settings);
+let register: { adminUrl: string; endpointUrl: string } | null = null;
+if (plan.mode === "listen") {
+  await serve({ services: app.services, port: plan.port, identityKeys: plan.identityKeys });
+  log.info({ port: plan.port, browser: settings.browser }, "autobrowse restate endpoint");
+  if (plan.register && settings.restateAdminUrl) {
+    register = { adminUrl: settings.restateAdminUrl, endpointUrl: plan.register };
+  }
+} else {
+  // No inbound port: the worker dials Restate Cloud and registers the tunnel URL it is handed.
+  const { connectTunnel } = await import("@restatedev/restate-sdk-tunnel");
+  const tunnel = connectTunnel({
+    services: app.services,
+    tunnelName: plan.tunnelName,
+    environmentId: plan.environmentId,
+    region: plan.region,
+    signingPublicKey: plan.signingPublicKey,
+    authToken: settings.restateAuthToken as string,
+  });
+  await tunnel.ready;
+  if (!tunnel.deploymentUrl) throw new Error("restate tunnel handshake gave no deployment URL");
+  log.info({ tunnel: plan.tunnelName, browser: settings.browser }, "autobrowse restate tunnel up");
+  register = {
+    adminUrl: settings.restateAdminUrl ?? cloudAdminUrl(plan.environmentId, plan.region),
+    endpointUrl: tunnel.deploymentUrl,
+  };
+}
+if (register) {
   const reg = await registerDeployment({
-    adminUrl: settings.restateAdminUrl,
-    endpointUrl: settings.restateEndpointUrl,
+    ...register,
     http: httpClient(),
     authToken: settings.restateAuthToken ?? null,
   });

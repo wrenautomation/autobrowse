@@ -127,6 +127,21 @@ const schema = z.object({
   restateAdminUrl: z.string().url().optional(),
   /** How Restate reaches this worker, for self-registration: http://worker:9081 in compose. */
   restateEndpointUrl: z.string().url().optional(),
+  /**
+   * Restate Cloud, no inbound port: the worker dials out to the env's tunnel and
+   * registers the tunnel URL. All four or none; `restateAuthToken` is the key.
+   * The identity key is also honoured by the plain listener (a public endpoint).
+   */
+  restateTunnelName: z.string().min(1).optional(),
+  restateEnvironmentId: z
+    .string()
+    .regex(/^env_[a-z0-9]+$/)
+    .optional(),
+  restateCloudRegion: z.string().min(1).optional(),
+  restateIdentityKey: z
+    .string()
+    .regex(/^publickeyv1_[1-9A-HJ-NP-Za-km-z]+$/)
+    .optional(),
 });
 
 export type Settings = z.infer<typeof schema>;
@@ -191,6 +206,10 @@ export const ENV_KEYS = {
   twilioNumber: "TWILIO_NUMBER",
   restateAdminUrl: "RESTATE_ADMIN_URL",
   restateEndpointUrl: "RESTATE_ENDPOINT_URL",
+  restateTunnelName: "RESTATE_TUNNEL_NAME",
+  restateEnvironmentId: "RESTATE_ENVIRONMENT_ID",
+  restateCloudRegion: "RESTATE_CLOUD_REGION",
+  restateIdentityKey: "RESTATE_IDENTITY_KEY",
 } as const satisfies Record<keyof Settings, string>;
 
 export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {

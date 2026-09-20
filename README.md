@@ -160,8 +160,15 @@ HOST_INGRESS_PORT=18080 HOST_ADMIN_PORT=19070 HOST_UI_PORT=19080 docker compose 
 The worker registers itself with Restate on start (`RESTATE_ADMIN_URL` +
 `RESTATE_ENDPOINT_URL`). `wren` is Lambda behind Restate Cloud;
 autobrowse is a long-lived container because browser steps run for
-minutes and hold a profile. `designs/2026-09-19-deploy.md` has the AWS /
-Kubernetes path.
+minutes and hold a profile.
+
+### AWS
+
+`deploy/`: one EC2 box, the image from ECR, secrets in SSM, no inbound port.
+With `RESTATE_TUNNEL_NAME` + `RESTATE_ENVIRONMENT_ID` + `RESTATE_CLOUD_REGION`
++ `RESTATE_IDENTITY_KEY` set, the worker dials Restate Cloud's tunnel instead
+of listening and registers the tunnel URL itself. `deploy/README.md` is the
+runbook; a push to main deploys once the box exists.
 
 ## Layout
 

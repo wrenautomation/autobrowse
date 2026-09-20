@@ -1,0 +1,22 @@
+# The worker on the box. Restate is Restate Cloud, reached through the tunnel
+# the worker dials, so nothing listens for Restate here. The UI stays on
+# loopback: reach it with SSM port forwarding (terraform output `ui_forward`).
+# `/data/env/.env` is written from SSM by /usr/local/bin/autobrowse-deploy.
+services:
+  worker:
+    image: ${ECR_IMAGE}
+    env_file: /data/env/.env
+    environment:
+      UI_PORT: "9080"
+      UI_HOST: 0.0.0.0 # the host side stays loopback; UI_TOKEN in the env is still required
+      BROWSER: ${BROWSER:-local}
+      BROWSER_CHANNEL: chromium
+    ports:
+      - "127.0.0.1:9080:9080"
+    volumes:
+      - /data:/data
+    shm_size: 1g
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "5" }
