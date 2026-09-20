@@ -55,5 +55,8 @@ trips", "options first class, not inconvenient".
    index would save that once recordings number in the hundreds.
 4. `inbound` (channel commands) reads the newest 100 runs to find the
    waiting one; a run older than that cannot be answered by text.
-5. Step `clip` keeps 6 KB per string; a desktop tree cut mid-line is
+5. `before` is a plain `updatedAt` cursor: two runs updated in the same
+   millisecond at a page edge could hide one. A (time, id) cursor fixes it
+   if it ever shows.
+6. Step `clip` keeps 6 KB per string; a desktop tree cut mid-line is
    still readable, the model only ever saw 6 KB anyway.
