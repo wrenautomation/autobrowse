@@ -142,6 +142,8 @@ function Actions({ rec }: { rec: Recording }) {
         return `select ${a.value} in ${a.target.name ?? a.target.tag}`;
       case "press":
         return `press ${a.key}`;
+      case "upload":
+        return `upload ${a.files.map((f) => f.split("/").pop()).join(", ")} to ${a.target.name ?? a.target.tag}`;
       case "submit":
         return "submit";
       case "note":

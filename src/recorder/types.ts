@@ -38,6 +38,7 @@ export type Action =
   | (Base & { kind: "input"; target: LocatorHints; value: string; redacted: boolean })
   | (Base & { kind: "select"; target: LocatorHints; value: string })
   | (Base & { kind: "press"; target: LocatorHints; key: string })
+  | (Base & { kind: "upload"; target: LocatorHints; files: string[] })
   | (Base & { kind: "submit"; target: LocatorHints })
   | (Base & { kind: "note"; text: string })
   | (Base & { kind: "pause" })

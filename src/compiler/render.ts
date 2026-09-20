@@ -59,7 +59,9 @@ function renderOp(op: OutlineOp): string {
         ? `{ kind: "fill", value: ${renderValue(op.value)} }`
         : op.kind === "select"
           ? `{ kind: "select", value: ${q(op.value)} }`
-          : `{ kind: "press", key: ${q(op.key)} }`;
+          : op.kind === "upload"
+            ? `{ kind: "upload", files: [${renderValue(op.file)}] }`
+            : `{ kind: "press", key: ${q(op.key)} }`;
   return `    await fp.act(${opSrc}, ${hints}, ${opts});${locatorNote}`;
 }
 
@@ -68,9 +70,10 @@ function flowInputs(step: Extract<OutlineStep, { kind: "browser" }>) {
   const fields: string[] = [];
   const secrets: string[] = [];
   for (const op of step.ops) {
-    if (op.kind !== "fill") continue;
-    if (op.value.from === "plan" && !fields.includes(op.value.field)) fields.push(op.value.field);
-    if (op.value.from === "secret" && !secrets.includes(op.value.key)) secrets.push(op.value.key);
+    const value = op.kind === "fill" ? op.value : op.kind === "upload" ? op.file : null;
+    if (!value) continue;
+    if (value.from === "plan" && !fields.includes(value.field)) fields.push(value.field);
+    if (value.from === "secret" && !secrets.includes(value.key)) secrets.push(value.key);
   }
   return { fields, secrets };
 }

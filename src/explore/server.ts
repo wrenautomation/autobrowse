@@ -51,6 +51,11 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   targetSchema.extend({ cmd: z.literal("fill"), value: z.string(), goal: z.string().optional() }),
   targetSchema.extend({ cmd: z.literal("select"), value: z.string(), goal: z.string().optional() }),
   targetSchema.extend({ cmd: z.literal("press"), key: z.string(), goal: z.string().optional() }),
+  targetSchema.extend({
+    cmd: z.literal("upload"),
+    files: z.array(z.string().min(1)).min(1),
+    goal: z.string().optional(),
+  }),
   /** Keyboard into whatever is focused; not journaled as a locator act. */
   z.object({ cmd: z.literal("type"), text: z.string() }),
   z.object({ cmd: z.literal("key"), key: z.string() }),
@@ -210,6 +215,15 @@ async function serve(
         await find(c).selectOption(c.value, { timeout: 10_000 });
         journalAct(c, (target) => ({ kind: "select", target, value: c.value }));
         return { ok: true };
+      }
+      case "upload": {
+        await fp.act({ kind: "upload", files: c.files }, c.hints as Hints, {
+          goal: c.goal ?? "upload",
+          timeoutMs: 10_000,
+        });
+        await settle(page);
+        journalAct(c, (target) => ({ kind: "upload", target, files: c.files }));
+        return { url: page.url() };
       }
       case "press": {
         await find(c).press(c.key, { timeout: 10_000 });

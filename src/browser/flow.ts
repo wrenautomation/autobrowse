@@ -42,7 +42,9 @@ export type Op =
   | { kind: "click" }
   | { kind: "fill"; value: string }
   | { kind: "select"; value: string }
-  | { kind: "press"; key: string };
+  | { kind: "press"; key: string }
+  /** Files into a file input, or through the chooser a button opens. */
+  | { kind: "upload"; files: string[] };
 
 export interface ActOptions {
   /** In words, for the repairer and the trace: "click Purchase". */
@@ -215,6 +217,19 @@ async function doOp(
       return void (await target.selectOption(op.value, { timeout }));
     case "press":
       return target.press(op.key, { timeout });
+    case "upload": {
+      const isInput = await target
+        .evaluate(
+          (el) => el.tagName === "INPUT" && (el as { type?: string }).type === "file",
+          undefined,
+          { timeout },
+        )
+        .catch(() => false);
+      if (isInput) return target.setInputFiles(op.files, { timeout });
+      const chooser = page.waitForEvent("filechooser", { timeout });
+      await target.click({ timeout });
+      return (await chooser).setFiles(op.files);
+    }
   }
 }
 

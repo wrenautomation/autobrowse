@@ -4,6 +4,7 @@
  * stdin, never as arguments (argv is visible to every process).
  */
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { Command } from "commander";
 import {
   credentialSchema,
@@ -121,6 +122,18 @@ export function registerAuthCommands(program: Command, settings: Settings): void
         },
       });
       console.log(await runner.run(check, undefined));
+    });
+
+  program
+    .command("workspace-logo <file>")
+    .description("Set the Google Workspace logo (admin console; 320×132 PNG under 30 KB)")
+    .option("--headed", "show the browser")
+    .action(async (file: string, o: { headed?: boolean }) => {
+      const { googleWorkspaceLogo } = await import("../browser/flows/google-workspace-logo.js");
+      const runner = flowRunner(browserOptions(settings, !o.headed), {
+        login: loginFor(settings, gmailFor(settings)),
+      });
+      console.log(await runner.run(googleWorkspaceLogo, { file: resolve(file) }));
     });
 
   program

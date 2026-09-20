@@ -164,6 +164,18 @@ export function structure(rec: Recording): Outline {
             key: a.key,
           });
         break;
+      case "upload": {
+        const label = describe(a.target);
+        const key = fieldKey(camel(label));
+        fields.push({ key, label, example: a.files[0] ?? null });
+        add({
+          kind: "upload",
+          goal: `upload to ${label}`,
+          hints: stripHints(a.target),
+          file: { from: "plan", field: key },
+        });
+        break;
+      }
       case "submit":
         // Follows the click or Enter that caused it.
         break;

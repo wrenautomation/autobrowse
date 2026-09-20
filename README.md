@@ -82,6 +82,7 @@ pnpm ui:dev                     # SPA with hot reload on :5173, proxied to :9080
 
 pnpm autobrowse setup                          # asks once for what is missing (hidden input, sealed store)
 pnpm autobrowse login cloudflare               # signs in by itself: password or the Google button, TOTP/email/SMS code
+pnpm autobrowse workspace-logo logo.png   # the org logo across Gmail/Calendar/Drive (320×132 PNG < 30 KB)
 pnpm autobrowse enroll-totp cloudflare --url https://dash.cloudflare.com/profile/authentication  # reads the seed, stores it, confirms
 echo '{"provider":"cloudflare"}' > /tmp/bootstrap.json
 pnpm autobrowse run bootstrap cloudflare --plan /tmp/bootstrap.json   # mints CLOUDFLARE_ACCOUNT_ID + API token into .env
