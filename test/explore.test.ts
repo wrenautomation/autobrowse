@@ -67,6 +67,21 @@ describe("explore mode", () => {
     await send({ cmd: "click", hints: { role: "button", name: "Buy now" } });
     expect((await send({ cmd: "eval", js: "document.title" })).body.result).toBe("clicked");
 
+    // A popup (an OAuth window) is listed and switched to; closing it returns to the main page.
+    await send({ cmd: "eval", js: 'window.open("about:blank", "pop")' });
+    await new Promise((r) => setTimeout(r, 500));
+    const pages = (await send({ cmd: "pages" })).body.pages as Array<{ index: number }>;
+    expect(pages).toHaveLength(2);
+    expect((await send({ cmd: "page", index: 1 })).body).toHaveProperty("url", "about:blank");
+    expect((await send({ cmd: "pages" })).body.pages).toMatchObject([
+      { active: false },
+      { active: true },
+    ]);
+    await send({ cmd: "eval", js: "window.close()" });
+    await new Promise((r) => setTimeout(r, 300));
+    expect((await send({ cmd: "pages" })).body.pages).toMatchObject([{ active: true }]);
+    expect((await send({ cmd: "page", index: 5 })).status).toBe(500);
+
     const bad = await send({ cmd: "nope" });
     expect(bad.status).toBe(400);
     const noToken = await fetch(`http://127.0.0.1:${port}/`, { method: "POST", body: "{}" });

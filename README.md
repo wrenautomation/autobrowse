@@ -79,7 +79,8 @@ Browserbase takes them.
   profile per identity, so two accounts never meet in a chooser.
 - **Explored.** `autobrowse explore <site> [--url u]`: one hidden browser
   stays open on the site and takes commands over loopback, one at a time
-  (`open`, `click`, `fill`, `aria`, `eval`, `save`, `close`). `aria` dumps
+  (`open`, `click`, `fill`, `aria`, `eval`, `pages`/`page` for an OAuth
+  popup, `save`, `close`). `aria` dumps
   the page's accessibility tree: every control by role and name, so a
   whole form is mapped in one look instead of one miss per run. Every act
   that works is journaled as a recording; `save` writes it, `compile`

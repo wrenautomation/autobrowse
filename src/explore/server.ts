@@ -81,6 +81,12 @@ export const commandSchema = z.discriminatedUnion("cmd", [
     raw: z.boolean().optional(),
   }),
   z.object({ cmd: z.literal("url") }),
+  /** Every open page (an OAuth popup beside the main one); `page` switches to one by index, "main" returns. */
+  z.object({ cmd: z.literal("pages") }),
+  z.object({
+    cmd: z.literal("page"),
+    index: z.union([z.number().int().min(0), z.literal("main")]),
+  }),
   z.object({ cmd: z.literal("screenshot") }),
   z.object({ cmd: z.literal("eval"), js: z.string(), raw: z.boolean().optional() }),
   targetSchema.extend({ cmd: z.literal("count") }),
@@ -298,6 +304,23 @@ async function serve(
       }
       case "url":
         return { url: page.url() };
+      case "pages":
+        return {
+          pages: page
+            .context()
+            .pages()
+            .map((p, i) => ({ index: i, url: p.url(), active: p === page })),
+        };
+      case "page": {
+        const all = page.context().pages();
+        const next = c.index === "main" ? all[0] : all[c.index];
+        if (!next || next.isClosed()) throw new Error(`no open page ${c.index}`);
+        fp.switchTo(next);
+        page = next;
+        // A popup that closes (OAuth done) hands control back to the main page.
+        if (c.index !== "main") next.once("close", () => fp.switchTo(all[0] as Page));
+        return { url: next.url() };
+      }
       case "screenshot":
         return { file: await shoot() };
       case "eval": {
