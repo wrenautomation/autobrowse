@@ -60,6 +60,18 @@ describe("store", () => {
 });
 
 describe("recordBrowser", () => {
+  it("masks credentials carried in a URL and a field named DSN", () => {
+    expect(
+      redactText("dsn https://b8c5df178ddbca3691ff56840302e317@o451.ingest.us.sentry.io/4512"),
+    ).toBe("dsn https://<redacted>@o451.ingest.us.sentry.io/4512");
+    expect(redactText("postgres://wren:hunter2pass@db.internal:5432/wren")).toBe(
+      "postgres://<redacted>@db.internal:5432/wren",
+    );
+    expect(redactAria('- textbox "DSN URL": https://x.y/1')).toBe(
+      '- textbox "DSN URL": <redacted>',
+    );
+  });
+
   it("masks a filled password field in an aria tree, whatever the value looks like", () => {
     const tree = [
       "- main:",

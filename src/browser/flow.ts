@@ -17,7 +17,7 @@ import { join } from "node:path";
 import type { Page } from "playwright";
 import { expandHome } from "../google-auth.js";
 import { redactAria, redactText } from "../recorder/redact.js";
-import { type Hints, locate } from "./locate.js";
+import { type Hints, locate, textOf } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
 import { canLearn, noRepairer, type Repairer, type RepairReport, snapshotPage } from "./repair.js";
 import {
@@ -315,10 +315,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
                   .first()
                   .isVisible()
                   .catch(() => false),
-          read: async (hints) =>
-            (await locate(active, hints).first().innerText({ timeout: 10_000 }))
-              .trim()
-              .slice(0, 2_000),
+          read: async (hints) => (await textOf(locate(active, hints))).slice(0, 2_000),
           wait: (ms) => active.waitForTimeout(ms),
           waitForUrl: (pattern, timeout) =>
             active

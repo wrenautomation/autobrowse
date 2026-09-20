@@ -29,5 +29,16 @@ describe("looksLikeWall", () => {
       "challenge",
     );
     expect(await looksLikeWall(page("https://x.com/", "Dashboard"))).toBeNull();
+    expect(
+      await looksLikeWall(
+        page(
+          "https://x.com/signup",
+          "Get set up\nThis site is protected by reCAPTCHA and the Google Privacy Policy",
+        ),
+      ),
+    ).toBeNull();
+    expect((await looksLikeWall(page("https://x.com/", "Complete the CAPTCHA below")))?.kind).toBe(
+      "captcha",
+    );
   });
 });

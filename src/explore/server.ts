@@ -18,7 +18,7 @@ import { dirname, join, relative } from "node:path";
 import type { Page } from "playwright";
 import { z } from "zod";
 import { defineFlow, type FlowPage, flowRunner, type RunnerOptions } from "../browser/flow.js";
-import { type Hints, locate, locateAll } from "../browser/locate.js";
+import { type Hints, locate, locateAll, textOf } from "../browser/locate.js";
 import { snapshotPage } from "../browser/repair.js";
 import { type BrowserOptions, looksLikeWall } from "../browser/session.js";
 import type { SecretSink } from "../deps/sink.js";
@@ -409,7 +409,7 @@ async function serve(
       }
       case "keep": {
         if (!opts.sink) throw new Error("keep needs a secret sink (SECRET_SINK / .env)");
-        const value = (await find(c).first().innerText({ timeout: 10_000 })).trim();
+        const value = await textOf(find(c));
         if (!value) throw new Error("keep: the element is empty");
         await opts.sink.put(c.env, value);
         journalAct(c, (target) => ({ kind: "keep", target, env: c.env }));

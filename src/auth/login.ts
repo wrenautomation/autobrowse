@@ -28,6 +28,8 @@ export interface SignInContext {
   notify?: (text: string) => Promise<void>;
   /** Another site's credential (the identity provider behind an OAuth button), or throws. */
   credFor(site: string): Promise<Credential>;
+  /** This context signing in as another credential: its codes come from that one. */
+  as(cred: Credential): SignInContext;
 }
 
 export interface SiteLogin {
@@ -405,7 +407,7 @@ export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signI
     )
       throw new LoginFailed(site, `no ${provider} sign-in page after pressing the button`);
     const cred = await ctx.credFor(provider);
-    await signInToGoogle({ ...ctx, cred });
+    await signInToGoogle(ctx.as(cred));
     fp.switchTo(main);
     if (!(await fp.waitForUrl(spec.success, 30_000)) && !spec.success.test(fp.url()))
       throw new LoginFailed(site, `still on ${fp.url()} after the ${provider} round trip`);
@@ -452,24 +454,28 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
     const cred = await opts.credentials.get(login.credential ?? site);
     if (!cred) return "no-credential";
     const since = now();
-    const ctx: SignInContext = {
+    // Codes belong to the credential: an OAuth sign-in continues as the
+    // provider's (`ctx.as(cred)`), and its TOTP must answer, not the site's.
+    const contextAs = (cred: Credential): SignInContext => ({
       fp,
       cred,
       async code(kind, hint) {
         const req = hint ? { site, kind, since, hint } : { site, kind, since };
-        const c = await opts.codes.get(req, ctx.cred);
+        const c = await opts.codes.get(req, cred);
         if (!c) throw new LoginFailed(site, `no ${kind} code available`);
         return c;
       },
-      offers: (kind) => opts.codes.offers(kind, ctx.cred),
-      inbox: (kind) => opts.codes.inbox(kind, ctx.cred),
+      offers: (kind) => opts.codes.offers(kind, cred),
+      inbox: (kind) => opts.codes.inbox(kind, cred),
       ...(opts.notify ? { notify: opts.notify } : {}),
       async credFor(other) {
         const c = await opts.credentials.get(other);
         if (!c) throw new LoginFailed(site, `no credential stored for ${other}`);
         return c;
       },
-    };
+      as: contextAs,
+    });
+    const ctx = contextAs(cred);
     const here = login.signInHere;
     if (here?.at.test(fp.url())) {
       await here.run(ctx);

@@ -294,6 +294,27 @@ describe("loginProvider", () => {
       "unknown-site",
     );
   });
+  it("answers codes for the credential an OAuth sign-in swaps in, not the site's own", async () => {
+    const viaGoogle: SiteLogin = {
+      site: "s",
+      home: "https://site.test/",
+      loggedIn: async () => true,
+      async signIn(ctx) {
+        const sub = ctx.as(await ctx.credFor("google"));
+        expect(sub.offers("totp")).toBe(true);
+        expect(ctx.offers("totp")).toBe(false);
+        await sub.code("totp");
+      },
+    };
+    const login = loginProvider([viaGoogle], {
+      credentials: memoryCredentials({
+        s: { username: "u", password: "-", via: "google" },
+        google: { username: "g", password: "p", totpSecret: RFC_SECRET },
+      }),
+      codes: totpSource(),
+    });
+    expect(await login(fakePage({ text: [], present: () => true }).fp, "s")).toBe("signed-in");
+  });
   it("reports a missing credential and a missing code", async () => {
     const login = loginProvider([site], {
       credentials: memoryCredentials(),
@@ -365,6 +386,7 @@ describe("signInToGoogle second step", () => {
     inbox: (kind) => (kind === "sms" && kinds.includes(kind) ? "+15555550182" : null),
     ...(notify ? { notify } : {}),
     credFor: async () => base,
+    as: () => ctx(fp, kinds, notify),
   });
   it("switches account when the profile is signed in as someone else", async () => {
     const { fp, acts } = fakePage({

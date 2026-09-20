@@ -3,7 +3,7 @@
  * names that say secret) and the value (token shapes). Either one masks.
  */
 const SECRET_FIELD =
-  /pass(word|wd|phrase)?|secret|token|api[-_ ]?key|private|credential|otp|code|pin|ssn|cvv|card/i;
+  /pass(word|wd|phrase)?|secret|token|api[-_ ]?key|private|credential|otp|code|pin|ssn|cvv|card|\bdsn\b/i;
 
 const SECRET_VALUES: RegExp[] = [
   /\bAKIA[0-9A-Z]{16}\b/, // AWS access key id
@@ -14,6 +14,7 @@ const SECRET_VALUES: RegExp[] = [
   /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/, // JWT
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
   /\b[A-Za-z0-9_-]{40,}\b/, // long opaque strings: Cloudflare tokens, Google keys
+  /(?<=[a-z][a-z0-9+.-]*:\/\/)[^\s@/:]+(?::[^\s@/]*)?(?=@)/, // credentials in a URL: a Sentry DSN, a database URL
 ];
 
 export const REDACTED = "<redacted>";

@@ -307,6 +307,25 @@ const twilio: SiteLogin = {
   }),
 };
 
+/**
+ * Sentry: the org was made 2026-09-21 with "Register with Google" (no
+ * password); the login page's "Sign in with Google" link signs it in. Signed-in pages
+ * live on the org's subdomain, the login page on the bare host.
+ */
+const SENTRY_HOME = /https:\/\/[a-z0-9-]+\.sentry\.io\//;
+const sentry: SiteLogin = {
+  site: "sentry",
+  home: "https://wren-automation.sentry.io/issues/",
+  ask: "Your Sentry account (sentry.io), where the DSN lives",
+  via: ["google"],
+  loggedIn: async (fp) => SENTRY_HOME.test(fp.url()),
+  signIn: oauthLogin("sentry", {
+    start: "https://sentry.io/auth/login/",
+    button: { role: "link", name: "Sign in with Google" },
+    success: SENTRY_HOME,
+  }),
+};
+
 export const SITE_LOGINS: readonly SiteLogin[] = [
   cloudflare,
   google,
@@ -315,4 +334,5 @@ export const SITE_LOGINS: readonly SiteLogin[] = [
   aws,
   anthropic,
   twilio,
+  sentry,
 ];

@@ -44,7 +44,14 @@ describe("setup", () => {
     ]);
     const out = await runSetup(io, store, SITE_LOGINS);
     expect(out.stored).toEqual(["google", "cloudflare"]);
-    expect(out.skipped).toEqual(["google-admin", "instantly", "aws", "anthropic", "twilio"]);
+    expect(out.skipped).toEqual([
+      "google-admin",
+      "instantly",
+      "aws",
+      "anthropic",
+      "twilio",
+      "sentry",
+    ]);
     expect((await store.get("cloudflare"))?.via).toBe("google");
     expect(asked.filter((q) => q.startsWith("hidden")).length).toBe(2);
   });
@@ -57,10 +64,11 @@ describe("setup", () => {
       aws: { username: "root@x.co", password: "g" },
       anthropic: { username: "-", password: "-", via: "google" },
       twilio: { username: "-", password: "-", via: "google" },
+      sentry: { username: "-", password: "-", via: "google" },
     });
     const { io, asked, said } = scripted([]);
     await runSetup(io, store, SITE_LOGINS);
     expect(asked).toEqual([]);
-    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(7);
+    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(8);
   });
 });

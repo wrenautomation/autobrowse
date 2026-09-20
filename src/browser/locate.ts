@@ -98,6 +98,17 @@ export function locateAll(page: Page, hints: Hints): Locator {
 }
 
 /** The one match a flow acts on: `nth` when the hints say so, else the first. */
+/** What a person reads off the element: an input's value, anything else's text. */
+export async function textOf(loc: Locator, timeout = 10_000): Promise<string> {
+  const first = loc.first();
+  const tag = await first.evaluate((el) => el.tagName.toLowerCase(), undefined, { timeout });
+  const text =
+    tag === "input" || tag === "textarea"
+      ? await first.inputValue({ timeout })
+      : await first.innerText({ timeout });
+  return text.trim();
+}
+
 export function locate(page: Page, hints: Hints): Locator {
   return locateAll(page, hints).nth(hints.nth ?? 0);
 }

@@ -207,8 +207,9 @@ export async function looksLikeWall(page: Page): Promise<Wall | null> {
       .innerText()
       .catch(() => "")
   ).slice(0, 4000);
+  // "protected by reCAPTCHA" is the legal footer on every sign-up form, not a wall.
   if (
-    /verify you are human|captcha|unusual traffic|performing security verification|verifies you are not a bot/i.test(
+    /verify you are human|(?<!protected by re)captcha|i'm not a robot|unusual traffic|performing security verification|verifies you are not a bot/i.test(
       text,
     )
   )
