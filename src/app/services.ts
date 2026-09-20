@@ -54,6 +54,8 @@ import { parseGuards } from "../engine/guards.js";
 import { makeRunObject } from "../engine/object.js";
 import { runsRegistry } from "../engine/registry.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
+import { askOverChannel } from "../gates/ask.js";
+import type { Approver } from "../gates/payment.js";
 import {
   expandHome,
   loadServiceAccountKey,
@@ -337,6 +339,45 @@ export function gmailFor(settings: Settings, http = httpClient()): GmailUserClie
 }
 
 /** The ways to reach people and systems, from settings: email, the paired phone, a webhook. */
+/**
+ * Who answers a payment gate: the first channel the person both hears and
+ * can reply on (phone → Linq → email); null when there is none, and then
+ * the session refuses the act rather than guessing.
+ */
+export function approverFor(
+  settings: Settings,
+  gmail: GmailUserClient,
+  http = httpClient(),
+): Approver | null {
+  const phone = phoneFor(settings);
+  if (phone) {
+    const ch = phoneChannel(phone);
+    if (ch.note)
+      return askOverChannel({
+        note: ch.note.bind(ch),
+        reader: phoneReader(phone),
+        inbox: phone.number,
+      });
+  }
+  const linq = linqFor(settings, http);
+  if (linq) {
+    const ch = linqChannel(linq);
+    if (ch.note)
+      return askOverChannel({
+        note: ch.note.bind(ch),
+        reader: linq.client.reader(),
+        inbox: linq.to,
+      });
+  }
+  const notifyFrom = settings.notifyFrom ?? settings.googleAdminUser;
+  if (settings.notifyTo && notifyFrom) {
+    const ch = emailChannel({ gmail, from: notifyFrom, to: settings.notifyTo });
+    if (ch.note)
+      return askOverChannel({ note: ch.note.bind(ch), reader: gmail, inbox: notifyFrom }); // replies land in the sender's inbox
+  }
+  return null;
+}
+
 export function channelsFor(
   settings: Settings,
   gmail: GmailUserClient,

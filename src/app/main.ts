@@ -17,6 +17,7 @@ import { cloudAdminUrl, planEndpoint } from "./endpoint.js";
 import { registerDeployment } from "./register.js";
 import { initSentry } from "./sentry.js";
 import {
+  approverFor,
   browserOptions,
   budgetOf,
   buildApp,
@@ -82,6 +83,8 @@ const llm = llmFor(settings, undefined, (err) => {
   log.warn({ used: err.used, cap: err.cap }, "model budget spent");
   void app.channel.note?.(`autobrowse: ${err.message}`).catch(() => undefined);
 });
+const approver = approverFor(settings, gmailFor(settings));
+if (!approver) log.warn("no channel a person can answer on: payment steps will be refused");
 const agent = llm
   ? agentSessions({
       llm,
@@ -96,6 +99,7 @@ const agent = llm
           login: loginFor(settings, gmailFor(settings)),
           pace: paceFor(settings), // an agent browses at a person's pace: sites watch for the other kind
           sink: app.sink,
+          ...(approver ? { approve: approver } : {}),
         }),
     })
   : undefined;

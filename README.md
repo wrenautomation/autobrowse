@@ -102,6 +102,11 @@ Browserbase takes them.
   agent. `explore` leaves its bearer token in
   `$TMPDIR/autobrowse/explore-<port>.token` (owner-only) for the session's
   life, never in its output.
+- **Payment gate.** A billing field or a button that spends (`src/gates/`)
+  is never the session's own call: the act waits on a yes from the person
+  over a channel they answer on (phone, Linq, email), and is refused
+  outright when no such channel is set. Compiled steps that touch billing
+  are gated the same way as irreversible ones; the agent stops on a no.
 - **Desktop.** The same session takes `{"cmd":"os","act":{…}}`: apps,
   the front app's controls as a tree (`tree`, like `aria`), `click` by role
   and name, `type`, `key` ("cmd+shift+4", "return"), `shot`, and `shell`

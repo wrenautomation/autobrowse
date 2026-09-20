@@ -24,6 +24,9 @@ describe("explore mode", () => {
   let port: number;
   let done: Promise<void>;
   let token: string;
+  /** The person behind the payment gate: says yes, remembers what was asked. */
+  const asks: string[] = [];
+  let answer = true;
   const send = async (cmd: Record<string, unknown>) => {
     const r = await fetch(`http://127.0.0.1:${port}/`, {
       method: "POST",
@@ -42,6 +45,10 @@ describe("explore mode", () => {
       desktop,
       sink,
       tokenFile: join(dir, "explore.token"),
+      approve: async (ask) => {
+        asks.push(ask.what);
+        return answer;
+      },
       recordingsDir: join(dir, "recordings"),
       browser: {
         tier: "local",
@@ -83,8 +90,16 @@ describe("explore mode", () => {
       hints: { role: "textbox", name: "Password" },
       value: "hunter2hunter2",
     });
+    // "Buy now" spends: the person is asked first; a no leaves the page untouched.
+    answer = false;
+    const refused = await send({ cmd: "click", hints: { role: "button", name: "Buy now" } });
+    expect(refused.status).toBe(403);
+    expect(refused.body).toMatchObject({ gate: "payment", reason: "denied" });
+    expect((await send({ cmd: "eval", js: "document.title" })).body.result).not.toBe("clicked");
+    answer = true;
     await send({ cmd: "click", hints: { role: "button", name: "Buy now" } });
     expect((await send({ cmd: "eval", js: "document.title" })).body.result).toBe("clicked");
+    expect(asks).toEqual(['press "Buy now", which spends', 'press "Buy now", which spends']); // the missing "Purchase" asked nobody
 
     // A popup (an OAuth window) is listed and switched to; closing it returns to the main page.
     await send({ cmd: "eval", js: 'window.open("about:blank", "pop")' });
@@ -174,6 +189,10 @@ describe("pause: a person's hand acts land in the journal", () => {
     });
     try {
       await ex.exec({ cmd: "open", url: PAGE });
+      // Nobody to ask: a spending click is refused, not guessed.
+      await expect(
+        ex.exec({ cmd: "click", hints: { role: "button", name: "Buy now" } }),
+      ).rejects.toThrow(/needs a person.*no channel/);
       await ex.exec({ cmd: "pause" });
       expect(ex.paused()).toBe(true);
       // A person "clicks" and "types": real DOM events, as a hand would raise them.

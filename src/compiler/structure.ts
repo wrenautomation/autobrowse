@@ -9,6 +9,7 @@
  */
 import type { Hints } from "../browser/locate.js";
 import { INTERACTIVE_COMMANDS } from "../deps/shell.js";
+import { paymentGate } from "../gates/payment.js";
 import type { Action, LocatorHints, Recording } from "../recorder/types.js";
 import type { DesktopOutlineOp, Outline, OutlineField, OutlineOp, OutlineStep } from "./outline.js";
 
@@ -90,7 +91,13 @@ export function structure(rec: Recording): Outline {
   const close = () => {
     const c = cur();
     if (c?.ops.length) {
-      c.irreversible = c.ops.some((o) => o.kind === "click" && o.irreversible);
+      // A step that touches billing waits for the person, whatever its click says.
+      c.irreversible = c.ops.some(
+        (o) =>
+          (o.kind === "click" && o.irreversible) ||
+          ((o.kind === "fill" || o.kind === "select" || o.kind === "click") &&
+            paymentGate(o.kind, o.hints) !== null),
+      );
       steps.push(c);
     }
     current = null;

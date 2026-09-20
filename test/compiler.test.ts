@@ -172,6 +172,37 @@ describe("keep", () => {
   });
 });
 
+describe("billing", () => {
+  it("makes a step that fills a card field wait for the person, whatever it clicks", () => {
+    const rec: Recording = {
+      ...recording,
+      name: "pay",
+      commands: [],
+      terminal: null,
+      actions: [
+        { t: 0, kind: "navigate", url: "https://x.test/billing" },
+        {
+          t: 1,
+          kind: "input",
+          url: "https://x.test/billing",
+          target: h({ tag: "input", role: "textbox", name: "Card number" }),
+          value: "<redacted>",
+          redacted: true,
+        },
+        {
+          t: 2,
+          kind: "click",
+          url: "https://x.test/billing",
+          target: h({ tag: "button", role: "button", name: "Continue" }),
+        },
+      ],
+    };
+    const o = structure(rec);
+    expect(o.steps[0]?.irreversible).toBe(true);
+    expect(o.secrets.map((s) => s.key)).toEqual(["cardNumber"]);
+  });
+});
+
 describe("polish", () => {
   it("applies names, descriptions, proofs and irreversible upgrades only", async () => {
     const o = structure(recording);

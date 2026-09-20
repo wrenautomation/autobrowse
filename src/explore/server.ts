@@ -30,6 +30,7 @@ import {
   noDesktop,
   treeText,
 } from "../desktop/types.js";
+import { type Approver, PaymentGate, paymentGate } from "../gates/payment.js";
 import { type RawAction, redactRaw } from "../recorder/browser.js";
 import { BINDING, OBSERVER_SCRIPT } from "../recorder/observer.js";
 import {
@@ -131,6 +132,11 @@ export interface ExploreOptions {
   desktop?: Desktop;
   /** Where `keep` puts a secret read off the page (.env locally, SSM in prod). */
   sink?: SecretSink;
+  /**
+   * Who says yes to a billing field or a button that spends. Without one
+   * such acts are refused: money is never a session's own call.
+   */
+  approve?: Approver;
   /**
    * Where the bearer token is written (owner-only) for the session's life, so a
    * shell beside the process reads it instead of a log: see `tokenFileFor`.
@@ -300,6 +306,16 @@ async function serve(
 
   type Target = z.infer<typeof targetSchema>;
   const find = (t: Target) => locate(page, t.hints as Hints);
+  /** Billing fields and spending buttons wait for the person; refused when nobody can be asked. */
+  const gate = async (act: "fill" | "select" | "click", t: Target) => {
+    const what = paymentGate(act, t.hints as Hints);
+    if (!what) return;
+    // A miss is a miss, not a question: the element must be there before anyone is asked.
+    await find(t).first().waitFor({ state: "visible", timeout: 10_000 });
+    if (!opts.approve) throw new PaymentGate(what, "no-approver");
+    if (!(await opts.approve({ what, url: page.url(), site: opts.site })))
+      throw new PaymentGate(what, "denied");
+  };
   const journalAct = (t: Target, act: (target: LocatorHints) => Journaled) =>
     journal(act(toLocatorHints(t.hints)));
   /** What leaves the socket: masked like a transcript, unless the caller asks for raw. */
@@ -315,12 +331,14 @@ async function serve(
         return { url: page.url(), wall: await looksLikeWall(page) };
       }
       case "click": {
+        await gate("click", c);
         await find(c).click({ timeout: 10_000 });
         await settle(page);
         journalAct(c, (target) => ({ kind: "click", target }));
         return { url: page.url() };
       }
       case "fill": {
+        await gate("fill", c);
         await find(c).fill(c.value, { timeout: 10_000 });
         const secret =
           looksLikeSecretField(toLocatorHints(c.hints)) || looksLikeSecretValue(c.value);
@@ -333,6 +351,7 @@ async function serve(
         return { ok: true };
       }
       case "select": {
+        await gate("select", c);
         await find(c).selectOption(c.value, { timeout: 10_000 });
         journalAct(c, (target) => ({ kind: "select", target, value: c.value }));
         return { ok: true };
@@ -492,11 +511,12 @@ async function serve(
       try {
         res.end(JSON.stringify(await run(parsed)));
       } catch (err) {
-        res.statusCode = 500;
+        res.statusCode = err instanceof PaymentGate ? 403 : 500;
         res.end(
           JSON.stringify({
             error: err instanceof Error ? err.message.split("\n")[0] : String(err),
             url: page.url(),
+            ...(err instanceof PaymentGate ? { gate: err.gate, reason: err.reason } : {}),
           }),
         );
       }

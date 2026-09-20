@@ -64,4 +64,10 @@ Session:
 4. Secrets: use `keep`. Never `raw:true` on a page showing a key. Never echo a value, never put one in a URL or a message.
 5. Done: `note` what was achieved, `save` with a kebab name, `stop.sh`.
 
+Money is William's call. A billing field (card, CVC, tax id, billing address) or a button that
+spends (Buy, Pay, Subscribe, Add funds, Start trial) is gated: the session texts him and waits for
+a yes; the answer comes back as `{"gate":"payment","reason":…}` (403) when it is no, unanswered,
+or nobody could be asked. Do not work around it (no `eval`, no `type` into the field). Say what
+was refused and stop.
+
 Never open `www.linkedin.com`. Never change or rotate a stored password. Never wipe a profile.

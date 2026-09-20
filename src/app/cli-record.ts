@@ -3,7 +3,21 @@ import { join } from "node:path";
 import type { Command } from "commander";
 import { expandHome } from "../google-auth.js";
 import type { Settings } from "./config.js";
-import { browserOptions, gmailFor, llmFor, loginFor, paceFor, sinkFor } from "./services.js";
+import {
+  approverFor,
+  browserOptions,
+  gmailFor,
+  llmFor,
+  loginFor,
+  paceFor,
+  sinkFor,
+} from "./services.js";
+
+/** The payment gate's answerer, when a channel can carry the question. */
+const approve = (settings: Settings) => {
+  const a = approverFor(settings, gmailFor(settings));
+  return a ? { approve: a } : {};
+};
 
 export function registerRecordCommands(program: Command, settings: Settings): void {
   program
@@ -24,6 +38,7 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
         login: loginFor(settings, gmailFor(settings)),
         sink: sinkFor(settings),
         tokenFile,
+        ...approve(settings),
       });
       // The token lives in an owner-only file, not in this output: logs get pasted, files do not.
       console.log(
@@ -65,6 +80,7 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
             login: loginFor(settings, gmailFor(settings)),
             pace: paceFor(settings),
             sink: sinkFor(settings),
+            ...approve(settings),
           });
           if (url) await ex.exec({ cmd: "open", url });
           return ex;
@@ -183,6 +199,7 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
             login: loginFor(settings, gmailFor(settings)),
             pace: paceFor(settings),
             sink: sinkFor(settings),
+            ...approve(settings),
           }),
       });
       const record = readFailure(failure, expandHome(settings.artifactsDir));
@@ -285,6 +302,7 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<void> {
     login: loginFor(settings, gmailFor(settings)),
     pace: paceFor(settings),
     sink: sinkFor(settings),
+    ...approve(settings),
   });
   console.log(
     `agent on ${r.site}; pause/resume: curl -s -X POST -H "Authorization: Bearer ${ex.token}" http://127.0.0.1:${ex.port}/ -d '{"cmd":"pause"}'`,

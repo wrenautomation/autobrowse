@@ -10,6 +10,7 @@
 import { z } from "zod";
 import { desktopOpSchema } from "../desktop/types.js";
 import type { ExploreCommand, Explorer } from "../explore/server.js";
+import { PaymentGate } from "../gates/payment.js";
 import { completeJson, type Llm, LlmOutputInvalid, type LlmUsage } from "../llm/types.js";
 import { type Digest, digest, hintsFor, pageForModel } from "./digest.js";
 
@@ -196,6 +197,12 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
       rec.result = await o.explorer.exec(toCommand(step.action, page));
     } catch (err) {
       rec.error = (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "failed";
+      // The person said no to spending (or could not be asked): that ends the goal, not the model's turn.
+      if (err instanceof PaymentGate) {
+        steps.push(rec);
+        o.onStep?.(rec);
+        return { achieved: false, summary: err.message, steps, usage };
+      }
     }
     steps.push(rec);
     o.onStep?.(rec);
