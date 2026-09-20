@@ -9,9 +9,9 @@ import { loadEnvFile, loadSettings } from "../src/app/config.js";
 import { llmFor, memoryFor } from "../src/app/services.js";
 import { completeJson } from "../src/llm/types.js";
 
-loadEnvFile();
-const settings = loadSettings();
 const live = process.env.LIVE === "1";
+// Settings are strict (a real .env); only load them when the live run is on, so CI's import is clean.
+const settings = live ? (loadEnvFile(), loadSettings()) : null!;
 
 describe.skipIf(!live)("live", () => {
   it("backboard remembers and recalls", async () => {
