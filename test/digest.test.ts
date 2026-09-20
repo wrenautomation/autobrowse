@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { digest, hintsFor } from "../src/agent/digest.js";
+import { digest, hintsFor, pageForModel } from "../src/agent/digest.js";
 
 const TREE = `- banner:
   - link "Google Account":
@@ -49,5 +49,22 @@ heading [level=1]: Welcome, William
     const small = digest(many, { maxRefs: 10 });
     expect(small.refs).toHaveLength(10);
     expect(small.text).toContain("(+80 more controls below");
+  });
+});
+
+describe("pageForModel", () => {
+  const a = digest('- button "Save"\n- text: draft\n- textbox "Name"');
+  it("sends the whole page first, one line when nothing changed, a delta when only text moved", () => {
+    expect(pageForModel(null, a)).toBe(a.text);
+    expect(pageForModel(a, a)).toMatch(/unchanged/);
+    const b = digest('- button "Save"\n- text: saved\n- textbox "Name"');
+    const d = pageForModel(a, b);
+    expect(d).toMatch(/same controls/);
+    expect(d).toContain("+ saved");
+    expect(d).toContain("- draft");
+  });
+  it("sends the whole page when controls changed, since refs renumber", () => {
+    const c = digest('- button "Cancel"\n- button "Save"\n- text: draft');
+    expect(pageForModel(a, c)).toBe(c.text);
   });
 });

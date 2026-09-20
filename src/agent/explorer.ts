@@ -10,7 +10,7 @@
 import { z } from "zod";
 import type { ExploreCommand, Explorer } from "../explore/server.js";
 import { completeJson, type Llm, LlmOutputInvalid, type LlmUsage } from "../llm/types.js";
-import { type Digest, digest, hintsFor } from "./digest.js";
+import { type Digest, digest, hintsFor, pageForModel } from "./digest.js";
 
 /** A ref number from the digest; the code turns it back into locator hints. */
 const ref = z.number().int().positive();
@@ -77,6 +77,7 @@ export interface AgentResult {
 
 const SYSTEM = `You drive a real web browser to reach a goal, one step at a time.
 Each turn you get the page URL, a digest of the page (controls as [n] role "name", plus headings and text), and what your recent steps did.
+When the page is the same as last turn, the digest says so and lists only what changed; the [n] refs you saw before still apply.
 Reply with ONE JSON object: {"thought": "...", "action": {...}}.
 Actions, with "cmd" set to exactly one of these words:
   {"cmd":"click","ref":n,"goal":"why"}
@@ -102,6 +103,8 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
   let nudged = false;
   /** The page the last journaled thought was on: one note per page keeps compiled steps page-sized. */
   let notedOn: string | null = null;
+  /** What the model saw last turn, to send only the change when the page is the same. */
+  let seen: { url: string; page: Digest } | null = null;
   const inputs = Object.entries(o.inputs ?? {})
     .map(([k, v]) => `${k}: ${v}`)
     .join("\n");
@@ -111,11 +114,13 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
     const url = (await o.explorer.exec({ cmd: "url" })) as { url: string };
     const aria = (await o.explorer.exec({ cmd: "aria", limit: 60_000 })) as { aria: string };
     const page = digest(aria.aria, { maxRefs: o.maxRefs ?? 80 });
+    const shown = pageForModel(seen?.url === url.url ? seen.page : null, page);
+    seen = { url: url.url, page };
     const history = steps
       .slice(-6)
       .map((s) => `${s.n}. ${describe(s)} → ${s.error ? `FAILED: ${s.error}` : "ok"}`)
       .join("\n");
-    const prompt = `GOAL: ${o.goal}\n${inputs ? `INPUTS:\n${inputs}\n` : ""}\nSTEP ${n} of ${max}\nURL: ${url.url}\nRECENT STEPS:\n${history || "(none)"}\n\nPAGE:\n${page.text}`;
+    const prompt = `GOAL: ${o.goal}\n${inputs ? `INPUTS:\n${inputs}\n` : ""}\nSTEP ${n} of ${max}\nURL: ${url.url}\nRECENT STEPS:\n${history || "(none)"}\n\nPAGE:\n${shown}`;
     let step: Step;
     try {
       const reply = await completeJson(o.llm, stepSchema, {

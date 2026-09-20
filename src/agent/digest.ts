@@ -126,3 +126,31 @@ export function hintsFor(ref: Ref): Hints {
   if (ref.nth) h.nth = ref.nth;
   return h;
 }
+
+const REF_LINE = /^\[(\d+)\] /;
+
+/**
+ * The page as the model should see it after the previous step: the whole
+ * digest when controls moved, else only what changed. Refs keep their
+ * numbers only when every `[n]` line is the same as before, so that is
+ * the condition for a delta; unchanged pages cost a line.
+ */
+export function pageForModel(prev: Digest | null, next: Digest): string {
+  if (!prev) return next.text;
+  if (prev.text === next.text) return "(unchanged since the last step; the same refs apply)";
+  const before = prev.text.split("\n");
+  const after = next.text.split("\n");
+  const refsBefore = before.filter((l) => REF_LINE.test(l));
+  const refsAfter = after.filter((l) => REF_LINE.test(l));
+  const sameRefs =
+    refsBefore.length === refsAfter.length && refsBefore.every((l, i) => l === refsAfter[i]);
+  if (!sameRefs) return next.text;
+  const was = new Set(before);
+  const now = new Set(after);
+  const delta = [
+    ...after.filter((l) => !was.has(l)).map((l) => `+ ${l.trim()}`),
+    ...before.filter((l) => !now.has(l)).map((l) => `- ${l.trim()}`),
+  ];
+  if (delta.length >= after.length) return next.text;
+  return `(same controls as the last step; the same refs apply; text that changed:)\n${delta.join("\n")}`;
+}
