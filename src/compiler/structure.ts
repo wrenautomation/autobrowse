@@ -53,6 +53,9 @@ function pathOf(url: string): string {
   }
 }
 
+/** More than a handful of words, or a full stop inside: a thought, not a handle. */
+const isSentence = (s: string): boolean => s.trim().split(/\s+/).length > 5 || /[.!?]\s+\S/.test(s);
+
 /** Unique names: `name`, `name-2`, `name-3`. */
 function uniquer() {
   const seen = new Map<string, number>();
@@ -117,7 +120,12 @@ export function structure(rec: Recording): Outline {
         break;
       case "note":
         close();
-        pendingName = kebab(a.text);
+        // A short note is a name ("Checkout"); a sentence (an agent's thought) describes the step, and the page names it.
+        pendingName = isSentence(a.text)
+          ? pendingUrl
+            ? kebab(pathOf(pendingUrl))
+            : null
+          : kebab(a.text);
         pendingDescription = a.text;
         break;
       case "pause":

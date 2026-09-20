@@ -3,6 +3,8 @@
  * saved beside the recording so it can be edited and re-rendered
  * without the model; the rendered files go to `out/<name>/`.
  */
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Llm, LlmUsage } from "../llm/types.js";
@@ -46,7 +48,17 @@ export async function writeRendered(dir: string, r: Rendered): Promise<string[]>
     await writeFile(file, src);
     out.push(file);
   }
+  await format(out);
   return out;
+}
+
+/** The repo's formatter over what was written, so compiled code passes the same gates as hand-written code. Best effort. */
+async function format(files: string[]): Promise<void> {
+  const biome = join(process.cwd(), "node_modules", ".bin", "biome");
+  if (!existsSync(biome)) return;
+  await new Promise<void>((resolve) => {
+    execFile(biome, ["check", "--write", ...files], { timeout: 30_000 }, () => resolve());
+  });
 }
 
 export { OUTLINE_FILE, type Outline, type OutlineStep, outlineSchema } from "./outline.js";
