@@ -52,6 +52,51 @@ program
   });
 
 program
+  .command("try <workflow>")
+  .description(
+    "Run a workflow in this process, no Restate: real browser, in-memory journal. Gates answer approved unless --ask. The proof a compiled recording works.",
+  )
+  .option("--plan <file>", "plan JSON; default {}")
+  .option("--dry-run", "plan only; stop before the first irreversible step")
+  .option("--ask", "stop at the first gate instead of approving it")
+  .option("--headed", "show the browser")
+  .action(
+    async (
+      name: string,
+      o: { plan?: string; dryRun?: boolean; ask?: boolean; headed?: boolean },
+    ) => {
+      const { loadCompiledWorkflows } = await import("../workflows/compiled.js");
+      const { memoryEffects } = await import("../engine/memory.js");
+      const { runFlow } = await import("../engine/run.js");
+      const { flowRunner } = await import("../browser/flow.js");
+      const { browserOptions, gmailFor, loginFor } = await import("./services.js");
+      const compiled = (await loadCompiledWorkflows("src/workflows")).map((c) => c.workflow);
+      const workflow = [...WORKFLOWS, ...compiled].find((w) => w.name === name);
+      if (!workflow) throw new Error(`unknown workflow ${name}; see: autobrowse workflows`);
+      if (WORKFLOWS.includes(workflow))
+        throw new Error(`${name} needs the worker's deps (APIs); run it with: autobrowse run`);
+      const raw = o.plan ? (JSON.parse(await readFile(o.plan, "utf8")) as object) : {};
+      const plan = workflow.plan.parse({ ...raw, dryRun: o.dryRun ?? false });
+      const browser = flowRunner(
+        browserOptions(settings, o.headed ? false : settings.browserHeadless),
+        { login: loginFor(settings, gmailFor(settings)) },
+      );
+      const out = await runFlow(
+        memoryEffects().fx,
+        workflow as never,
+        { browser } as never,
+        plan,
+        (gate) =>
+          o.ask ? null : { approved: true, note: "autobrowse try", at: new Date().toISOString() },
+      );
+      for (const [step, r] of Object.entries(out.results))
+        if (r) console.log(`${step.padEnd(28)} ${r.status}  ${r.detail}`);
+      console.log(out.status);
+      if (out.status !== "done") process.exitCode = 1;
+    },
+  );
+
+program
   .command("domain <domain>")
   .description("Provision a domain end to end: buy, DNS, Workspace, inboxes, warmup, roster, loops")
   .requiredOption(

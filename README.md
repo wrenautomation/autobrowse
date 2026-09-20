@@ -42,8 +42,9 @@ Browserbase takes them.
   each step the model sees the URL and a digest of the page (numbered
   controls, headings, a little text; ~700 tokens), picks one act, the
   code runs it and journals it. `done` or `human` ends it; the journal is
-  a recording, `compile` makes it a deterministic flow. Explore by agent
-  once, then run the flow forever. `pause`/`resume` over loopback lets a
+  a recording, `compile` makes it a deterministic flow that registers
+  itself at the next boot; `autobrowse try <name>` runs it in-process.
+  Explore by agent once, then run the flow forever. `pause`/`resume` over loopback lets a
   person step in mid-run: while paused the browser is theirs and every
   click and keystroke lands in the same journal; the agent re-reads the
   page when it resumes. The UI's **Explore** page is the same thing with
@@ -116,7 +117,8 @@ pnpm autobrowse agent google "open Personal info and report the display name" --
 pnpm autobrowse repair ~/.config/autobrowse/artifacts/google-x-2026-….failure.json   # agent picks up where a flow stopped
 pnpm autobrowse creds paste google@ops            # a second account: `email password [key]` on the clipboard
 pnpm autobrowse record buy-domain --site cloudflare --url https://dash.cloudflare.com/ --terminal
-pnpm autobrowse compile buy-domain             # → recordings/buy-domain/outline.json, src/workflows/buy-domain/
+pnpm autobrowse compile buy-domain             # → recordings/buy-domain/outline.json, src/workflows/buy-domain/ (registers itself at boot)
+pnpm autobrowse try google-name                # run a compiled workflow here, no Restate: the proof it is deterministic
 pnpm autobrowse compile buy-domain --no-llm --from-outline
 
 pnpm autobrowse domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin --dry-run
