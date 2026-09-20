@@ -59,6 +59,9 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   /** Keyboard into whatever is focused; not journaled as a locator act. */
   z.object({ cmd: z.literal("type"), text: z.string() }),
   z.object({ cmd: z.literal("key"), key: z.string() }),
+  /** Play/pause for an agent driving this session: a person takes over, then hands back. */
+  z.object({ cmd: z.literal("pause") }),
+  z.object({ cmd: z.literal("resume") }),
   /** Accessibility tree of the page (or of one locator), capped. */
   z.object({
     cmd: z.literal("aria"),
@@ -103,9 +106,15 @@ export interface Explorer {
   port: number;
   /** Every request carries this as `Authorization: Bearer …`; the socket drives a signed-in browser. */
   token: string;
+  /** The same commands, in process: what an agent in this process calls. */
+  exec(command: Command): Promise<unknown>;
+  /** True between `pause` and `resume`; an agent waits on `resumed()` before its next step. */
+  paused(): boolean;
+  resumed(): Promise<void>;
   /** Resolves when `close` arrives or the browser goes away. */
   done: Promise<void>;
 }
+export type ExploreCommand = Command;
 
 const toLocatorHints = (h: z.infer<typeof hintsSchema>): LocatorHints => ({
   tag: h.tag ?? "",
@@ -168,6 +177,13 @@ async function serve(
   });
   /** The active page: it moves when a popup opens (OAuth) and comes back after; re-read per command. */
   let page: Page = fp.page;
+  let paused = false;
+  let waiters: Array<() => void> = [];
+  const resume = () => {
+    paused = false;
+    for (const w of waiters) w();
+    waiters = [];
+  };
 
   const shoot = async (): Promise<string> => {
     const file = join(shotsDir, `${String(shotN++).padStart(4, "0")}.png`);
@@ -265,6 +281,14 @@ async function serve(
       case "note":
         journal({ kind: "note", text: c.text });
         return { ok: true };
+      case "pause":
+        paused = true;
+        journal({ kind: "pause" });
+        return { paused: true };
+      case "resume":
+        journal({ kind: "resume" });
+        resume();
+        return { paused: false };
       case "journal":
         return { actions };
       case "save": {
@@ -329,5 +353,13 @@ async function serve(
     server.close();
     finishFlow();
   });
-  return { port: opts.port, token, done };
+  return {
+    port: opts.port,
+    token,
+    exec: run,
+    paused: () => paused,
+    resumed: () =>
+      paused ? new Promise<void>((resolve) => waiters.push(resolve)) : Promise.resolve(),
+    done,
+  };
 }

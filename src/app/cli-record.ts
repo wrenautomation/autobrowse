@@ -58,6 +58,69 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
     });
 
   program
+    .command("agent <site> <goal>")
+    .description(
+      "An agent explores the site toward the goal, journaling every act; `--save <name>` writes the recording to compile. Loopback stays open for pause/resume.",
+    )
+    .option("--url <url>", "start here")
+    .option("--input <k=v...>", "named values the goal may use (a file path, a domain)")
+    .option("--save <name>", "recording name; default = from the goal")
+    .option("--max-steps <n>", "step budget", "25")
+    .option("--port <port>", "loopback port", "9090")
+    .action(
+      async (
+        site: string,
+        goal: string,
+        o: { url?: string; input?: string[]; save?: string; maxSteps: string; port: string },
+      ) => {
+        const { startExplore } = await import("../explore/server.js");
+        const { exploreWithAgent } = await import("../agent/explorer.js");
+        const llm = llmFor(settings);
+        if (!llm) throw new Error("the agent needs a model: set LLM_PROVIDER and its key");
+        const ex = await startExplore({
+          site,
+          browser: browserOptions(settings, false),
+          recordingsDir: settings.recordingsDir,
+          port: Number(o.port),
+          login: loginFor(settings, gmailFor(settings)),
+        });
+        console.log(
+          `agent on ${site}; pause/resume: curl -s -X POST -H "Authorization: Bearer ${ex.token}" http://127.0.0.1:${ex.port}/ -d '{"cmd":"pause"}'`,
+        );
+        if (o.url) await ex.exec({ cmd: "open", url: o.url });
+        const inputs = Object.fromEntries(
+          (o.input ?? []).map((kv) => {
+            const i = kv.indexOf("=");
+            return [kv.slice(0, i), kv.slice(i + 1)];
+          }),
+        );
+        const result = await exploreWithAgent({
+          explorer: ex,
+          llm,
+          goal,
+          inputs,
+          maxSteps: Number(o.maxSteps),
+          onStep: (r) =>
+            console.log(
+              `${r.n}. ${r.step?.thought ?? "(unparsable reply)"}\n   ${r.step?.action.cmd ?? "-"} ${r.error ? `✗ ${r.error}` : "✓"}`,
+            ),
+        });
+        console.log(`${result.achieved ? "achieved" : "not achieved"}: ${result.summary}`);
+        console.log(`tokens in ${result.usage.inputTokens} out ${result.usage.outputTokens}`);
+        const name =
+          o.save ??
+          goal
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "")
+            .slice(0, 40);
+        const saved = (await ex.exec({ cmd: "save", name })) as { dir: string };
+        console.log(`recording: ${saved.dir}  →  pnpm autobrowse compile ${name}`);
+        await ex.exec({ cmd: "close" });
+      },
+    );
+
+  program
     .command("compile <name>")
     .description("Recording → outline.json beside it → a workflow module under --out")
     .option("--out <dir>", "where the module goes", "src/workflows")
