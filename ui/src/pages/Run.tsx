@@ -172,7 +172,7 @@ function Results({ outcome }: { outcome: RunStatusView["outcome"] }) {
             <span className={`pill ${r.status}`}>{r.status}</span>
           </span>
           <span>
-            {r.detail}
+            <Detail text={r.detail} />
             {r.screenshot ? (
               <>
                 {" "}
@@ -203,4 +203,24 @@ function Results({ outcome }: { outcome: RunStatusView["outcome"] }) {
       ))}
     </ul>
   );
+}
+
+/** A step's detail: a sentence as is, JSON (what a scraping step read) as key = value lines. */
+function Detail({ text }: { text: string }) {
+  if (!text.startsWith("{")) return <>{text}</>;
+  try {
+    const obj = JSON.parse(text) as Record<string, unknown>;
+    return (
+      <dl className="kv">
+        {Object.entries(obj).map(([k, v]) => (
+          <div key={k}>
+            <dt className="mono">{k}</dt>
+            <dd>{typeof v === "string" ? v : JSON.stringify(v)}</dd>
+          </div>
+        ))}
+      </dl>
+    );
+  } catch {
+    return <>{text}</>;
+  }
 }

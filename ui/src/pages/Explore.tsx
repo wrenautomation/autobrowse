@@ -448,6 +448,18 @@ function describe(s: SessionView["steps"][number]): string {
   if (!a) return "-";
   const at = "ref" in a ? ` [${a.ref}]` : "";
   const what =
-    a.cmd === "open" ? ` ${a.url}` : a.cmd === "fill" || a.cmd === "select" ? ` "${a.value}"` : "";
+    a.cmd === "open"
+      ? ` ${a.url}`
+      : a.cmd === "fill" || a.cmd === "select"
+        ? ` "${a.value}"`
+        : a.cmd === "read"
+          ? ` as ${a.as}${readText(s.result)}`
+          : "";
   return `${a.cmd}${at}${what}`;
+}
+
+/** What a read found, short, for the step list. */
+function readText(result: unknown): string {
+  const text = (result as { text?: unknown } | null)?.text;
+  return typeof text === "string" ? ` = "${text.slice(0, 80)}"` : "";
 }
