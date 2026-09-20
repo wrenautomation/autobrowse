@@ -118,7 +118,7 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
     .command("compile <name>")
     .description("Recording → outline.json beside it → a workflow module under --out")
     .option("--out <dir>", "where the module goes", "src/workflows")
-    .option("--lib <module>", "what the module imports the library as", "autobrowse")
+    .option("--lib <module>", "what the module imports the library as", "../../index.js")
     .option("--no-llm", "skip the model pass (names, proofs); pure template output")
     .option("--from-outline", "re-render an edited outline.json instead of re-structuring")
     .action(

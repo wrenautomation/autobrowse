@@ -19,12 +19,20 @@ export const IRREVERSIBLE_COMMAND =
 
 type BrowserStep = Extract<OutlineStep, { kind: "browser" }>;
 
-export const kebab = (s: string): string =>
-  s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/^[^a-z]+/, "") || "step";
+/** Longest step name; a note is a sentence, a name is a handle. Cut at a word. */
+const NAME_MAX = 40;
+
+export const kebab = (s: string): string => {
+  const full =
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .replace(/^[^a-z]+/, "") || "step";
+  if (full.length <= NAME_MAX) return full;
+  const cut = full.lastIndexOf("-", NAME_MAX);
+  return cut > 0 ? full.slice(0, cut) : full.slice(0, NAME_MAX);
+};
 
 export const camel = (s: string): string => {
   const k = kebab(s);

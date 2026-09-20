@@ -59,6 +59,7 @@ import { makeLlm } from "../llm/index.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import { type BootstrapDeps, bootstrapWorkflow } from "../workflows/bootstrap/index.js";
+import { compiledDeps, loadCompiledWorkflows } from "../workflows/compiled.js";
 import { type DomainDeps, domainWorkflow } from "../workflows/domain/index.js";
 import type { Settings } from "./config.js";
 import type { DeviceLink } from "./setup.js";
@@ -123,14 +124,20 @@ export function llmFor(settings: Settings, http = httpClient()) {
   );
 }
 
-/** The workflows this worker serves. Adding one is one line here. */
+/** The hand-written workflows; compiled ones join at boot (see workflows/compiled.ts). */
 export const WORKFLOWS: readonly AnyWorkflow[] = [domainWorkflow, bootstrapWorkflow];
+
+/** Where compiled workflows live and where the compiler writes; relative imports resolve to the library from there. */
+export const COMPILED_DIR = "src/workflows";
+export const COMPILED_LIB = "../../index.js";
 
 export interface App {
   services:
     | ReturnType<typeof makeRunObject>[]
     | Array<ReturnType<typeof makeRunObject> | typeof runsRegistry>;
   channel: Channel;
+  /** Hand-written plus compiled: what the UI and CLI list. */
+  workflows: readonly AnyWorkflow[];
   /** The UI's live feed; also one of the channels. */
   bus: EventBus;
   memory: Memory;
@@ -274,7 +281,7 @@ export function channelsFor(
   return list;
 }
 
-export function buildApp(settings: Settings, log: Logger): App {
+export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   const http = httpClient();
   const llm = llmFor(settings, http);
   const memory = memoryFor(settings, http);
@@ -372,13 +379,36 @@ export function buildApp(settings: Settings, log: Logger): App {
   };
 
   const host = { emit: (e: Parameters<Channel["deliver"]>[0]) => channel.deliver(e) };
+  const compiled = await loadCompiledWorkflows(COMPILED_DIR, (dir, err) =>
+    log.warn(
+      { dir, err: err instanceof Error ? err.message : String(err) },
+      "compiled workflow not loaded",
+    ),
+  );
+  const taken = new Set(WORKFLOWS.map((w) => w.name));
+  const extra = compiled.filter((c) => {
+    if (taken.has(c.workflow.name)) {
+      log.warn(
+        { dir: c.dir },
+        `compiled workflow ${c.workflow.name} clashes with a hand-written one; skipped`,
+      );
+      return false;
+    }
+    taken.add(c.workflow.name);
+    return true;
+  });
+  if (extra.length) log.info({ compiled: extra.map((c) => c.workflow.name) }, "compiled workflows");
   return {
     services: [
       runsRegistry,
       makeRunObject(domainWorkflow, domainDeps, host, { guards }),
       makeRunObject(bootstrapWorkflow, bootstrapDeps, host, { guards }),
+      ...extra.map((c) =>
+        makeRunObject(c.workflow as never, compiledDeps(browser) as never, host, { guards }),
+      ),
     ],
     channel,
+    workflows: [...WORKFLOWS, ...extra.map((c) => c.workflow)],
     bus,
     memory,
   };

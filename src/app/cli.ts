@@ -27,8 +27,10 @@ const program = new Command("autobrowse").showHelpAfterError();
 program
   .command("workflows")
   .description("What this worker can run")
-  .action(() => {
-    for (const w of WORKFLOWS)
+  .action(async () => {
+    const { loadCompiledWorkflows } = await import("../workflows/compiled.js");
+    const compiled = (await loadCompiledWorkflows("src/workflows")).map((c) => c.workflow);
+    for (const w of [...WORKFLOWS, ...compiled])
       console.log(
         `${w.name.padEnd(12)} ${w.description}  [${w.steps.map((s) => s.name).join(" → ")}]`,
       );

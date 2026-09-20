@@ -88,6 +88,10 @@ export function RecordingPage({ name }: { name: string }) {
           <div className="row">
             <strong>{compiled.outline.name}</strong>
             <span className="muted">
+              written to src/workflows/{compiled.outline.name}; restart the worker and it is on the
+              Runs page
+            </span>
+            <span className="muted">
               {compiled.outline.steps
                 .map((s) => `${s.name}${s.irreversible ? "!" : ""}`)
                 .join(" → ")}
