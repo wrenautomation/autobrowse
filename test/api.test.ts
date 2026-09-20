@@ -116,6 +116,21 @@ describe("api", () => {
     expect(body[0].plan.properties.domain).toBeDefined();
   });
 
+  it("status carries the live workflow list and today's model spend", async () => {
+    let used = 5;
+    const { app } = await setup(undefined, {
+      status: { llm: "fake", budget: { cap: 100, usedToday: 0 }, workflows: [] } as never,
+      workflows: async () => [domainWorkflow],
+      budget: () => ({ cap: 100, usedToday: used }),
+    });
+    expect(await (await app.request("/api/status")).json()).toMatchObject({
+      workflows: ["domain"],
+      budget: { cap: 100, usedToday: 5 },
+    });
+    used = 50;
+    expect((await (await app.request("/api/status")).json()).budget.usedToday).toBe(50);
+  });
+
   it("lists live workflows with proofs, and proves a compiled one on request", async () => {
     const proof = { at: "2026-09-20T05:00:00Z", status: "done", steps: [], output: null };
     const proved: string[] = [];

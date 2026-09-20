@@ -328,3 +328,14 @@ at the next step (steps are found by name), which is what a repair wants.
 Deps for a compiled run: the browser runner, `envSecrets`
 (`AUTOBROWSE_<KEY>`) and the local shell; the renderer declares only what
 a flow uses.
+
+## Model budget (2026-09-21)
+
+`llm/budget.ts` wraps the one `Llm` in a daily token cap
+(`LLM_DAILY_TOKENS`, 3M by default, 0 = off). The ledger is one JSON file
+under the artifacts dir, read on every call and written atomically, so the
+worker and the CLI count against the same UTC day. Over the cap a call
+throws `BudgetExceeded`: the agent session fails with that message, the
+evaluator logs it, the builder reports it as a failed build, and the person
+is told once a day. Nothing waits or retries. The Status page shows spend
+against the cap live.
