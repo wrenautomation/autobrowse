@@ -101,6 +101,25 @@ function GateCard({
       {gate.trace ? (
         <p className="mono muted">trace: npx playwright show-trace {gate.trace}</p>
       ) : null}
+      {gate.failure ? (
+        <p>
+          <button
+            type="button"
+            onClick={() =>
+              api
+                .agentRepair(gate.failure as string)
+                .then((v) => (location.hash = href("explore", v.id)))
+                .catch((e: Error) => alert(e.message))
+            }
+          >
+            take over with the agent
+          </button>{" "}
+          <span className="muted">
+            opens the same page in an Explore session: pause, do it by hand, resume; save and
+            compile what it took
+          </span>
+        </p>
+      ) : null}
       <div className="row">
         <input
           value={note}

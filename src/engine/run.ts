@@ -39,7 +39,10 @@ export interface OpenGate {
   prompt: string;
   openedAt: string;
   screenshot?: string;
+  aria?: string;
   trace?: string;
+  /** The failure record: what "take over with the agent" starts from. */
+  failure?: string;
 }
 
 export type RunStatus = "running" | "done" | "planned" | "waiting" | "rejected" | "failed";
