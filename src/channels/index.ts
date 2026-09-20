@@ -1,5 +1,6 @@
 export { type Command, parseCommand, type RunSpec } from "./commands.js";
 export { emailChannel } from "./email.js";
+export { linqChannel } from "./linq.js";
 export { memoryChannel } from "./memory.js";
 export { phoneChannel } from "./phone.js";
 export { render } from "./render.js";

@@ -25,6 +25,7 @@ import {
   type Channel,
   channels,
   emailChannel,
+  linqChannel,
   memoryChannel,
   phoneChannel,
   webhookChannel,
@@ -33,6 +34,7 @@ import { cloudflare, verifyCloudflareToken } from "../clients/cloudflare.js";
 import { type GmailUserClient, gmailClient } from "../clients/gmail.js";
 import { googleAdmin } from "../clients/google-admin.js";
 import { httpClient } from "../clients/http.js";
+import { type LinqClient, linqClient } from "../clients/linq.js";
 import { domainAvailability } from "../clients/rdap.js";
 import { ssmRosterStore } from "../clients/roster.js";
 import { twilioReader } from "../clients/twilio.js";
@@ -198,6 +200,9 @@ export function loginFor(
   const phone = phoneFor(settings);
   if (phone)
     sources.push(messageSource({ kind: "sms", inbox: phone.number, reader: phoneReader(phone) }));
+  const linq = linqFor(settings, http);
+  if (linq)
+    sources.push(messageSource({ kind: "sms", inbox: linq.to, reader: linq.client.reader() }));
   if (settings.twilioAccountSid && settings.twilioAuthToken && settings.twilioNumber)
     sources.push(
       messageSource({
@@ -218,6 +223,19 @@ export function loginFor(
     codes: codeSources(...sources),
     ...(notify ? { notify } : {}),
   });
+}
+
+/** Linq when the key and our number are set; the operator's number falls back to the paired phone's. */
+export function linqFor(
+  settings: Settings,
+  http = httpClient(),
+): { client: LinqClient; to: string } | null {
+  const to = settings.linqTo ?? settings.phoneNumber;
+  if (!settings.linqApiKey || !settings.linqNumber || !to) return null;
+  return {
+    client: linqClient({ apiKey: settings.linqApiKey, from: settings.linqNumber, http }),
+    to,
+  };
 }
 
 export function memoryFor(settings: Settings, http = httpClient()): Memory {
@@ -269,6 +287,8 @@ export function channelsFor(
     list.push(emailChannel({ gmail, from: notifyFrom, to: settings.notifyTo }));
   const phone = phoneFor(settings);
   if (phone) list.push(phoneChannel(phone));
+  const linq = linqFor(settings, http);
+  if (linq) list.push(linqChannel(linq));
   if (settings.webhookUrl)
     list.push(
       webhookChannel({

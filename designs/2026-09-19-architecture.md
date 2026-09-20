@@ -290,3 +290,15 @@ login provider use. Bare names behave as before (`cloudflare` → credential
   (compiles, matches a schema, or an API read confirms).
 - Prod and demo share code; demo-only integrations sit behind settings and
   the `htn-2026` branch holds config, copy and time compression only.
+
+## Linq (2026-09-20)
+
+`clients/linq.ts` speaks the v3 API: `POST /v3/chats` opens the chat with
+the operator once (chat id cached), then `POST /v3/chats/{id}/messages`;
+`GET /v3/chats/{id}/messages` is the `MessageReader` the SMS code source
+polls. `channels/linq.ts` is the same shape as the phone channel. Inbound
+`message.received` lands on `POST /hooks/linq`; the Standard Webhooks
+signature (`webhook-id`, `webhook-timestamp`, `webhook-signature`, HMAC
+over `id.ts.body`) replaces the bearer when a secret is set; only the
+operator's number is answered. Same command parser as every channel.
+Not live: needs a Linq key and a registered webhook.

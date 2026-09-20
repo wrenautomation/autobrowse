@@ -176,6 +176,19 @@ designs/        architecture and per-workflow design docs
 test/           one file per module; restate.test needs Docker
 ```
 
+## Channels
+
+Gates, failures and finishes reach the operator on every configured
+channel, and a reply on any of them is a command (`yes`, `no`, `pause`,
+`play`, `status`, `reset`, optionally `<workflow> <key>`):
+
+- email (a fleet inbox → `NOTIFY_TO`)
+- the paired iPhone (`PHONE_NUMBER`; Messages on this Mac, no vendor)
+- Linq (`LINQ_API_KEY` + `LINQ_NUMBER`; iMessage from a number we own,
+  no Mac; replies arrive at `POST /hooks/linq`, verified with
+  `LINQ_WEBHOOK_SECRET`; the same chats serve SMS one-time codes)
+- a webhook (`WEBHOOK_URL`)
+
 ## Coupling to `wren`
 
 Thin: writes the roster to SSM, dispatches wren's deploy, calls its ingress

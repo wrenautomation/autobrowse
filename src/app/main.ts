@@ -19,6 +19,7 @@ import {
   COMPILED_DIR,
   COMPILED_LIB,
   gmailFor,
+  linqFor,
   llmFor,
   loginFor,
 } from "./services.js";
@@ -56,9 +57,18 @@ const agent = llm
         }),
     })
   : undefined;
+const linq = linqFor(settings);
 startUiServer({
   ...(agent ? { agent } : {}),
   ...(llm ? { llm } : {}),
+  ...(linq
+    ? {
+        linq: {
+          ...linq,
+          ...(settings.linqWebhookSecret ? { secret: settings.linqWebhookSecret } : {}),
+        },
+      }
+    : {}),
   port: settings.uiPort,
   ...(settings.uiHost ? { host: settings.uiHost } : {}),
   distDir: `${root}/ui/dist`,

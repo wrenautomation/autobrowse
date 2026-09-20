@@ -18,6 +18,13 @@ import type { AgentSessions } from "../agent/sessions.js";
 import type { Ingress } from "../app/client.js";
 import type { FailureRecord } from "../browser/session.js";
 import { parseCommand } from "../channels/commands.js";
+import {
+  type LinqClient,
+  type LinqEvent,
+  linqEvent,
+  textOf,
+  verifyLinqWebhook,
+} from "../clients/linq.js";
 import type { Compiled } from "../compiler/index.js";
 import type { GateName } from "../engine/effects.js";
 import type { RunEvent } from "../engine/events.js";
@@ -42,6 +49,8 @@ export interface ApiDeps {
   agent?: AgentSessions;
   /** The model the evaluator uses; absent when none is configured. */
   llm?: Llm;
+  /** Linq: replies to the operator's iMessages; `secret` verifies the webhook. */
+  linq?: { client: LinqClient; to: string; secret?: string };
 }
 
 const agentStart = z.object({
@@ -94,7 +103,12 @@ export function api(deps: ApiDeps): Hono {
   const runOf = (workflow: string, key: string) => deps.ingress.run(workflow, key);
 
   app.use("/api/*", bearerAuth(deps.token));
-  app.use("/hooks/*", bearerAuth(deps.token), rateLimit({ perMinute: 60 }));
+  app.use("/hooks/*", rateLimit({ perMinute: 60 }));
+  app.use("/hooks/inbound", bearerAuth(deps.token));
+  // Linq cannot send our bearer; its signature stands in when a secret is set.
+  app.use("/hooks/linq", (c, next) =>
+    deps.linq?.secret ? next() : bearerAuth(deps.token)(c, next),
+  );
 
   app.get("/api/workflows", (c) =>
     c.json(
@@ -319,37 +333,27 @@ export function api(deps: ApiDeps): Hono {
     }
   });
 
-  /** What a person typed on any channel (iMessage, Slack, a form). Replies with text for that channel. */
-  app.post("/hooks/inbound", async (c) => {
-    const body = inboundBody.safeParse(await c.req.json().catch(() => null));
-    if (!body.success) return c.json({ error: "bad body", issues: body.error.issues }, 400);
-    const cmd = parseCommand(body.data.text, { workflows: [...byName.keys()] });
-    if (!cmd)
-      return c.json({
-        reply: "say yes, no, pause, play, status or reset, optionally with <workflow> <key>",
-      });
+  /** What a person typed on any channel becomes a command; the answer is one line for that channel. */
+  async function inbound(text: string): Promise<string> {
+    const cmd = parseCommand(text, { workflows: [...byName.keys()] });
+    if (!cmd) return "say yes, no, pause, play, status or reset, optionally with <workflow> <key>";
     const rows = await deps.ingress.registry().list();
     const target: RunRow | undefined = cmd.run
       ? rows.find((r) => r.workflow === cmd.run?.workflow && r.key === cmd.run?.key)
       : cmd.kind === "approve" || cmd.kind === "reject"
         ? rows.find((r) => r.status === "waiting")
         : rows[0];
-    if (!target)
-      return c.json({
-        reply: cmd.run ? `no run ${cmd.run.workflow}/${cmd.run.key}` : "no run is waiting",
-      });
+    if (!target) return cmd.run ? `no run ${cmd.run.workflow}/${cmd.run.key}` : "no run is waiting";
     const run = runOf(target.workflow, target.key);
     const id = `${target.workflow}/${target.key}`;
     switch (cmd.kind) {
       case "approve":
       case "reject": {
         const gate = (await run.status()).gate;
-        if (!gate) return c.json({ reply: `${id} is not waiting at a gate` });
+        if (!gate) return `${id} is not waiting at a gate`;
         const args = { name: gate.name, ...(cmd.note ? { note: cmd.note } : {}) };
         await (cmd.kind === "approve" ? run.approve(args) : run.reject(args));
-        return c.json({
-          reply: `${id}: ${gate.name} ${cmd.kind === "approve" ? "approved" : "rejected"}`,
-        });
+        return `${id}: ${gate.name} ${cmd.kind === "approve" ? "approved" : "rejected"}`;
       }
       case "status": {
         const s = await run.status();
@@ -358,12 +362,52 @@ export function api(deps: ApiDeps): Hono {
           : s.outcome
             ? s.outcome.status
             : "running";
-        return c.json({ reply: `${id}: ${line}${s.paused ? " (paused)" : ""}` });
+        return `${id}: ${line}${s.paused ? " (paused)" : ""}`;
       }
       default:
         await run[cmd.kind]();
-        return c.json({ reply: `${id}: ${cmd.kind === "play" ? "playing" : cmd.kind}` });
+        return `${id}: ${cmd.kind === "play" ? "playing" : cmd.kind}`;
     }
+  }
+
+  app.post("/hooks/inbound", async (c) => {
+    const body = inboundBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: "bad body", issues: body.error.issues }, 400);
+    return c.json({ reply: await inbound(body.data.text) });
+  });
+
+  /** Linq posts `message.received` here; the reply goes back over iMessage. Signature required when a secret is set. */
+  app.post("/hooks/linq", async (c) => {
+    const linq = deps.linq;
+    if (!linq) return c.json({ error: "linq is not configured" }, 404);
+    const raw = await c.req.text();
+    if (linq.secret) {
+      const ok = verifyLinqWebhook(
+        {
+          "webhook-id": c.req.header("webhook-id"),
+          "webhook-timestamp": c.req.header("webhook-timestamp"),
+          "webhook-signature": c.req.header("webhook-signature"),
+        },
+        raw,
+        linq.secret,
+      );
+      if (!ok) return c.json({ error: "bad signature" }, 401);
+    }
+    let event: LinqEvent;
+    try {
+      event = linqEvent.parse(JSON.parse(raw));
+    } catch {
+      return c.json({ error: "bad body" }, 400);
+    }
+    if (event.type !== "message.received") return c.json({ ignored: event.type });
+    const from = event.data.from;
+    if (!from || from !== linq.to) return c.json({ ignored: "not the operator" });
+    if (event.data.chat_id) linq.client.learn(from, event.data.chat_id);
+    const text = textOf(event.data);
+    if (!text) return c.json({ ignored: "no text" });
+    const reply = await inbound(text);
+    await linq.client.send(from, reply);
+    return c.json({ reply });
   });
 
   return app;

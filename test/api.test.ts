@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { AgentSessions, SessionView } from "../src/agent/sessions.js";
 import type { Ingress } from "../src/app/client.js";
+import { signLinqWebhook } from "../src/clients/linq.js";
 import type { OpenGate, RunStatusView } from "../src/engine/object.js";
 import type { RunRow } from "../src/engine/registry.js";
 import { saveRecording } from "../src/recorder/store.js";
@@ -66,7 +67,7 @@ function fakeIngress() {
   return { ingress, calls };
 }
 
-async function setup(token?: string) {
+async function setup(token?: string, extra: Partial<Parameters<typeof api>[0]> = {}) {
   const dir = await mkdtemp(join(tmpdir(), "api-"));
   const recordingsDir = join(dir, "rec");
   await saveRecording(recordingsDir, {
@@ -94,6 +95,7 @@ async function setup(token?: string) {
       files: { "index.ts": "//" },
     }),
     token,
+    ...extra,
   });
   return { app, calls, bus, dir };
 }
@@ -151,6 +153,55 @@ describe("api", () => {
     expect(status.reply).toMatch(/waiting at buy/);
     const huh = await (await app.request(post("/hooks/inbound", { text: "what" }))).json();
     expect(huh.reply).toMatch(/say yes, no/);
+  });
+
+  it("answers the operator's iMessage through Linq when the signature checks out", async () => {
+    const sent: string[] = [];
+    const client = {
+      send: async (_to: string, text: string) => void sent.push(text),
+      recent: async () => [],
+      learn: () => undefined,
+      reader: () => ({ recent: async () => [] }),
+    };
+    const secret = `whsec_${Buffer.from("k".repeat(32)).toString("base64")}`;
+    const { app, calls } = await setup("tok", { linq: { client, to: "+15550001111", secret } });
+    const body = JSON.stringify({
+      type: "message.received",
+      data: {
+        id: "m1",
+        chat_id: "c1",
+        from: "+15550001111",
+        parts: [{ type: "text", value: "yes" }],
+      },
+    });
+    const ts = String(Math.floor(Date.now() / 1000));
+    const headers = {
+      "content-type": "application/json",
+      "webhook-id": "e1",
+      "webhook-timestamp": ts,
+      "webhook-signature": signLinqWebhook("e1", ts, body, secret),
+    };
+    const ok = await app.request("/hooks/linq", { method: "POST", body, headers });
+    expect(ok.status).toBe(200);
+    expect(sent).toEqual(["domain/x.com: purchase approved"]);
+    expect(calls[0]).toMatch(/^approve purchase/);
+    const bad = await app.request("/hooks/linq", {
+      method: "POST",
+      body,
+      headers: { ...headers, "webhook-signature": "v1,AAAA" },
+    });
+    expect(bad.status).toBe(401);
+    const stranger = JSON.stringify({
+      type: "message.received",
+      data: { id: "m2", from: "+19990000000", parts: [{ type: "text", value: "yes" }] },
+    });
+    const r = await app.request("/hooks/linq", {
+      method: "POST",
+      body: stranger,
+      headers: { ...headers, "webhook-signature": signLinqWebhook("e1", ts, stranger, secret) },
+    });
+    expect(await r.json()).toEqual({ ignored: "not the operator" });
+    expect(sent).toHaveLength(1);
   });
 
   it("requires the bearer when one is set", async () => {

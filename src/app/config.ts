@@ -89,6 +89,21 @@ const schema = z.object({
     .regex(/^\+\d{8,15}$/)
     .optional(),
   phoneMessagesDb: z.string().min(1).optional(),
+  /**
+   * Linq: iMessage from a number we own, no Mac needed. Notes and gates go
+   * to `linqTo` (defaults to phoneNumber); SMS codes are read from the
+   * same chats. The webhook secret verifies what Linq posts to /hooks/linq.
+   */
+  linqApiKey: z.string().min(1).optional(),
+  linqNumber: z
+    .string()
+    .regex(/^\+\d{8,15}$/)
+    .optional(),
+  linqTo: z
+    .string()
+    .regex(/^\+\d{8,15}$/)
+    .optional(),
+  linqWebhookSecret: z.string().min(1).optional(),
   /** A Twilio number we own, for SMS one-time codes (E.164). All three or none. */
   twilioAccountSid: z.string().min(1).optional(),
   twilioAuthToken: z.string().min(1).optional(),
@@ -150,6 +165,10 @@ export const ENV_KEYS = {
   codesInbox: "CODES_INBOX",
   phoneNumber: "PHONE_NUMBER",
   phoneMessagesDb: "PHONE_MESSAGES_DB",
+  linqApiKey: "LINQ_API_KEY",
+  linqNumber: "LINQ_NUMBER",
+  linqTo: "LINQ_TO",
+  linqWebhookSecret: "LINQ_WEBHOOK_SECRET",
   twilioAccountSid: "TWILIO_ACCOUNT_SID",
   twilioAuthToken: "TWILIO_AUTH_TOKEN",
   twilioNumber: "TWILIO_NUMBER",
