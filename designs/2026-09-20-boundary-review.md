@@ -56,3 +56,14 @@ in `why`. (See `agent/evaluator.ts` SYSTEM.) Nothing else to cut.
 `explore`, `agent`, `record`, `compile`, `try`, sessions, credentials,
 TOTP/passkeys, devices (phone SMS), guards: all browser-side or sign-in
 plumbing. No wren imports anywhere (`clients/wren.ts` is an HTTP contract).
+
+## Browser legs as a service (2026-09-19, late)
+
+The in-repo half of the move is done: `src/engine/browser-service.ts`
+registers a Restate service `browser` with handlers `buy`, `dkimGenerate`,
+`dkimStart`, `warmup`, `workspaceLogo`, and `flow({name, input})` for any
+flow by `site/name` (`BROWSER_FLOWS`). A person needed → terminal 460,
+a broken flow → terminal 461, artifacts in the message; anything else
+retries under the run objects' schedule. These handler names are the
+contract wren calls when it takes over the domain workflow's API steps.
+The `domain` run object stays until wren owns the orchestration.

@@ -44,6 +44,7 @@ import {
   phoneReader,
   phoneStatus,
 } from "../devices/phone.js";
+import { type BrowserService, browserService } from "../engine/browser-service.js";
 import { Unrecoverable } from "../engine/effects.js";
 import { parseGuards } from "../engine/guards.js";
 import { makeRunObject } from "../engine/object.js";
@@ -132,9 +133,7 @@ export const COMPILED_DIR = "src/workflows";
 export const COMPILED_LIB = "../../index.js";
 
 export interface App {
-  services:
-    | ReturnType<typeof makeRunObject>[]
-    | Array<ReturnType<typeof makeRunObject> | typeof runsRegistry>;
+  services: Array<ReturnType<typeof makeRunObject> | typeof runsRegistry | BrowserService>;
   channel: Channel;
   /** Hand-written plus compiled: what the UI and CLI list. */
   workflows: readonly AnyWorkflow[];
@@ -401,6 +400,8 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   return {
     services: [
       runsRegistry,
+      // The browser legs for an orchestrator that owns the API steps (wren); compiled flows by name too.
+      browserService({ runner: browser }),
       makeRunObject(domainWorkflow, domainDeps, host, { guards }),
       makeRunObject(bootstrapWorkflow, bootstrapDeps, host, { guards }),
       ...extra.map((c) =>
