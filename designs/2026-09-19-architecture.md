@@ -313,3 +313,18 @@ op `read`; a compiled step with reads returns `Record<string, string>` and
 its result detail is that JSON. Headings, dialogs, alerts, status and
 cells are numbered refs now so they can be read; bare text stays
 unnumbered so a text-only change is still a delta.
+
+## Compiled object (2026-09-20)
+
+Hand-written workflows are one Restate object each, named after the
+workflow. Every compiled workflow runs under one object, `Compiled`, keyed
+`<workflow>/<key>`. Each invocation resolves the workflow from the key
+through a catalog that re-reads `src/workflows/` and imports each module
+with its mtime in the URL, so a compile or a rewrite is live at once: no
+restart, no re-registration. An unknown name is a terminal 404. The
+ingress client and the API route by `HAND_WRITTEN`; events, the registry
+and the UI still show `<workflow>/<key>`. A rewrite mid-run takes effect
+at the next step (steps are found by name), which is what a repair wants.
+Deps for a compiled run: the browser runner, `envSecrets`
+(`AUTOBROWSE_<KEY>`) and the local shell; the renderer declares only what
+a flow uses.

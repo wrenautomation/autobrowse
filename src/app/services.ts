@@ -133,7 +133,7 @@ export function llmFor(settings: Settings, http = httpClient()) {
   );
 }
 
-/** The hand-written workflows; compiled ones join at boot (see workflows/compiled.ts). */
+/** The hand-written workflows; compiled ones are found per run by the Compiled object (see workflows/compiled.ts). */
 export const WORKFLOWS: readonly AnyWorkflow[] = [domainWorkflow, bootstrapWorkflow];
 
 /** Where compiled workflows live and where the compiler writes; relative imports resolve to the library from there. */

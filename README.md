@@ -176,7 +176,7 @@ src/deps/       SecretSource, SecretSink (env file / SSM), Shell: what workflows
 src/devices/    what a person owns and a second step leans on: the paired phone (SMS in, iMessage out)
 src/explore/    explore mode: one open browser, a loopback command API, pause/resume with hand acts journaled
 src/agent/      the exploration agent (digest, one act a step), sessions (play/pause, persisted), repair, evaluator
-src/workflows/  one dir per workflow; domain + bootstrap hand-written, compiled ones register themselves at boot
+src/workflows/  one dir per workflow; domain + bootstrap hand-written, compiled ones are served as they appear (one `Compiled` object)
 src/ui/         Hono API (+ SSE bus, bearer, rate limit) and the static SPA
 src/app/        settings, composition root (lazy deps), self-registration, status, sentry, CLI, worker
 Dockerfile, compose.yml   the deploy unit; designs/2026-09-19-deploy.md
