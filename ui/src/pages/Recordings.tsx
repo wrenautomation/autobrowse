@@ -1,7 +1,8 @@
 /** Recordings on disk, one in detail with its screenshots, and the compile button: outline + source. */
 import { useState } from "react";
 import { describeOp } from "../../../src/desktop/describe.js";
-import { api, type Compiled, type Proof, type Recording } from "../api.js";
+import { api, type Compiled, type Recording } from "../api.js";
+import { ProveButton } from "../components/Prove.js";
 import { href, useLoad } from "../hooks.js";
 
 export function RecordingsPage() {
@@ -179,42 +180,5 @@ function Actions({ rec }: { rec: Recording }) {
         </div>
       ))}
     </div>
-  );
-}
-
-/** The proof is the compiled flow working on its own once: run it here, straight after compiling. */
-function ProveButton({ workflow }: { workflow: string }) {
-  const [busy, setBusy] = useState(false);
-  const [proof, setProof] = useState<Proof | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const prove = async () => {
-    setBusy(true);
-    setErr(null);
-    try {
-      setProof(await api.prove(workflow));
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  const failed = proof?.steps.find((s) => s.status !== "done" && s.status !== "skipped");
-  return (
-    <span>
-      <button type="button" disabled={busy} onClick={prove}>
-        {busy ? "proving…" : proof ? "prove again" : "prove it runs"}
-      </button>
-      {proof ? (
-        <span className={proof.status === "done" ? "muted" : "error"}>
-          {" "}
-          <span className={`pill ${proof.status === "done" ? "done" : "failed"}`}>
-            {proof.status === "done" ? "proven" : `proof ${proof.status}`}
-          </span>
-          {failed ? ` at ${failed.name}: ${failed.detail}` : ""}
-          {proof.output ? ` → ${JSON.stringify(proof.output)}` : ""}
-        </span>
-      ) : null}
-      {err ? <span className="error"> {err}</span> : null}
-    </span>
   );
 }

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { Outline } from "../../../src/compiler/outline.js";
 import { api, type Compiled } from "../api.js";
+import { ProveButton } from "../components/Prove.js";
 import { href, useLoad } from "../hooks.js";
 
 export function WorkflowPage({ name }: { name: string }) {
@@ -45,6 +46,7 @@ export function WorkflowPage({ name }: { name: string }) {
         <button type="button" className="primary" disabled={busy || !dirty} onClick={save}>
           {busy ? "saving…" : "save outline & re-render"}
         </button>
+        <ProveButton workflow={name} />
         <a href={href("runs")} className="muted">
           runs
         </a>
