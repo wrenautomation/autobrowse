@@ -162,14 +162,14 @@ src/llm/        Llm seam: anthropic, openai, fake; completeJson
 src/memory/     Memory seam: in-process store, Backboard; what repairs and gate answers taught us
 src/recorder/   observer (in page), browser + terminal capture, redaction, store
 src/compiler/   structure → outline → render (+ polish); output typechecks
-src/channels/   email, webhook, inbound command parser
+src/channels/   email, phone (iMessage on this Mac), linq, webhook, inbound command parser
 src/deps/       SecretSource, SecretSink (env file / SSM), Shell: what workflows read and write
 src/devices/    what a person owns and a second step leans on: the paired phone (SMS in, iMessage out)
 src/explore/    explore mode: one open browser, a loopback command API, pause/resume with hand acts journaled
 src/agent/      the exploration agent (digest, one act a step), sessions (play/pause, persisted), repair, evaluator
 src/workflows/  one dir per workflow; domain + bootstrap hand-written, compiled ones register themselves at boot
 src/ui/         Hono API (+ SSE bus, bearer, rate limit) and the static SPA
-src/app/        settings, composition root (lazy deps), self-registration, CLI, worker
+src/app/        settings, composition root (lazy deps), self-registration, status, sentry, CLI, worker
 Dockerfile, compose.yml   the deploy unit; designs/2026-09-19-deploy.md
 ui/             React SPA (Vite); ui/dist is served by the worker
 designs/        architecture and per-workflow design docs
