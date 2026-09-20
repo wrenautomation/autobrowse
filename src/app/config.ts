@@ -77,6 +77,11 @@ const schema = z.object({
   sentryEnvironment: z.string().min(1).default("local"),
   /** Run the evaluator every N hours and tell the person what deserves a workflow; 0 = off. */
   evaluateEveryHours: z.coerce.number().min(0).default(0),
+  /** Let the evaluator's proposals be explored, saved and compiled with nobody clicking. */
+  autoBuild: z
+    .enum(["true", "false", "1", "0"])
+    .default("false")
+    .transform((v) => v === "true" || v === "1"),
   /** Site credentials for automated sign-in; 0600 JSON. Env (`AUTOBROWSE_CRED_*`) is read first. */
   credentialsFile: z.string().min(1).default("~/.config/autobrowse/credentials.json"),
   /** How the credential file is sealed: keychain (macOS, default there), none (containers; credentials come from env). */
@@ -168,6 +173,7 @@ export const ENV_KEYS = {
   sentryDsn: "SENTRY_DSN",
   sentryEnvironment: "SENTRY_ENVIRONMENT",
   evaluateEveryHours: "EVALUATE_EVERY_HOURS",
+  autoBuild: "AUTO_BUILD",
   credentialsFile: "CREDENTIALS_FILE",
   credentialsCipher: "CREDENTIALS_CIPHER",
   codesInbox: "CODES_INBOX",

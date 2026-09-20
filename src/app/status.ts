@@ -14,6 +14,7 @@ export interface Status {
   codes: string[];
   guards: string;
   evaluateEveryHours: number;
+  autoBuild: boolean;
   sentry: boolean;
   workflows: string[];
   /** When this worker started (ISO). */
@@ -49,6 +50,7 @@ export function statusOf(
     codes,
     guards: settings.guards,
     evaluateEveryHours: settings.evaluateEveryHours,
+    autoBuild: settings.autoBuild,
     sentry: Boolean(settings.sentryDsn),
     workflows: live.workflows,
     since: (live.since ?? new Date()).toISOString(),

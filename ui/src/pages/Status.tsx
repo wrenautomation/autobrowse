@@ -19,7 +19,9 @@ export function StatusPage() {
     ["guards", s.guards],
     [
       "evaluator",
-      s.evaluateEveryHours > 0 ? `every ${s.evaluateEveryHours} h` : "off (EVALUATE_EVERY_HOURS)",
+      s.evaluateEveryHours > 0
+        ? `every ${s.evaluateEveryHours} h${s.autoBuild ? ", builds on its own" : ""}`
+        : "off (EVALUATE_EVERY_HOURS)",
     ],
     ["sentry", s.sentry ? "on" : "off"],
     ["workflows", s.workflows.join(", ")],

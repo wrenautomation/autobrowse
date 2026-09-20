@@ -8,6 +8,7 @@ import { httpClient } from "../clients/http.js";
 import { compile, writeRendered } from "../compiler/index.js";
 import { startExplore } from "../explore/server.js";
 import { expandHome } from "../google-auth.js";
+import type { Recording } from "../recorder/types.js";
 import { startUiServer } from "../ui/server.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
@@ -96,19 +97,34 @@ startUiServer({
   bus: app.bus,
   recordingsDir: expandHome(settings.recordingsDir),
   artifactsDir: expandHome(settings.artifactsDir),
-  compile: async (rec) => {
-    const out = await compile(rec, { llm, lib: COMPILED_LIB });
-    // Written where the worker loads from: restart, and it is on the Runs page.
-    await writeRendered(join(COMPILED_DIR, out.outline.name), out);
-    return out;
-  },
+  compile: compileRecording,
   token: settings.uiToken,
 });
+async function compileRecording(rec: Recording) {
+  const out = await compile(rec, { llm, lib: COMPILED_LIB });
+  // Written where the worker loads from: restart, and it is on the Runs page.
+  await writeRendered(join(COMPILED_DIR, out.outline.name), out);
+  return out;
+}
 if (llm && settings.evaluateEveryHours > 0 && app.channel.note) {
   const { proposeWorkflows, readFailures } = await import("../agent/evaluator.js");
   const { scheduleEvaluator } = await import("../agent/schedule.js");
-  const { listRecordings } = await import("../recorder/store.js");
+  const { listRecordings, loadRecording } = await import("../recorder/store.js");
   const recordingsDir = expandHome(settings.recordingsDir);
+  const note = app.channel.note.bind(app.channel);
+  const builder =
+    settings.autoBuild && agent
+      ? {
+          agent,
+          notify: note,
+          remember: new Set<string>(),
+          compile: async (name: string) => ({
+            workflow: (await compileRecording(await loadRecording(recordingsDir, name))).outline
+              .name,
+          }),
+        }
+      : null;
+  if (settings.autoBuild && !builder) log.warn("AUTO_BUILD set without a model: nothing builds");
   scheduleEvaluator({
     everyHours: settings.evaluateEveryHours,
     evidence: async () => ({
@@ -120,13 +136,24 @@ if (llm && settings.evaluateEveryHours > 0 && app.channel.note) {
       })),
     }),
     propose: (e) => proposeWorkflows(llm, e),
-    notify: app.channel.note.bind(app.channel),
+    notify: note,
+    ...(builder
+      ? {
+          build: async (proposals) => {
+            const { buildProposals } = await import("../agent/builder.js");
+            return buildProposals(proposals, builder);
+          },
+        }
+      : {}),
     onError: (err) => {
       log.warn({ err: err instanceof Error ? err.message : String(err) }, "evaluator");
       sentry?.error(err, { where: "evaluator" });
     },
   });
-  log.info({ everyHours: settings.evaluateEveryHours }, "evaluator scheduled");
+  log.info(
+    { everyHours: settings.evaluateEveryHours, autoBuild: builder !== null },
+    "evaluator scheduled",
+  );
 }
 log.info(
   {

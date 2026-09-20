@@ -11,6 +11,8 @@ export interface ScheduleOptions {
   evidence(): Promise<Evidence>;
   propose(evidence: Evidence): Promise<{ proposals: Proposal[] }>;
   notify(text: string): Promise<void>;
+  /** Build the fresh proposals after telling about them; errors are the caller's (onError). */
+  build?: (proposals: Proposal[]) => Promise<unknown>;
   /** Only proposals the last pass did not already tell about. */
   remember?: Set<string>;
   setInterval?: typeof globalThis.setInterval;
@@ -38,6 +40,7 @@ export function scheduleEvaluator(o: ScheduleOptions): () => void {
       if (!text) return;
       for (const p of unseen) told.add(p.title);
       await o.notify(text);
+      await o.build?.(unseen.filter((p) => !p.covered));
     } catch (err) {
       o.onError?.(err);
     }
