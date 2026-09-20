@@ -10,8 +10,10 @@ $30/month (instance) + $2 (volume) + pennies (ECR, SSM Advanced parameter).
 1. `aws login` (same account and region as wren). `cd deploy/terraform && tofu init && tofu apply`.
    wren's terraform must already be applied: this reads its GitHub OIDC provider.
 2. Restate Cloud, the wren env: Developers > API keys > a **Full** key
-   (`RESTATE_AUTH_TOKEN`); Developers > Security > the request-identity key
-   (`RESTATE_IDENTITY_KEY`); the env id (`RESTATE_ENVIRONMENT_ID`, `env_…`).
+   (`RESTATE_AUTH_TOKEN`); the env id (`RESTATE_ENVIRONMENT_ID`, `env_…`);
+   the request-identity key: `restate cloud login`, then
+   `deploy/scripts/identity-key.py --env >> deploy/prod.env` (or copy it from
+   Developers > Security).
 3. `cp deploy/prod.env.example deploy/prod.env`, fill it, `deploy/scripts/push-secrets.sh`.
    `UI_TOKEN` is required. Site credentials go in as `AUTOBROWSE_CRED_<SITE>_*`
    (`CREDENTIALS_CIPHER=none`: no Keychain on Linux).
@@ -31,5 +33,11 @@ $30/month (instance) + $2 (volume) + pennies (ECR, SSM Advanced parameter).
   `aws ssm send-command … autobrowse-deploy`).
 - Recordings are made on a laptop; copy the directory to `/data/recordings`
   (`aws ssm` port forward + `scp` through it, or S3) and compile from the UI.
+- Passkeys cannot ride in env. A site whose credential holds one (google-admin)
+  needs the credentials file on the box: `autobrowse creds export` on the
+  laptop is not a thing yet, so decrypt with `CREDENTIALS_CIPHER=none`
+  semantics by hand and copy to `/data/credentials.json`, then set
+  `CREDENTIALS_FILE=/data/credentials.json` in prod.env. Until then the
+  password + TOTP path signs in.
 - Persistent browser profiles live in `/data/profiles`: one worker, one box.
   `BROWSER=browserbase` moves the browser out and lets the box shrink.
