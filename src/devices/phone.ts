@@ -17,8 +17,6 @@ import { accessSync, constants } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Message, MessageReader } from "../auth/codes.js";
-import { render } from "../channels/render.js";
-import type { Channel } from "../channels/types.js";
 
 export interface PhoneOptions {
   /** The phone's number, E.164; the one text forwarding and iMessage know. */

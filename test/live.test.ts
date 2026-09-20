@@ -11,7 +11,11 @@ import { completeJson } from "../src/llm/types.js";
 
 const live = process.env.LIVE === "1";
 // Settings are strict (a real .env); only load them when the live run is on, so CI's import is clean.
-const settings = live ? (loadEnvFile(), loadSettings()) : null!;
+function liveSettings() {
+  loadEnvFile();
+  return loadSettings();
+}
+const settings = live ? liveSettings() : ({} as ReturnType<typeof loadSettings>);
 
 describe.skipIf(!live)("live", () => {
   it("backboard remembers and recalls", async () => {
