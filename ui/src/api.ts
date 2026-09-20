@@ -5,21 +5,25 @@
  */
 
 import type { Proposal } from "../../src/agent/evaluator.js";
-import type { SessionView, StartRequest } from "../../src/agent/sessions.js";
+import type { SessionSummary, SessionView, StartRequest } from "../../src/agent/sessions.js";
 import type { Status } from "../../src/app/status.js";
 import type { Compiled } from "../../src/compiler/index.js";
 import type { RunEvent } from "../../src/engine/events.js";
 import type { RunStatusView } from "../../src/engine/object.js";
-import type { RunRow } from "../../src/engine/registry.js";
-import type { Recording } from "../../src/recorder/types.js";
+import type { ListQuery, RunRow } from "../../src/engine/registry.js";
+import type { Recording, RecordingSummary } from "../../src/recorder/types.js";
+import type { JobView } from "../../src/ui/jobs.js";
 
 export type {
   Compiled,
+  JobView,
   Proposal,
   Recording,
+  RecordingSummary,
   RunEvent,
   RunRow,
   RunStatusView,
+  SessionSummary,
   SessionView,
   StartRequest,
   Status,
@@ -76,23 +80,46 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
 const post = (path: string, body?: unknown) =>
   call(path, { method: "POST", body: body === undefined ? null : JSON.stringify(body) });
 
+const query = (q: Record<string, string | number | undefined>) => {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== "") p.set(k, String(v));
+  const s = p.toString();
+  return s ? `?${s}` : "";
+};
+
+/**
+ * Minutes-long work (a proof, a heal) starts as a job and is awaited here:
+ * each request holds up to 25s server-side, so a wait is a few requests,
+ * not a poll every second. Resolves with the result, rejects with the error.
+ */
+async function finish<T>(job: JobView): Promise<T> {
+  let j = job;
+  while (j.status === "running")
+    j = await call<JobView>(`/api/jobs/${j.id}${query({ wait: 25_000 })}`);
+  if (j.status === "failed") throw new ApiError(500, j.error ?? "failed");
+  return j.result as T;
+}
+
 export const api = {
   status: () => call<Status | null>("/api/status"),
   workflows: () => call<WorkflowInfo[]>("/api/workflows"),
-  prove: (workflow: string) => post(`/api/workflows/${workflow}/prove`) as Promise<Proof>,
-  runs: () => call<RunRow[]>("/api/runs"),
+  prove: (workflow: string) =>
+    (post(`/api/workflows/${workflow}/prove`) as Promise<JobView>).then((j) => finish<Proof>(j)),
+  /** Newest first; `before` = the last row's updatedAt for the next page. */
+  runs: (q: ListQuery = {}) => call<RunRow[]>(`/api/runs${query({ ...q })}`),
+  job: (id: string, wait = 0) => call<JobView>(`/api/jobs/${id}${query({ wait })}`),
   run: (workflow: string, key: string) =>
     call<RunStatusView>(`/api/runs/${workflow}/${encodeURIComponent(key)}`),
   start: (workflow: string, key: string, plan: unknown) =>
     post(`/api/runs/${workflow}/${encodeURIComponent(key)}`, { plan }),
   action: (workflow: string, key: string, action: string, body?: { note?: string }) =>
     post(`/api/runs/${workflow}/${encodeURIComponent(key)}/${action}`, body ?? {}),
-  recordings: () => call<Recording[]>("/api/recordings"),
+  recordings: () => call<RecordingSummary[]>("/api/recordings"),
   recording: (name: string) => call<Recording>(`/api/recordings/${name}`),
   recordingFile: (name: string, file: string) => `/api/recordings/${name}/files/${file}`,
   compile: (name: string) => post(`/api/recordings/${name}/compile`) as Promise<Compiled>,
   artifact: (path: string) => `/api/artifacts?path=${encodeURIComponent(path)}`,
-  agents: () => call<SessionView[]>("/api/agent"),
+  agents: () => call<SessionSummary[]>("/api/agent"),
   agent: (id: string) => call<SessionView>(`/api/agent/${id}`),
   agentStart: (req: StartRequest) => post("/api/agent", req) as Promise<SessionView>,
   agentAction: (id: string, action: "pause" | "resume" | "stop" | "close") =>
@@ -107,7 +134,8 @@ export const api = {
       "/api/agent/proposals",
     ),
   agentRepair: (failure: string) => post("/api/agent/repair", { failure }) as Promise<SessionView>,
-  heal: (failure: string) => post("/api/agent/heal", { failure }) as Promise<HealOutcome>,
+  heal: (failure: string) =>
+    (post("/api/agent/heal", { failure }) as Promise<JobView>).then((j) => finish<HealOutcome>(j)),
 };
 
 /**

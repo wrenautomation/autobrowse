@@ -33,8 +33,8 @@ export function RecordingsPage() {
                 <a href={href("recordings", r.name)}>{r.name}</a>
               </td>
               <td>{r.site}</td>
-              <td>{r.actions.length}</td>
-              <td>{r.commands.length}</td>
+              <td>{r.actionCount}</td>
+              <td>{r.commandCount}</td>
               <td className="muted">{new Date(r.startedAt).toLocaleString()}</td>
             </tr>
           ))}

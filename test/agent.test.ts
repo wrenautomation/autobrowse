@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exploreWithAgent } from "../src/agent/explorer.js";
+import { clip, exploreWithAgent } from "../src/agent/explorer.js";
 import type { ExploreCommand, Explorer } from "../src/explore/server.js";
 import { fakeLlm } from "../src/llm/fake.js";
 
@@ -152,5 +152,18 @@ describe("exploreWithAgent", () => {
     const llm = fakeLlm([{ thought: "money", action: { cmd: "human", reason: "a purchase" } }]);
     const r = await exploreWithAgent({ explorer: ex, llm, goal: "buy it" });
     expect(r).toMatchObject({ achieved: false, summary: "a purchase" });
+  });
+});
+
+describe("clip", () => {
+  it("cuts long strings anywhere in a result and leaves the rest alone", () => {
+    const long = "x".repeat(10);
+    expect(clip({ tree: long, apps: [long, "a"], code: 0, ok: true }, 4)).toEqual({
+      tree: "xxxx…",
+      apps: ["xxxx…", "a"],
+      code: 0,
+      ok: true,
+    });
+    expect(clip(null)).toBeNull();
   });
 });

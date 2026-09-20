@@ -194,7 +194,7 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
       notedOn = url.url;
     }
     try {
-      rec.result = await o.explorer.exec(toCommand(step.action, page));
+      rec.result = clip(await o.explorer.exec(toCommand(step.action, page)));
     } catch (err) {
       rec.error = (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "failed";
       // The person said no to spending (or could not be asked): that ends the goal, not the model's turn.
@@ -236,6 +236,15 @@ function toCommand(a: Act, page: Digest): ExploreCommand {
     case "keep":
       return { cmd: "keep", hints, env: a.env };
   }
+}
+
+/** A step's result as kept: strings cut to what anyone reads back (a desktop tree, a command's output). */
+export function clip(value: unknown, max = 6_000): unknown {
+  if (typeof value === "string") return value.length > max ? `${value.slice(0, max)}…` : value;
+  if (Array.isArray(value)) return value.map((v) => clip(v, max));
+  if (value && typeof value === "object")
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, clip(v, max)]));
+  return value;
 }
 
 /** What a step gave back, when it is worth the model's eyes: the text a read found. */

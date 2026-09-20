@@ -65,4 +65,23 @@ export interface Recording {
   commands: string[];
 }
 
+/** A list row: what a table shows, without the actions themselves. */
+export interface RecordingSummary {
+  name: string;
+  site: string;
+  startedAt: string;
+  finishedAt: string;
+  actionCount: number;
+  commandCount: number;
+}
+
+export const summarizeRecording = (r: Recording): RecordingSummary => ({
+  name: r.name,
+  site: r.site,
+  startedAt: r.startedAt,
+  finishedAt: r.finishedAt,
+  actionCount: r.actions.length,
+  commandCount: r.commands.length,
+});
+
 export const MANIFEST = "manifest.json";

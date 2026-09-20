@@ -1,10 +1,53 @@
 /** Every run the registry knows, and a form to start one from a workflow's plan schema. */
-import { useState } from "react";
-import { api, type WorkflowInfo } from "../api.js";
+import { useCallback, useEffect, useState } from "react";
+import { applyRunEvent, LIST_LIMIT, type RunRow } from "../../../src/engine/rows.js";
+import { api, type RunEvent, type WorkflowInfo } from "../api.js";
 import { href, useLoad } from "../hooks.js";
 
-export function RunsPage({ version }: { version: number }) {
-  const runs = useLoad(() => api.runs(), [version]);
+/** The list is loaded once a page at a time; each live event folds into it, as the registry folds it. */
+function useRuns(event: RunEvent | null) {
+  const [rows, setRows] = useState<RunRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async (before?: string) => {
+    setBusy(true);
+    try {
+      const page = await api.runs({ limit: LIST_LIMIT, ...(before ? { before } : {}) });
+      setRows((prev) => merge(before ? (prev ?? []) : [], page));
+      setMore(page.length === LIST_LIMIT);
+      setError(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  useEffect(() => {
+    if (!event) return;
+    setRows((prev) => {
+      if (!prev) return prev;
+      const id = (r: RunRow) => `${r.workflow}/${r.key}`;
+      const have = prev.find((r) => id(r) === `${event.run.workflow}/${event.run.key}`) ?? null;
+      return merge(prev, [applyRunEvent(have, event)]);
+    });
+  }, [event]);
+  const last = rows?.[rows.length - 1];
+  return { rows, error, busy, more, loadMore: () => last && load(last.updatedAt) };
+}
+
+/** Newer rows replace older ones with the same id; newest first. */
+function merge(prev: RunRow[], next: RunRow[]): RunRow[] {
+  const byId = new Map(prev.map((r) => [`${r.workflow}/${r.key}`, r]));
+  for (const r of next) byId.set(`${r.workflow}/${r.key}`, r);
+  return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+export function RunsPage({ event }: { event: RunEvent | null }) {
+  const runs = useRuns(event);
   const [proved, setProved] = useState(0);
   const workflows = useLoad(() => api.workflows(), [proved]);
   return (
@@ -21,7 +64,7 @@ export function RunsPage({ version }: { version: number }) {
           </tr>
         </thead>
         <tbody>
-          {(runs.data ?? []).map((r) => (
+          {(runs.rows ?? []).map((r) => (
             <tr key={`${r.workflow}/${r.key}`}>
               <td>
                 <a href={href("runs", r.workflow, r.key)}>
@@ -36,7 +79,7 @@ export function RunsPage({ version }: { version: number }) {
               <td className="muted">{new Date(r.updatedAt).toLocaleString()}</td>
             </tr>
           ))}
-          {runs.data?.length === 0 && (
+          {runs.rows?.length === 0 && (
             <tr>
               <td colSpan={4} className="muted">
                 nothing yet
@@ -45,6 +88,11 @@ export function RunsPage({ version }: { version: number }) {
           )}
         </tbody>
       </table>
+      {runs.more && (
+        <button type="button" disabled={runs.busy} onClick={() => void runs.loadMore()}>
+          {runs.busy ? "loading…" : "older runs"}
+        </button>
+      )}
       <h2>Start a run</h2>
       {workflows.data ? (
         <StartForm workflows={workflows.data} onProved={() => setProved((n) => n + 1)} />

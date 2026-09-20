@@ -12,7 +12,7 @@
  * Disk Access (to read the database) and once for Automation of
  * Messages (to send). `phoneStatus` says which is missing and opens the pane.
  */
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -23,9 +23,9 @@ export interface PhoneOptions {
   number: string;
   dbPath?: string;
   /** Run a read-only SQL against the database; JSON rows out. Defaults to the sqlite3 tool. */
-  sql?: (query: string) => string;
+  sql?: (query: string) => string | Promise<string>;
   /** Send an iMessage. Defaults to Messages.app over AppleScript. */
-  send?: (to: string, text: string) => void;
+  send?: (to: string, text: string) => void | Promise<void>;
 }
 
 export const DEFAULT_DB = join(homedir(), "Library", "Messages", "chat.db");
@@ -33,10 +33,23 @@ export const DEFAULT_DB = join(homedir(), "Library", "Messages", "chat.db");
 /** Messages stores dates as nanoseconds since 2001-01-01. */
 const APPLE_EPOCH_S = 978_307_200;
 
-function sqlite(dbPath: string): (query: string) => string {
-  return (query) => {
-    const r = spawnSync("sqlite3", ["-readonly", "-json", dbPath, query], { encoding: "utf8" });
-    if (r.status !== 0) throw new Error(`sqlite3: ${(r.stderr || r.stdout).trim().slice(0, 200)}`);
+/** A child process without holding the event loop: the daemon polls this every few seconds. */
+function run(
+  file: string,
+  args: string[],
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    execFile(file, args, { encoding: "utf8", timeout: 30_000 }, (err, stdout, stderr) => {
+      const code = err && "code" in err && typeof err.code === "number" ? err.code : err ? 1 : 0;
+      resolve({ code, stdout: String(stdout), stderr: String(stderr) });
+    });
+  });
+}
+
+function sqlite(dbPath: string): (query: string) => Promise<string> {
+  return async (query) => {
+    const r = await run("sqlite3", ["-readonly", "-json", dbPath, query]);
+    if (r.code !== 0) throw new Error(`sqlite3: ${(r.stderr || r.stdout).trim().slice(0, 200)}`);
     return r.stdout;
   };
 }
@@ -67,12 +80,12 @@ export function phoneReader(opts: PhoneOptions): MessageReader {
     async recent(_inbox, since) {
       const sinceNs = (Math.floor(since.getTime() / 1000) - APPLE_EPOCH_S) * 1e9;
       const rows = JSON.parse(
-        sql(
+        (await sql(
           `select h.id as sender, coalesce(m.text, '') as text, hex(m.attributedBody) as body, m.date as date
            from message m left join handle h on h.ROWID = m.handle_id
            where m.is_from_me = 0 and m.date > ${sinceNs}
            order by m.date desc limit 50`,
-        ) || "[]",
+        )) || "[]",
       ) as Array<{ sender: string | null; text: string; body: string; date: number }>;
       return rows
         .map(
@@ -88,7 +101,7 @@ export function phoneReader(opts: PhoneOptions): MessageReader {
   };
 }
 
-function appleScriptSend(to: string, text: string): void {
+async function appleScriptSend(to: string, text: string): Promise<void> {
   const script = [
     "on run argv",
     'tell application "Messages"',
@@ -98,16 +111,15 @@ function appleScriptSend(to: string, text: string): void {
     "end tell",
     "end run",
   ].flatMap((l) => ["-e", l]);
-  const r = spawnSync("osascript", [...script, to, text], { encoding: "utf8" });
-  if (r.status !== 0)
-    throw new Error(`Messages.app: ${(r.stderr || r.stdout).trim().slice(0, 200)}`);
+  const r = await run("osascript", [...script, to, text]);
+  if (r.code !== 0) throw new Error(`Messages.app: ${(r.stderr || r.stdout).trim().slice(0, 200)}`);
 }
 
 /** Send one note to the phone. */
 export function phoneNotifier(opts: PhoneOptions): (text: string) => Promise<void> {
   const send = opts.send ?? appleScriptSend;
   return async (text) => {
-    send(opts.number, text);
+    await send(opts.number, text);
   };
 }
 
@@ -126,7 +138,8 @@ export function phoneStatus(dbPath = DEFAULT_DB): PhoneStatus {
   let read = false;
   try {
     accessSync(dbPath, constants.R_OK);
-    sqlite(dbPath)("select 1");
+    const r = spawnSync("sqlite3", ["-readonly", dbPath, "select 1"], { encoding: "utf8" });
+    if (r.status !== 0) throw new Error(r.stderr);
     read = true;
   } catch {
     fix.push(

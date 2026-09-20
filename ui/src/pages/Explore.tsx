@@ -46,7 +46,7 @@ export function ExplorePage() {
               <td>
                 <span className={`pill ${pillClass(s.status)}`}>{s.status}</span>
               </td>
-              <td>{s.steps.length}</td>
+              <td>{s.stepCount}</td>
               <td className="muted">{new Date(s.startedAt).toLocaleString()}</td>
             </tr>
           ))}

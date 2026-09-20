@@ -73,6 +73,24 @@ describe("explore mode", () => {
     expect(statSync(file).mode & 0o777).toBe(0o600);
   });
 
+  it("runs page commands one after another, however they arrive", async () => {
+    await send({ cmd: "open", url: PAGE });
+    const slow = send({
+      cmd: "eval",
+      js: "new Promise(r => setTimeout(() => { window.__order = 'slow'; r('slow') }, 400))",
+    });
+    const fast = send({ cmd: "eval", js: "window.__order" });
+    const [a, b] = await Promise.all([slow, fast]);
+    expect(a.body.result).toBe("slow");
+    expect(b.body.result).toBe("slow"); // the second waited for the first
+    // Session controls do not queue: a pause lands even behind a slow act.
+    const busy = send({ cmd: "eval", js: "new Promise(r => setTimeout(r, 600))" });
+    const t0 = Date.now();
+    await send({ cmd: "url" });
+    expect(Date.now() - t0).toBeLessThan(400);
+    await busy;
+  });
+
   it("takes commands one at a time, journals the ones that work, and saves a compilable recording", async () => {
     const opened = await send({ cmd: "open", url: PAGE });
     expect(opened.body, JSON.stringify(opened.body)).toHaveProperty("url", PAGE);
@@ -150,13 +168,14 @@ describe("explore mode", () => {
     expect(desktop.acts.map((a) => a.op)).toEqual(["click", "type", "shell"]);
 
     const saved = await send({ cmd: "save", name: "buy" });
-    expect(saved.body.actions).toBe(8);
+    expect(saved.body.actions).toBe(9); // the ordering test's open is journaled too
     const rec = await loadRecording(join(dir, "recordings"), "buy");
     // (the page's own data: URL holds the fixture; the acts must not)
     expect(JSON.stringify(rec.actions.map(({ url: _u, ...a }) => a))).not.toContain(
       "sk-ant-minted",
     );
     expect(rec.actions.map((a) => a.kind)).toEqual([
+      "navigate",
       "navigate",
       "input",
       "input",
@@ -166,11 +185,11 @@ describe("explore mode", () => {
       "desktop",
       "desktop",
     ]);
-    const typed = rec.actions[6];
+    const typed = rec.actions[7];
     expect(
       typed.kind === "desktop" && typed.redacted && typed.op.op === "type" && typed.op.text,
     ).toBe("<redacted>");
-    const pw = rec.actions[2];
+    const pw = rec.actions[3];
     expect(pw.kind === "input" && pw.value).toBe("<redacted>");
     const compiled = await compile(rec);
     expect(compiled.outline.steps.length).toBeGreaterThan(0);

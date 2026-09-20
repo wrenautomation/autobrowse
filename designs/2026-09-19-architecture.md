@@ -267,12 +267,24 @@ login provider use. Bare names behave as before (`cloudflare` → credential
 ## UI
 
 - Hono in the worker process (`src/ui/api.ts`): `/api/workflows` (with a
-  JSON schema per plan), `/api/runs`, `/api/runs/:wf/:key` (GET status,
-  POST start, POST `approve|reject|pause|play|reset`), `/api/events` (SSE
-  over an in-process bus; `after=` resumes), `/api/recordings[/:name
-  [/files/*|/compile]]`, `/api/artifacts?path=` (inside `ARTIFACTS_DIR`
-  only), `/hooks/inbound` (rate limited; `parseCommand` with known
-  workflow names so "yes looks fine" is a note).
+  JSON schema per plan and the last proof), `/api/runs?limit=&before=`
+  (newest first, 100 a page; `before` = the last row's `updatedAt`),
+  `/api/runs/:wf/:key` (GET status, POST start, POST
+  `approve|reject|pause|play|reset`), `/api/events` (SSE over an
+  in-process bus; `after=` resumes), `/api/recordings` (rows with counts)
+  `[/:name[/files/*|/compile]]`, `/api/artifacts?path=` (inside
+  `ARTIFACTS_DIR` only), `/api/agent` (rows without steps; `/:id` has
+  them, results clipped to 6 KB per string), `/hooks/inbound` (rate
+  limited; `parseCommand` with known workflow names so "yes looks fine"
+  is a note).
+- Minutes-long work (`POST …/prove`, `POST /api/agent/heal`) is a job:
+  202 with the job at once, one job per kind+key (a second click joins
+  it), `GET /api/jobs/:id?wait=<ms>` holds up to 30 s until it settles.
+  The client's `api.prove`/`api.heal` do the waiting; callers just await.
+- Payload rules: lists are rows, details carry the body; every list
+  pages; anything a page can compute from events it computes (the Runs
+  page folds `RunEvent`s with `applyRunEvent`, the registry's own fold,
+  instead of refetching; the Run page refetches only on its run's events).
 - `UI_TOKEN` set: every route needs the bearer and the server binds all
   interfaces. Unset: no auth, loopback only. The SPA keeps the token in
   localStorage and sends it as a header; SSE is read over `fetch`, not

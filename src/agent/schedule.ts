@@ -32,7 +32,11 @@ export function wording(proposals: Proposal[]): string | null {
 /** One pass now, then every `everyHours`. Returns a stop function. */
 export function scheduleEvaluator(o: ScheduleOptions): () => void {
   const told = o.remember ?? new Set<string>();
+  // A pass can outlast the interval (builds explore sites); the next tick skips, never overlaps.
+  let running = false;
   const pass = async () => {
+    if (running) return;
+    running = true;
     try {
       const { proposals } = await o.propose(await o.evidence());
       const unseen = proposals.filter((p) => !told.has(p.title));
@@ -43,6 +47,8 @@ export function scheduleEvaluator(o: ScheduleOptions): () => void {
       await o.build?.(unseen.filter((p) => !p.covered));
     } catch (err) {
       o.onError?.(err);
+    } finally {
+      running = false;
     }
   };
   void pass();

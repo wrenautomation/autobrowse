@@ -48,6 +48,16 @@ export interface SessionView {
   port: number;
 }
 
+/** A list row: the session without its steps. */
+export interface SessionSummary extends Omit<SessionView, "steps"> {
+  stepCount: number;
+}
+
+export const summarizeSession = ({ steps, ...rest }: SessionView): SessionSummary => ({
+  ...rest,
+  stepCount: steps.length,
+});
+
 export interface StartRequest {
   site: string;
   goal: string;

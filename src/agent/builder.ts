@@ -23,6 +23,7 @@ export interface BuilderOptions {
   /** Titles already built or attempted; kept by the caller across passes. */
   remember?: Set<string>;
   sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
 }
 
 export interface BuildOutcome {
@@ -57,13 +58,19 @@ export function pickBuildable(proposals: Proposal[], o: BuilderOptions): Proposa
     .slice(0, o.perPass ?? 1);
 }
 
+/** A session that neither finishes nor asks for a person within this is given up on. */
+const SETTLE_MS = 30 * 60_000;
+
 /** Wait for the session to settle or to ask for a person. */
 async function settle(o: BuilderOptions, id: string): Promise<SessionView> {
   const sleep = o.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)));
+  const now = o.now ?? Date.now;
+  const deadline = now() + SETTLE_MS;
   for (;;) {
     const view = o.agent.get(id);
     if (!view) throw new Error(`session ${id} vanished`);
     if (SETTLED.has(view.status) || view.status === "needs-human") return view;
+    if (now() >= deadline) throw new Error(`session ${id} still ${view.status} after 30 minutes`);
     await sleep(2_000);
   }
 }

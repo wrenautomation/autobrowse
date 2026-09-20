@@ -1,21 +1,22 @@
 /** One run: the open gate first (that is what a person came for), then controls, results, plan. */
-import { useState } from "react";
-import { api, type HealOutcome, type RunStatusView } from "../api.js";
+import { useEffect, useState } from "react";
+import { api, type HealOutcome, type RunEvent, type RunStatusView } from "../api.js";
 import { href, useLoad } from "../hooks.js";
 
 export function RunPage({
   workflow,
   runKey,
-  version,
+  event,
 }: {
   workflow: string;
   runKey: string;
-  version: number;
+  event: RunEvent | null;
 }) {
-  const { data, error, reload } = useLoad(
-    () => api.run(workflow, runKey),
-    [workflow, runKey, version],
-  );
+  const { data, error, reload } = useLoad(() => api.run(workflow, runKey), [workflow, runKey]);
+  // Only this run's events are worth a fetch; the rest of the fleet's are not.
+  useEffect(() => {
+    if (event?.run.workflow === workflow && event.run.key === runKey) reload();
+  }, [event, workflow, runKey, reload]);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [msg, setMsg] = useState<string | null>(null);

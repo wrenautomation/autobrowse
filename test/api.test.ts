@@ -6,7 +6,7 @@ import type { AgentSessions, SessionView } from "../src/agent/sessions.js";
 import type { Ingress } from "../src/app/client.js";
 import { signLinqWebhook } from "../src/clients/linq.js";
 import type { OpenGate, RunStatusView } from "../src/engine/object.js";
-import type { RunRow } from "../src/engine/registry.js";
+import { type ListQuery, pageOf, type RunRow } from "../src/engine/registry.js";
 import { saveRecording } from "../src/recorder/store.js";
 import { api } from "../src/ui/api.js";
 import { eventBus } from "../src/ui/bus.js";
@@ -59,7 +59,7 @@ function fakeIngress() {
   const ingress = {
     run: () => run,
     registry: () => ({
-      list: async () => rows,
+      list: async (q: ListQuery) => pageOf(rows, q),
       record: async () => undefined,
       forget: async () => undefined,
     }),
@@ -134,10 +134,12 @@ describe("api", () => {
   it("lists live workflows with proofs, and proves a compiled one on request", async () => {
     const proof = { at: "2026-09-20T05:00:00Z", status: "done", steps: [], output: null };
     const proved: string[] = [];
+    let release: () => void = () => undefined;
     const { app } = await setup(undefined, {
       workflows: async () => [domainWorkflow, { ...domainWorkflow, name: "google-name" }],
       proofs: async () => ({ "google-name": proved.length ? proof : null }),
       prove: async (name) => {
+        await new Promise<void>((r) => (release = r));
         proved.push(name);
         return proof;
       },
@@ -148,13 +150,42 @@ describe("api", () => {
       ["google-name", null],
     ]);
     expect((await app.request(post("/api/workflows/domain/prove"))).status).toBe(404);
-    expect(await (await app.request(post("/api/workflows/google-name/prove"))).json()).toEqual(
-      proof,
+    // Minutes long in life: a job comes back at once; the page polls it.
+    const started = await app.request(post("/api/workflows/google-name/prove"));
+    expect(started.status).toBe(202);
+    const job = await started.json();
+    expect(job).toMatchObject({ kind: "prove", key: "google-name", status: "running" });
+    // A second click while it runs joins the same job.
+    expect((await (await app.request(post("/api/workflows/google-name/prove"))).json()).id).toBe(
+      job.id,
     );
+    // `wait` holds the answer until it settles: one request instead of a poll loop.
+    const waiting = app.request(`/api/jobs/${job.id}?wait=5000`);
+    release();
+    expect(await (await waiting).json()).toMatchObject({ status: "done", result: proof });
+    expect(proved).toEqual(["google-name"]);
+    expect((await app.request("/api/jobs/nope")).status).toBe(404);
     const after = await (await app.request("/api/workflows")).json();
     expect(after[1].proof).toEqual(proof);
     const bare = await setup();
     expect((await bare.app.request(post("/api/workflows/google-name/prove"))).status).toBe(501);
+  });
+
+  it("pages the run list newest first", async () => {
+    const { app } = await setup();
+    const rows = await (await app.request("/api/runs")).json();
+    expect(rows.map((r: RunRow) => r.key)).toEqual(["x.com"]);
+    expect(await (await app.request("/api/runs?limit=1&before=t")).json()).toEqual([]);
+    const many = Array.from({ length: 5 }, (_, i) => ({
+      ...rows[0],
+      key: `k${i}`,
+      updatedAt: `2026-09-2${i}`,
+    }));
+    expect(pageOf(many, { limit: 2 }).map((r) => r.key)).toEqual(["k4", "k3"]);
+    expect(pageOf(many, { limit: 2, before: "2026-09-23" }).map((r) => r.key)).toEqual([
+      "k2",
+      "k1",
+    ]);
   });
 
   it("starts, answers and controls runs through the ingress", async () => {
@@ -258,11 +289,11 @@ describe("api", () => {
 
   it("serves recordings, their files (inside the dir only) and compiles them", async () => {
     const { app } = await setup();
-    expect(
-      ((await (await app.request("/api/recordings")).json()) as { name: string }[]).map(
-        (r) => r.name,
-      ),
-    ).toEqual(["chore"]);
+    // The list is rows, not manifests: counts stand in for the actions.
+    expect(await (await app.request("/api/recordings")).json()).toEqual([
+      expect.objectContaining({ name: "chore", actionCount: expect.any(Number) }),
+    ]);
+    expect((await (await app.request("/api/recordings")).json())[0].actions).toBeUndefined();
     expect((await app.request("/api/recordings/chore/files/shot.png")).status).toBe(200);
     expect((await app.request("/api/recordings/chore/files/../../x")).status).toBe(404);
     expect((await app.request("/api/recordings/Bad/files/x")).status).toBe(400);
@@ -361,7 +392,9 @@ describe("api: agent sessions", () => {
     );
     expect(started.status).toBe(201);
     expect(await started.json()).toMatchObject({ id: "abc", site: "google@ops" });
-    expect(await (await withAgent.request("/api/agent")).json()).toHaveLength(1);
+    const listed = await (await withAgent.request("/api/agent")).json();
+    expect(listed).toEqual([expect.objectContaining({ id: "abc", stepCount: expect.any(Number) })]);
+    expect(listed[0].steps).toBeUndefined();
     expect((await withAgent.request("/api/agent/abc")).status).toBe(200);
     expect((await withAgent.request("/api/agent/nope")).status).toBe(404);
     for (const a of ["pause", "resume", "stop"])

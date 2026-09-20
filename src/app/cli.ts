@@ -194,9 +194,12 @@ program.command("status <workflow> <key>").action(async (workflow: string, key: 
 
 program
   .command("runs")
-  .description("Every run the registry knows, newest first")
-  .action(async () => {
-    for (const r of await api.registry().list())
+  .description("Runs the registry knows, newest first")
+  .option("--limit <n>", "how many", "100")
+  .option("--before <updatedAt>", "the page after this time (the last row's updatedAt)")
+  .action(async (opts: { limit: string; before?: string }) => {
+    const q = { limit: Number(opts.limit) || 100, ...(opts.before ? { before: opts.before } : {}) };
+    for (const r of await api.registry().list(q))
       console.log(
         `${r.status.padEnd(9)} ${`${r.workflow}/${r.key}`.padEnd(40)} ${r.gate ? `gate:${r.gate}` : (r.lastStep ?? "")}  ${r.updatedAt}`,
       );

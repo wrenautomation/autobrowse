@@ -9,9 +9,9 @@ import { StatusPage } from "./pages/Status.js";
 
 export function App() {
   const route = useRoute();
-  const [version, setVersion] = useState(0);
-  const bump = useCallback((_e: RunEvent) => setVersion((v) => v + 1), []);
-  const events = useEvents(bump);
+  const [event, setEvent] = useState<RunEvent | null>(null);
+  const onEvent = useCallback((e: RunEvent) => setEvent(e), []);
+  const events = useEvents(onEvent);
   const [page, a, b] = route;
   const nav = (name: string, label: string) => (
     <a href={href(name)} className={(page ?? "runs") === name ? "active" : ""}>
@@ -33,7 +33,7 @@ export function App() {
       </header>
       <main>
         {page === "runs" && a && b ? (
-          <RunPage workflow={a} runKey={b} version={version} />
+          <RunPage workflow={a} runKey={b} event={event} />
         ) : page === "recordings" && a ? (
           <RecordingPage name={a} />
         ) : page === "recordings" ? (
@@ -45,7 +45,7 @@ export function App() {
         ) : page === "status" ? (
           <StatusPage />
         ) : (
-          <RunsPage version={version} />
+          <RunsPage event={event} />
         )}
       </main>
       <Ticker events={events} />

@@ -15,7 +15,7 @@ import { z } from "zod";
 import { proposeWorkflows, readFailures } from "../agent/evaluator.js";
 import type { HealOutcome } from "../agent/heal.js";
 import { readFailure, repairRequest } from "../agent/repair.js";
-import type { AgentSessions } from "../agent/sessions.js";
+import { type AgentSessions, summarizeSession } from "../agent/sessions.js";
 import type { Ingress } from "../app/client.js";
 import type { Status } from "../app/status.js";
 import type { FailureRecord } from "../browser/session.js";
@@ -35,10 +35,11 @@ import type { AnyWorkflow } from "../engine/workflow.js";
 import { commandSchema } from "../explore/server.js";
 import type { Llm } from "../llm/types.js";
 import { listRecordings, loadRecording, recordingDir } from "../recorder/store.js";
-import type { Recording } from "../recorder/types.js";
+import { type Recording, summarizeRecording } from "../recorder/types.js";
 import type { Proof } from "../workflows/proof.js";
 import { bearerAuth, rateLimit } from "./auth.js";
 import type { EventBus } from "./bus.js";
+import { Jobs } from "./jobs.js";
 
 export interface ApiDeps {
   /** The workflows a run may name; a function when compiled ones come and go without a restart. */
@@ -49,6 +50,8 @@ export interface ApiDeps {
   prove?(workflow: string): Promise<Proof>;
   /** Heal a failed compiled step from its failure record: agent finishes it, step rewritten, proven. */
   heal?(record: FailureRecord): Promise<HealOutcome>;
+  /** Where prove/heal run; one per process, injectable for tests. */
+  jobs?: Jobs;
   ingress: Ingress;
   bus: EventBus;
   recordingsDir: string;
@@ -155,15 +158,40 @@ export function api(deps: ApiDeps): Hono {
     );
   });
 
-  /** A proof is a run of its own (gates declined, plan defaults), so it is not a Restate run. */
+  /**
+   * A proof is a run of its own (gates declined, plan defaults), so it is
+   * not a Restate run. Minutes long: a job, answered at once and polled.
+   */
+  const jobs = deps.jobs ?? new Jobs();
   app.post("/api/workflows/:name/prove", async (c) => {
     const { name } = c.req.param();
-    if (!deps.prove) return c.json({ error: "no browser here to prove with" }, 501);
+    const prove = deps.prove;
+    if (!prove) return c.json({ error: "no browser here to prove with" }, 501);
     if (!(name in (await proofs()))) return c.json({ error: "not a compiled workflow" }, 404);
-    return c.json(await deps.prove(name));
+    return c.json(
+      jobs.start("prove", name, () => prove(name)),
+      202,
+    );
+  });
+  app.get("/api/jobs", (c) => c.json(jobs.list()));
+  /** `?wait=<ms>` (30s at most) holds the answer until the job settles: one request, not a poll loop. */
+  app.get("/api/jobs/:id", async (c) => {
+    const wait = Math.min(Number(c.req.query("wait") ?? 0) || 0, 30_000);
+    const job = await jobs.wait(c.req.param("id"), wait);
+    return job ? c.json(job) : c.json({ error: "no such job" }, 404);
   });
 
-  app.get("/api/runs", async (c) => c.json(await deps.ingress.registry().list()));
+  /** Newest first; `?limit=` (100) and `?before=<updatedAt of the last row>` page through. */
+  app.get("/api/runs", async (c) => {
+    const limit = Number(c.req.query("limit")) || undefined;
+    const before = c.req.query("before");
+    return c.json(
+      await deps.ingress.registry().list({
+        ...(limit ? { limit } : {}),
+        ...(before ? { before } : {}),
+      }),
+    );
+  });
 
   app.get("/api/runs/:workflow/:key", async (c) => {
     const { workflow, key } = c.req.param();
@@ -232,7 +260,9 @@ export function api(deps: ApiDeps): Hono {
     });
   });
 
-  app.get("/api/recordings", async (c) => c.json(await listRecordings(deps.recordingsDir)));
+  app.get("/api/recordings", async (c) =>
+    c.json((await listRecordings(deps.recordingsDir)).map(summarizeRecording)),
+  );
 
   app.get("/api/recordings/:name", async (c) => {
     const { name } = c.req.param();
@@ -269,7 +299,7 @@ export function api(deps: ApiDeps): Hono {
     return serveUnder(deps.artifactsDir, resolve(path)) ?? c.json({ error: "not found" }, 404);
   });
 
-  app.get("/api/agent", (c) => c.json(deps.agent?.list() ?? []));
+  app.get("/api/agent", (c) => c.json((deps.agent?.list() ?? []).map(summarizeSession)));
   /** The evaluator: which recurring needs deserve a workflow, from failures, sessions and recordings. */
   app.get("/api/agent/proposals", async (c) => {
     if (!deps.llm) return c.json({ error: "no model configured: set LLM_PROVIDER" }, 503);
@@ -289,9 +319,10 @@ export function api(deps: ApiDeps): Hono {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 502);
     }
   });
-  /** A failed compiled step healed in place: rewritten from what the agent did, then proven. Long: minutes. */
+  /** A failed compiled step healed in place: rewritten from what the agent did, then proven. Minutes: a job. */
   app.post("/api/agent/heal", async (c) => {
-    if (!deps.heal) return c.json({ error: "healing needs a model and a browser here" }, 503);
+    const heal = deps.heal;
+    if (!heal) return c.json({ error: "healing needs a model and a browser here" }, 503);
     const body = repairBody.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: "failure path required" }, 400);
     let record: FailureRecord;
@@ -300,7 +331,10 @@ export function api(deps: ApiDeps): Hono {
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
     }
-    return c.json(await deps.heal(record));
+    return c.json(
+      jobs.start("heal", `${record.site}/${record.flow}`, () => heal(record)),
+      202,
+    );
   });
   /** A failed step's record → an agent session on that page toward the flow's goal. */
   app.post("/api/agent/repair", async (c) => {
@@ -392,7 +426,7 @@ export function api(deps: ApiDeps): Hono {
   async function inbound(text: string): Promise<string> {
     const cmd = parseCommand(text, { workflows: (await workflows()).map((w) => w.name) });
     if (!cmd) return "say yes, no, pause, play, status or reset, optionally with <workflow> <key>";
-    const rows = await deps.ingress.registry().list();
+    const rows = await deps.ingress.registry().list({});
     const target: RunRow | undefined = cmd.run
       ? rows.find((r) => r.workflow === cmd.run?.workflow && r.key === cmd.run?.key)
       : cmd.kind === "approve" || cmd.kind === "reject"

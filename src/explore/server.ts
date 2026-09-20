@@ -330,7 +330,28 @@ async function serve(
   /** What leaves the socket: masked like a transcript, unless the caller asks for raw. */
   const out = (text: string, raw: boolean | undefined) => (raw ? text : redactText(text));
 
-  const run = async (c: Command, wait = false): Promise<unknown> => {
+  /**
+   * One browser, one hand: page commands run one after another, whoever
+   * sends them (two clicks in flight would race the same page). Session
+   * controls (pause, resume, journal, url, pages, close) answer at once,
+   * so a person can stop a long act instead of queueing behind it.
+   */
+  const IMMEDIATE = new Set<Command["cmd"]>([
+    "pause",
+    "resume",
+    "journal",
+    "url",
+    "pages",
+    "close",
+  ]);
+  let chain: Promise<unknown> = Promise.resolve();
+  const run = (c: Command, wait = false): Promise<unknown> => {
+    if (IMMEDIATE.has(c.cmd)) return runOne(c, wait);
+    const next = chain.then(() => runOne(c, wait));
+    chain = next.catch(() => undefined);
+    return next;
+  };
+  const runOne = async (c: Command, wait: boolean): Promise<unknown> => {
     page = fp.page;
     switch (c.cmd) {
       case "open": {

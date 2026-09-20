@@ -6,23 +6,15 @@
 import * as restate from "@restatedev/restate-sdk";
 import type { RunEvent } from "./events.js";
 import { runId } from "./events.js";
-import type { RunStatus } from "./run.js";
+import { applyRunEvent, type ListQuery, pageOf, type RunRow } from "./rows.js";
 
 export const REGISTRY = { name: "Runs" } as const;
 export const REGISTRY_KEY = "all";
 
-export interface RunRow {
-  workflow: string;
-  key: string;
-  startedAt: string;
-  updatedAt: string;
-  status: RunStatus | "reset";
-  /** The open gate's name, when waiting. */
-  gate: string | null;
-  lastStep: string | null;
-}
-
 const ROWS = "rows";
+
+export type { ListQuery, RunRow } from "./rows.js";
+export { applyRunEvent, LIST_LIMIT, pageOf } from "./rows.js";
 
 export const runsRegistry = restate.object({
   name: REGISTRY.name,
@@ -30,57 +22,12 @@ export const runsRegistry = restate.object({
     record: async (ctx: restate.ObjectContext, event: RunEvent): Promise<void> => {
       const rows = (await ctx.get<Record<string, RunRow>>(ROWS)) ?? {};
       const id = runId(event.run);
-      const row: RunRow = rows[id] ?? {
-        workflow: event.run.workflow,
-        key: event.run.key,
-        startedAt: event.at,
-        updatedAt: event.at,
-        status: "running",
-        gate: null,
-        lastStep: null,
-      };
-      row.updatedAt = event.at;
-      switch (event.type) {
-        case "started":
-          Object.assign(row, {
-            startedAt: event.at,
-            status: "running",
-            gate: null,
-            lastStep: null,
-          });
-          break;
-        case "step":
-          row.lastStep = event.step;
-          row.status = "running";
-          break;
-        case "gate-opened":
-          row.status = "waiting";
-          row.gate = event.gate.name;
-          break;
-        case "gate-answered":
-          row.gate = null;
-          row.status = event.approved ? "running" : "rejected";
-          break;
-        case "paused":
-        case "resumed":
-          break;
-        case "finished":
-          row.status = event.status;
-          row.gate = null;
-          break;
-        case "reset":
-          row.status = "reset";
-          row.gate = null;
-          break;
-      }
-      rows[id] = row;
+      rows[id] = applyRunEvent(rows[id] ?? null, event);
       ctx.set(ROWS, rows);
     },
     list: restate.handlers.object.shared(
-      async (ctx: restate.ObjectSharedContext): Promise<RunRow[]> =>
-        Object.values((await ctx.get<Record<string, RunRow>>(ROWS)) ?? {}).sort((a, b) =>
-          b.updatedAt.localeCompare(a.updatedAt),
-        ),
+      async (ctx: restate.ObjectSharedContext, q: ListQuery): Promise<RunRow[]> =>
+        pageOf(Object.values((await ctx.get<Record<string, RunRow>>(ROWS)) ?? {}), q),
     ),
     forget: async (ctx: restate.ObjectContext, id: string): Promise<void> => {
       const rows = (await ctx.get<Record<string, RunRow>>(ROWS)) ?? {};

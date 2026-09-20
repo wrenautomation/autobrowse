@@ -30,6 +30,7 @@ export interface HealOptions {
   /** Run the healed workflow once; returns one line. Absent = no proof. */
   prove?: (workflow: string) => Promise<string>;
   sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
 }
 
 export interface HealOutcome {
@@ -102,12 +103,18 @@ function dedupe<T>(items: T[], key: (t: T) => string): T[] {
 
 const SETTLED = new Set<SessionView["status"]>(["done", "stopped", "failed", "closed"]);
 
+/** A session that neither finishes nor asks for a person within this is given up on. */
+const SETTLE_MS = 30 * 60_000;
+
 async function settle(o: HealOptions, id: string): Promise<SessionView> {
   const sleep = o.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)));
+  const now = o.now ?? Date.now;
+  const deadline = now() + SETTLE_MS;
   for (;;) {
     const view = o.agent.get(id);
     if (!view) throw new Error(`session ${id} vanished`);
     if (SETTLED.has(view.status) || view.status === "needs-human") return view;
+    if (now() >= deadline) throw new Error(`session ${id} still ${view.status} after 30 minutes`);
     await sleep(2_000);
   }
 }
