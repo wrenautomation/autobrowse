@@ -68,7 +68,7 @@ export interface PasskeySetupSpec {
   url: string | ((cred: Credential) => string);
   create: Hints;
   /** Confirmations after `create`, clicked when present ("Continue passkey enrollment"). */
-  then?: Hints[];
+  confirmations?: Hints[];
   done: RegExp;
 }
 

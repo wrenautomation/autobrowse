@@ -344,7 +344,7 @@ describe("loginProvider on the site's own sign-in page", () => {
 });
 
 describe("signInToGoogle second step", () => {
-  const base = { username: "u@gmail.com", password: "p" };
+  const base = { username: "u@gmail.com", password: "p", recoveryCodes: [], passkeys: [] };
   const page = (present: (h: Hints) => boolean) =>
     fakePage({
       text: ["2-Step Verification Choose how you want to sign in", "welcome"],

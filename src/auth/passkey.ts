@@ -27,7 +27,7 @@ export function enrollPasskeyFlow(
       const before = new Set((await fp.passkeys.export()).map((p) => p.credentialId));
       await fp.open(typeof spec.url === "string" ? spec.url : spec.url(cred));
       await fp.act({ kind: "click" }, spec.create, { goal: "create a passkey" });
-      for (const step of spec.then ?? [])
+      for (const step of spec.confirmations ?? [])
         if (await fp.has(step, 5_000))
           await fp.act({ kind: "click" }, step, { goal: "continue the passkey enrollment" });
       // The ceremony is answered by the authenticator; give the page a moment to finish it.

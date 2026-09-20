@@ -89,7 +89,7 @@ const GOOGLE_PASSKEY_SETUP: PasskeySetupSpec = {
   url: (cred) =>
     `https://myaccount.google.com/signinoptions/passkeys?authuser=${encodeURIComponent(cred.username)}`,
   create: { role: "button", name: "/create a passkey|create passkey/i" },
-  then: [{ role: "button", name: "/^continue passkey enrollment$/i" }],
+  confirmations: [{ role: "button", name: "/^continue passkey enrollment$/i" }],
   done: /passkey created|you can now use your passkey|passkeys? you created|created (a )?passkey/i,
 };
 
