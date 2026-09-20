@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { AgentSessions, SessionView } from "../src/agent/sessions.js";
 import type { Ingress } from "../src/app/client.js";
 import { signLinqWebhook } from "../src/clients/linq.js";
+import type { Outline } from "../src/compiler/index.js";
 import type { OpenGate, RunStatusView } from "../src/engine/object.js";
 import { type ListQuery, pageOf, type RunRow } from "../src/engine/registry.js";
 import { saveRecording } from "../src/recorder/store.js";
@@ -169,6 +170,60 @@ describe("api", () => {
     expect(after[1].proof).toEqual(proof);
     const bare = await setup();
     expect((await bare.app.request(post("/api/workflows/google-name/prove"))).status).toBe(501);
+  });
+
+  it("reads and saves a compiled workflow's outline, re-rendering it; refuses bad or renamed ones", async () => {
+    const outline: Outline = {
+      name: "chore",
+      site: "scratch",
+      description: "d",
+      fields: [],
+      secrets: [],
+      steps: [
+        {
+          kind: "browser",
+          name: "open",
+          description: "",
+          irreversible: false,
+          proof: null,
+          url: "https://x.test/a",
+          ops: [],
+        },
+      ],
+    };
+    const saved: Outline[] = [];
+    const { app } = await setup(undefined, {
+      outline: {
+        load: async (name) => (name === "chore" ? outline : null),
+        save: async (_name, o) => {
+          saved.push(o);
+          return { outline: o, usage: null, files: { "index.ts": "// new" } };
+        },
+      },
+    });
+    const put = (path: string, body: unknown) =>
+      new Request(`http://x${path}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    expect(await (await app.request("/api/workflows/chore/outline")).json()).toEqual(outline);
+    expect((await app.request("/api/workflows/domain/outline")).status).toBe(404);
+    expect((await app.request(put("/api/workflows/domain/outline", outline))).status).toBe(404);
+    expect((await app.request(put("/api/workflows/chore/outline", { name: "chore" }))).status).toBe(
+      400,
+    );
+    expect(
+      (await app.request(put("/api/workflows/chore/outline", { ...outline, name: "other" })))
+        .status,
+    ).toBe(400);
+    const edited = { ...outline, description: "edited" };
+    const res = await app.request(put("/api/workflows/chore/outline", edited));
+    expect(res.status).toBe(200);
+    expect((await res.json()).files["index.ts"]).toBe("// new");
+    expect(saved).toEqual([edited]);
+    const bare = await setup();
+    expect((await bare.app.request(put("/api/workflows/chore/outline", outline))).status).toBe(501);
   });
 
   it("pages the run list newest first", async () => {

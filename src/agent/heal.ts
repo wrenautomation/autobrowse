@@ -12,9 +12,8 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { FailureRecord } from "../browser/session.js";
-import { loadOutline, saveOutline, writeRendered } from "../compiler/index.js";
+import { loadOutline, rerender } from "../compiler/index.js";
 import type { Outline } from "../compiler/outline.js";
-import { render } from "../compiler/render.js";
 import { structure } from "../compiler/structure.js";
 import { loadRecording } from "../recorder/store.js";
 import { repairRequest } from "./repair.js";
@@ -153,8 +152,7 @@ export async function healFailure(record: FailureRecord, o: HealOptions): Promis
   await o.agent.close(view.id);
   const healed = structure(await loadRecording(o.recordingsDir, recName));
   const outline = spliceStep(found.outline, found.stepIndex, healed);
-  await saveOutline(found.dir, outline);
-  await writeRendered(found.dir, render(outline, { lib: o.lib }));
+  await rerender(found.dir, outline, { lib: o.lib });
   if (!o.prove)
     return {
       ...base,

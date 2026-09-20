@@ -27,7 +27,7 @@ import {
   textOf,
   verifyLinqWebhook,
 } from "../clients/linq.js";
-import type { Compiled } from "../compiler/index.js";
+import { type Compiled, type Outline, outlineSchema } from "../compiler/index.js";
 import type { GateName } from "../engine/effects.js";
 import type { RunEvent } from "../engine/events.js";
 import type { RunRow } from "../engine/registry.js";
@@ -52,6 +52,11 @@ export interface ApiDeps {
   heal?(record: FailureRecord): Promise<HealOutcome>;
   /** Where prove/heal run; one per process, injectable for tests. */
   jobs?: Jobs;
+  /** A compiled workflow's editable outline: read it, or save an edit and re-render the module. */
+  outline?: {
+    load(name: string): Promise<Outline | null>;
+    save(name: string, outline: Outline): Promise<Compiled>;
+  };
   ingress: Ingress;
   bus: EventBus;
   recordingsDir: string;
@@ -173,6 +178,25 @@ export function api(deps: ApiDeps): Hono {
       202,
     );
   });
+  /** The outline is the edit surface of a compiled flow; hand-written ones have none (404). */
+  app.get("/api/workflows/:name/outline", async (c) => {
+    const outline = await deps.outline?.load(c.req.param("name"));
+    return outline
+      ? c.json(outline)
+      : c.json({ error: "no outline: not a compiled workflow" }, 404);
+  });
+  app.put("/api/workflows/:name/outline", async (c) => {
+    const { name } = c.req.param();
+    if (!deps.outline) return c.json({ error: "no compiled workflows here" }, 501);
+    if (!(await deps.outline.load(name)))
+      return c.json({ error: "no outline: not a compiled workflow" }, 404);
+    const parsed = outlineSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "bad outline", issues: parsed.error.issues }, 400);
+    if (parsed.data.name !== name)
+      return c.json({ error: `the outline's name must stay ${name}: it is the directory` }, 400);
+    return c.json(await deps.outline.save(name, parsed.data));
+  });
+
   app.get("/api/jobs", (c) => c.json(jobs.list()));
   /** `?wait=<ms>` (30s at most) holds the answer until the job settles: one request, not a poll loop. */
   app.get("/api/jobs/:id", async (c) => {

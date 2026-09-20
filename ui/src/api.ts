@@ -8,6 +8,7 @@ import type { Proposal } from "../../src/agent/evaluator.js";
 import type { SessionSummary, SessionView, StartRequest } from "../../src/agent/sessions.js";
 import type { Status } from "../../src/app/status.js";
 import type { Compiled } from "../../src/compiler/index.js";
+import type { Outline } from "../../src/compiler/outline.js";
 import type { RunEvent } from "../../src/engine/events.js";
 import type { RunStatusView } from "../../src/engine/object.js";
 import type { ListQuery, RunRow } from "../../src/engine/registry.js";
@@ -106,6 +107,13 @@ export const api = {
   prove: (workflow: string) =>
     (post(`/api/workflows/${workflow}/prove`) as Promise<JobView>).then((j) => finish<Proof>(j)),
   /** Newest first; `before` = the last row's updatedAt for the next page. */
+  /** A compiled workflow's outline; 404 for a hand-written one. Saving re-renders the module. */
+  outline: (workflow: string) => call<Outline>(`/api/workflows/${workflow}/outline`),
+  saveOutline: (workflow: string, outline: Outline) =>
+    call<Compiled>(`/api/workflows/${workflow}/outline`, {
+      method: "PUT",
+      body: JSON.stringify(outline),
+    }),
   runs: (q: ListQuery = {}) => call<RunRow[]>(`/api/runs${query({ ...q })}`),
   job: (id: string, wait = 0) => call<JobView>(`/api/jobs/${id}${query({ wait })}`),
   run: (workflow: string, key: string) =>

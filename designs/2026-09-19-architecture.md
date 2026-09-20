@@ -152,7 +152,7 @@ login provider use. Bare names behave as before (`cloudflare` → credential
 - `polish(outline, llm)`: optional. Merges only names, descriptions,
   proofs and `irreversible → true` by step index. Never changes ops,
   fields, order, or clears a flag.
-- The outline is saved beside the recording; `compile --from-outline`
+- The outline is saved beside the compiled module; `compile --from-outline`
   re-renders an edited one without the model.
 
 ## Devices

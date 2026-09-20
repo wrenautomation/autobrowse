@@ -125,7 +125,8 @@ Browserbase takes them.
   (steps at notes and navigations, typed inputs vs secrets, irreversible
   verbs, pauses → hand-offs) → a workflow module plus a test that
   typechecks against the library. A model may polish names and proofs; it
-  can never change what runs. Edit the outline, `--from-outline` again.
+  can never change what runs. Edit the outline (the Workflow page in the
+  UI, or the file) and it re-renders; `--from-outline` does the same from the CLI.
 - **Repaired.** Generated flows act through `fp.act(op, hints, {goal})`. A
   stale locator asks the repairer (a model, later Stagehand) for new hints
   for the same goal, tries once, reports the repair. Irreversible ops are
@@ -163,7 +164,7 @@ pnpm autobrowse agent google "open Personal info and report the display name" --
 pnpm autobrowse repair ~/.config/autobrowse/artifacts/google-x-2026-….failure.json   # agent picks up where a flow stopped
 pnpm autobrowse creds paste google@ops            # a second account: `email password [key]` on the clipboard
 pnpm autobrowse record buy-domain --site cloudflare --url https://dash.cloudflare.com/ --terminal
-pnpm autobrowse compile buy-domain             # → recordings/buy-domain/outline.json, src/workflows/buy-domain/ (on the Runs page at once; no restart)
+pnpm autobrowse compile buy-domain             # → src/workflows/buy-domain/ with its outline.json (on the Runs page at once; no restart)
 pnpm autobrowse try google-name                # run a compiled workflow here, no Restate: the proof it is deterministic
 pnpm autobrowse compile buy-domain --no-llm --from-outline
 

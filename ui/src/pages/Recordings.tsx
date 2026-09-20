@@ -92,6 +92,7 @@ export function RecordingPage({ name }: { name: string }) {
               written to src/workflows/{compiled.outline.name}; it is on the Runs page now
             </span>
             <ProveButton workflow={compiled.outline.name} />
+            <a href={href("workflows", compiled.outline.name)}>edit outline</a>
             <span className="muted">
               {compiled.outline.steps
                 .map((s) => `${s.name}${s.irreversible ? "!" : ""}`)

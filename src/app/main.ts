@@ -6,7 +6,7 @@ import pino from "pino";
 import { agentSessions } from "../agent/sessions.js";
 import type { FailureRecord } from "../browser/session.js";
 import { httpClient } from "../clients/http.js";
-import { compile, saveOutline, writeRendered } from "../compiler/index.js";
+import { compile, loadOutline, rerender, saveOutline, writeRendered } from "../compiler/index.js";
 import { startExplore } from "../explore/server.js";
 import { expandHome } from "../google-auth.js";
 import type { Recording } from "../recorder/types.js";
@@ -181,6 +181,10 @@ startUiServer({
   recordingsDir: expandHome(settings.recordingsDir),
   artifactsDir: expandHome(settings.artifactsDir),
   compile: compileRecording,
+  outline: {
+    load: (name) => loadOutline(join(COMPILED_DIR, name)).catch(() => null),
+    save: (name, outline) => rerender(join(COMPILED_DIR, name), outline, { lib: COMPILED_LIB }),
+  },
   token: settings.uiToken,
 });
 async function compileRecording(rec: Recording) {

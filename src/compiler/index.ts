@@ -30,6 +30,18 @@ export async function compile(rec: Recording, opts: CompileOptions = {}): Promis
   return { outline, usage, ...render(outline, opts) };
 }
 
+/** Render an outline and write module, test and outline into `dir`: the one way an edit or a heal lands. */
+export async function rerender(
+  dir: string,
+  outline: Outline,
+  opts: RenderOptions = {},
+): Promise<Compiled> {
+  const out: Compiled = { outline, usage: null, ...render(outline, opts) };
+  await writeRendered(dir, out);
+  await saveOutline(dir, outline);
+  return out;
+}
+
 export async function saveOutline(dir: string, outline: Outline): Promise<string> {
   const file = join(dir, OUTLINE_FILE);
   await writeFile(file, `${JSON.stringify(outline, null, 2)}\n`);

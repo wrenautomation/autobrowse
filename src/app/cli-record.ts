@@ -238,37 +238,41 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
     });
   program
     .command("compile <name>")
-    .description("Recording → outline.json beside it → a workflow module under --out")
+    .description(
+      "Recording → workflow module under --out, with its editable outline.json beside it",
+    )
     .option("--out <dir>", "where the module goes", "src/workflows")
     .option("--lib <module>", "what the module imports the library as", "../../index.js")
     .option("--no-llm", "skip the model pass (names, proofs); pure template output")
-    .option("--from-outline", "re-render an edited outline.json instead of re-structuring")
+    .option(
+      "--from-outline",
+      "re-render <name>'s edited outline.json under --out instead of re-structuring",
+    )
     .action(
       async (
         name: string,
         o: { out: string; lib: string; llm: boolean; fromOutline?: boolean },
       ) => {
-        const { compile, loadOutline, saveOutline, writeRendered } = await import(
+        const { compile, loadOutline, rerender, writeRendered, saveOutline } = await import(
           "../compiler/index.js"
         );
-        const { loadRecording, recordingDir } = await import("../recorder/store.js");
-        const dir = recordingDir(settings.recordingsDir, name);
+        const { loadRecording } = await import("../recorder/store.js");
         const llm = o.llm ? llmFor(settings) : null;
         if (o.llm && !llm) console.log("no model key set; template output only");
         let out: Awaited<ReturnType<typeof compile>>;
         if (o.fromOutline) {
-          const { render } = await import("../compiler/render.js");
-          const outline = await loadOutline(dir);
-          out = { outline, usage: null, ...render(outline, { lib: o.lib }) };
+          out = await rerender(join(o.out, name), await loadOutline(join(o.out, name)), {
+            lib: o.lib,
+          });
         } else {
           out = await compile(await loadRecording(settings.recordingsDir, name), {
             llm,
             lib: o.lib,
           });
-          await saveOutline(dir, out.outline);
+          await writeRendered(join(o.out, out.outline.name), out);
+          await saveOutline(join(o.out, out.outline.name), out.outline);
         }
-        const files = await writeRendered(join(o.out, out.outline.name), out);
-        for (const f of files) console.log(f);
+        for (const f of Object.keys(out.files)) console.log(join(o.out, out.outline.name, f));
         if (out.usage)
           console.log(`model: ${out.usage.inputTokens} in / ${out.usage.outputTokens} out`);
         console.log(

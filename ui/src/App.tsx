@@ -6,6 +6,7 @@ import { RecordingPage, RecordingsPage } from "./pages/Recordings.js";
 import { RunPage } from "./pages/Run.js";
 import { RunsPage } from "./pages/Runs.js";
 import { StatusPage } from "./pages/Status.js";
+import { WorkflowPage } from "./pages/Workflow.js";
 
 export function App() {
   const route = useRoute();
@@ -34,6 +35,8 @@ export function App() {
       <main>
         {page === "runs" && a && b ? (
           <RunPage workflow={a} runKey={b} event={event} />
+        ) : page === "workflows" && a ? (
+          <WorkflowPage name={a} />
         ) : page === "recordings" && a ? (
           <RecordingPage name={a} />
         ) : page === "recordings" ? (

@@ -255,6 +255,11 @@ function StartForm({ workflows, onProved }: { workflows: WorkflowInfo[]; onProve
         irreversible)
       </p>
       <ProofLine w={w} onProved={onProved} />
+      {w.proof !== undefined ? (
+        <p>
+          <a href={href("workflows", w.name)}>edit outline</a>
+        </p>
+      ) : null}
     </div>
   );
 }
