@@ -38,10 +38,11 @@ describe("setup", () => {
       "admin@x.co", // cloudflare via google
       "", // google-admin skipped
       "", // instantly skipped
+      "", // aws skipped
     ]);
     const out = await runSetup(io, store, SITE_LOGINS);
     expect(out.stored).toEqual(["google", "cloudflare"]);
-    expect(out.skipped).toEqual(["google-admin", "instantly"]);
+    expect(out.skipped).toEqual(["google-admin", "instantly", "aws"]);
     expect((await store.get("cloudflare"))?.via).toBe("google");
     expect(asked.filter((q) => q.startsWith("hidden")).length).toBe(2);
   });
@@ -51,10 +52,11 @@ describe("setup", () => {
       cloudflare: { username: "-", password: "-", via: "google" },
       "google-admin": { username: "e", password: "f" },
       instantly: { username: "c", password: "d" },
+      aws: { username: "root@x.co", password: "g" },
     });
     const { io, asked, said } = scripted([]);
     await runSetup(io, store, SITE_LOGINS);
     expect(asked).toEqual([]);
-    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(4);
+    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(5);
   });
 });

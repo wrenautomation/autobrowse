@@ -174,4 +174,99 @@ const instantly: SiteLogin = {
   }),
 };
 
-export const SITE_LOGINS: readonly SiteLogin[] = [cloudflare, google, googleAdmin, instantly];
+/**
+ * AWS console sign-in, the page behind `aws login` and `aws sso`: an IAM user
+ * (`username` = `<account id or alias>/<iam user>`) or the root user
+ * (`username` = the account email). Both take a TOTP from the stored seed.
+ * Unverified until its first run.
+ */
+export function awsIdentity(
+  username: string,
+): { kind: "root" } | { kind: "iam"; account: string; user: string } {
+  if (username.includes("@")) return { kind: "root" };
+  const [account, user] = username.split("/", 2);
+  if (!account || !user) {
+    throw new LoginFailed(
+      "aws",
+      "username must be <account id or alias>/<iam user>, or the root email",
+    );
+  }
+  return { kind: "iam", account, user };
+}
+
+const AWS_SIGNED_IN =
+  /console\.aws\.amazon\.com|signin\.aws\.amazon\.com\/v1\/sessions\/confirmation|allow access/i;
+
+const aws: SiteLogin = {
+  site: "aws",
+  home: "https://console.aws.amazon.com/",
+  ask: "Your AWS console sign-in (root email, or <account>/<iam user>), for `aws login`",
+  loggedIn: async (fp) =>
+    /console\.aws\.amazon\.com/.test(fp.url()) &&
+    !(await fp.has({ role: "textbox", name: "Password" })),
+  async signIn({ fp, cred, code }: SignInContext) {
+    const who = awsIdentity(cred.username);
+    if (!(await fp.has({ role: "textbox", name: "Password" }, 8_000))) {
+      await fp.open("https://signin.aws.amazon.com/signin", { allowWall: true });
+    }
+    if (who.kind === "root") {
+      const rootButton = { role: "button", name: "/root user email/i" } as const;
+      if (await fp.has(rootButton))
+        await fp.act({ kind: "click" }, rootButton, { goal: "root user sign-in" });
+      await fp.act(
+        { kind: "fill", value: cred.username },
+        { role: "textbox", name: "/root user email/i" },
+        { goal: "type the root email" },
+      );
+      await fp.act(
+        { kind: "click" },
+        { role: "button", name: "Next" },
+        { goal: "continue past email" },
+      );
+    } else {
+      await fp.act(
+        { kind: "fill", value: who.account },
+        { role: "textbox", name: "/account id or alias/i" },
+        { goal: "type the account" },
+      );
+      await fp.act(
+        { kind: "fill", value: who.user },
+        { role: "textbox", name: "/iam username/i" },
+        { goal: "type the IAM username" },
+      );
+    }
+    await fp.act(
+      { kind: "fill", value: cred.password },
+      { role: "textbox", name: "Password" },
+      { goal: "type password" },
+    );
+    await fp.act(
+      { kind: "click" },
+      { role: "button", name: "/^sign in$/i" },
+      { goal: "submit login form" },
+    );
+    await fp.wait(1_500);
+    const text = await fp.text();
+    if (/incorrect|authentication failed|invalid/i.test(text))
+      throw new LoginFailed("aws", "password rejected");
+    const mfa = { role: "textbox", name: "/mfa code|authentication code/i" } as const;
+    if (await fp.has(mfa, 8_000)) {
+      await fp.act({ kind: "fill", value: await code("totp") }, mfa, { goal: "type the MFA code" });
+      await fp.act(
+        { kind: "click" },
+        { role: "button", name: "/submit|sign in/i" },
+        { goal: "submit MFA" },
+      );
+      await fp.wait(1_500);
+    }
+    // `aws login` ends on a confirmation page: allow the CLI, which shows the code the terminal asks for.
+    const allow = { role: "button", name: "/^allow/i" } as const;
+    if (await fp.has(allow, 8_000))
+      await fp.act({ kind: "click" }, allow, { goal: "allow the CLI session" });
+    if (!AWS_SIGNED_IN.test(fp.url()) && !AWS_SIGNED_IN.test(await fp.text())) {
+      throw new LoginFailed("aws", `still on ${fp.url()} after sign-in`);
+    }
+  },
+};
+
+export const SITE_LOGINS: readonly SiteLogin[] = [cloudflare, google, googleAdmin, instantly, aws];

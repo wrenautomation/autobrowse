@@ -470,3 +470,17 @@ describe("resolveLogin", () => {
     expect(resolveLogin(sites, "nope@x")).toBeNull();
   });
 });
+
+describe("aws site login", () => {
+  it("reads the identity from the username", async () => {
+    const { awsIdentity, SITE_LOGINS } = await import("../src/auth/sites.js");
+    expect(awsIdentity("ops@example.com")).toEqual({ kind: "root" });
+    expect(awsIdentity("123456789012/william")).toEqual({
+      kind: "iam",
+      account: "123456789012",
+      user: "william",
+    });
+    expect(() => awsIdentity("william")).toThrow(/account id or alias/);
+    expect(SITE_LOGINS.map((s) => s.site)).toContain("aws");
+  });
+});

@@ -24,6 +24,14 @@ $30/month (instance) + $2 (volume) + pennies (ECR, SSM Advanced parameter).
 5. Push main (or run `deploy` by hand). The box pulls the image, reads the
    env, starts the worker; the worker dials the tunnel and registers itself.
 
+## `aws login` without a person
+
+The AWS sign-in page is a known site (`aws`): `autobrowse creds set aws` with
+the root email or `<account>/<iam user>`, the console password and the MFA
+seed. Then `aws login --remote` prints a URL; an explore session on it with
+site `aws` signs in and allows the CLI. Restate Cloud's device login was done
+this way on 2026-09-21 (Google button, stored `google` credential).
+
 ## After
 
 - UI: the `ui_forward` output, then `http://localhost:9080` with the token.
