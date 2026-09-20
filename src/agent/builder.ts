@@ -27,7 +27,8 @@ export interface BuilderOptions {
 
 export interface BuildOutcome {
   title: string;
-  session: string;
+  /** The agent session, or null when the build failed before one opened. */
+  session: string | null;
   /** The compiled workflow's name, or null when the agent did not get there. */
   workflow: string | null;
   summary: string;
@@ -67,6 +68,44 @@ async function settle(o: BuilderOptions, id: string): Promise<SessionView> {
   }
 }
 
+/** Explore, and when the agent got there, save + compile (+ prove). */
+async function buildOne(p: Proposal, o: BuilderOptions): Promise<BuildOutcome> {
+  const started = await o.agent.start({ site: p.site, goal: p.goal });
+  const view = await settle(o, started.id);
+  if (view.status === "needs-human") {
+    // The session stays open, paused on the person's prompt: theirs to finish in the UI.
+    return {
+      title: p.title,
+      session: view.id,
+      workflow: null,
+      summary: `the agent needs you: ${view.prompt ?? "see the session"}`,
+    };
+  }
+  if (view.status === "done" && view.achieved) {
+    const name = recordingNameFor(p.title);
+    await o.agent.save(view.id, name);
+    await o.agent.close(view.id);
+    const { workflow } = await o.compile(name);
+    // The recording worked once by hand; the proof is the compiled flow working on its own.
+    const proof = o.prove
+      ? await o.prove(workflow).catch((err: Error) => `proof failed: ${err.message}`)
+      : null;
+    return {
+      title: p.title,
+      session: view.id,
+      workflow,
+      summary: proof ? `${view.summary ?? ""}; ${proof}` : (view.summary ?? ""),
+    };
+  }
+  await o.agent.close(view.id).catch(() => undefined);
+  return {
+    title: p.title,
+    session: view.id,
+    workflow: null,
+    summary: view.error ?? view.summary ?? `session ${view.status}`,
+  };
+}
+
 export async function buildProposals(
   proposals: Proposal[],
   o: BuilderOptions,
@@ -75,47 +114,21 @@ export async function buildProposals(
   const outcomes: BuildOutcome[] = [];
   for (const p of pickBuildable(proposals, o)) {
     seen.add(p.title);
-    const started = await o.agent.start({ site: p.site, goal: p.goal });
-    const view = await settle(o, started.id);
-    let outcome: BuildOutcome;
-    if (view.status === "needs-human") {
-      // The session stays open, paused on the person's prompt: theirs to finish in the UI.
-      outcome = {
+    // One proposal failing (a compile that will not typecheck, a model outage) must not stop the others.
+    const outcome = await buildOne(p, o).catch(
+      (err: Error): BuildOutcome => ({
         title: p.title,
-        session: view.id,
+        session: null,
         workflow: null,
-        summary: `the agent needs you: ${view.prompt ?? "see the session"}`,
-      };
-    } else if (view.status === "done" && view.achieved) {
-      const name = recordingNameFor(p.title);
-      await o.agent.save(view.id, name);
-      await o.agent.close(view.id);
-      const { workflow } = await o.compile(name);
-      // The recording worked once by hand; the proof is the compiled flow working on its own.
-      const proof = o.prove
-        ? await o.prove(workflow).catch((err: Error) => `proof failed: ${err.message}`)
-        : null;
-      outcome = {
-        title: p.title,
-        session: view.id,
-        workflow,
-        summary: proof ? `${view.summary ?? ""}; ${proof}` : (view.summary ?? ""),
-      };
-    } else {
-      await o.agent.close(view.id).catch(() => undefined);
-      outcome = {
-        title: p.title,
-        session: view.id,
-        workflow: null,
-        summary: view.error ?? view.summary ?? `session ${view.status}`,
-      };
-    }
+        summary: `build failed: ${err.message}`,
+      }),
+    );
     outcomes.push(outcome);
     await o
       .notify(
         outcome.workflow
           ? `autobrowse built \`${outcome.workflow}\` from "${p.title}": ${outcome.summary}. It is on the Runs page.`
-          : `autobrowse could not build "${p.title}" on its own: ${outcome.summary}. Session ${outcome.session} in Explore.`,
+          : `autobrowse could not build "${p.title}" on its own: ${outcome.summary}.${outcome.session ? ` Session ${outcome.session} in Explore.` : ""}`,
       )
       .catch(() => undefined);
   }

@@ -415,15 +415,16 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   };
 
   const host = { emit: (e: Parameters<Channel["deliver"]>[0]) => channel.deliver(e) };
-  const catalog = compiledCatalog(COMPILED_DIR, (dir, err) =>
-    log.warn(
-      { dir, err: err instanceof Error ? err.message : String(err) },
-      "compiled workflow not loaded",
-    ),
-  );
-  const taken = new Set(WORKFLOWS.map((w) => w.name));
-  /** Compiled flows, minus any that clashes with a hand-written name (said once per boot). */
+  /** The catalog is read on every listing; a broken flow is said once per distinct error, not per request. */
   const warned = new Set<string>();
+  const catalog = compiledCatalog(COMPILED_DIR, (dir, err) => {
+    const message = err instanceof Error ? err.message : String(err);
+    if (warned.has(`${dir}\n${message}`)) return;
+    warned.add(`${dir}\n${message}`);
+    log.warn({ dir, err: message }, "compiled workflow not loaded");
+  });
+  const taken = new Set(WORKFLOWS.map((w) => w.name));
+  /** Compiled flows, minus any that clashes with a hand-written name (said once). */
   const compiledNow = async () =>
     (await catalog.list()).filter((c) => {
       if (!taken.has(c.workflow.name)) return true;

@@ -145,6 +145,26 @@ describe("buildProposals", () => {
 });
 
 describe("recordingNameFor", () => {
+  it("reports a proposal whose compile throws and goes on to the next", async () => {
+    notes.length = 0;
+    const { agent } = fakeAgent({ status: "done", achieved: true, summary: "ok" });
+    let n = 0;
+    const out = await buildProposals([proposal({ title: "Bad" }), proposal({ title: "Good" })], {
+      ...base(agent),
+      perPass: 2,
+      compile: async (name: string) => {
+        if (n++ === 0) throw new Error("index.ts does not typecheck");
+        return { workflow: `wf-${name}` };
+      },
+    });
+    expect(out.map((o) => [o.title, o.workflow, o.summary])).toEqual([
+      ["Bad", null, "build failed: index.ts does not typecheck"],
+      ["Good", "wf-good", "ok"],
+    ]);
+    expect(notes[0]).toMatch(/could not build "Bad".*build failed/);
+    expect(notes[1]).toMatch(/built `wf-good`/);
+  });
+
   it("slugs a title within the recording name rules", () => {
     expect(recordingNameFor("Renew the SSL certificate!")).toBe("renew-the-ssl-certificate");
     expect(recordingNameFor("???")).toBe("proposal");
