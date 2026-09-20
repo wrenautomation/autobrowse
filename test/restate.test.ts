@@ -223,4 +223,26 @@ describe("Compiled object", () => {
     );
     expect(rows.find((x) => x.workflow === "example-title")).toMatchObject({ status: "done" });
   });
+
+  it("a flow deleted mid-run ends the run as failed; controls and status still work", async () => {
+    await compiled("example-title", "k2").pause();
+    await compiled("example-title", "k2").run({ dryRun: false });
+    expect(await compiled("example-title", "k2").status()).toMatchObject({
+      paused: true,
+      workflow: "example-title",
+      key: "k2",
+    });
+    shelf.delete("example-title");
+    await compiled("example-title", "k2").play();
+    const failed = await until(
+      () => compiled("example-title", "k2").status(),
+      (s) => s.outcome?.status === "failed",
+    );
+    expect(failed.outcome?.results).toEqual({});
+    expect(host.subjects()).toContain("k2: failed");
+    await compiled("example-title", "k2").reset();
+    await expect(compiled("example-title", "k2").run({ dryRun: false })).rejects.toThrow(
+      /no compiled workflow/,
+    );
+  });
 });

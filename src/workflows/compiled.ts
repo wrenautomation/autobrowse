@@ -118,5 +118,6 @@ export function makeCompiledRunObject(o: {
     },
     o.host,
     o.opts ?? {},
+    splitCompiledKey,
   );
 }

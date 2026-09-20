@@ -194,6 +194,8 @@ export function makeRunObjectFrom<W extends AnyWorkflow>(
   resolve: (key: string) => Promise<Resolved<W>>,
   host: HostDeps,
   opts: AdvanceOptions = {},
+  /** How a run is named from its key alone; controls and status need no workflow for that. */
+  refOf: (key: string) => RunRef = (key) => ({ workflow: name, key }),
 ): RunObjectDefinition<W> {
   const service = { name } as const;
   type Self = RunObject<W>;
@@ -225,7 +227,7 @@ export function makeRunObjectFrom<W extends AnyWorkflow>(
     input: { name: GateName; note?: string },
     approved: boolean,
   ): Promise<OpenGate> => {
-    const { workflow, ref } = await resolve(ctx.key);
+    const ref = refOf(ctx.key);
     const gate = await gateOpen(ctx, input.name);
     const a: GateAnswer = {
       approved,
@@ -242,7 +244,7 @@ export function makeRunObjectFrom<W extends AnyWorkflow>(
       note: a.note,
     });
     if (verdict === "rejected") {
-      const outcome = await outcomeOf(fx, workflow, "rejected");
+      const outcome = await outcomeOf(fx, (await resolve(ctx.key)).workflow, "rejected");
       ctx.set(OUTCOME, outcome);
       await emit(ctx, ref, { type: "finished", status: "rejected", summary: summarize(outcome) });
     } else next(ctx, (await ctx.get<number>(GEN)) ?? 0);
@@ -276,7 +278,24 @@ export function makeRunObjectFrom<W extends AnyWorkflow>(
         const raw = await ctx.get<PlanOf<W>>(PLAN);
         if (input.gen !== gen || !raw) return; // a message from a run that is gone
         if (await ctx.get<boolean>(PAUSED)) return; // `play` sends the next step
-        const { workflow, deps, ref } = await resolve(ctx.key);
+        const ref = refOf(ctx.key);
+        let found: Resolved<W>;
+        try {
+          found = await resolve(ctx.key);
+        } catch (err) {
+          // The flow is gone from disk mid-run: the run ends as failed rather than hanging as "running".
+          if (!(err instanceof restate.TerminalError)) throw err;
+          const results = (await ctx.get<Outcome["results"]>(KEYS.results)) ?? {};
+          const outcome: Outcome = { status: "failed", results, memo: null };
+          ctx.set(OUTCOME, outcome);
+          await emit(ctx, ref, {
+            type: "finished",
+            status: "failed",
+            summary: `${summarize(outcome)}\n${err.message}`,
+          });
+          return;
+        }
+        const { workflow, deps } = found;
         const plan = workflow.plan.parse(raw);
         const fx = effects(ctx);
         const a = await advance(fx, workflow, deps, plan, opts);
@@ -300,14 +319,14 @@ export function makeRunObjectFrom<W extends AnyWorkflow>(
       pause: async (ctx: restate.ObjectContext): Promise<void> => {
         if (await ctx.get<boolean>(PAUSED)) return;
         ctx.set(PAUSED, true);
-        await emit(ctx, (await resolve(ctx.key)).ref, { type: "paused" });
+        await emit(ctx, refOf(ctx.key), { type: "paused" });
       },
 
       /** Undo `pause` and run on. */
       play: async (ctx: restate.ObjectContext): Promise<void> => {
         if (!(await ctx.get<boolean>(PAUSED))) return;
         ctx.clear(PAUSED);
-        await emit(ctx, (await resolve(ctx.key)).ref, { type: "resumed" });
+        await emit(ctx, refOf(ctx.key), { type: "resumed" });
         if (await ctx.get<OpenGate>(KEYS.gate)) return; // the answer will send the next step
         if (await ctx.get<Outcome>(OUTCOME)) return; // nothing left to run
         next(ctx, (await ctx.get<number>(GEN)) ?? 0);
@@ -324,12 +343,12 @@ export function makeRunObjectFrom<W extends AnyWorkflow>(
         const gen = (await ctx.get<number>(GEN)) ?? 0;
         ctx.clearAll();
         ctx.set(GEN, gen + 1);
-        await emit(ctx, (await resolve(ctx.key)).ref, { type: "reset" });
+        await emit(ctx, refOf(ctx.key), { type: "reset" });
       },
 
       status: restate.handlers.object.shared(
         async (ctx: restate.ObjectSharedContext): Promise<RunStatusView> => {
-          const { workflow, ref } = await resolve(ctx.key);
+          const ref = refOf(ctx.key);
           const outcome = await ctx.get<Outcome>(OUTCOME);
           const gate = await ctx.get<OpenGate>(KEYS.gate);
           return {
@@ -338,7 +357,7 @@ export function makeRunObjectFrom<W extends AnyWorkflow>(
             plan: await ctx.get(PLAN),
             gate,
             paused: (await ctx.get<boolean>(PAUSED)) === true,
-            outcome: outcome ?? (await inFlight(ctx, workflow, gate)),
+            outcome: outcome ?? (await inFlight(ctx, gate)),
           };
         },
       ),
@@ -348,9 +367,9 @@ export function makeRunObjectFrom<W extends AnyWorkflow>(
 }
 
 /** Mid-run status: the results so far, without a final verdict. */
+/** A run still going: results so far; the memo is what the last step left, or null before any did. */
 async function inFlight(
   ctx: restate.ObjectSharedContext,
-  workflow: AnyWorkflow,
   gate: OpenGate | null,
 ): Promise<Outcome | null> {
   const results = await ctx.get<Outcome["results"]>(KEYS.results);
@@ -358,6 +377,6 @@ async function inFlight(
   return {
     status: gate ? "waiting" : "running",
     results,
-    memo: (await ctx.get<Outcome["memo"]>(KEYS.memo)) ?? workflow.emptyMemo(),
+    memo: (await ctx.get<Outcome["memo"]>(KEYS.memo)) ?? null,
   };
 }
