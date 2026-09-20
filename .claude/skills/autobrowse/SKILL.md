@@ -65,8 +65,8 @@ Session:
 5. Done: `note` what was achieved, `save` with a kebab name, `stop.sh`.
 
 Money is William's call. A billing field (card, CVC, tax id, billing address) or a button that
-spends (Buy, Pay, Subscribe, Add funds, Start trial) is gated: the session texts him; `cmd.sh`
-re-sends the command every 30 s until he answers (up to 31 min), then the act runs on a yes.
+spends (Buy, Pay, Subscribe, Add funds, Start trial) is gated: the session texts him and `cmd.sh`
+holds the request until he answers (up to ~45 min), then the act runs on a yes.
 `{"gate":"payment","reason":…}` with exit 1 means no, unanswered, or nobody could be asked. Do
 not work around it (no `eval`, no `type` into the field). Say what was refused and stop.
 

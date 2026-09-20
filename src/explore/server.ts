@@ -539,8 +539,11 @@ async function serve(
         res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
         return;
       }
+      // `?wait=1`: a payment gate holds the request until the person answers (one request, not a
+      // resend loop); without it the gate answers 202 at once and the same command re-asks.
+      const wait = new URL(req.url ?? "/", "http://x").searchParams.get("wait") === "1";
       try {
-        res.end(JSON.stringify(await run(parsed)));
+        res.end(JSON.stringify(await run(parsed, wait)));
       } catch (err) {
         res.statusCode = err instanceof PaymentGate ? (err.reason === "asked" ? 202 : 403) : 500;
         res.end(

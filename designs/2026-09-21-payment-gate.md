@@ -17,8 +17,10 @@ Money is a person's decision; the machine detects the surface and stops.
   page; the form after it is gated.
 - Explore session (`approve?: Approver`): the element is located first (a
   miss is a miss, nobody is asked), then the person is asked; a no, no
-  answer in 10 minutes, or no channel → `PaymentGate` → HTTP 403
-  `{gate:"payment", reason}` and nothing happens. Every CLI session and the
+  answer in 30 minutes, or no channel → `PaymentGate` → HTTP 403
+  `{gate:"payment", reason}` and nothing happens. Over the socket a plain
+  request answers 202 `asked` at once and the same command re-asks;
+  `?wait=1` (what `cmd.sh` sends) holds the request until the answer. Every CLI session and the
   daemon's agent sessions get `approverFor(settings)`.
 - `src/gates/ask.ts`: `askOverChannel` sends one line ("autobrowse on
   anthropic wants to press "Buy $20 of credits", which spends at <url>.

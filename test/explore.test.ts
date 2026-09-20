@@ -27,8 +27,8 @@ describe("explore mode", () => {
   /** The person behind the payment gate: says yes, remembers what was asked. */
   const asks: string[] = [];
   let answer = true;
-  const send = async (cmd: Record<string, unknown>) => {
-    const r = await fetch(`http://127.0.0.1:${port}/`, {
+  const send = async (cmd: Record<string, unknown>, wait = false) => {
+    const r = await fetch(`http://127.0.0.1:${port}/${wait ? "?wait=1" : ""}`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}` },
       body: JSON.stringify(cmd),
@@ -120,8 +120,8 @@ describe("explore mode", () => {
     expect(refused.body).toMatchObject({ gate: "payment", reason: "denied" });
     expect((await send({ cmd: "eval", js: "document.title" })).body.result).not.toBe("clicked");
     answer = true;
-    expect((await send(buy)).status).toBe(202);
-    expect((await send(buy)).status).toBe(200);
+    // `?wait=1` holds the request until the answer: one request, the act done on a yes.
+    expect((await send(buy, true)).status).toBe(200);
     expect((await send({ cmd: "eval", js: "document.title" })).body.result).toBe("clicked");
     expect(asks).toEqual(['press "Buy now", which spends', 'press "Buy now", which spends']); // once per answer; the missing "Purchase" asked nobody
 
