@@ -30,7 +30,7 @@ import {
   noDesktop,
   treeText,
 } from "../desktop/types.js";
-import { type Approver, PaymentGate, paymentGate } from "../gates/payment.js";
+import { type Approver, PaymentGate, PendingApprovals, paymentGate } from "../gates/payment.js";
 import { type RawAction, redactRaw } from "../recorder/browser.js";
 import { BINDING, OBSERVER_SCRIPT } from "../recorder/observer.js";
 import {
@@ -153,7 +153,7 @@ export interface Explorer {
   port: number;
   /** Every request carries this as `Authorization: Bearer …`; the socket drives a signed-in browser. */
   token: string;
-  /** The same commands, in process: what an agent in this process calls. */
+  /** The same commands, in process: what an agent in this process calls; it waits on a payment gate. */
   exec(command: Command): Promise<unknown>;
   /** True between `pause` and `resume`; an agent waits on `resumed()` before its next step. */
   paused(): boolean;
@@ -306,22 +306,31 @@ async function serve(
 
   type Target = z.infer<typeof targetSchema>;
   const find = (t: Target) => locate(page, t.hints as Hints);
-  /** Billing fields and spending buttons wait for the person; refused when nobody can be asked. */
-  const gate = async (act: "fill" | "select" | "click", t: Target) => {
+  /**
+   * Billing fields and spending buttons wait for the person; refused when
+   * nobody can be asked. Over the socket the question is asked once and the
+   * same command is sent again after the reply (`reason: "asked"`); in
+   * process the caller waits.
+   */
+  const approvals = opts.approve ? new PendingApprovals(opts.approve) : null;
+  const gate = async (act: "fill" | "select" | "click", t: Target, wait: boolean) => {
     const what = paymentGate(act, t.hints as Hints);
     if (!what) return;
     // A miss is a miss, not a question: the element must be there before anyone is asked.
     await find(t).first().waitFor({ state: "visible", timeout: 10_000 });
-    if (!opts.approve) throw new PaymentGate(what, "no-approver");
-    if (!(await opts.approve({ what, url: page.url(), site: opts.site })))
-      throw new PaymentGate(what, "denied");
+    if (!approvals) throw new PaymentGate(what, "no-approver");
+    await approvals.decide(
+      `${act} ${JSON.stringify(t.hints)}`,
+      { what, url: page.url(), site: opts.site },
+      wait,
+    );
   };
   const journalAct = (t: Target, act: (target: LocatorHints) => Journaled) =>
     journal(act(toLocatorHints(t.hints)));
   /** What leaves the socket: masked like a transcript, unless the caller asks for raw. */
   const out = (text: string, raw: boolean | undefined) => (raw ? text : redactText(text));
 
-  const run = async (c: Command): Promise<unknown> => {
+  const run = async (c: Command, wait = false): Promise<unknown> => {
     page = fp.page;
     switch (c.cmd) {
       case "open": {
@@ -331,14 +340,14 @@ async function serve(
         return { url: page.url(), wall: await looksLikeWall(page) };
       }
       case "click": {
-        await gate("click", c);
+        await gate("click", c, wait);
         await find(c).click({ timeout: 10_000 });
         await settle(page);
         journalAct(c, (target) => ({ kind: "click", target }));
         return { url: page.url() };
       }
       case "fill": {
-        await gate("fill", c);
+        await gate("fill", c, wait);
         await find(c).fill(c.value, { timeout: 10_000 });
         const secret =
           looksLikeSecretField(toLocatorHints(c.hints)) || looksLikeSecretValue(c.value);
@@ -351,7 +360,7 @@ async function serve(
         return { ok: true };
       }
       case "select": {
-        await gate("select", c);
+        await gate("select", c, wait);
         await find(c).selectOption(c.value, { timeout: 10_000 });
         journalAct(c, (target) => ({ kind: "select", target, value: c.value }));
         return { ok: true };
@@ -511,7 +520,7 @@ async function serve(
       try {
         res.end(JSON.stringify(await run(parsed)));
       } catch (err) {
-        res.statusCode = err instanceof PaymentGate ? 403 : 500;
+        res.statusCode = err instanceof PaymentGate ? (err.reason === "asked" ? 202 : 403) : 500;
         res.end(
           JSON.stringify({
             error: err instanceof Error ? err.message.split("\n")[0] : String(err),
@@ -536,7 +545,7 @@ async function serve(
   return {
     port: opts.port,
     token,
-    exec: run,
+    exec: (c) => run(c, true),
     paused: () => paused,
     resumed: () =>
       paused ? new Promise<void>((resolve) => waiters.push(resolve)) : Promise.resolve(),

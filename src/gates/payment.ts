@@ -52,18 +52,58 @@ export interface Approval {
 export type Approver = (ask: Approval) => Promise<boolean>;
 
 /** The refusal an explore command answers with: the act did not happen. */
+export type GateReason = "no-approver" | "denied" | "no-answer" | "asked";
+
 export class PaymentGate extends Error {
   readonly gate = "payment" as const;
   constructor(
     readonly what: string,
-    readonly reason: "no-approver" | "denied" | "no-answer",
+    readonly reason: GateReason,
   ) {
     super(
       reason === "no-approver"
         ? `payment step needs a person: ${what}; no channel to ask on (set PHONE_NUMBER, LINQ_* or NOTIFY_TO)`
         : reason === "denied"
           ? `payment step refused: ${what}`
-          : `payment step unanswered: ${what}`,
+          : reason === "asked"
+            ? `payment step asked: ${what}; the person has been texted, send the same command again after they answer`
+            : `payment step unanswered: ${what}`,
     );
+  }
+}
+
+/**
+ * One question per act, asked once and remembered until it is answered and
+ * consumed. A caller that cannot wait (an HTTP request) asks and comes back
+ * with the same act; a caller that can (the agent in process) waits on it.
+ */
+export class PendingApprovals {
+  private readonly pending = new Map<
+    string,
+    { promise: Promise<boolean>; answer: boolean | null }
+  >();
+  constructor(private readonly approve: Approver) {}
+
+  /** True to proceed; throws PaymentGate("asked") when the answer is not in yet and `wait` is off. */
+  async decide(key: string, ask: Approval, wait: boolean): Promise<void> {
+    let entry = this.pending.get(key);
+    if (!entry) {
+      const e: { promise: Promise<boolean>; answer: boolean | null } = {
+        promise: null as never,
+        answer: null,
+      };
+      e.promise = this.approve(ask)
+        .catch(() => false)
+        .then((a) => {
+          e.answer = a;
+          return a;
+        });
+      entry = e;
+      this.pending.set(key, entry);
+    }
+    if (wait) await entry.promise;
+    if (entry.answer === null) throw new PaymentGate(ask.what, "asked");
+    this.pending.delete(key);
+    if (!entry.answer) throw new PaymentGate(ask.what, "denied");
   }
 }

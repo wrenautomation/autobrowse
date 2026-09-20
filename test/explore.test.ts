@@ -90,16 +90,22 @@ describe("explore mode", () => {
       hints: { role: "textbox", name: "Password" },
       value: "hunter2hunter2",
     });
-    // "Buy now" spends: the person is asked first; a no leaves the page untouched.
+    // "Buy now" spends: over the socket the person is asked once (202) and the same
+    // command comes back after the reply; a no leaves the page untouched.
+    const buy = { cmd: "click", hints: { role: "button", name: "Buy now" } };
     answer = false;
-    const refused = await send({ cmd: "click", hints: { role: "button", name: "Buy now" } });
+    const asked = await send(buy);
+    expect(asked.status).toBe(202);
+    expect(asked.body).toMatchObject({ gate: "payment", reason: "asked" });
+    const refused = await send(buy);
     expect(refused.status).toBe(403);
     expect(refused.body).toMatchObject({ gate: "payment", reason: "denied" });
     expect((await send({ cmd: "eval", js: "document.title" })).body.result).not.toBe("clicked");
     answer = true;
-    await send({ cmd: "click", hints: { role: "button", name: "Buy now" } });
+    expect((await send(buy)).status).toBe(202);
+    expect((await send(buy)).status).toBe(200);
     expect((await send({ cmd: "eval", js: "document.title" })).body.result).toBe("clicked");
-    expect(asks).toEqual(['press "Buy now", which spends', 'press "Buy now", which spends']); // the missing "Purchase" asked nobody
+    expect(asks).toEqual(['press "Buy now", which spends', 'press "Buy now", which spends']); // once per answer; the missing "Purchase" asked nobody
 
     // A popup (an OAuth window) is listed and switched to; closing it returns to the main page.
     await send({ cmd: "eval", js: 'window.open("about:blank", "pop")' });

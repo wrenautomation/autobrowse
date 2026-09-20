@@ -26,7 +26,7 @@ export const askLine = (ask: Approval): string =>
 export function askOverChannel(opts: AskOptions): Approver {
   const now = opts.now ?? Date.now;
   const sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
-  const timeoutMs = opts.timeoutMs ?? 10 * 60_000;
+  const timeoutMs = opts.timeoutMs ?? 30 * 60_000; // a person is not at their phone every minute
   const pollMs = opts.pollMs ?? 3_000;
   return async (ask) => {
     const since = new Date(now());
