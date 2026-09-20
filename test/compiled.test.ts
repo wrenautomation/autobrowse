@@ -2,10 +2,12 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { WORKFLOWS } from "../src/app/services.js";
 import {
   compiledCatalog,
   compiledDeps,
   compiledKey,
+  HAND_WRITTEN,
   loadCompiledWorkflows,
   splitCompiledKey,
 } from "../src/workflows/compiled.js";
@@ -83,5 +85,12 @@ describe("compiledDeps", () => {
     } finally {
       delete process.env.AUTOBROWSE_CARD_CVV;
     }
+  });
+});
+
+describe("HAND_WRITTEN", () => {
+  it("names exactly the workflows the worker serves under their own objects", () => {
+    // The ingress routes by this set; a hand-written flow missing from it would be sent to Compiled.
+    expect(new Set(WORKFLOWS.map((w) => w.name))).toEqual(HAND_WRITTEN);
   });
 });
