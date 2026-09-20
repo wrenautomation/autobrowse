@@ -59,7 +59,8 @@ const SYSTEM = `You look at what a browser-automation system has been failing at
 Reply with ONE JSON object: {"proposals": [{"title", "why", "site", "goal", "occurrences", "covered"}]}.
 Group evidence by the underlying need (the same login wall on three flows is one need). Rank by occurrences × cost of doing it by hand.
 "goal" must be runnable by an agent as written: name the site page and the outcome, no placeholders.
-"covered" is true when a recording or flow already does it. At most 10 proposals; none when the evidence shows nothing recurring.`;
+"covered" is true when a recording or flow already does it. At most 10 proposals; none when the evidence shows nothing recurring.
+Browser workflows are for what has no API. When the need is served by a documented API (DNS records, creating users, sending mail), do not propose a browser workflow; if it is the only recurring thing, propose it once with "why" saying an API path exists.`;
 
 export function describeEvidence(e: Evidence): string {
   const failures = e.failures
