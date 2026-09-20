@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { chromium } from "playwright";
 import { describe, expect, it } from "vitest";
 import { recorderControl, startBrowserRecording } from "../src/recorder/browser.js";
-import { looksLikeSecretField, looksLikeSecretValue, redactText } from "../src/recorder/redact.js";
+import {
+  looksLikeSecretField,
+  looksLikeSecretValue,
+  redactAria,
+  redactText,
+} from "../src/recorder/redact.js";
 import { listRecordings, saveRecording } from "../src/recorder/store.js";
 import { extractCommands, scriptArgs, stripAnsi } from "../src/recorder/terminal.js";
 import type { Recording } from "../src/recorder/types.js";
@@ -55,6 +60,25 @@ describe("store", () => {
 });
 
 describe("recordBrowser", () => {
+  it("masks a filled password field in an aria tree, whatever the value looks like", () => {
+    const tree = [
+      "- main:",
+      '  - textbox "Enter your password": b+f9ZmBWyevCyMn6=2PdHoqq',
+      '  - textbox "Domain": wren-six.com',
+      '  - textbox "Show password"',
+      '  - checkbox "Show password"',
+    ].join("\n");
+    expect(redactAria(tree)).toBe(
+      [
+        "- main:",
+        '  - textbox "Enter your password": <redacted>',
+        '  - textbox "Domain": wren-six.com',
+        '  - textbox "Show password"',
+        '  - checkbox "Show password"',
+      ].join("\n"),
+    );
+  });
+
   it("captures clicks, inputs (redacted when secret), navigations, pause and notes", async () => {
     const dir = await mkdtemp(join(tmpdir(), "rec-"));
     const browser = await chromium.launch();

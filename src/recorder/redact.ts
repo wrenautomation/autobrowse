@@ -39,3 +39,17 @@ export function redactText(text: string): string {
     out = out.replace(new RegExp(re.source, `${re.flags}g`), REDACTED);
   return out;
 }
+
+/**
+ * An aria snapshot line for a filled field reads `- textbox "Enter your
+ * password": <value>`. Masked when the field is secret by name, whatever
+ * the value looks like: a password is not token-shaped. Then the usual
+ * text pass for values that are.
+ */
+export function redactAria(tree: string): string {
+  const masked = tree.replace(
+    /^(\s*-\s*(?:'|")?(?:textbox|searchbox|combobox)\s+"([^"]*)"[^:\n]*):\s+(?!\n)(.+)$/gm,
+    (line, head: string, name: string) => (SECRET_FIELD.test(name) ? `${head}: ${REDACTED}` : line),
+  );
+  return redactText(masked);
+}

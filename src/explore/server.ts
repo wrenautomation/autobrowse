@@ -25,6 +25,7 @@ import {
   looksLikeSecretField,
   looksLikeSecretValue,
   REDACTED,
+  redactAria,
   redactText,
 } from "../recorder/redact.js";
 import { saveRecording } from "../recorder/store.js";
@@ -283,7 +284,8 @@ async function serve(
       case "aria": {
         const scope = c.hints ? locate(page, c.hints as Hints) : page.locator("body");
         const tree = await scope.ariaSnapshot().catch((e: Error) => `error: ${e.message}`);
-        return { aria: out(tree.slice(0, c.limit ?? 12_000), c.raw) };
+        // Even raw: a password typed into a field is never something a caller may read back.
+        return { aria: out(redactAria(tree.slice(0, c.limit ?? 12_000)), c.raw) };
       }
       case "snapshot":
         return { rows: await snapshotPage(page, c.limit ?? 120) };

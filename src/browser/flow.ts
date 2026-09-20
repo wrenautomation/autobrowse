@@ -16,7 +16,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright";
 import { expandHome } from "../google-auth.js";
-import { redactText } from "../recorder/redact.js";
+import { redactAria, redactText } from "../recorder/redact.js";
 import { type Hints, locate } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
 import { canLearn, noRepairer, type Repairer, type RepairReport, snapshotPage } from "./repair.js";
@@ -393,7 +393,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             .ariaSnapshot({ timeout: 5_000 })
             .catch(() => null);
           if (tree !== null) {
-            writeFileSync(aria, redactText(`${session.page.url()}\n\n${tree}`));
+            writeFileSync(aria, redactAria(`${session.page.url()}\n\n${tree}`));
             artifacts.aria = aria;
           }
           if (tracing) {
