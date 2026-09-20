@@ -94,6 +94,7 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
   const max = o.maxSteps ?? 25;
   const steps: StepRecord[] = [];
   const usage: LlmUsage = { inputTokens: 0, outputTokens: 0 };
+  let nudged = false;
   const inputs = Object.entries(o.inputs ?? {})
     .map(([k, v]) => `${k}: ${v}`)
     .join("\n");
@@ -133,6 +134,17 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
       continue;
     }
     const rec: StepRecord = { n, step, result: null, error: null, url: url.url };
+    // Giving up with budget left and nothing tried that failed: once, push back.
+    if (step.action.cmd === "done" && !step.action.achieved && !nudged && n < max) {
+      const tried = steps.some((s) => s.error);
+      if (!tried) {
+        nudged = true;
+        rec.error = `you gave up at step ${n} of ${max} without any failed act; look at the controls again (names carry content) and try the most promising path before deciding`;
+        steps.push(rec);
+        o.onStep?.(rec);
+        continue;
+      }
+    }
     if (step.action.cmd === "done" || step.action.cmd === "human") {
       await o.explorer.exec({ cmd: "note", text: step.thought });
       steps.push(rec);

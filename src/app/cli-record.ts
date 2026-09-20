@@ -1,7 +1,6 @@
 /** `autobrowse login <site>` and `autobrowse record <name>`: the recorder's command line. */
 import { join } from "node:path";
 import type { Command } from "commander";
-import type { FailureRecord } from "../browser/session.js";
 import type { Settings } from "./config.js";
 import { browserOptions, gmailFor, llmFor, loginFor } from "./services.js";
 
@@ -100,20 +99,15 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
         goal: string | undefined,
         o: { input?: string[]; maxSteps: string; port: string },
       ) => {
-        const { readFileSync } = await import("node:fs");
-        const record = JSON.parse(readFileSync(failure, "utf8")) as FailureRecord;
-        const aim =
-          goal ??
-          (record.goal
-            ? `finish what the flow "${record.flow}" was doing: its next act was "${record.goal}"`
-            : `finish what the flow "${record.flow}" was doing`);
+        const { readFailure, repairGoal, repairName } = await import("../agent/repair.js");
+        const record = readFailure(failure);
         console.log(`repairing ${record.site}/${record.flow} (${record.kind}: ${record.error})`);
         await runAgent(settings, {
           site: record.site,
-          goal: `${aim}. The flow stopped here with: ${record.error}`,
+          goal: repairGoal(record, goal),
           url: record.url,
           inputs: parseInputs(o.input),
-          save: slug(`${record.flow}-repair`),
+          save: repairName(record),
           maxSteps: Number(o.maxSteps),
           port: Number(o.port),
         });

@@ -1,7 +1,7 @@
 /** One run: the open gate first (that is what a person came for), then controls, results, plan. */
 import { useState } from "react";
 import { api, type RunStatusView } from "../api.js";
-import { useLoad } from "../hooks.js";
+import { href, useLoad } from "../hooks.js";
 
 export function RunPage({
   workflow,
@@ -131,7 +131,17 @@ function GateCard({
 
 function Results({ outcome }: { outcome: RunStatusView["outcome"] }) {
   const entries = Object.entries(outcome?.results ?? {}) as Array<
-    [string, { status: string; detail: string; at: string; screenshot?: string; trace?: string }]
+    [
+      string,
+      {
+        status: string;
+        detail: string;
+        at: string;
+        screenshot?: string;
+        trace?: string;
+        failure?: string;
+      },
+    ]
   >;
   if (!entries.length) return <p className="muted">no step has finished yet</p>;
   return (
@@ -150,6 +160,22 @@ function Results({ outcome }: { outcome: RunStatusView["outcome"] }) {
                 <a href={api.artifact(r.screenshot)} target="_blank" rel="noreferrer">
                   screenshot
                 </a>
+              </>
+            ) : null}
+            {r.failure ? (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  onClick={() =>
+                    api
+                      .agentRepair(r.failure as string)
+                      .then((v) => (location.hash = href("explore", v.id)))
+                      .catch((e: Error) => alert(e.message))
+                  }
+                >
+                  repair with agent
+                </button>
               </>
             ) : null}
             <span className="muted"> · {new Date(r.at).toLocaleTimeString()}</span>

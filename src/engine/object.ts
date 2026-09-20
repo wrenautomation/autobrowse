@@ -123,7 +123,7 @@ async function journaled<T>(
         nh.artifacts = artifacts;
         throw nh;
       }
-      if (artifacts.screenshot || artifacts.aria || artifacts.trace)
+      if (artifacts.screenshot || artifacts.aria || artifacts.trace || artifacts.failure)
         throw new FlowFailed(name, reason, artifacts);
       throw new Unrecoverable(reason);
     }

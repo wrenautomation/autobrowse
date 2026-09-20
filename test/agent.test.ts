@@ -100,6 +100,18 @@ describe("exploreWithAgent", () => {
     expect(r.steps[0]?.error).toMatch(/not a valid action/);
     expect(r.achieved).toBe(true);
   });
+  it("pushes back once on an early give-up, then accepts it", async () => {
+    const { ex } = fakeExplorer(['- link "Name Jane Doe"']);
+    const llm = fakeLlm([
+      { thought: "nothing here", action: { cmd: "done", summary: "no name", achieved: false } },
+      { thought: "still nothing", action: { cmd: "done", summary: "no name", achieved: false } },
+    ]);
+    const r = await exploreWithAgent({ explorer: ex, llm, goal: "report the name" });
+    expect(r.steps).toHaveLength(2);
+    expect(r.steps[0]?.error).toMatch(/gave up at step 1/);
+    expect(llm.requests[1]?.prompt).toContain("FAILED: you gave up");
+    expect(r).toMatchObject({ achieved: false, summary: "no name" });
+  });
   it("hands over on human", async () => {
     const { ex } = fakeExplorer(['- button "Buy now"']);
     const llm = fakeLlm([{ thought: "money", action: { cmd: "human", reason: "a purchase" } }]);

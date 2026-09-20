@@ -77,6 +77,7 @@ export const api = {
   agentSave: (id: string, name: string) =>
     post(`/api/agent/${id}/save`, { name }) as Promise<SessionView>,
   agentShot: (id: string, n: number) => `/api/agent/${id}/shot/${n}`,
+  agentRepair: (failure: string) => post("/api/agent/repair", { failure }) as Promise<SessionView>,
 };
 
 /**

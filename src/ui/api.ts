@@ -12,8 +12,10 @@ import { Readable } from "node:stream";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
+import { readFailure, repairRequest } from "../agent/repair.js";
 import type { AgentSessions } from "../agent/sessions.js";
 import type { Ingress } from "../app/client.js";
+import type { FailureRecord } from "../browser/session.js";
 import { parseCommand } from "../channels/commands.js";
 import type { Compiled } from "../compiler/index.js";
 import type { GateName } from "../engine/effects.js";
@@ -46,6 +48,7 @@ const agentStart = z.object({
 });
 const AGENT_ACTIONS = ["pause", "resume", "stop", "save", "close"] as const;
 const agentAction = z.object({ name: z.string().optional() });
+const repairBody = z.object({ failure: z.string().min(1), goal: z.string().max(2000).optional() });
 
 const ACTIONS = ["approve", "reject", "pause", "play", "reset"] as const;
 type Action = (typeof ACTIONS)[number];
@@ -205,8 +208,20 @@ export function api(deps: ApiDeps): Hono {
     return serveUnder(deps.artifactsDir, resolve(path)) ?? c.json({ error: "not found" }, 404);
   });
 
-  /** What a person typed on any channel (iMessage, Slack, a form). Replies with text for that channel. */
   app.get("/api/agent", (c) => c.json(deps.agent?.list() ?? []));
+  /** A failed step's record → an agent session on that page toward the flow's goal. */
+  app.post("/api/agent/repair", async (c) => {
+    if (!deps.agent) return c.json({ error: "no model configured: set LLM_PROVIDER" }, 503);
+    const body = repairBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: "failure path required" }, 400);
+    let record: FailureRecord;
+    try {
+      record = readFailure(body.data.failure, deps.artifactsDir);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+    }
+    return c.json(await deps.agent.start(repairRequest(record, body.data.goal)), 201);
+  });
   app.post("/api/agent", async (c) => {
     if (!deps.agent) return c.json({ error: "no model configured: set LLM_PROVIDER" }, 503);
     const parsed = agentStart.safeParse(await c.req.json().catch(() => null));
@@ -265,6 +280,7 @@ export function api(deps: ApiDeps): Hono {
     }
   });
 
+  /** What a person typed on any channel (iMessage, Slack, a form). Replies with text for that channel. */
   app.post("/hooks/inbound", async (c) => {
     const body = inboundBody.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: "bad body", issues: body.error.issues }, 400);
