@@ -48,12 +48,25 @@ export function recorderControl(): RecorderControl {
   return c;
 }
 
-type RawAction =
+/** What the observer script sends over the binding, before redaction. */
+export type RawAction =
   | { kind: "click"; target: LocatorHints }
   | { kind: "input"; target: LocatorHints; value: string }
   | { kind: "select"; target: LocatorHints; value: string }
   | { kind: "press"; target: LocatorHints; key: string }
   | { kind: "submit"; target: LocatorHints };
+
+/** A typed secret never reaches the journal: the field or the value gives it away. */
+export function redactRaw(raw: RawAction): ActionBody {
+  if (raw.kind !== "input") return raw;
+  const secret = looksLikeSecretField(raw.target) || looksLikeSecretValue(raw.value);
+  return {
+    kind: "input",
+    target: raw.target,
+    value: secret ? REDACTED : raw.value,
+    redacted: secret,
+  };
+}
 
 export interface BrowserRecording {
   actions: Action[];
@@ -119,17 +132,7 @@ export async function startBrowserRecording(opts: {
   await session.context.exposeBinding(BINDING, async (_src, raw: RawAction) => {
     await markers();
     if (control.paused) return;
-    if (raw.kind === "input") {
-      const secret = looksLikeSecretField(raw.target) || looksLikeSecretValue(raw.value);
-      await push({
-        kind: "input",
-        target: raw.target,
-        value: secret ? REDACTED : raw.value,
-        redacted: secret,
-      });
-      return;
-    }
-    await push(raw);
+    await push(redactRaw(raw));
   });
   await session.context.addInitScript(OBSERVER_SCRIPT);
   session.page.on("framenavigated", (frame) => {

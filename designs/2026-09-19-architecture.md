@@ -107,8 +107,12 @@ the compiled flow uses the same locator the agent used. A malformed
 reply or a ref not on the page is a failed step the model sees next
 turn, not the end of the run. `done{achieved}` / `human{reason}` end it.
 Budget: `maxSteps`, `maxRefs`. The explore server's `pause`/`resume`
-gate each step (`resumed()`), so a person can act by hand and the agent
-re-observes.
+gate each step (`resumed()`); while paused the recorder's observer is
+live on the page, so hand acts (click, input, navigate; secrets redacted)
+sit in the journal between the `pause` and `resume` markers, and the
+agent re-observes on resume. `agent/sessions.ts` keeps live sessions
+for the UI (`/api/agent`: start, pause, resume, stop, save, close, a
+screenshot per step); one explore server per session on its own port.
 
 `FailureRecord` (`<stamp>.failure.json`, every flow failure: site, flow,
 url, last act goal, error, kind) is the seam between deterministic and

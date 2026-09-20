@@ -44,7 +44,10 @@ Browserbase takes them.
   code runs it and journals it. `done` or `human` ends it; the journal is
   a recording, `compile` makes it a deterministic flow. Explore by agent
   once, then run the flow forever. `pause`/`resume` over loopback lets a
-  person step in mid-run; the agent re-reads the page when it resumes.
+  person step in mid-run: while paused the browser is theirs and every
+  click and keystroke lands in the same journal; the agent re-reads the
+  page when it resumes. The UI's **Explore** page is the same thing with
+  a form, live steps and screenshots, pause/resume/stop, save, compile.
 - **Self-repairing.** Every flow failure writes `<stamp>.failure.json`
   (site, URL, last goal, error). `autobrowse repair <that file>` starts
   the agent on that page toward the flow's goal and records the way

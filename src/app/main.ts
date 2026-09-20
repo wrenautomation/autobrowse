@@ -1,14 +1,16 @@
 /** Restate endpoint (:9081) and the UI + API (:9080) in one process, sharing the event bus. */
 import { serve } from "@restatedev/restate-sdk/node";
 import pino from "pino";
+import { agentSessions } from "../agent/sessions.js";
 import { httpClient } from "../clients/http.js";
 import { compile } from "../compiler/index.js";
+import { startExplore } from "../explore/server.js";
 import { expandHome } from "../google-auth.js";
 import { startUiServer } from "../ui/server.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
 import { registerDeployment } from "./register.js";
-import { buildApp, llmFor, WORKFLOWS } from "./services.js";
+import { browserOptions, buildApp, gmailFor, llmFor, loginFor, WORKFLOWS } from "./services.js";
 
 const root = loadEnvFile();
 const settings = loadSettings();
@@ -27,7 +29,21 @@ if (settings.restateAdminUrl && settings.restateEndpointUrl) {
 }
 
 const llm = llmFor(settings);
+const agent = llm
+  ? agentSessions({
+      llm,
+      open: (site, port) =>
+        startExplore({
+          site,
+          browser: browserOptions(settings, false),
+          recordingsDir: expandHome(settings.recordingsDir),
+          port,
+          login: loginFor(settings, gmailFor(settings)),
+        }),
+    })
+  : undefined;
 startUiServer({
+  ...(agent ? { agent } : {}),
   port: settings.uiPort,
   ...(settings.uiHost ? { host: settings.uiHost } : {}),
   distDir: `${root}/ui/dist`,

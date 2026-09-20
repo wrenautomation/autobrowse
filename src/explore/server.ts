@@ -19,6 +19,8 @@ import { defineFlow, type FlowPage, flowRunner, type RunnerOptions } from "../br
 import { type Hints, locate, locateAll } from "../browser/locate.js";
 import { snapshotPage } from "../browser/repair.js";
 import { type BrowserOptions, looksLikeWall } from "../browser/session.js";
+import { type RawAction, redactRaw } from "../recorder/browser.js";
+import { BINDING, OBSERVER_SCRIPT } from "../recorder/observer.js";
 import {
   looksLikeSecretField,
   looksLikeSecretValue,
@@ -179,6 +181,8 @@ async function serve(
   let page: Page = fp.page;
   let paused = false;
   let waiters: Array<() => void> = [];
+  /** Acts a person did by hand since the last `pause`. */
+  let handActs = 0;
   const resume = () => {
     paused = false;
     for (const w of waiters) w();
@@ -192,6 +196,24 @@ async function serve(
   };
   const journal = (a: Journaled) =>
     actions.push({ ...a, t: now() - t0, url: page.url() } as Action);
+  // While paused, the page reports what a person does (the recorder's
+  // observer), so hand-done steps sit in the same journal as the
+  // commands. Un-paused, commands journal themselves and the DOM is quiet.
+  await page
+    .context()
+    .exposeBinding(BINDING, (_src, raw: RawAction) => {
+      if (!paused) return;
+      handActs++;
+      journal(redactRaw(raw));
+    })
+    .catch(() => undefined);
+  await page
+    .context()
+    .addInitScript(OBSERVER_SCRIPT)
+    .catch(() => undefined);
+  page.on("framenavigated", (frame) => {
+    if (paused && frame === page.mainFrame()) journal({ kind: "navigate" });
+  });
 
   type Target = z.infer<typeof targetSchema>;
   const find = (t: Target) => locate(page, t.hints as Hints);
@@ -283,12 +305,16 @@ async function serve(
         return { ok: true };
       case "pause":
         paused = true;
+        handActs = 0;
         journal({ kind: "pause" });
+        // The page may predate the init script: hook it now.
+        await page.evaluate(OBSERVER_SCRIPT).catch(() => undefined);
         return { paused: true };
-      case "resume":
+      case "resume": {
         journal({ kind: "resume" });
         resume();
-        return { paused: false };
+        return { paused: false, handActs };
+      }
       case "journal":
         return { actions };
       case "save": {

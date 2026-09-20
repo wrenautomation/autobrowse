@@ -56,6 +56,8 @@ export interface AgentOptions {
   /** Values the goal refers to by name (a file path, a domain); the model never invents them. */
   inputs?: Record<string, string>;
   maxSteps?: number;
+  /** A person said stop: the loop ends before its next step. */
+  stopped?: () => boolean;
   /** Most controls the model sees per step. */
   maxRefs?: number;
   onStep?: (r: StepRecord) => void;
@@ -97,6 +99,7 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
     .join("\n");
   for (let n = 1; n <= max; n++) {
     await o.explorer.resumed();
+    if (o.stopped?.()) return { achieved: false, summary: "stopped by a person", steps, usage };
     const url = (await o.explorer.exec({ cmd: "url" })) as { url: string };
     const aria = (await o.explorer.exec({ cmd: "aria", limit: 60_000 })) as { aria: string };
     const page = digest(aria.aria, { maxRefs: o.maxRefs ?? 80 });

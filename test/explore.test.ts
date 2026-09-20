@@ -87,3 +87,46 @@ describe("explore mode", () => {
     expect(compiled.outline.steps.length).toBeGreaterThan(0);
   }, 60_000);
 });
+
+describe("pause: a person's hand acts land in the journal", () => {
+  it("journals clicks and typing between pause and resume, nothing outside", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "explore-pause-"));
+    const port = 9800 + Math.floor(Math.random() * 150);
+    const ex = await startExplore({
+      site: "scratch",
+      port,
+      recordingsDir: join(dir, "recordings"),
+      browser: {
+        tier: "local",
+        channel: "chromium",
+        profilesDir: join(dir, "profiles"),
+        artifactsDir: join(dir, "artifacts"),
+        headless: true,
+      },
+    });
+    try {
+      await ex.exec({ cmd: "open", url: PAGE });
+      await ex.exec({ cmd: "pause" });
+      expect(ex.paused()).toBe(true);
+      // A person "clicks" and "types": real DOM events, as a hand would raise them.
+      await ex.exec({
+        cmd: "eval",
+        js: `document.querySelector('input').focus(); document.querySelector('input').value='x.com'; document.querySelector('input').dispatchEvent(new Event('input',{bubbles:true})); document.querySelector('input').dispatchEvent(new Event('change',{bubbles:true})); document.querySelector('button').click();`,
+      });
+      await new Promise((r) => setTimeout(r, 300));
+      const resumed = (await ex.exec({ cmd: "resume" })) as { handActs: number };
+      expect(resumed.handActs).toBeGreaterThanOrEqual(1);
+      const journal = (await ex.exec({ cmd: "journal" })) as { actions: Array<{ kind: string }> };
+      const kinds = journal.actions.map((a) => a.kind);
+      const p = kinds.indexOf("pause");
+      const r = kinds.indexOf("resume");
+      expect(p).toBeGreaterThan(-1);
+      expect(kinds.slice(p + 1, r)).toContain("click");
+    } finally {
+      await ex.exec({ cmd: "close" }).catch(() => undefined);
+      await ex.done;
+      await new Promise((r) => setTimeout(r, 500));
+      await rm(dir, { recursive: true, force: true, maxRetries: 5 });
+    }
+  }, 60_000);
+});

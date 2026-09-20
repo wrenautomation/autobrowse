@@ -12,6 +12,7 @@ import { Readable } from "node:stream";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
+import type { AgentSessions } from "../agent/sessions.js";
 import type { Ingress } from "../app/client.js";
 import { parseCommand } from "../channels/commands.js";
 import type { Compiled } from "../compiler/index.js";
@@ -32,7 +33,19 @@ export interface ApiDeps {
   artifactsDir: string;
   compile(rec: Recording): Promise<Compiled>;
   token: string | undefined;
+  /** Agent sessions (explore by model with play/pause); absent when no model is configured. */
+  agent?: AgentSessions;
 }
+
+const agentStart = z.object({
+  site: z.string().regex(/^[a-z][a-z0-9-]*(@[a-z0-9][a-z0-9.@_-]*)?$/i),
+  goal: z.string().min(1).max(2000),
+  inputs: z.record(z.string(), z.string()).optional(),
+  maxSteps: z.number().int().min(1).max(200).optional(),
+  url: z.string().url().optional(),
+});
+const AGENT_ACTIONS = ["pause", "resume", "stop", "save", "close"] as const;
+const agentAction = z.object({ name: z.string().optional() });
 
 const ACTIONS = ["approve", "reject", "pause", "play", "reset"] as const;
 type Action = (typeof ACTIONS)[number];
@@ -193,6 +206,65 @@ export function api(deps: ApiDeps): Hono {
   });
 
   /** What a person typed on any channel (iMessage, Slack, a form). Replies with text for that channel. */
+  app.get("/api/agent", (c) => c.json(deps.agent?.list() ?? []));
+  app.post("/api/agent", async (c) => {
+    if (!deps.agent) return c.json({ error: "no model configured: set LLM_PROVIDER" }, 503);
+    const parsed = agentStart.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: parsed.error.issues[0]?.message ?? "bad body" }, 400);
+    const { url, inputs, maxSteps, ...rest } = parsed.data;
+    return c.json(
+      await deps.agent.start({
+        ...rest,
+        ...(inputs ? { inputs } : {}),
+        ...(maxSteps ? { maxSteps } : {}),
+        url: url ?? null,
+      }),
+      201,
+    );
+  });
+  app.get("/api/agent/:id", (c) => {
+    const view = deps.agent?.get(c.req.param("id"));
+    return view ? c.json(view) : c.json({ error: "not found" }, 404);
+  });
+  app.get("/api/agent/:id/shot/:n", (c) => {
+    const view = deps.agent?.get(c.req.param("id"));
+    const step = view?.steps[Number(c.req.param("n"))];
+    if (!step?.screenshot) return c.json({ error: "not found" }, 404);
+    return (
+      serveUnder(deps.recordingsDir, resolve(step.screenshot)) ??
+      c.json({ error: "not found" }, 404)
+    );
+  });
+  app.post("/api/agent/:id/:action", async (c) => {
+    const { id, action } = c.req.param();
+    if (!deps.agent) return c.json({ error: "no model configured" }, 503);
+    if (!(AGENT_ACTIONS as readonly string[]).includes(action))
+      return c.json({ error: `unknown action ${action}` }, 400);
+    const body = agentAction.safeParse((await c.req.json().catch(() => ({}))) ?? {});
+    if (!body.success) return c.json({ error: "bad body" }, 400);
+    try {
+      switch (action as (typeof AGENT_ACTIONS)[number]) {
+        case "pause":
+          return c.json(await deps.agent.pause(id));
+        case "resume":
+          return c.json(await deps.agent.resume(id));
+        case "stop":
+          return c.json(await deps.agent.stop(id));
+        case "close":
+          return c.json(await deps.agent.close(id));
+        case "save": {
+          const name = body.data.name ?? deps.agent.get(id)?.goal.replace(/[^a-z0-9]+/gi, "-");
+          if (!name || !NAME.test(name.toLowerCase()))
+            return c.json({ error: "give a recording name: lowercase, dashes" }, 400);
+          return c.json(await deps.agent.save(id, name.toLowerCase()));
+        }
+      }
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 404);
+    }
+  });
+
   app.post("/hooks/inbound", async (c) => {
     const body = inboundBody.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: "bad body", issues: body.error.issues }, 400);

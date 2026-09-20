@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { getToken, type RunEvent, setToken } from "./api.js";
 import { href, useEvents, useRoute } from "./hooks.js";
+import { AgentPage, ExplorePage } from "./pages/Explore.js";
 import { RecordingPage, RecordingsPage } from "./pages/Recordings.js";
 import { RunPage } from "./pages/Run.js";
 import { RunsPage } from "./pages/Runs.js";
@@ -23,6 +24,7 @@ export function App() {
         <nav>
           {nav("runs", "Runs")}
           {nav("recordings", "Recordings")}
+          {nav("explore", "Explore")}
         </nav>
         <span className="spacer" />
         <TokenBox />
@@ -34,6 +36,10 @@ export function App() {
           <RecordingPage name={a} />
         ) : page === "recordings" ? (
           <RecordingsPage />
+        ) : page === "explore" && a ? (
+          <AgentPage id={a} />
+        ) : page === "explore" ? (
+          <ExplorePage />
         ) : (
           <RunsPage version={version} />
         )}

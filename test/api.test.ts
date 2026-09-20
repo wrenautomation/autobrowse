@@ -2,6 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import type { AgentSessions, SessionView } from "../src/agent/sessions.js";
 import type { Ingress } from "../src/app/client.js";
 import type { OpenGate, RunStatusView } from "../src/engine/object.js";
 import type { RunRow } from "../src/engine/registry.js";
@@ -189,5 +190,90 @@ describe("api", () => {
     const second = new TextDecoder().decode((await reader.read()).value);
     expect(second).toContain("event: paused");
     await reader.cancel();
+  });
+});
+
+describe("api: agent sessions", () => {
+  function fakeAgent() {
+    const views = new Map<string, SessionView>();
+    const calls: string[] = [];
+    const agent: AgentSessions = {
+      async start(req) {
+        const v: SessionView = {
+          id: "abc",
+          site: req.site,
+          goal: req.goal,
+          inputs: req.inputs ?? {},
+          status: "running",
+          steps: [],
+          achieved: null,
+          summary: null,
+          error: null,
+          recording: null,
+          recordingName: null,
+          usage: { inputTokens: 0, outputTokens: 0 },
+          startedAt: "2026-09-20T00:00:00.000Z",
+          port: 9100,
+        };
+        views.set(v.id, v);
+        return v;
+      },
+      list: () => [...views.values()],
+      get: (id) => views.get(id) ?? null,
+      async pause(id) {
+        calls.push(`pause ${id}`);
+        return views.get(id) as SessionView;
+      },
+      async resume(id) {
+        calls.push(`resume ${id}`);
+        return views.get(id) as SessionView;
+      },
+      async stop(id) {
+        calls.push(`stop ${id}`);
+        return views.get(id) as SessionView;
+      },
+      async save(id, name) {
+        calls.push(`save ${id} ${name}`);
+        return views.get(id) as SessionView;
+      },
+      async close(id) {
+        calls.push(`close ${id}`);
+        return views.get(id) as SessionView;
+      },
+    };
+    return { agent, calls };
+  }
+  it("starts, reads, controls and saves a session; validates the body", async () => {
+    const { app } = await setup();
+    const { agent, calls } = fakeAgent();
+    const withAgent = api({
+      workflows: [],
+      ingress: fakeIngress().ingress,
+      bus: eventBus(),
+      recordingsDir: "/nowhere",
+      artifactsDir: "/nowhere",
+      compile: async () => ({ outline: {} as never, usage: null, files: {} }),
+      token: undefined,
+      agent,
+    });
+    expect((await app.request(post("/api/agent", { site: "google", goal: "g" }))).status).toBe(503);
+    const bad = await withAgent.request(post("/api/agent", { site: "Bad Site", goal: "g" }));
+    expect(bad.status).toBe(400);
+    const started = await withAgent.request(
+      post("/api/agent", { site: "google@ops", goal: "find the name", maxSteps: 5 }),
+    );
+    expect(started.status).toBe(201);
+    expect(await started.json()).toMatchObject({ id: "abc", site: "google@ops" });
+    expect(await (await withAgent.request("/api/agent")).json()).toHaveLength(1);
+    expect((await withAgent.request("/api/agent/abc")).status).toBe(200);
+    expect((await withAgent.request("/api/agent/nope")).status).toBe(404);
+    for (const a of ["pause", "resume", "stop"])
+      expect((await withAgent.request(post(`/api/agent/abc/${a}`, {}))).status).toBe(200);
+    expect((await withAgent.request(post("/api/agent/abc/save", {}))).status).toBe(200);
+    expect(
+      (await withAgent.request(post("/api/agent/abc/save", { name: "Bad Name" }))).status,
+    ).toBe(400);
+    expect((await withAgent.request(post("/api/agent/abc/dance", {}))).status).toBe(400);
+    expect(calls).toEqual(["pause abc", "resume abc", "stop abc", "save abc find-the-name"]);
   });
 });

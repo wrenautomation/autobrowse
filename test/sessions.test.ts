@@ -1,0 +1,108 @@
+import { describe, expect, it } from "vitest";
+import { agentSessions } from "../src/agent/sessions.js";
+import type { ExploreCommand, Explorer } from "../src/explore/server.js";
+import { fakeLlm } from "../src/llm/fake.js";
+
+function fakeExplorer() {
+  const calls: ExploreCommand[] = [];
+  let paused = false;
+  let waiters: Array<() => void> = [];
+  let finish: () => void = () => undefined;
+  const done = new Promise<void>((r) => {
+    finish = r;
+  });
+  const ex: Explorer = {
+    port: 0,
+    token: "t",
+    paused: () => paused,
+    resumed: () => (paused ? new Promise<void>((r) => waiters.push(r)) : Promise.resolve()),
+    done,
+    async exec(c) {
+      calls.push(c);
+      switch (c.cmd) {
+        case "url":
+          return { url: "https://site.test/" };
+        case "aria":
+          return { aria: '- button "Go"' };
+        case "pause":
+          paused = true;
+          return { paused };
+        case "resume":
+          paused = false;
+          for (const w of waiters) w();
+          waiters = [];
+          return { paused };
+        case "screenshot":
+          return { file: `/shots/${calls.length}.png` };
+        case "click":
+          await new Promise((r) => setTimeout(r, 30)); // a real click takes a beat
+          return { ok: true };
+        case "save":
+          return { dir: `/rec/${c.name}` };
+        case "close":
+          finish();
+          return { closed: true };
+        default:
+          return { ok: true };
+      }
+    },
+  };
+  return { ex, calls };
+}
+
+const tick = () => new Promise((r) => setTimeout(r, 20));
+
+describe("agentSessions", () => {
+  it("runs a session to done, keeps steps with screenshots, saves and closes", async () => {
+    const { ex, calls } = fakeExplorer();
+    const llm = fakeLlm([
+      { thought: "go", action: { cmd: "click", ref: 1, goal: "go" } },
+      { thought: "there", action: { cmd: "done", summary: "arrived", achieved: true } },
+    ]);
+    const s = agentSessions({ llm, open: async () => ex, basePort: 9500 });
+    const v = await s.start({ site: "site", goal: "arrive" });
+    expect(v.port).toBe(9500);
+    for (let i = 0; i < 20 && s.get(v.id)?.status !== "done"; i++) await tick();
+    const done = s.get(v.id);
+    expect(done).toMatchObject({ status: "done", achieved: true, summary: "arrived" });
+    expect(done?.steps.map((x) => x.step?.action.cmd)).toEqual(["click", "done"]);
+    await tick();
+    expect(done?.steps[0]?.screenshot).toMatch(/\.png$/);
+    await s.save(v.id, "arrive");
+    expect(s.get(v.id)?.recording).toBe("/rec/arrive");
+    await s.close(v.id);
+    expect(s.get(v.id)?.status).toBe("closed");
+    expect(calls.at(-1)?.cmd).toBe("close");
+  });
+  it("pause holds the agent, resume lets it go, stop ends it", async () => {
+    const { ex } = fakeExplorer();
+    const llm = fakeLlm(
+      Array.from({ length: 10 }, () => ({
+        thought: "again",
+        action: { cmd: "click", ref: 1, goal: "g" },
+      })),
+    );
+    const s = agentSessions({ llm, open: async () => ex, basePort: 9500 });
+    const v = await s.start({ site: "site", goal: "loop", maxSteps: 10 });
+    await tick();
+    await s.pause(v.id);
+    const at = s.get(v.id)?.steps.length ?? 0;
+    await tick();
+    await tick();
+    expect(s.get(v.id)?.status).toBe("paused");
+    expect(s.get(v.id)?.steps.length).toBeLessThanOrEqual(at + 1);
+    await s.resume(v.id);
+    expect(s.get(v.id)?.status).toBe("running");
+    const stopped = await s.stop(v.id);
+    expect(stopped.status).toBe("stopped");
+    expect(stopped.summary).toBe("stopped by a person");
+    expect(stopped.steps.length).toBeLessThan(10);
+  });
+  it("ports do not collide between live sessions", async () => {
+    const llm = fakeLlm([{ thought: "x", action: { cmd: "done", summary: "s", achieved: true } }]);
+    const s = agentSessions({ llm, open: async () => fakeExplorer().ex, basePort: 9600 });
+    const a = await s.start({ site: "a", goal: "g" });
+    const b = await s.start({ site: "b", goal: "g" });
+    expect([a.port, b.port]).toEqual([9600, 9601]);
+  });
+});
