@@ -51,6 +51,26 @@ export function RunsPage({ version }: { version: number }) {
 }
 
 /** Scalars get a field each; anything else is JSON. The key is the run's identity (a domain, an email). */
+/** Compiled flows carry their last proof run; a draft has none yet. */
+function ProofLine({ proof }: { proof: WorkflowInfo["proof"] }) {
+  if (proof === undefined) return null;
+  if (proof === null)
+    return (
+      <p className="muted">draft: compiled, never run. `autobrowse try &lt;name&gt; --prove`</p>
+    );
+  const failed = proof.steps.find((s) => s.status !== "done" && s.status !== "skipped");
+  return (
+    <p className={proof.status === "done" ? "muted" : "error"}>
+      <span className={`pill ${proof.status === "done" ? "done" : "failed"}`}>
+        {proof.status === "done" ? "proven" : `proof ${proof.status}`}
+      </span>{" "}
+      {new Date(proof.at).toLocaleString()}
+      {failed ? ` at ${failed.name}: ${failed.detail}` : ""}
+      {proof.output ? ` → ${JSON.stringify(proof.output)}` : ""}
+    </p>
+  );
+}
+
 function StartForm({ workflows }: { workflows: WorkflowInfo[] }) {
   const [name, setName] = useState(workflows[0]?.name ?? "");
   const w = workflows.find((x) => x.name === name);
@@ -157,6 +177,7 @@ function StartForm({ workflows }: { workflows: WorkflowInfo[] }) {
         steps: {w.steps.map((s) => `${s.name}${s.irreversible ? "!" : ""}`).join(" → ")} (! =
         irreversible)
       </p>
+      <ProofLine proof={w.proof} />
     </div>
   );
 }

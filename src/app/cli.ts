@@ -60,18 +60,21 @@ program
   .option("--dry-run", "plan only; stop before the first irreversible step")
   .option("--ask", "stop at the first gate instead of approving it")
   .option("--headed", "show the browser")
+  .option("--prove", "write the outcome as proof.json beside the compiled workflow")
   .action(
     async (
       name: string,
-      o: { plan?: string; dryRun?: boolean; ask?: boolean; headed?: boolean },
+      o: { plan?: string; dryRun?: boolean; ask?: boolean; headed?: boolean; prove?: boolean },
     ) => {
       const { loadCompiledWorkflows } = await import("../workflows/compiled.js");
       const { memoryEffects } = await import("../engine/memory.js");
       const { runFlow } = await import("../engine/run.js");
       const { flowRunner } = await import("../browser/flow.js");
       const { browserOptions, gmailFor, loginFor, paceFor } = await import("./services.js");
-      const compiled = (await loadCompiledWorkflows("src/workflows")).map((c) => c.workflow);
-      const workflow = [...WORKFLOWS, ...compiled].find((w) => w.name === name);
+      const compiled = await loadCompiledWorkflows("src/workflows");
+      const workflow = [...WORKFLOWS, ...compiled.map((c) => c.workflow)].find(
+        (w) => w.name === name,
+      );
       if (!workflow) throw new Error(`unknown workflow ${name}; see: autobrowse workflows`);
       if (WORKFLOWS.includes(workflow))
         throw new Error(`${name} needs the worker's deps (APIs); run it with: autobrowse run`);
@@ -81,12 +84,25 @@ program
         browserOptions(settings, o.headed ? false : settings.browserHeadless),
         { login: loginFor(settings, gmailFor(settings)), pace: paceFor(settings) },
       );
+      if (o.prove) {
+        // A proof is its own kind of run: gates declined, nothing bought, the outcome kept beside the flow.
+        const { proveWorkflow, writeProof } = await import("../workflows/proof.js");
+        const dir = compiled.find((c) => c.workflow.name === name)?.dir;
+        if (!dir) throw new Error("--prove is for compiled workflows");
+        const proof = await proveWorkflow(workflow, browser, {
+          plan: raw as Record<string, unknown>,
+        });
+        for (const s of proof.steps) console.log(`${s.name.padEnd(28)} ${s.status}  ${s.detail}`);
+        console.log(`${proof.status} → ${writeProof(dir, proof)}`);
+        if (proof.status !== "done") process.exitCode = 1;
+        return;
+      }
       const out = await runFlow(
         memoryEffects().fx,
         workflow as never,
         { browser } as never,
         plan,
-        (gate) =>
+        () =>
           o.ask ? null : { approved: true, note: "autobrowse try", at: new Date().toISOString() },
       );
       for (const [step, r] of Object.entries(out.results))

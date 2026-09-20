@@ -64,7 +64,9 @@ Browserbase takes them.
   an agent session; `EVALUATE_EVERY_HOURS=6` runs it on a clock and
   messages the fresh ones. `AUTO_BUILD=true` goes the last step alone:
   a fresh proposal seen twice or more is explored by the agent, saved,
-  compiled, and you hear what got built or where it needs you. The agent's `human` is a pause with a prompt: do the
+  compiled, proven (one run on its own, `proof.json` beside the flow, shown on
+  the Runs page), and you hear what got built or where it needs you.
+  `autobrowse try <name> --prove` writes the same proof by hand. The agent's `human` is a pause with a prompt: do the
   captcha or the purchase in the window, resume, it goes on.
 - **Accounts.** A site name may carry an account: `google@ops` is the
   google walk with credential and browser profile `google@ops`. One

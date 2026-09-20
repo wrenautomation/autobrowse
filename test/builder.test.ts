@@ -102,13 +102,17 @@ describe("buildProposals", () => {
     notes.length = 0;
     const { agent, calls } = fakeAgent({ status: "done", achieved: true, summary: "renewed" });
     const remember = new Set<string>();
-    const out = await buildProposals([proposal({})], { ...base(agent), remember });
+    const out = await buildProposals([proposal({})], {
+      ...base(agent),
+      remember,
+      prove: async (wf) => `proven ${wf}`,
+    });
     expect(out).toEqual([
       {
         title: "Renew the SSL certificate",
         session: "s1",
         workflow: "wf-renew-the-ssl-certificate",
-        summary: "renewed",
+        summary: "renewed; proven wf-renew-the-ssl-certificate",
       },
     ]);
     expect(calls).toEqual([

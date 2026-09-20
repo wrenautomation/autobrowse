@@ -90,6 +90,7 @@ startUiServer({
   ...(settings.uiHost ? { host: settings.uiHost } : {}),
   distDir: `${root}/ui/dist`,
   workflows: app.workflows,
+  proofs: app.proofs,
   ingress: ingress({
     url: settings.restateIngressUrl,
     authToken: settings.restateAuthToken ?? null,
@@ -122,6 +123,18 @@ if (llm && settings.evaluateEveryHours > 0 && app.channel.note) {
             workflow: (await compileRecording(await loadRecording(recordingsDir, name))).outline
               .name,
           }),
+          prove: async (workflow: string) => {
+            const { loadCompiledWorkflows } = await import("../workflows/compiled.js");
+            const { proofLine, proveWorkflow, writeProof } = await import("../workflows/proof.js");
+            const found = (await loadCompiledWorkflows(COMPILED_DIR)).find(
+              (c) => c.workflow.name === workflow,
+            );
+            if (!found) throw new Error(`compiled workflow ${workflow} did not load`);
+            const proof = await proveWorkflow(found.workflow, app.browser);
+            writeProof(found.dir, proof);
+            app.proofs[workflow] = proof;
+            return proofLine(proof);
+          },
         }
       : null;
   if (settings.autoBuild && !builder) log.warn("AUTO_BUILD set without a model: nothing builds");

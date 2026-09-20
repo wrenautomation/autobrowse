@@ -25,10 +25,19 @@ export type {
   Status,
 };
 
+export interface Proof {
+  at: string;
+  status: string;
+  steps: Array<{ name: string; status: string; detail: string }>;
+  output: Record<string, string> | null;
+}
+
 export interface WorkflowInfo {
   name: string;
   description: string;
   steps: Array<{ name: string; irreversible: boolean }>;
+  /** undefined = hand-written (tested in the repo); null = compiled, never run; else its last proof run. */
+  proof?: Proof | null;
   plan: {
     properties?: Record<string, { type?: string; description?: string; default?: unknown }>;
     required?: string[];

@@ -12,6 +12,10 @@ describe("loadCompiledWorkflows", () => {
       join(root, "good", "index.ts"),
       `export const workflow = { name: "good", description: "d", steps: [{ name: "a" }] };`,
     );
+    writeFileSync(
+      join(root, "good", "proof.json"),
+      JSON.stringify({ at: "2026-09-20T05:00:00Z", status: "done", steps: [], output: null }),
+    );
     mkdirSync(join(root, "domain"));
     writeFileSync(
       join(root, "domain", "index.ts"),
@@ -25,6 +29,7 @@ describe("loadCompiledWorkflows", () => {
       errors.push(dir.split("/").pop() ?? ""),
     );
     expect(found.map((f) => f.workflow.name)).toEqual(["good"]);
+    expect(found[0]?.proof?.status).toBe("done");
     expect(errors).toEqual(["broken"]);
     expect(await loadCompiledWorkflows(join(root, "nope"))).toEqual([]);
   });

@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { FlowRunner } from "../browser/flow.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
+import { type Proof, readProof } from "./proof.js";
 
 /** Hand-written workflows, wired with their own deps in services.ts. */
 export const HAND_WRITTEN = new Set(["domain", "bootstrap"]);
@@ -17,6 +18,8 @@ export const HAND_WRITTEN = new Set(["domain", "bootstrap"]);
 export interface CompiledWorkflow {
   workflow: AnyWorkflow;
   dir: string;
+  /** The last proof run, or null for a draft nobody has run yet. */
+  proof: Proof | null;
 }
 
 function isWorkflow(v: unknown): v is AnyWorkflow {
@@ -43,7 +46,7 @@ export async function loadCompiledWorkflows(
     try {
       const mod = (await import(pathToFileURL(file).href)) as Record<string, unknown>;
       const workflow = mod.workflow ?? Object.values(mod).find(isWorkflow);
-      if (isWorkflow(workflow)) out.push({ workflow, dir });
+      if (isWorkflow(workflow)) out.push({ workflow, dir, proof: readProof(dir) });
     } catch (err) {
       onError(dir, err);
     }

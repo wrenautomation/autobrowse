@@ -13,6 +13,8 @@ export interface BuilderOptions {
   agent: AgentSessions;
   /** Compile the recording saved under `name`; returns the workflow's name. */
   compile(name: string): Promise<{ workflow: string }>;
+  /** Run the compiled workflow once and keep the outcome beside it; returns one line. Absent = no proof run. */
+  prove?: (workflow: string) => Promise<string>;
   notify(text: string): Promise<void>;
   /** A proposal needs this much evidence before the agent spends a session on it. */
   minOccurrences?: number;
@@ -89,7 +91,16 @@ export async function buildProposals(
       await o.agent.save(view.id, name);
       await o.agent.close(view.id);
       const { workflow } = await o.compile(name);
-      outcome = { title: p.title, session: view.id, workflow, summary: view.summary ?? "" };
+      // The recording worked once by hand; the proof is the compiled flow working on its own.
+      const proof = o.prove
+        ? await o.prove(workflow).catch((err: Error) => `proof failed: ${err.message}`)
+        : null;
+      outcome = {
+        title: p.title,
+        session: view.id,
+        workflow,
+        summary: proof ? `${view.summary ?? ""}; ${proof}` : (view.summary ?? ""),
+      };
     } else {
       await o.agent.close(view.id).catch(() => undefined);
       outcome = {

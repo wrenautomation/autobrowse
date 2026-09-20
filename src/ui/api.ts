@@ -35,11 +35,14 @@ import { commandSchema } from "../explore/server.js";
 import type { Llm } from "../llm/types.js";
 import { listRecordings, loadRecording, recordingDir } from "../recorder/store.js";
 import type { Recording } from "../recorder/types.js";
+import type { Proof } from "../workflows/proof.js";
 import { bearerAuth, rateLimit } from "./auth.js";
 import type { EventBus } from "./bus.js";
 
 export interface ApiDeps {
   workflows: readonly AnyWorkflow[];
+  /** Compiled workflows' proof runs by name; absent = hand-written. */
+  proofs?: Record<string, Proof | null>;
   ingress: Ingress;
   bus: EventBus;
   recordingsDir: string;
@@ -122,6 +125,8 @@ export function api(deps: ApiDeps): Hono {
         description: w.description,
         steps: w.steps.map((s) => ({ name: s.name, irreversible: s.irreversible ?? false })),
         plan: z.toJSONSchema(w.plan, { io: "input", unrepresentable: "any" }),
+        // Hand-written flows are proven by their tests; compiled ones by one run after compiling.
+        proof: deps.proofs && w.name in deps.proofs ? (deps.proofs[w.name] ?? null) : undefined,
       })),
     ),
   );

@@ -18,6 +18,7 @@ import {
   SITE_LOGINS,
   totpSource,
 } from "../auth/index.js";
+import type { FlowRunner } from "../browser/flow.js";
 import { flowRunner, HUMAN_PACE, type Pace } from "../browser/flow.js";
 import { llmRepairer, noRepairer, rememberingRepairer } from "../browser/repair.js";
 import type { BrowserOptions } from "../browser/session.js";
@@ -64,6 +65,7 @@ import { type EventBus, eventBus } from "../ui/bus.js";
 import { type BootstrapDeps, bootstrapWorkflow } from "../workflows/bootstrap/index.js";
 import { compiledDeps, loadCompiledWorkflows } from "../workflows/compiled.js";
 import { type DomainDeps, domainWorkflow } from "../workflows/domain/index.js";
+import type { Proof } from "../workflows/proof.js";
 import type { Settings } from "./config.js";
 import type { DeviceLink } from "./setup.js";
 
@@ -139,6 +141,10 @@ export interface App {
   channel: Channel;
   /** Hand-written plus compiled: what the UI and CLI list. */
   workflows: readonly AnyWorkflow[];
+  /** Compiled workflows' last proof runs by name (hand-written ones have none). */
+  proofs: Record<string, Proof | null>;
+  /** The worker's browser runner: what compiled flows and proof runs use. */
+  browser: FlowRunner;
   /** The UI's live feed; also one of the channels. */
   bus: EventBus;
   memory: Memory;
@@ -436,6 +442,8 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     ],
     channel,
     workflows: [...WORKFLOWS, ...extra.map((c) => c.workflow)],
+    proofs: Object.fromEntries(extra.map((c) => [c.workflow.name, c.proof])),
+    browser,
     bus,
     memory,
   };
