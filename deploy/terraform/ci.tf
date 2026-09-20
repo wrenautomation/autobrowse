@@ -58,7 +58,7 @@ data "aws_iam_policy_document" "ci" {
   }
   statement {
     sid       = "StartStopBox"
-    actions   = ["ec2:StartInstances", "ec2:StopInstances"]
+    actions   = ["ec2:StartInstances", "ec2:StopInstances", "ec2:CreateTags", "ec2:DeleteTags"]
     resources = [aws_instance.box.arn]
   }
   statement {

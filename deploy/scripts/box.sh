@@ -1,12 +1,34 @@
 #!/usr/bin/env bash
 # The worker box on demand: a stopped instance bills nothing but its volume.
-#   box.sh start   boot it and wait until SSM can reach it (then the worker is up in ~1 min)
-#   box.sh stop    shut it down; flows resume from Restate's journal on the next start
+#   box.sh start     boot it and wait until SSM can reach it (then the worker is up in ~1 min)
+#   box.sh stop      shut it down; flows resume from Restate's journal on the next start
+#   box.sh release   stop it unless a person started it (what a deploy runs last, always)
 #   box.sh status
+# Who started it is an instance tag (autobrowse:started-by = person|deploy), set on
+# a start from stopped and cleared on stop: a deploy never leaves a box running
+# that it booted, and never stops one a person booted. BOX_STARTED_BY=deploy in CI.
 set -euo pipefail
 ID="${AUTOBROWSE_INSTANCE_ID:-$(cd "$(dirname "$0")/../terraform" && tofu output -raw instance_id)}"
+TAG="autobrowse:started-by"
+state() {
+  aws ec2 describe-instances --instance-ids "$ID" \
+    --query 'Reservations[0].Instances[0].State.Name' --output text
+}
+started_by() {
+  aws ec2 describe-instances --instance-ids "$ID" \
+    --query "Reservations[0].Instances[0].Tags[?Key=='$TAG'].Value | [0]" --output text
+}
+stop() {
+  aws ec2 stop-instances --instance-ids "$ID" >/dev/null
+  aws ec2 delete-tags --resources "$ID" --tags "Key=$TAG" >/dev/null
+  aws ec2 wait instance-stopped --instance-ids "$ID"
+  echo "$ID stopped"
+}
 case "${1:-status}" in
   start)
+    if [ "$(state)" = "stopped" ]; then
+      aws ec2 create-tags --resources "$ID" --tags "Key=$TAG,Value=${BOX_STARTED_BY:-person}" >/dev/null
+    fi
     aws ec2 start-instances --instance-ids "$ID" >/dev/null
     aws ec2 wait instance-running --instance-ids "$ID"
     for _ in $(seq 1 30); do
@@ -16,12 +38,12 @@ case "${1:-status}" in
       sleep 5
     done
     echo "$ID running but SSM not online yet" >&2; exit 1 ;;
-  stop)
-    aws ec2 stop-instances --instance-ids "$ID" >/dev/null
-    aws ec2 wait instance-stopped --instance-ids "$ID"
-    echo "$ID stopped" ;;
-  status)
-    aws ec2 describe-instances --instance-ids "$ID" \
-      --query 'Reservations[0].Instances[0].State.Name' --output text ;;
-  *) echo "usage: box.sh start|stop|status" >&2; exit 2 ;;
+  stop) stop ;;
+  release)
+    by="$(started_by)"
+    if [ "$by" = "person" ]; then echo "$ID left running: a person started it"; exit 0; fi
+    [ "$(state)" = "stopped" ] && { echo "$ID already stopped"; exit 0; }
+    stop ;;
+  status) state ;;
+  *) echo "usage: box.sh start|stop|release|status" >&2; exit 2 ;;
 esac
