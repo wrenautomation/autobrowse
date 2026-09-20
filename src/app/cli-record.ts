@@ -1,9 +1,8 @@
 /** `autobrowse login <site>` and `autobrowse record <name>`: the recorder's command line. */
 import { join } from "node:path";
 import type { Command } from "commander";
-import { HUMAN_PACE } from "../browser/flow.js";
 import type { Settings } from "./config.js";
-import { browserOptions, gmailFor, llmFor, loginFor } from "./services.js";
+import { browserOptions, gmailFor, llmFor, loginFor, paceFor } from "./services.js";
 
 export function registerRecordCommands(program: Command, settings: Settings): void {
   program
@@ -179,7 +178,7 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<void> {
     recordingsDir: settings.recordingsDir,
     port: r.port,
     login: loginFor(settings, gmailFor(settings)),
-    pace: HUMAN_PACE,
+    pace: paceFor(settings),
   });
   console.log(
     `agent on ${r.site}; pause/resume: curl -s -X POST -H "Authorization: Bearer ${ex.token}" http://127.0.0.1:${ex.port}/ -d '{"cmd":"pause"}'`,

@@ -69,7 +69,7 @@ program
       const { memoryEffects } = await import("../engine/memory.js");
       const { runFlow } = await import("../engine/run.js");
       const { flowRunner } = await import("../browser/flow.js");
-      const { browserOptions, gmailFor, loginFor } = await import("./services.js");
+      const { browserOptions, gmailFor, loginFor, paceFor } = await import("./services.js");
       const compiled = (await loadCompiledWorkflows("src/workflows")).map((c) => c.workflow);
       const workflow = [...WORKFLOWS, ...compiled].find((w) => w.name === name);
       if (!workflow) throw new Error(`unknown workflow ${name}; see: autobrowse workflows`);
@@ -79,7 +79,7 @@ program
       const plan = workflow.plan.parse({ ...raw, dryRun: o.dryRun ?? false });
       const browser = flowRunner(
         browserOptions(settings, o.headed ? false : settings.browserHeadless),
-        { login: loginFor(settings, gmailFor(settings)) },
+        { login: loginFor(settings, gmailFor(settings)), pace: paceFor(settings) },
       );
       const out = await runFlow(
         memoryEffects().fx,

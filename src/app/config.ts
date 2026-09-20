@@ -40,6 +40,8 @@ const schema = z.object({
     .string()
     .default("true")
     .transform((v) => !/^(false|0|no)$/i.test(v)),
+  /** How the browser acts: `human` (paced like a person; sites watch for the other kind) or `fast` (demos, tests). */
+  pace: z.enum(["human", "fast"]).default("human"),
   /** Screenshots and Playwright traces from flows that needed a person or failed. */
   artifactsDir: z.string().min(1).default("~/.config/autobrowse/artifacts"),
   /** Raw Playwright codegen output from `record --flow`; may hold typed secrets, never committed. */
@@ -142,6 +144,7 @@ export const ENV_KEYS = {
   profilesDir: "PROFILES_DIR",
   browserChannel: "BROWSER_CHANNEL",
   browserHeadless: "BROWSER_HEADLESS",
+  pace: "PACE",
   artifactsDir: "ARTIFACTS_DIR",
   recordingsDir: "RECORDINGS_DIR",
   logLevel: "LOG_LEVEL",

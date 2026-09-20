@@ -18,7 +18,7 @@ import {
   SITE_LOGINS,
   totpSource,
 } from "../auth/index.js";
-import { flowRunner } from "../browser/flow.js";
+import { flowRunner, HUMAN_PACE, type Pace } from "../browser/flow.js";
 import { llmRepairer, noRepairer, rememberingRepairer } from "../browser/repair.js";
 import type { BrowserOptions } from "../browser/session.js";
 import {
@@ -238,6 +238,11 @@ export function linqFor(
   };
 }
 
+/** The runner's pace from settings; `fast` means no delays at all. */
+export function paceFor(settings: Settings): Pace | null {
+  return settings.pace === "fast" ? null : HUMAN_PACE;
+}
+
 export function memoryFor(settings: Settings, http = httpClient()): Memory {
   if (settings.memory === "backboard" && settings.backboardApiKey)
     return backboardMemory({
@@ -315,6 +320,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
 
   const guards = parseGuards(settings.guards);
   const browser = flowRunner(browserOptions(settings), {
+    pace: paceFor(settings),
     repairer: rememberingRepairer(memory, llm ? llmRepairer(llm) : noRepairer),
     login: loginFor(settings, gmail),
     repairIrreversible: !guards.has("irreversible"),
