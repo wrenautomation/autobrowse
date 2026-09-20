@@ -70,6 +70,8 @@ const schema = z.object({
   envFile: z.string().min(1).default(".env"),
   /** Which guards stay on: `all`, `none`, or a comma list (purchase, password, irreversible). */
   guards: z.string().default("all"),
+  /** Run the evaluator every N hours and tell the person what deserves a workflow; 0 = off. */
+  evaluateEveryHours: z.coerce.number().min(0).default(0),
   /** Site credentials for automated sign-in; 0600 JSON. Env (`AUTOBROWSE_CRED_*`) is read first. */
   credentialsFile: z.string().min(1).default("~/.config/autobrowse/credentials.json"),
   /** How the credential file is sealed: keychain (macOS, default there), none (containers; credentials come from env). */
@@ -142,6 +144,7 @@ export const ENV_KEYS = {
   secretSink: "SECRET_SINK",
   envFile: "ENV_FILE",
   guards: "GUARDS",
+  evaluateEveryHours: "EVALUATE_EVERY_HOURS",
   credentialsFile: "CREDENTIALS_FILE",
   credentialsCipher: "CREDENTIALS_CIPHER",
   codesInbox: "CODES_INBOX",

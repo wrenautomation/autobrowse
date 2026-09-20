@@ -57,7 +57,8 @@ Browserbase takes them.
 - **Self-building.** The evaluator (`/api/agent/proposals`, Explore
   page) reads flow failures, agent sessions and recordings and says which
   recurring needs deserve a workflow, each as a site + goal one click from
-  an agent session. The agent's `human` is a pause with a prompt: do the
+  an agent session; `EVALUATE_EVERY_HOURS=6` runs it on a clock and
+  messages the fresh ones. The agent's `human` is a pause with a prompt: do the
   captcha or the purchase in the window, resume, it goes on.
 - **Accounts.** A site name may carry an account: `google@ops` is the
   google walk with credential and browser profile `google@ops`. One

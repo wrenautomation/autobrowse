@@ -78,6 +78,28 @@ startUiServer({
   },
   token: settings.uiToken,
 });
+if (llm && settings.evaluateEveryHours > 0 && app.channel.note) {
+  const { proposeWorkflows, readFailures } = await import("../agent/evaluator.js");
+  const { scheduleEvaluator } = await import("../agent/schedule.js");
+  const { listRecordings } = await import("../recorder/store.js");
+  const recordingsDir = expandHome(settings.recordingsDir);
+  scheduleEvaluator({
+    everyHours: settings.evaluateEveryHours,
+    evidence: async () => ({
+      failures: readFailures(expandHome(settings.artifactsDir)),
+      sessions: agent?.list() ?? [],
+      recordings: (await listRecordings(recordingsDir)).map((r) => ({
+        name: r.name,
+        site: r.site,
+      })),
+    }),
+    propose: (e) => proposeWorkflows(llm, e),
+    notify: app.channel.note.bind(app.channel),
+    onError: (err) =>
+      log.warn({ err: err instanceof Error ? err.message : String(err) }, "evaluator"),
+  });
+  log.info({ everyHours: settings.evaluateEveryHours }, "evaluator scheduled");
+}
 log.info(
   {
     port: settings.uiPort,
