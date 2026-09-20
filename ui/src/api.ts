@@ -79,6 +79,7 @@ const post = (path: string, body?: unknown) =>
 export const api = {
   status: () => call<Status | null>("/api/status"),
   workflows: () => call<WorkflowInfo[]>("/api/workflows"),
+  prove: (workflow: string) => post(`/api/workflows/${workflow}/prove`) as Promise<Proof>,
   runs: () => call<RunRow[]>("/api/runs"),
   run: (workflow: string, key: string) =>
     call<RunStatusView>(`/api/runs/${workflow}/${encodeURIComponent(key)}`),

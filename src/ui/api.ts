@@ -44,6 +44,8 @@ export interface ApiDeps {
   workflows: readonly AnyWorkflow[] | (() => Promise<readonly AnyWorkflow[]>);
   /** Compiled workflows' proof runs by name; a name absent here is hand-written. */
   proofs?: Record<string, Proof | null> | (() => Promise<Record<string, Proof | null>>);
+  /** Run a compiled workflow once as its proof and keep it; absent when the worker has no browser. */
+  prove?(workflow: string): Promise<Proof>;
   ingress: Ingress;
   bus: EventBus;
   recordingsDir: string;
@@ -135,6 +137,14 @@ export function api(deps: ApiDeps): Hono {
         proof: w.name in proven ? (proven[w.name] ?? null) : undefined,
       })),
     );
+  });
+
+  /** A proof is a run of its own (gates declined, plan defaults), so it is not a Restate run. */
+  app.post("/api/workflows/:name/prove", async (c) => {
+    const { name } = c.req.param();
+    if (!deps.prove) return c.json({ error: "no browser here to prove with" }, 501);
+    if (!(name in (await proofs()))) return c.json({ error: "not a compiled workflow" }, 404);
+    return c.json(await deps.prove(name));
   });
 
   app.get("/api/runs", async (c) => c.json(await deps.ingress.registry().list()));

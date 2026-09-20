@@ -5,7 +5,8 @@ import { href, useLoad } from "../hooks.js";
 
 export function RunsPage({ version }: { version: number }) {
   const runs = useLoad(() => api.runs(), [version]);
-  const workflows = useLoad(() => api.workflows(), []);
+  const [proved, setProved] = useState(0);
+  const workflows = useLoad(() => api.workflows(), [proved]);
   return (
     <>
       <h1>Runs</h1>
@@ -45,18 +46,44 @@ export function RunsPage({ version }: { version: number }) {
         </tbody>
       </table>
       <h2>Start a run</h2>
-      {workflows.data ? <StartForm workflows={workflows.data} /> : null}
+      {workflows.data ? (
+        <StartForm workflows={workflows.data} onProved={() => setProved((n) => n + 1)} />
+      ) : null}
     </>
   );
 }
 
 /** Scalars get a field each; anything else is JSON. The key is the run's identity (a domain, an email). */
-/** Compiled flows carry their last proof run; a draft has none yet. */
-function ProofLine({ proof }: { proof: WorkflowInfo["proof"] }) {
+/** Compiled flows carry their last proof run; a draft has none yet. One click runs a proof here. */
+function ProofLine({ w, onProved }: { w: WorkflowInfo; onProved: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const proof = w.proof;
   if (proof === undefined) return null;
+  const prove = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.prove(w.name);
+      onProved();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const button = (
+    <button type="button" disabled={busy} onClick={prove} style={{ marginLeft: 8 }}>
+      {busy ? "proving…" : proof ? "prove again" : "prove"}
+    </button>
+  );
   if (proof === null)
     return (
-      <p className="muted">draft: compiled, never run. `autobrowse try &lt;name&gt; --prove`</p>
+      <p className="muted">
+        draft: compiled, never run (a proof runs it once on plan defaults; gates are declined)
+        {button}
+        {err ? <span className="error"> {err}</span> : null}
+      </p>
     );
   const failed = proof.steps.find((s) => s.status !== "done" && s.status !== "skipped");
   return (
@@ -67,11 +94,13 @@ function ProofLine({ proof }: { proof: WorkflowInfo["proof"] }) {
       {new Date(proof.at).toLocaleString()}
       {failed ? ` at ${failed.name}: ${failed.detail}` : ""}
       {proof.output ? ` → ${JSON.stringify(proof.output)}` : ""}
+      {button}
+      {err ? <span> {err}</span> : null}
     </p>
   );
 }
 
-function StartForm({ workflows }: { workflows: WorkflowInfo[] }) {
+function StartForm({ workflows, onProved }: { workflows: WorkflowInfo[]; onProved: () => void }) {
   const [name, setName] = useState(workflows[0]?.name ?? "");
   const w = workflows.find((x) => x.name === name);
   const [key, setKey] = useState("");
@@ -177,7 +206,7 @@ function StartForm({ workflows }: { workflows: WorkflowInfo[] }) {
         steps: {w.steps.map((s) => `${s.name}${s.irreversible ? "!" : ""}`).join(" → ")} (! =
         irreversible)
       </p>
-      <ProofLine proof={w.proof} />
+      <ProofLine w={w} onProved={onProved} />
     </div>
   );
 }

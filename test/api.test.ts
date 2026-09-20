@@ -116,6 +116,32 @@ describe("api", () => {
     expect(body[0].plan.properties.domain).toBeDefined();
   });
 
+  it("lists live workflows with proofs, and proves a compiled one on request", async () => {
+    const proof = { at: "2026-09-20T05:00:00Z", status: "done", steps: [], output: null };
+    const proved: string[] = [];
+    const { app } = await setup(undefined, {
+      workflows: async () => [domainWorkflow, { ...domainWorkflow, name: "google-name" }],
+      proofs: async () => ({ "google-name": proved.length ? proof : null }),
+      prove: async (name) => {
+        proved.push(name);
+        return proof;
+      },
+    });
+    const before = await (await app.request("/api/workflows")).json();
+    expect(before.map((w: { name: string; proof?: unknown }) => [w.name, w.proof])).toEqual([
+      ["domain", undefined],
+      ["google-name", null],
+    ]);
+    expect((await app.request(post("/api/workflows/domain/prove"))).status).toBe(404);
+    expect(await (await app.request(post("/api/workflows/google-name/prove"))).json()).toEqual(
+      proof,
+    );
+    const after = await (await app.request("/api/workflows")).json();
+    expect(after[1].proof).toEqual(proof);
+    const bare = await setup();
+    expect((await bare.app.request(post("/api/workflows/google-name/prove"))).status).toBe(501);
+  });
+
   it("starts, answers and controls runs through the ingress", async () => {
     const { app, calls } = await setup();
     expect(

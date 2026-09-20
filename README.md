@@ -67,7 +67,8 @@ Browserbase takes them.
   a fresh proposal seen twice or more is explored by the agent, saved,
   compiled, proven (one run on its own, `proof.json` beside the flow, shown on
   the Runs page), and you hear what got built or where it needs you.
-  `autobrowse try <name> --prove` writes the same proof by hand. The agent's `human` is a pause with a prompt: do the
+  `autobrowse try <name> --prove` or "prove" on the Runs page writes the
+  same proof by hand. The agent's `human` is a pause with a prompt: do the
   captcha or the purchase in the window, resume, it goes on.
 - **Accounts.** A site name may carry an account: `google@ops` is the
   google walk with credential and browser profile `google@ops`. One

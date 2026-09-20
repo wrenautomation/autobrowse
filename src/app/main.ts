@@ -91,6 +91,7 @@ startUiServer({
   distDir: `${root}/ui/dist`,
   workflows: app.workflows,
   proofs: app.proofs,
+  prove: proveCompiled,
   ingress: ingress({
     url: settings.restateIngressUrl,
     authToken: settings.restateAuthToken ?? null,
@@ -106,6 +107,15 @@ async function compileRecording(rec: Recording) {
   // Written where the Compiled object loads from: it is on the Runs page at once.
   await writeRendered(join(COMPILED_DIR, out.outline.name), out);
   return out;
+}
+/** One proof run of a compiled flow, kept beside it; the catalog reads it back on the next listing. */
+async function proveCompiled(workflow: string) {
+  const { proveWorkflow, writeProof } = await import("../workflows/proof.js");
+  const found = await app.catalog.get(workflow);
+  if (!found) throw new Error(`compiled workflow ${workflow} did not load`);
+  const proof = await proveWorkflow(found.workflow, app.browser);
+  writeProof(found.dir, proof);
+  return proof;
 }
 if (llm && settings.evaluateEveryHours > 0 && app.channel.note) {
   const { proposeWorkflows, readFailures } = await import("../agent/evaluator.js");
@@ -124,12 +134,8 @@ if (llm && settings.evaluateEveryHours > 0 && app.channel.note) {
               .name,
           }),
           prove: async (workflow: string) => {
-            const { proofLine, proveWorkflow, writeProof } = await import("../workflows/proof.js");
-            const found = await app.catalog.get(workflow);
-            if (!found) throw new Error(`compiled workflow ${workflow} did not load`);
-            const proof = await proveWorkflow(found.workflow, app.browser);
-            writeProof(found.dir, proof); // the catalog reads it back on the next listing
-            return proofLine(proof);
+            const { proofLine } = await import("../workflows/proof.js");
+            return proofLine(await proveCompiled(workflow));
           },
         }
       : null;
