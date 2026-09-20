@@ -41,6 +41,13 @@ const opSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("press"), goal: z.string(), hints: hintsSchema, key: z.string() }),
   /** One file, a path from the plan or a literal. */
   z.object({ kind: z.literal("upload"), goal: z.string(), hints: hintsSchema, file: valueSchema }),
+  /** Text read off an element, kept under `as` in the step's result. */
+  z.object({
+    kind: z.literal("read"),
+    goal: z.string(),
+    hints: hintsSchema,
+    as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
+  }),
   /** The recorder was paused here: a person did something private. */
   z.object({ kind: z.literal("human"), reason: z.string() }),
 ]);

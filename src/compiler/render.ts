@@ -51,6 +51,7 @@ function renderOp(op: OutlineOp): string {
     .map(([k, v]) => `${k}: ${q(String(v))}`)
     .join(", ")} }`;
   const locatorNote = plan ? ` // ${renderLocator(plan)}` : " // TODO: no usable hints";
+  if (op.kind === "read") return `    out.${op.as} = await fp.read(${hints});${locatorNote}`;
   const opts = `{ goal: ${q(op.goal)}${op.kind === "click" && op.irreversible ? ", irreversible: true" : ""} }`;
   const opSrc =
     op.kind === "click"
@@ -85,9 +86,12 @@ function renderBrowserStep(o: Outline, step: Extract<OutlineStep, { kind: "brows
   const inputType = [...fields, ...secrets].length
     ? `export interface ${Input} {\n${[...fields, ...secrets].map((k) => `  ${k}: string;`).join("\n")}\n}`
     : `export type ${Input} = Record<string, never>;`;
+  const reads = step.ops.filter((op) => op.kind === "read");
   const flowLines = [
     ...(step.url ? [`    await fp.open(${q(step.url)});`] : []),
+    ...(reads.length ? ["    const out: Record<string, string> = {};"] : []),
     ...step.ops.map(renderOp),
+    ...(reads.length ? ["    return out;"] : []),
   ];
   const secretLines = secrets.map(
     (k) =>
@@ -102,7 +106,7 @@ function renderBrowserStep(o: Outline, step: Extract<OutlineStep, { kind: "brows
     : "    // TODO: prove the result through an API read where one exists.";
   return `${inputType}
 
-const ${id}Flow = defineFlow<${Input}, void>({
+const ${id}Flow = defineFlow<${Input}, ${reads.length ? "Record<string, string>" : "void"}>({
   site: ${q(o.site)},
   name: ${q(step.name)},
   async run(fp, input) {
@@ -113,9 +117,9 @@ ${flowLines.join("\n") || "    void input;"}
 const ${id}: Step<${q(step.name)}> = {
   name: ${q(step.name)},${step.irreversible ? "\n  irreversible: true," : ""}
   async run({ fx, deps, plan${step.irreversible ? ", gate" : ""} }) {
-${gate}${secretLines.length ? `${secretLines.join("\n")}\n` : ""}    await fx.run(${q(`browser ${step.name}`)}, () => deps.browser.run(${id}Flow, { ${inputArgs} }));
+${gate}${secretLines.length ? `${secretLines.join("\n")}\n` : ""}    ${reads.length ? "const out = " : ""}await fx.run(${q(`browser ${step.name}`)}, () => deps.browser.run(${id}Flow, { ${inputArgs} }));
 ${proof}
-    return done(${q(step.description || step.name)});
+    return done(${reads.length ? "JSON.stringify(out)" : q(step.description || step.name)});
   },
 };`;
 }

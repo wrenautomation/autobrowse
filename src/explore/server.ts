@@ -83,6 +83,8 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("screenshot") }),
   z.object({ cmd: z.literal("eval"), js: z.string(), raw: z.boolean().optional() }),
   targetSchema.extend({ cmd: z.literal("count") }),
+  /** Read an element's text and keep it under `as`; journaled, so the compiled flow reads it too. */
+  targetSchema.extend({ cmd: z.literal("read"), as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/) }),
   z.object({ cmd: z.literal("note"), text: z.string() }),
   /** Write the journal as a recording under `recordingsDir/<name>`. */
   z.object({ cmd: z.literal("save"), name: z.string().regex(/^[a-z][a-z0-9-]*$/) }),
@@ -302,6 +304,12 @@ async function serve(
       }
       case "count":
         return { count: await locateAll(page, c.hints as Hints).count() };
+      case "read": {
+        const text = (await find(c).first().innerText({ timeout: 10_000 })).trim().slice(0, 2_000);
+        const shown = out(text, false);
+        journalAct(c, (target) => ({ kind: "read", target, as: c.as, value: shown }));
+        return { as: c.as, text: shown };
+      }
       case "note":
         journal({ kind: "note", text: c.text });
         return { ok: true };

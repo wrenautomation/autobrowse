@@ -26,6 +26,8 @@ function fakeExplorer(trees: string[]) {
             throw new Error("locator.click: Timeout 10000ms exceeded.");
           i++;
           return { url: `https://site.test/p${i}` };
+        case "read":
+          return { as: c.as, text: `text of ${c.hints.name}` };
         case "pause":
           paused = true;
           return { paused };
@@ -130,6 +132,20 @@ describe("exploreWithAgent", () => {
     });
     expect(asked).toEqual(["a purchase"]);
     expect(r).toMatchObject({ achieved: true, summary: "bought" });
+  });
+  it("reads an element under a name and sees the text next turn", async () => {
+    const { ex, calls } = fakeExplorer(['- heading "Welcome, Jane" [level=1]\n- button "Go"']);
+    const llm = fakeLlm([
+      { thought: "read it", action: { cmd: "read", ref: 1, as: "greeting" } },
+      { thought: "done", action: { cmd: "done", summary: "Welcome, Jane", achieved: true } },
+    ]);
+    const r = await exploreWithAgent({ explorer: ex, llm, goal: "report the greeting" });
+    expect(r.achieved).toBe(true);
+    expect(calls.find((c) => c.cmd === "read")).toMatchObject({
+      hints: { role: "heading", name: "Welcome, Jane" },
+      as: "greeting",
+    });
+    expect(llm.requests[1]?.prompt).toContain('read [1] as greeting → ok: "text of Welcome, Jane"');
   });
   it("hands over on human", async () => {
     const { ex } = fakeExplorer(['- button "Buy now"']);

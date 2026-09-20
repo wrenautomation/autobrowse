@@ -32,6 +32,10 @@ Browserbase takes them.
 - **Verified.** A browser step is proved by an API read afterwards (the
   purchase by the Registrar API, DKIM by the record's shape, the user by
   Directory). The trace is for the person; the API read is for the machine.
+- **Read.** A flow can keep text as well as act: `read {ref, as}` in the
+  agent, `read` in explore mode, `fp.read(hints)` in a compiled step. The
+  values come back as the step's result, so a workflow scrapes the same
+  way it clicks, with no model at run time.
 - **Recorded.** `autobrowse record <name>` opens a headed browser with an
   observer: clicks, typing, navigations, each with a screenshot and
   locator hints (role, label, text; never CSS). Typed secrets are redacted

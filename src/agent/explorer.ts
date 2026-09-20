@@ -32,6 +32,8 @@ export const stepSchema = z.object({
       goal: z.string(),
     }),
     z.object({ cmd: z.literal("key"), key: z.string() }),
+    /** Read a control's or heading's text and keep it under a name; the compiled flow reads it too. */
+    z.object({ cmd: z.literal("read"), ref, as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/) }),
     /** The goal is met (or cannot be): say what happened. */
     z.object({ cmd: z.literal("done"), summary: z.string(), achieved: z.boolean() }),
     /** Something only a person can do (a captcha, a choice with money on it). */
@@ -87,10 +89,11 @@ Actions, with "cmd" set to exactly one of these words:
   {"cmd":"upload","ref":n,"files":["path"],"goal":"why"}
   {"cmd":"open","url":"https://..."}
   {"cmd":"key","key":"Escape"}
+  {"cmd":"read","ref":n,"as":"camelName"}   (keep an element's text under a name; a workflow built from this run will read it the same way)
   {"cmd":"done","summary":"what happened","achieved":true|false}
   {"cmd":"human","reason":"why a person must do this"}
 ref is the [n] of a control in the digest; only those numbers exist.
-Control names carry content too: a link named "Name Jane Doe" tells you the name is Jane Doe. When the goal asks you to report something, quote it in the done summary.
+Control names carry content too: a link named "Name Jane Doe" tells you the name is Jane Doe. When the goal asks you to report or collect something, read it with read{ref,as} first, then quote it in the done summary.
 Rules: never invent values; use only the inputs given. Never buy, delete, or submit money-related forms: return human{reason} instead.
 Prefer the shortest path. When the tree shows the goal is met, return done with achieved=true.
 If the same step fails twice, try another element or return done with achieved=false.`;
@@ -118,7 +121,7 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
     seen = { url: url.url, page };
     const history = steps
       .slice(-6)
-      .map((s) => `${s.n}. ${describe(s)} → ${s.error ? `FAILED: ${s.error}` : "ok"}`)
+      .map((s) => `${s.n}. ${describe(s)} → ${s.error ? `FAILED: ${s.error}` : outcome(s)}`)
       .join("\n");
     const prompt = `GOAL: ${o.goal}\n${inputs ? `INPUTS:\n${inputs}\n` : ""}\nSTEP ${n} of ${max}\nURL: ${url.url}\nRECENT STEPS:\n${history || "(none)"}\n\nPAGE:\n${shown}`;
     let step: Step;
@@ -207,7 +210,17 @@ function toCommand(a: Act, page: Digest): ExploreCommand {
       return { cmd: "press", hints, key: a.key, goal: a.goal };
     case "upload":
       return { cmd: "upload", hints, files: a.files, goal: a.goal };
+    case "read":
+      return { cmd: "read", hints, as: a.as };
   }
+}
+
+/** What a step gave back, when it is worth the model's eyes: the text a read found. */
+function outcome(s: StepRecord): string {
+  const r = s.result as { text?: string } | null;
+  if (s.step?.action.cmd === "read" && r?.text !== undefined)
+    return `ok: ${JSON.stringify(r.text.slice(0, 300))}`;
+  return "ok";
 }
 
 function describe(s: StepRecord): string {
@@ -215,6 +228,12 @@ function describe(s: StepRecord): string {
   const a = s.step.action;
   const at = "ref" in a ? ` [${a.ref}]` : "";
   const what =
-    a.cmd === "open" ? ` ${a.url}` : a.cmd === "fill" || a.cmd === "select" ? ` "${a.value}"` : "";
+    a.cmd === "open"
+      ? ` ${a.url}`
+      : a.cmd === "fill" || a.cmd === "select"
+        ? ` "${a.value}"`
+        : a.cmd === "read"
+          ? ` as ${a.as}`
+          : "";
   return `${a.cmd}${at}${what}`;
 }

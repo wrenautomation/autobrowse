@@ -150,6 +150,8 @@ function Actions({ rec }: { rec: Recording }) {
         return `upload ${a.files.map((f) => f.split("/").pop()).join(", ")} to ${a.target.name ?? a.target.tag}`;
       case "submit":
         return "submit";
+      case "read":
+        return `read ${a.target.name ?? a.target.text ?? a.target.tag} as ${a.as}: "${a.value.slice(0, 60)}"`;
       case "note":
         return `note: ${a.text}`;
       case "pause":

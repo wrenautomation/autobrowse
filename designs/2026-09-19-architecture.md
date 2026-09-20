@@ -302,3 +302,14 @@ signature (`webhook-id`, `webhook-timestamp`, `webhook-signature`, HMAC
 over `id.ts.body`) replaces the bearer when a secret is set; only the
 operator's number is answered. Same command parser as every channel.
 Not live: needs a Linq key and a registered webhook.
+
+## Read op (2026-09-20)
+
+Scraping is a first-class op, not a separate system. Recorder action
+`read {target, as, value}`; explore command `read {hints, as}` (journaled,
+text masked like a transcript); agent action `read {ref, as}` with the
+text shown to the model on the next turn; `FlowPage.read(hints)`; outline
+op `read`; a compiled step with reads returns `Record<string, string>` and
+its result detail is that JSON. Headings, dialogs, alerts, status and
+cells are numbered refs now so they can be read; bare text stays
+unnumbered so a text-only change is still a delta.

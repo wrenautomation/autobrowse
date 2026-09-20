@@ -49,6 +49,14 @@ const recording: Recording = {
       key: "Enter",
     },
     { t: 3, kind: "navigate", url: "https://dash.cloudflare.com/results?q=x" },
+    {
+      t: 3.5,
+      kind: "read",
+      url: "https://dash.cloudflare.com/results?q=x",
+      target: h({ tag: "td", role: "cell", name: "$9.77" }),
+      as: "priceText",
+      value: "$9.77",
+    },
     { t: 4, kind: "note", url: "https://dash.cloudflare.com/results?q=x", text: "Checkout" },
     {
       t: 5,
@@ -85,17 +93,23 @@ describe("structure", () => {
     const o = structure(recording);
     expect(o.steps.map((s) => [s.name, s.kind, s.irreversible])).toEqual([
       ["register", "browser", false],
+      ["results", "browser", false],
       ["checkout", "browser", true],
       ["terminal", "terminal", false],
     ]);
+    const results = o.steps[1];
+    if (results?.kind !== "browser") throw new Error("expected browser step");
+    expect(results.ops).toEqual([
+      { kind: "read", goal: "read $9.77 as priceText", hints: expect.anything(), as: "priceText" },
+    ]);
     expect(o.fields).toEqual([{ key: "domain", label: "Domain", example: "wren-six.com" }]);
     expect(o.secrets).toEqual([{ key: "cardCvv", label: "Card CVV" }]);
-    const checkout = o.steps[1];
+    const checkout = o.steps[2];
     if (checkout?.kind !== "browser") throw new Error("expected browser step");
     expect(checkout.url).toBe("https://dash.cloudflare.com/results?q=x");
     expect(checkout.ops.map((op) => op.kind)).toEqual(["fill", "human", "click"]);
     expect(checkout.description).toBe("Checkout");
-    const terminal = o.steps[2];
+    const terminal = o.steps[3];
     if (terminal?.kind !== "terminal") throw new Error("expected terminal step");
     expect(terminal.description).toMatch(/1 need a person \(gh auth login\)/);
   });
@@ -111,6 +125,10 @@ describe("render", () => {
     expect(src).toContain('gate("human"');
     expect(src).toContain("throw new NeedsHuman(");
     expect(src).toContain("irreversible: true");
+    expect(src).toContain(
+      'out.priceText = await fp.read({ tag: "td", role: "cell", name: "$9.77" });',
+    );
+    expect(src).toContain("return done(JSON.stringify(out));");
   });
 });
 
@@ -122,7 +140,7 @@ describe("polish", () => {
         description: "Buy a domain at Cloudflare",
         steps: [
           { index: 0, name: "Search Domain", proof: "registrar API lists it" },
-          { index: 1, irreversible: false, name: "search-domain" },
+          { index: 2, irreversible: false, name: "search-domain" },
           { index: 9, name: "ghost" },
         ],
       },
@@ -131,9 +149,9 @@ describe("polish", () => {
     expect(outline.description).toBe("Buy a domain at Cloudflare");
     expect(outline.steps[0]?.name).toBe("search-domain");
     expect(outline.steps[0]?.proof).toBe("registrar API lists it");
-    expect(outline.steps[1]?.name).toBe("checkout"); // collision kept the old name
-    expect(outline.steps[1]?.irreversible).toBe(true); // never downgraded
-    expect(outline.steps).toHaveLength(3);
+    expect(outline.steps[2]?.name).toBe("checkout"); // collision kept the old name
+    expect(outline.steps[2]?.irreversible).toBe(true); // never downgraded
+    expect(outline.steps).toHaveLength(4);
   });
 });
 

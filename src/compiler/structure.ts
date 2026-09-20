@@ -184,6 +184,14 @@ export function structure(rec: Recording): Outline {
         });
         break;
       }
+      case "read":
+        add({
+          kind: "read",
+          goal: `read ${describe(a.target)} as ${a.as}`,
+          hints: stripHints(a.target),
+          as: a.as,
+        });
+        break;
       case "submit":
         // Follows the click or Enter that caused it.
         break;

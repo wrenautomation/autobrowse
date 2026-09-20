@@ -80,6 +80,8 @@ export interface FlowPage {
   /** Whether something matching `hints` is on the page right now. */
   /** Visible now, or within `withinMs` when given (a page still rendering its next step). */
   has(hints: Hints, withinMs?: number): Promise<boolean>;
+  /** The element's text, trimmed and capped: what a scraping step keeps. */
+  read(hints: Hints): Promise<string>;
   wait(ms: number): Promise<void>;
   /** Resolves when the URL matches, or null at the timeout. */
   waitForUrl(pattern: RegExp | ((url: string) => boolean), timeoutMs: number): Promise<boolean>;
@@ -311,6 +313,10 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
                   .first()
                   .isVisible()
                   .catch(() => false),
+          read: async (hints) =>
+            (await locate(active, hints).first().innerText({ timeout: 10_000 }))
+              .trim()
+              .slice(0, 2_000),
           wait: (ms) => active.waitForTimeout(ms),
           waitForUrl: (pattern, timeout) =>
             active

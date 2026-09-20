@@ -24,25 +24,27 @@ const TREE = `- banner:
 
 describe("digest", () => {
   const d = digest(TREE);
-  it("numbers only what can be acted on, keeps bearings, drops scaffolding and repeats", () => {
+  it("numbers what can be acted on or read, keeps bearings, drops scaffolding and repeats", () => {
     expect(d.text).toBe(`[1] link "Google Account"
 [2] button "Search"
 [3] link "Home"
 [4] link "Personal info"
 [5] link "Home"
-heading [level=1]: Welcome, William
+[6] heading [level=1]: Welcome, William
   Manage your info, privacy, and security
   ${"x".repeat(99)}…
-[6] checkbox "Dark" [checked]
-[7] button "Account: Jane (a@b.c), plan"
-[8] textbox "Say "hi""
-  one`);
+[7] checkbox "Dark" [checked]
+[8] button "Account: Jane (a@b.c), plan"
+[9] textbox "Say "hi""
+[10] cell: one`);
     expect(d.text).not.toMatch(/generic|img|banner/);
   });
   it("refs resolve to role + exact name, nth among twins", () => {
     expect(hintsFor(d.refs[2] as never)).toEqual({ role: "link", name: "Home" });
     expect(hintsFor(d.refs[4] as never)).toEqual({ role: "link", name: "Home", nth: 1 });
-    expect(hintsFor(d.refs[7] as never)).toEqual({ role: "textbox", name: 'Say "hi"' });
+    expect(hintsFor(d.refs[8] as never)).toEqual({ role: "textbox", name: 'Say "hi"' });
+    expect(hintsFor(d.refs[5] as never)).toEqual({ role: "heading", name: "Welcome, William" });
+    expect(hintsFor(d.refs[9] as never)).toEqual({ role: "cell", name: "one" });
   });
   it("caps the control list and says so", () => {
     const many = Array.from({ length: 90 }, (_, i) => `- button "b${i}"`).join("\n");

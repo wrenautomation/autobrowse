@@ -40,6 +40,8 @@ export type Action =
   | (Base & { kind: "press"; target: LocatorHints; key: string })
   | (Base & { kind: "upload"; target: LocatorHints; files: string[] })
   | (Base & { kind: "submit"; target: LocatorHints })
+  /** Text read off an element and kept under a name: the scraping half of a workflow. */
+  | (Base & { kind: "read"; target: LocatorHints; as: string; value: string })
   | (Base & { kind: "note"; text: string })
   | (Base & { kind: "pause" })
   | (Base & { kind: "resume" });

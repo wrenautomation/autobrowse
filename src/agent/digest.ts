@@ -97,12 +97,22 @@ export function digest(aria: string, o: DigestOptions = {}): Digest {
       lines.push(`[${n}] ${role}${name ? ` "${name}"` : ""}${attrs ? ` ${attrs.trim()}` : ""}`);
       continue;
     }
-    if (CONTEXT.has(role)) {
-      const body = name || tail || "";
-      if (body) lines.push(`${role}${attrs ? attrs : ""}: ${clip(body, width)}`);
+    if (CONTEXT.has(role) || role === "cell") {
+      const body = clip(name || tail || "", width);
+      if (!body) continue;
+      if (refs.length >= maxRefs) {
+        hiddenRefs++;
+        continue;
+      }
+      const key = `${role}\u0000${body}`;
+      const nth = twins.get(key) ?? 0;
+      twins.set(key, nth + 1);
+      const n = refs.length + 1;
+      refs.push({ n, role, name: body, nth, attrs: attrs.trim() });
+      lines.push(`[${n}] ${role}${attrs ? ` ${attrs.trim()}` : ""}: ${body}`);
       continue;
     }
-    if (role === "text" || role === "paragraph" || role === "cell") {
+    if (role === "text" || role === "paragraph") {
       const body = clip(tail ?? name, width);
       if (!body || seenText.has(body) || textLines >= maxText) continue;
       seenText.add(body);
