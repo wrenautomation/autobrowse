@@ -1,5 +1,5 @@
 /**
- * Recorded 2026-09-20 on google.
+ * Open the Personal info page on Google and report the display name..
  * Compiled from the recording "google-name". Edit freely: the outline was the
  * source until this file was written; from here on this file is.
  */
@@ -21,11 +21,11 @@ export type Memo = Record<string, unknown>;
 
 type Step<S extends string> = StepDef<Plan, Deps, Memo, S>;
 
-export type TheGoalIsToOpenThePersonalInfoInput = Record<string, never>;
+export type OpenPersonalInfoInput = Record<string, never>;
 
-const theGoalIsToOpenThePersonalInfoFlow = defineFlow<TheGoalIsToOpenThePersonalInfoInput, void>({
+const openPersonalInfoFlow = defineFlow<OpenPersonalInfoInput, void>({
   site: "google",
-  name: "the-goal-is-to-open-the-personal-info",
+  name: "open-personal-info",
   async run(fp, input) {
     await fp.open("https://myaccount.google.com/");
     await fp.act(
@@ -36,23 +36,19 @@ const theGoalIsToOpenThePersonalInfoFlow = defineFlow<TheGoalIsToOpenThePersonal
   },
 });
 
-const theGoalIsToOpenThePersonalInfo: Step<"the-goal-is-to-open-the-personal-info"> = {
-  name: "the-goal-is-to-open-the-personal-info",
+const openPersonalInfo: Step<"open-personal-info"> = {
+  name: "open-personal-info",
   async run({ fx, deps, plan }) {
-    await fx.run("browser the-goal-is-to-open-the-personal-info", () =>
-      deps.browser.run(theGoalIsToOpenThePersonalInfoFlow, {}),
-    );
+    await fx.run("browser open-personal-info", () => deps.browser.run(openPersonalInfoFlow, {}));
     // TODO: prove the result through an API read where one exists.
-    return done(
-      "The goal is to open the Personal info page and report the display name. The Personal info page can be accessed through the menuitem 'Personal info' or the link 'Go to Personal info'. I will click on the menuitem 'Personal info' to navigate to the page.",
-    );
+    return done("Navigate to the Personal info page by clicking the 'Personal info' menuitem.");
   },
 };
 
 export const workflow = defineWorkflow<Deps, Memo>()({
   name: "google-name",
-  description: "Recorded 2026-09-20 on google",
+  description: "Open the Personal info page on Google and report the display name.",
   plan: planSchema,
-  steps: [theGoalIsToOpenThePersonalInfo],
+  steps: [openPersonalInfo],
   emptyMemo: () => ({}),
 });
