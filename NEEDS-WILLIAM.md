@@ -38,6 +38,19 @@ it. Dated 2026-09-21.
   `pnpm autobrowse desktop setup` prints (needs your sudo password;
   the agent never sees it).
 
+## Content channels (YouTube + LinkedIn; wren `designs/2026-09-21-content-channels.md`)
+
+- **LinkedIn login**: `pnpm autobrowse creds paste linkedin` with
+  `email password [authenticator key]` on the clipboard. No LinkedIn
+  credential is stored, so no LinkedIn flow can be explored yet.
+- **LinkedIn developer app** (Client ID/secret; products "Share on
+  LinkedIn" + "Sign In with LinkedIn using OpenID Connect"): needs a
+  LinkedIn Page to attach to. Say which Page, or that I should create
+  one for Wren Automation.
+- **YouTube**: which Google account owns the channel? If it is
+  jinwilliam.jin@gmail.com the stored `google` cred covers the login;
+  the OAuth client + consent I can drive from there.
+
 ## Keys not yet obtained
 
 - `BROWSERBASE_*`: skipped on purpose (no Browserbase).
