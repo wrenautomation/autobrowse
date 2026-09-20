@@ -44,6 +44,7 @@ const agent = llm
   : undefined;
 startUiServer({
   ...(agent ? { agent } : {}),
+  ...(llm ? { llm } : {}),
   port: settings.uiPort,
   ...(settings.uiHost ? { host: settings.uiHost } : {}),
   distDir: `${root}/ui/dist`,

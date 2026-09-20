@@ -4,13 +4,14 @@
  * and compile it. This is where a workflow is born.
  */
 import { useEffect, useState } from "react";
-import { api, type SessionView } from "../api.js";
+import { api, type Proposal, type SessionView } from "../api.js";
 import { href, useLoad } from "../hooks.js";
 
 const LIVE = new Set(["starting", "running", "paused", "needs-human"]);
 
 export function ExplorePage() {
   const { data, error, reload } = useLoad(() => api.agents(), []);
+  const [prefill, setPrefill] = useState<Proposal | null>(null);
   useEffect(() => {
     const t = setInterval(reload, 3000);
     return () => clearInterval(t);
@@ -22,7 +23,8 @@ export function ExplorePage() {
         The agent finds the way once; save the journal, compile it, run the flow forever. Pause any
         time to do a step by hand: it lands in the same journal.
       </p>
-      <StartForm onStarted={(v) => (location.hash = href("explore", v.id))} />
+      <StartForm onStarted={(v) => (location.hash = href("explore", v.id))} prefill={prefill} />
+      <Proposals onPick={setPrefill} />
       {error && <p className="error">{error}</p>}
       <table>
         <thead>
@@ -70,9 +72,69 @@ function pillClass(status: SessionView["status"]): string {
   return "";
 }
 
-function StartForm({ onStarted }: { onStarted: (v: SessionView) => void }) {
+/**
+ * What the evaluator thinks deserves a workflow: each row is one click
+ * into the form above. Computed on demand (one model call), not on load.
+ */
+function Proposals({ onPick }: { onPick: (p: Proposal) => void }) {
+  const [data, setData] = useState<Proposal[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await api.proposals();
+      setData(r.proposals);
+      setMsg(`model ${r.usage.inputTokens} in / ${r.usage.outputTokens} out`);
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="card">
+      <div className="row">
+        <strong>What deserves a workflow</strong>
+        <button type="button" disabled={busy} onClick={load}>
+          {busy ? "looking…" : data ? "look again" : "ask the evaluator"}
+        </button>
+        <span className="muted">
+          from flow failures, sessions and recordings {msg ? `· ${msg}` : ""}
+        </span>
+      </div>
+      {data?.length === 0 && <p className="muted">nothing recurring yet</p>}
+      {data?.map((p) => (
+        <div className="row" key={p.title} style={{ marginTop: 8 }}>
+          <span className="pill">{p.occurrences}×</span>
+          <span className="grow">
+            <strong>{p.title}</strong> <span className="muted">{p.why}</span>
+            {p.covered ? <span className="pill done">covered</span> : null}
+          </span>
+          <button type="button" className="primary" onClick={() => onPick(p)}>
+            explore this
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StartForm({
+  onStarted,
+  prefill,
+}: {
+  onStarted: (v: SessionView) => void;
+  prefill: Proposal | null;
+}) {
   const [site, setSite] = useState("google");
   const [goal, setGoal] = useState("");
+  useEffect(() => {
+    if (!prefill) return;
+    setSite(prefill.site);
+    setGoal(prefill.goal);
+  }, [prefill]);
   const [url, setUrl] = useState("");
   const [inputs, setInputs] = useState("");
   const [maxSteps, setMaxSteps] = useState("25");

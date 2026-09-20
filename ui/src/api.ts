@@ -4,6 +4,7 @@
  * worker needs one, lives in localStorage and goes in a header only.
  */
 
+import type { Proposal } from "../../src/agent/evaluator.js";
 import type { SessionView, StartRequest } from "../../src/agent/sessions.js";
 import type { Compiled } from "../../src/compiler/index.js";
 import type { RunEvent } from "../../src/engine/events.js";
@@ -11,7 +12,16 @@ import type { RunStatusView } from "../../src/engine/object.js";
 import type { RunRow } from "../../src/engine/registry.js";
 import type { Recording } from "../../src/recorder/types.js";
 
-export type { Compiled, Recording, RunEvent, RunRow, RunStatusView, SessionView, StartRequest };
+export type {
+  Compiled,
+  Proposal,
+  Recording,
+  RunEvent,
+  RunRow,
+  RunStatusView,
+  SessionView,
+  StartRequest,
+};
 
 export interface WorkflowInfo {
   name: string;
@@ -77,6 +87,10 @@ export const api = {
   agentSave: (id: string, name: string) =>
     post(`/api/agent/${id}/save`, { name }) as Promise<SessionView>,
   agentShot: (id: string, n: number) => `/api/agent/${id}/shot/${n}`,
+  proposals: () =>
+    call<{ proposals: Proposal[]; usage: { inputTokens: number; outputTokens: number } }>(
+      "/api/agent/proposals",
+    ),
   agentRepair: (failure: string) => post("/api/agent/repair", { failure }) as Promise<SessionView>,
 };
 

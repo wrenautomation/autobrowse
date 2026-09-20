@@ -53,6 +53,11 @@ Browserbase takes them.
   the agent on that page toward the flow's goal and records the way
   through; compile it, splice it in. The loop: run → fail → explore →
   compile → run.
+- **Self-building.** The evaluator (`/api/agent/proposals`, Explore
+  page) reads flow failures, agent sessions and recordings and says which
+  recurring needs deserve a workflow, each as a site + goal one click from
+  an agent session. The agent's `human` is a pause with a prompt: do the
+  captcha or the purchase in the window, resume, it goes on.
 - **Accounts.** A site name may carry an account: `google@ops` is the
   google walk with credential and browser profile `google@ops`. One
   profile per identity, so two accounts never meet in a chooser.

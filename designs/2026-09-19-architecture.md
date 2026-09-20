@@ -118,8 +118,11 @@ screenshot per step); one explore server per session on its own port.
 url, last act goal, error, kind) is the seam between deterministic and
 exploratory: `autobrowse repair <file>` opens the agent on that URL with
 the flow's goal. Run → fail → explore → compile → run is the self-building
-loop; the evaluator that decides *which* recurring need deserves a flow
-is not built.
+loop. `agent/evaluator.ts` is the judgement: failure records (all
+`*.failure.json` in the artifacts dir), sessions and recordings in, up
+to ten ranked proposals out (site, runnable goal, occurrences, covered).
+Not yet: proposals acted on without a person (a schedule that explores,
+compiles and registers the flow itself).
 
 ## Accounts
 

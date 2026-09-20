@@ -12,6 +12,7 @@ import { Readable } from "node:stream";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
+import { proposeWorkflows, readFailures } from "../agent/evaluator.js";
 import { readFailure, repairRequest } from "../agent/repair.js";
 import type { AgentSessions } from "../agent/sessions.js";
 import type { Ingress } from "../app/client.js";
@@ -22,6 +23,7 @@ import type { GateName } from "../engine/effects.js";
 import type { RunEvent } from "../engine/events.js";
 import type { RunRow } from "../engine/registry.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
+import type { Llm } from "../llm/types.js";
 import { listRecordings, loadRecording, recordingDir } from "../recorder/store.js";
 import type { Recording } from "../recorder/types.js";
 import { bearerAuth, rateLimit } from "./auth.js";
@@ -37,6 +39,8 @@ export interface ApiDeps {
   token: string | undefined;
   /** Agent sessions (explore by model with play/pause); absent when no model is configured. */
   agent?: AgentSessions;
+  /** The model the evaluator uses; absent when none is configured. */
+  llm?: Llm;
 }
 
 const agentStart = z.object({
@@ -209,6 +213,25 @@ export function api(deps: ApiDeps): Hono {
   });
 
   app.get("/api/agent", (c) => c.json(deps.agent?.list() ?? []));
+  /** The evaluator: which recurring needs deserve a workflow, from failures, sessions and recordings. */
+  app.get("/api/agent/proposals", async (c) => {
+    if (!deps.llm) return c.json({ error: "no model configured: set LLM_PROVIDER" }, 503);
+    const recordings = (await listRecordings(deps.recordingsDir)).map((r) => ({
+      name: r.name,
+      site: r.site,
+    }));
+    try {
+      return c.json(
+        await proposeWorkflows(deps.llm, {
+          failures: readFailures(deps.artifactsDir),
+          sessions: deps.agent?.list() ?? [],
+          recordings,
+        }),
+      );
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 502);
+    }
+  });
   /** A failed step's record → an agent session on that page toward the flow's goal. */
   app.post("/api/agent/repair", async (c) => {
     if (!deps.agent) return c.json({ error: "no model configured: set LLM_PROVIDER" }, 503);
