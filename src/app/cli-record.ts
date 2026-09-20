@@ -35,6 +35,42 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
     });
 
   program
+    .command("mcp")
+    .description(
+      "Serve autobrowse as MCP tools over stdio for Claude Code: `claude mcp add autobrowse -- pnpm autobrowse mcp`",
+    )
+    .option("--port <port>", "first loopback port for sessions", "9300")
+    .action(async (o: { port: string }) => {
+      const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
+      const { startExplore } = await import("../explore/server.js");
+      const { buildMcpServer } = await import("../mcp/server.js");
+      const { version } = JSON.parse(
+        await import("node:fs").then((fs) =>
+          fs.readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+        ),
+      ) as { version: string };
+      let port = Number(o.port);
+      const server = buildMcpServer({
+        version,
+        open: async (site, url) => {
+          const ex = await startExplore({
+            site,
+            browser: browserOptions(settings, false),
+            recordingsDir: settings.recordingsDir,
+            port: port++,
+            login: loginFor(settings, gmailFor(settings)),
+            pace: paceFor(settings),
+          });
+          if (url) await ex.exec({ cmd: "open", url });
+          return ex;
+        },
+      });
+      // stdout is the protocol: anything else goes to stderr.
+      console.log = (...a: unknown[]) => console.error(...a);
+      await server.connect(new StdioServerTransport());
+    });
+
+  program
     .command("record <name>")
     .description(
       "Record a chore: a headed browser with an observer, play/pause from this terminal, optional terminal capture",

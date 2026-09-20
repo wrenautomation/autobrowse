@@ -49,3 +49,19 @@ at a keyboard with a hard goal wants B.
   laptop; the box has no interactive Claude Code, so B is laptop-only.
 - Whether B should reuse the agent's step schema as tool schemas (yes: one
   vocabulary, two callers).
+
+## Shape B, built 2026-09-21
+
+`autobrowse mcp` serves the explore session as MCP tools over stdio;
+`.mcp.json` in the repo registers it, so Claude Code in this directory
+has `start`, `aria`, `open`, `click`, `fill`, `os`, `command`, `save`,
+`close`, `sessions`. One session per site profile, the site's stored login
+applies, every act is journaled, `save` → `autobrowse compile`. The
+socket's redaction is the same, so Claude Code sees nothing loopback
+would not show. Outside this repo: `claude mcp add autobrowse -- pnpm
+--dir <autobrowse> -s autobrowse mcp`.
+
+Both shapes now exist: A (Claude Code as the model behind the built-in
+agent, `LLM_PROVIDER=claude-code`) for unattended runs on the box; B for a
+person working with Claude Code on a laptop, who wants it to drive.
+

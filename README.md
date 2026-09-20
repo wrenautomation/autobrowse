@@ -86,6 +86,11 @@ Browserbase takes them.
   that works is journaled as a recording; `save` writes it, `compile`
   takes it from there. Failing flows leave the same aria tree next to the
   screenshot (`<stamp>.aria.txt`).
+- **Claude Code.** `autobrowse mcp` (registered by `.mcp.json`) gives
+  Claude Code the session as tools: `start`, `aria`, `click`, `fill`,
+  `open`, `os`, `command`, `save`, `close`. Same journal, same redaction,
+  same compile. `LLM_PROVIDER=claude-code` is the other direction: Claude
+  Code as the model behind the built-in agent.
 - **Desktop.** The same session takes `{"cmd":"os","act":{…}}`: apps,
   the front app's controls as a tree (`tree`, like `aria`), `click` by role
   and name, `type`, `key` ("cmd+shift+4", "return"), `shot`, and `shell`
