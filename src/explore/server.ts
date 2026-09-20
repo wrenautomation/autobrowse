@@ -101,6 +101,8 @@ export interface ExploreOptions {
   port: number;
   /** The runner's login hook: a wall on `open` is signed through with stored credentials. */
   login?: RunnerOptions["login"];
+  /** Delays around acts; null (the default) answers a console at once, an agent passes human pace. */
+  pace?: RunnerOptions["pace"];
   now?: () => number;
 }
 
@@ -152,7 +154,7 @@ export async function startExplore(opts: ExploreOptions): Promise<Explorer> {
         }),
     });
     const runner = flowRunner(opts.browser, {
-      pace: null,
+      pace: opts.pace ?? null,
       ...(opts.login ? { login: opts.login } : {}),
     });
     void runner.run(flow, undefined).catch(() => undefined);

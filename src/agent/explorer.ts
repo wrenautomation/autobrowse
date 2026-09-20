@@ -100,6 +100,8 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
   const steps: StepRecord[] = [];
   const usage: LlmUsage = { inputTokens: 0, outputTokens: 0 };
   let nudged = false;
+  /** The page the last journaled thought was on: one note per page keeps compiled steps page-sized. */
+  let notedOn: string | null = null;
   const inputs = Object.entries(o.inputs ?? {})
     .map(([k, v]) => `${k}: ${v}`)
     .join("\n");
@@ -165,7 +167,10 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
       const summary = step.action.cmd === "done" ? step.action.summary : step.action.reason;
       return { achieved, summary, steps, usage };
     }
-    await o.explorer.exec({ cmd: "note", text: step.thought });
+    if (notedOn !== url.url) {
+      await o.explorer.exec({ cmd: "note", text: step.thought });
+      notedOn = url.url;
+    }
     try {
       rec.result = await o.explorer.exec(toCommand(step.action, page));
     } catch (err) {

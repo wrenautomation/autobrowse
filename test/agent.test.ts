@@ -38,7 +38,7 @@ function fakeExplorer(trees: string[]) {
 }
 
 describe("exploreWithAgent", () => {
-  it("observes, acts, journals its thoughts, and stops on done", async () => {
+  it("observes, acts, journals one thought per page, and stops on done", async () => {
     const { ex, calls } = fakeExplorer([
       '- button "Settings"',
       '- heading "Settings" - checkbox "Dark" [checked]',

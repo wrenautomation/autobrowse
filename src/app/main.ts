@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { serve } from "@restatedev/restate-sdk/node";
 import pino from "pino";
 import { agentSessions } from "../agent/sessions.js";
+import { HUMAN_PACE } from "../browser/flow.js";
 import { httpClient } from "../clients/http.js";
 import { compile, writeRendered } from "../compiler/index.js";
 import { startExplore } from "../explore/server.js";
@@ -51,6 +52,7 @@ const agent = llm
           recordingsDir: expandHome(settings.recordingsDir),
           port,
           login: loginFor(settings, gmailFor(settings)),
+          pace: HUMAN_PACE, // an agent browses at a person's pace: sites watch for the other kind
         }),
     })
   : undefined;
