@@ -44,8 +44,15 @@ aws ecr get-login-password --region ${region} \
 # SSM holds one JSON object; the container wants KEY=VALUE lines. Never echoed.
 aws ssm get-parameter --region ${region} --name "${env_param}" --with-decryption \
   --query Parameter.Value --output text \
-  | python3 -c 'import json,sys
+  | python3 -c 'import json,sys,os
+# A multi-line value (a service-account JSON) cannot live in an env file:
+# it goes to its own 0600 file and the variable names the path.
 for k, v in json.load(sys.stdin).items():
+    if "\n" in v or v.lstrip().startswith("{"):
+        path = f"/data/env/{k.lower()}.json"
+        with open(path, "w") as f: f.write(v)
+        os.chmod(path, 0o600); os.chown(path, 1000, 1000)
+        v = path
     print(f"{k}={v}")' > /data/env/.env.tmp
 chmod 600 /data/env/.env.tmp
 mv /data/env/.env.tmp /data/env/.env
