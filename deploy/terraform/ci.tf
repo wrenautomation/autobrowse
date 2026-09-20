@@ -57,6 +57,16 @@ data "aws_iam_policy_document" "ci" {
     resources = [aws_ecr_repository.worker.arn]
   }
   statement {
+    sid       = "StartStopBox"
+    actions   = ["ec2:StartInstances", "ec2:StopInstances"]
+    resources = [aws_instance.box.arn]
+  }
+  statement {
+    sid       = "SeeBox"
+    actions   = ["ec2:DescribeInstances", "ec2:DescribeInstanceStatus", "ssm:DescribeInstanceInformation"]
+    resources = ["*"]
+  }
+  statement {
     sid       = "RunDeployOnBox"
     actions   = ["ssm:SendCommand"]
     resources = [aws_instance.box.arn, "arn:aws:ssm:${var.region}::document/AWS-RunShellScript"]

@@ -2,8 +2,10 @@
 
 One t3.medium box, the worker container from ECR, `/data` on its own volume,
 secrets in SSM, no inbound port. Restate Cloud reaches the worker through the
-tunnel the worker dials; you reach the UI through SSM port forwarding. Roughly
-$30/month (instance) + $2 (volume) + pennies (ECR, SSM Advanced parameter).
+tunnel the worker dials; you reach the UI through SSM port forwarding. The box is
+**stopped between jobs**: a stopped instance bills nothing, the volume ~$2/month.
+Running it is ~$1/day (t3.medium). `deploy/scripts/box.sh start|stop|status`.
+A deploy starts it, ships, and stops it again if it found it stopped.
 
 ## Once
 
