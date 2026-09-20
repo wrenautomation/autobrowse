@@ -4,8 +4,9 @@ import { join } from "node:path";
 import { serve } from "@restatedev/restate-sdk/node";
 import pino from "pino";
 import { agentSessions } from "../agent/sessions.js";
+import type { FailureRecord } from "../browser/session.js";
 import { httpClient } from "../clients/http.js";
-import { compile, writeRendered } from "../compiler/index.js";
+import { compile, saveOutline, writeRendered } from "../compiler/index.js";
 import { startExplore } from "../explore/server.js";
 import { expandHome } from "../google-auth.js";
 import type { Recording } from "../recorder/types.js";
@@ -97,6 +98,34 @@ const agent = llm
         }),
     })
   : undefined;
+if (settings.autoHeal && agent) {
+  const { healFailure, healLine } = await import("../agent/heal.js");
+  const { proofLine } = await import("../workflows/proof.js");
+  const healing = new Set<string>();
+  app.onFailure = (record, file) => {
+    // Only a plain failure heals; a person's step stays theirs, an interrupted leg retries itself.
+    if (record.kind !== "failed") return;
+    const key = `${record.site}/${record.flow}`;
+    if (healing.has(key)) return;
+    healing.add(key);
+    void healFailure(record, {
+      agent,
+      compiledDir: COMPILED_DIR,
+      recordingsDir: expandHome(settings.recordingsDir),
+      lib: COMPILED_LIB,
+      prove: async (name) => proofLine(await proveCompiled(name)),
+    })
+      .then((out) => {
+        log.info({ heal: out, file }, "heal");
+        return app.channel.note?.(healLine(out));
+      })
+      .catch((err: Error) => log.warn({ err: err.message, file }, "heal failed"))
+      .finally(() => healing.delete(key));
+  };
+  log.info("auto-heal on");
+} else if (settings.autoHeal) {
+  log.warn("AUTO_HEAL set without a model: nothing heals");
+}
 const linq = linqFor(settings);
 const status = statusOf(settings, {
   llm: llm?.id ?? null,
@@ -123,6 +152,21 @@ startUiServer({
   workflows: app.workflows,
   proofs: app.proofs,
   prove: proveCompiled,
+  ...(agent
+    ? {
+        heal: async (record: FailureRecord) => {
+          const { healFailure } = await import("../agent/heal.js");
+          const { proofLine } = await import("../workflows/proof.js");
+          return healFailure(record, {
+            agent,
+            compiledDir: COMPILED_DIR,
+            recordingsDir: expandHome(settings.recordingsDir),
+            lib: COMPILED_LIB,
+            prove: async (name) => proofLine(await proveCompiled(name)),
+          });
+        },
+      }
+    : {}),
   budget: () => budgetOf(llm),
   ingress: ingress({
     url: settings.restateIngressUrl,
@@ -137,7 +181,10 @@ startUiServer({
 async function compileRecording(rec: Recording) {
   const out = await compile(rec, { llm, lib: COMPILED_LIB });
   // Written where the Compiled object loads from: it is on the Runs page at once.
-  await writeRendered(join(COMPILED_DIR, out.outline.name), out);
+  // The outline beside it is the editable source; healing rewrites one step of it.
+  const dir = join(COMPILED_DIR, out.outline.name);
+  await writeRendered(dir, out);
+  await saveOutline(dir, out.outline);
   return out;
 }
 /** One proof run of a compiled flow, kept beside it; the catalog reads it back on the next listing. */

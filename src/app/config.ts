@@ -84,6 +84,11 @@ const schema = z.object({
     .enum(["true", "false", "1", "0"])
     .default("false")
     .transform((v) => v === "true" || v === "1"),
+  /** A compiled step that fails is finished by the agent and rewritten from what it did, then proven. */
+  autoHeal: z
+    .enum(["true", "false", "1", "0"])
+    .default("false")
+    .transform((v) => v === "true" || v === "1"),
   /** Site credentials for automated sign-in; 0600 JSON. Env (`AUTOBROWSE_CRED_*`) is read first. */
   credentialsFile: z.string().min(1).default("~/.config/autobrowse/credentials.json"),
   /** How the credential file is sealed: keychain (macOS, default there), none (containers; credentials come from env). */
@@ -192,6 +197,7 @@ export const ENV_KEYS = {
   sentryEnvironment: "SENTRY_ENVIRONMENT",
   evaluateEveryHours: "EVALUATE_EVERY_HOURS",
   autoBuild: "AUTO_BUILD",
+  autoHeal: "AUTO_HEAL",
   credentialsFile: "CREDENTIALS_FILE",
   credentialsCipher: "CREDENTIALS_CIPHER",
   codesInbox: "CODES_INBOX",

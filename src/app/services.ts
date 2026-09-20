@@ -22,7 +22,7 @@ import {
 import type { FlowRunner } from "../browser/flow.js";
 import { flowRunner, HUMAN_PACE, type Pace } from "../browser/flow.js";
 import { llmRepairer, noRepairer, rememberingRepairer } from "../browser/repair.js";
-import type { BrowserOptions } from "../browser/session.js";
+import type { BrowserOptions, FailureRecord } from "../browser/session.js";
 import {
   type Channel,
   channels,
@@ -174,6 +174,8 @@ export interface App {
   /** The UI's live feed; also one of the channels. */
   bus: EventBus;
   memory: Memory;
+  /** Set by the host once the agent exists: every failure record goes here (healing). */
+  onFailure: ((record: FailureRecord, file: string) => void) | null;
 }
 
 /** Env credentials first (a Secret in k8s), then the sealed 0600 file; writes go to the file. */
@@ -351,7 +353,9 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   const channel = channels([...list, bus, memoryChannel(memory)]);
 
   const guards = parseGuards(settings.guards);
+  const failures: { hook: App["onFailure"] } = { hook: null };
   const browser = flowRunner(browserOptions(settings), {
+    onFailure: (record, file) => failures.hook?.(record, file),
     pace: paceFor(settings),
     repairer: rememberingRepairer(memory, llm ? llmRepairer(llm) : noRepairer),
     login: loginFor(settings, gmail),
@@ -478,5 +482,11 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     browser,
     bus,
     memory,
+    get onFailure() {
+      return failures.hook;
+    },
+    set onFailure(hook) {
+      failures.hook = hook;
+    },
   };
 }

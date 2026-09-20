@@ -107,6 +107,7 @@ export const api = {
       "/api/agent/proposals",
     ),
   agentRepair: (failure: string) => post("/api/agent/repair", { failure }) as Promise<SessionView>,
+  heal: (failure: string) => post("/api/agent/heal", { failure }) as Promise<HealOutcome>,
 };
 
 /**
@@ -160,4 +161,12 @@ export function subscribe(onEvent: (event: RunEvent) => void): () => void {
   };
   void run();
   return () => ctl.abort();
+}
+
+export interface HealOutcome {
+  status: "healed" | "proof-failed" | "needs-human" | "failed" | "no-workflow";
+  workflow: string | null;
+  step: string | null;
+  session: string | null;
+  summary: string;
 }

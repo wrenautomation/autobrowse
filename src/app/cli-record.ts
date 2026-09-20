@@ -1,6 +1,7 @@
 /** `autobrowse login <site>` and `autobrowse record <name>`: the recorder's command line. */
 import { join } from "node:path";
 import type { Command } from "commander";
+import { expandHome } from "../google-auth.js";
 import type { Settings } from "./config.js";
 import { browserOptions, gmailFor, llmFor, loginFor, paceFor } from "./services.js";
 
@@ -114,6 +115,68 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
       },
     );
 
+  program
+    .command("heal <failure>")
+    .description(
+      "A failed compiled step: the agent finishes it on the page, the step is rewritten from what it did, the flow is proven again",
+    )
+    .option("--no-prove", "rewrite only; skip the proof run")
+    .action(async (failure: string, o: { prove: boolean }) => {
+      const { healFailure, healLine } = await import("../agent/heal.js");
+      const { readFailure } = await import("../agent/repair.js");
+      const { agentSessions } = await import("../agent/sessions.js");
+      const { startExplore } = await import("../explore/server.js");
+      const { COMPILED_DIR, COMPILED_LIB } = await import("./services.js");
+      const llm = llmFor(settings);
+      if (!llm) throw new Error("heal needs a model: set a model key or LLM_PROVIDER=claude-code");
+      const recordingsDir = expandHome(settings.recordingsDir);
+      const agent = agentSessions({
+        llm,
+        dir: join(recordingsDir, ".sessions"),
+        open: (site, port) =>
+          startExplore({
+            site,
+            browser: browserOptions(settings, false),
+            recordingsDir,
+            port,
+            login: loginFor(settings, gmailFor(settings)),
+            pace: paceFor(settings),
+          }),
+      });
+      const record = readFailure(failure, expandHome(settings.artifactsDir));
+      const out = await healFailure(record, {
+        agent,
+        compiledDir: COMPILED_DIR,
+        recordingsDir,
+        lib: COMPILED_LIB,
+        ...(o.prove
+          ? {
+              prove: async (name: string) => {
+                const { loadCompiledWorkflows } = await import("../workflows/compiled.js");
+                const { proofLine, proveWorkflow, writeProof } = await import(
+                  "../workflows/proof.js"
+                );
+                const { flowRunner } = await import("../browser/flow.js");
+                const found = (await loadCompiledWorkflows(COMPILED_DIR)).find(
+                  (c) => c.workflow.name === name,
+                );
+                if (!found) throw new Error(`healed workflow ${name} did not load`);
+                const proof = await proveWorkflow(
+                  found.workflow,
+                  flowRunner(browserOptions(settings), {
+                    pace: paceFor(settings),
+                    login: loginFor(settings, gmailFor(settings)),
+                  }),
+                );
+                writeProof(found.dir, proof);
+                return proofLine(proof);
+              },
+            }
+          : {}),
+      });
+      console.log(healLine(out));
+      if (out.status !== "healed") process.exitCode = 1;
+    });
   program
     .command("compile <name>")
     .description("Recording → outline.json beside it → a workflow module under --out")

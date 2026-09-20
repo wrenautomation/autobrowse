@@ -1,6 +1,6 @@
 /** One run: the open gate first (that is what a person came for), then controls, results, plan. */
 import { useState } from "react";
-import { api, type RunStatusView } from "../api.js";
+import { api, type HealOutcome, type RunStatusView } from "../api.js";
 import { href, useLoad } from "../hooks.js";
 
 export function RunPage({
@@ -194,7 +194,8 @@ function Results({ outcome }: { outcome: RunStatusView["outcome"] }) {
                   }
                 >
                   repair with agent
-                </button>
+                </button>{" "}
+                <HealButton failure={r.failure as string} />
               </>
             ) : null}
             <span className="muted"> · {new Date(r.at).toLocaleTimeString()}</span>
@@ -223,4 +224,45 @@ function Detail({ text }: { text: string }) {
   } catch {
     return <>{text}</>;
   }
+}
+
+/** Heal in place: the agent finishes the step, the step is rewritten, the flow proven; minutes, so it waits. */
+function HealButton({ failure }: { failure: string }) {
+  const [busy, setBusy] = useState(false);
+  const [out, setOut] = useState<HealOutcome | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const heal = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      setOut(await api.heal(failure));
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <span>
+      <button type="button" disabled={busy} onClick={heal}>
+        {busy ? "healing…" : "heal step"}
+      </button>
+      {out ? (
+        <span className={out.status === "healed" ? "muted" : "error"}>
+          {" "}
+          <span className={`pill ${out.status === "healed" ? "done" : "failed"}`}>
+            {out.status}
+          </span>{" "}
+          {out.summary}
+          {out.session && out.status === "needs-human" ? (
+            <>
+              {" "}
+              <a href={href("explore", out.session)}>open session</a>
+            </>
+          ) : null}
+        </span>
+      ) : null}
+      {err ? <span className="error"> {err}</span> : null}
+    </span>
+  );
 }

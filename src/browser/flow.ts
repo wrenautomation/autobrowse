@@ -170,6 +170,8 @@ export interface RunnerOptions {
   repairIrreversible?: boolean;
   /** Every repair, tried or not, so the flow's source can be fixed for good. */
   onRepair?: (report: RepairReport) => void;
+  /** Every failure record written (kind failed/human/interrupted): what healing starts from. */
+  onFailure?: (record: FailureRecord, file: string) => void;
   locks?: KeyedMutex;
 }
 
@@ -426,6 +428,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           };
           artifacts.failure = join(artifactsDir, `${stamp}.failure.json`);
           writeFileSync(artifacts.failure, JSON.stringify(record, null, 2));
+          runner.onFailure?.(record, artifacts.failure);
           if (err instanceof NeedsHuman) {
             err.artifacts = artifacts;
             throw err;

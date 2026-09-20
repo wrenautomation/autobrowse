@@ -13,6 +13,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { proposeWorkflows, readFailures } from "../agent/evaluator.js";
+import type { HealOutcome } from "../agent/heal.js";
 import { readFailure, repairRequest } from "../agent/repair.js";
 import type { AgentSessions } from "../agent/sessions.js";
 import type { Ingress } from "../app/client.js";
@@ -46,6 +47,8 @@ export interface ApiDeps {
   proofs?: Record<string, Proof | null> | (() => Promise<Record<string, Proof | null>>);
   /** Run a compiled workflow once as its proof and keep it; absent when the worker has no browser. */
   prove?(workflow: string): Promise<Proof>;
+  /** Heal a failed compiled step from its failure record: agent finishes it, step rewritten, proven. */
+  heal?(record: FailureRecord): Promise<HealOutcome>;
   ingress: Ingress;
   bus: EventBus;
   recordingsDir: string;
@@ -285,6 +288,19 @@ export function api(deps: ApiDeps): Hono {
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 502);
     }
+  });
+  /** A failed compiled step healed in place: rewritten from what the agent did, then proven. Long: minutes. */
+  app.post("/api/agent/heal", async (c) => {
+    if (!deps.heal) return c.json({ error: "healing needs a model and a browser here" }, 503);
+    const body = repairBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: "failure path required" }, 400);
+    let record: FailureRecord;
+    try {
+      record = readFailure(body.data.failure, deps.artifactsDir);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+    }
+    return c.json(await deps.heal(record));
   });
   /** A failed step's record → an agent session on that page toward the flow's goal. */
   app.post("/api/agent/repair", async (c) => {
