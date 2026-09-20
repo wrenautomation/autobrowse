@@ -11,15 +11,18 @@ import { type HealOutcome, healFailure } from "../agent/heal.js";
 import { type AgentSessions, agentSessions } from "../agent/sessions.js";
 import { type FlowRunner, flowRunner } from "../browser/flow.js";
 import type { FailureRecord } from "../browser/session.js";
+import { httpClient } from "../clients/http.js";
 import type { Compiled, Outline } from "../compiler/index.js";
 import { compile, loadOutline, rerender, saveOutline, writeRendered } from "../compiler/index.js";
 import type { SecretSink } from "../deps/sink.js";
+import { BROWSER_FLOWS } from "../engine/browser-service.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import { type ExploreOptions, type Explorer, startExplore } from "../explore/server.js";
 import type { Approver } from "../gates/payment.js";
 import { expandHome } from "../google-auth.js";
 import type { Llm } from "../llm/types.js";
 import type { Recording } from "../recorder/types.js";
+import { SITES, type SiteFacade, siteFacade } from "../sites/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import type { Jobs } from "../ui/jobs.js";
 import { type CompiledCatalog, compiledCatalog } from "../workflows/compiled.js";
@@ -72,6 +75,8 @@ export interface Backend {
   status?: Status;
   /** Today's model spend against the cap, read live; absent = as the status says. */
   budget?(): Status["budget"];
+  /** Sites served under their official API's shape, with their key/token setup. */
+  sites?: SiteFacade;
 }
 
 /** The port allows a value or a loader for these; every face reads them the same way. */
@@ -213,10 +218,26 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
   const agent = o.llm
     ? agentFor(settings, o.llm, { sink: app.sink, ...(o.notify ? { notify: o.notify } : {}) })
     : undefined;
+  // What setup keeps is visible to the next call at once, whichever sink is behind it.
+  const made = new Map<string, string>();
+  const sites = siteFacade(SITES, {
+    http: httpClient(),
+    env: (name) => made.get(name) ?? process.env[name],
+    sink: {
+      put: async (name, value) => {
+        await app.sink.put(name, value);
+        made.set(name, value);
+      },
+    },
+    runner: app.browser,
+    flow: (name) => BROWSER_FLOWS[name] ?? null,
+    oauthPort: settings.oauthPort,
+  });
   return {
     workflows: app.workflows,
     proofs: app.proofs,
     prove,
+    sites,
     ...(agent
       ? { agent, heal: healer(agent, settings, o.proveAfterHeal === false ? undefined : prove) }
       : {}),

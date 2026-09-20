@@ -9,6 +9,7 @@ import type { Outline } from "../src/compiler/index.js";
 import type { OpenGate, RunStatusView } from "../src/engine/object.js";
 import { type ListQuery, pageOf, type RunRow } from "../src/engine/registry.js";
 import { saveRecording } from "../src/recorder/store.js";
+import { SiteError, type SiteFacade } from "../src/sites/index.js";
 import { api } from "../src/ui/api.js";
 import { eventBus } from "../src/ui/bus.js";
 import { domainWorkflow } from "../src/workflows/domain/index.js";
@@ -472,5 +473,78 @@ describe("api: agent sessions", () => {
       "save abc find-the-name",
       "exec abc note",
     ]);
+  });
+
+  it("serves site apis under the official path, merging query and body, and setup as a job", async () => {
+    const calls: unknown[] = [];
+    const sites: SiteFacade = {
+      list: async () => [{ site: "linkedin", origin: "o", authed: false, routes: [], setup: [] }],
+      status: async (site) => {
+        if (site !== "linkedin") throw new SiteError(404, "no site");
+        return {
+          site,
+          origin: "o",
+          authed: false,
+          routes: [],
+          setup: [
+            { name: "developer-app", makes: ["A"], summary: "", done: false, blockedOn: [] },
+            {
+              name: "consent",
+              makes: ["B"],
+              needs: ["A"],
+              summary: "",
+              done: false,
+              blockedOn: ["A"],
+            },
+          ],
+        };
+      },
+      call: async (site, method, path, input) => {
+        calls.push([site, method, path, input]);
+        if (path === "/rest/posts" && method === "POST" && !("author" in input))
+          throw new SiteError(400, "author: a LinkedIn URN");
+        return { id: "urn:li:share:1" };
+      },
+      setup: async (_site, step) => ({ made: [step] }),
+    };
+    const { app } = await setup(undefined, { sites });
+    expect(await (await app.request("/api/sites")).json()).toEqual([
+      expect.objectContaining({ site: "linkedin" }),
+    ]);
+    expect((await app.request("/api/sites/nope")).status).toBe(404);
+    const ok = await app.request(
+      post("/api/sites/linkedin/rest/posts?x=1", { author: "urn:li:person:a", commentary: "hi" }),
+    );
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ id: "urn:li:share:1" });
+    expect(calls[0]).toEqual([
+      "linkedin",
+      "POST",
+      "/rest/posts",
+      { x: "1", author: "urn:li:person:a", commentary: "hi" },
+    ]);
+    const bad = await app.request(post("/api/sites/linkedin/rest/posts", { commentary: "hi" }));
+    expect(bad.status).toBe(400);
+    const get = await app.request(
+      "/api/sites/linkedin/rest/socialActions/urn:li:share:1/comments?count=3",
+    );
+    expect(get.status).toBe(200);
+    expect(calls[2]).toEqual([
+      "linkedin",
+      "GET",
+      "/rest/socialActions/urn:li:share:1/comments",
+      { count: "3" },
+    ]);
+    expect((await app.request(post("/api/sites/linkedin/setup/consent"))).status).toBe(409);
+    expect((await app.request(post("/api/sites/linkedin/setup/nope"))).status).toBe(404);
+    const job = await app.request(post("/api/sites/linkedin/setup/developer-app"));
+    expect(job.status).toBe(202);
+    const { id } = (await job.json()) as { id: string };
+    expect(await (await app.request(`/api/jobs/${id}?wait=1000`)).json()).toMatchObject({
+      status: "done",
+      result: { made: ["developer-app"] },
+    });
+    const bare = await setup();
+    expect((await bare.app.request("/api/sites")).status).toBe(501);
   });
 });

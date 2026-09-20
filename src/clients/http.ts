@@ -28,8 +28,8 @@ export interface JsonRequest {
   headers?: Record<string, string>;
   /** JSON-encoded when present. */
   body?: unknown;
-  /** Raw body, already encoded; sets no content type. */
-  raw?: string;
+  /** Raw body, already encoded; sets no content type (set one in `headers`). */
+  raw?: string | Uint8Array<ArrayBuffer>;
 }
 
 export interface JsonResponse<T> {

@@ -9,7 +9,7 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { Readable } from "node:stream";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { proposeWorkflows, readFailures } from "../agent/evaluator.js";
@@ -18,6 +18,7 @@ import { summarizeSession } from "../agent/sessions.js";
 import { type Backend, proofsOf, workflowsOf } from "../app/backend.js";
 import type { FailureRecord } from "../browser/session.js";
 import { parseCommand } from "../channels/commands.js";
+import { HttpError } from "../clients/http.js";
 import {
   type LinqClient,
   type LinqEvent,
@@ -32,6 +33,7 @@ import type { RunRow } from "../engine/registry.js";
 import { commandSchema } from "../explore/server.js";
 import { listRecordings, loadRecording, recordingDir } from "../recorder/store.js";
 import { summarizeRecording } from "../recorder/types.js";
+import { type Method, SiteError } from "../sites/index.js";
 import { bearerAuth, rateLimit } from "./auth.js";
 import { Jobs } from "./jobs.js";
 
@@ -40,6 +42,13 @@ export interface ApiDeps extends Backend {
   token: string | undefined;
   /** Linq: replies to the operator's iMessages; `secret` verifies the webhook. */
   linq?: { client: LinqClient; to: string; secret?: string };
+}
+
+/** A site error keeps its status (404 route, 400 request, 501 no leg, 409 blocked); the site's own HTTP error keeps its status too. */
+function siteError(c: Context, err: unknown) {
+  if (err instanceof SiteError) return c.json({ error: err.message }, err.status as 400);
+  if (err instanceof HttpError) return c.json({ error: err.message }, (err.status || 502) as 502);
+  throw err;
 }
 
 const agentStart = z.object({
@@ -162,6 +171,57 @@ export function api(deps: ApiDeps): Hono {
     return c.json(await deps.outline.save(name, parsed.data));
   });
 
+  /**
+   * Site APIs: a service under its official REST shape (`POST
+   * /api/sites/linkedin/rest/posts` is LinkedIn's Posts API). The API leg
+   * answers with a token, the browser leg without; one client either way.
+   * Setup steps make the site's keys and tokens (minutes: a job).
+   */
+  app.get("/api/sites", async (c) =>
+    deps.sites ? c.json(await deps.sites.list()) : c.json({ error: "no site apis here" }, 501),
+  );
+  app.get("/api/sites/:site", async (c) => {
+    if (!deps.sites) return c.json({ error: "no site apis here" }, 501);
+    try {
+      return c.json(await deps.sites.status(c.req.param("site")));
+    } catch (err) {
+      return siteError(c, err);
+    }
+  });
+  app.post("/api/sites/:site/setup/:step", async (c) => {
+    const sites = deps.sites;
+    if (!sites) return c.json({ error: "no site apis here" }, 501);
+    const { site, step } = c.req.param();
+    try {
+      const row = (await sites.status(site)).setup.find((s) => s.name === step);
+      if (!row) return c.json({ error: `no setup step ${step} on ${site}` }, 404);
+      if (row.blockedOn.length)
+        return c.json({ error: `needs ${row.blockedOn.join(", ")} first` }, 409);
+      return c.json(
+        jobs.start("setup", `${site}/${step}`, () => sites.setup(site, step)),
+        202,
+      );
+    } catch (err) {
+      return siteError(c, err);
+    }
+  });
+  app.all("/api/sites/:site/*", async (c) => {
+    const sites = deps.sites;
+    if (!sites) return c.json({ error: "no site apis here" }, 501);
+    const site = c.req.param("site");
+    const path = new URL(c.req.url).pathname.slice(`/api/sites/${site}`.length);
+    const method = c.req.method as Method;
+    const body =
+      method === "GET" || method === "DELETE"
+        ? {}
+        : ((await c.req.json().catch(() => null)) as Record<string, unknown> | null);
+    if (body === null) return c.json({ error: "body must be JSON" }, 400);
+    try {
+      return c.json(await sites.call(site, method, path, { ...c.req.query(), ...body }));
+    } catch (err) {
+      return siteError(c, err);
+    }
+  });
   app.get("/api/jobs", (c) => c.json(jobs.list()));
   /** `?wait=<ms>` (30s at most) holds the answer until the job settles: one request, not a poll loop. */
   app.get("/api/jobs/:id", async (c) => {

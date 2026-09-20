@@ -14,7 +14,9 @@ import { localBackend, proofsOf, workflowsOf } from "./backend.js";
 import { registerAuthCommands } from "./cli-auth.js";
 import { registerDesktopCommands } from "./cli-desktop.js";
 import { registerEnvCommands } from "./cli-env.js";
+import { readJson } from "./cli-json.js";
 import { registerRecordCommands } from "./cli-record.js";
+import { registerSiteCommands } from "./cli-site.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
 import { envStoreFor, WORKFLOWS } from "./services.js";
@@ -46,29 +48,13 @@ program
     }
   });
 
-/** A plan as typed (`{"domain":"x.com"}`), from a file, or piped in (`-`). */
-async function readPlan(arg: string): Promise<unknown> {
-  const text = arg.trim().startsWith("{")
-    ? arg
-    : arg === "-"
-      ? await new Promise<string>((r) => {
-          let buf = "";
-          process.stdin
-            .setEncoding("utf8")
-            .on("data", (c) => (buf += c))
-            .on("end", () => r(buf));
-        })
-      : await readFile(arg, "utf8");
-  return JSON.parse(text);
-}
-
 program
   .command("run <workflow> <key>")
   .description("Start a run from a plan (JSON); omit --plan to resume the stored one")
   .option("--plan <json|file>", "inline JSON, a file path, or - for stdin")
   .option("--dry-run", "plan only; stop before the first irreversible step")
   .action(async (workflow: string, key: string, o: { plan?: string; dryRun?: boolean }) => {
-    const plan = o.plan ? ((await readPlan(o.plan)) as Record<string, unknown>) : null;
+    const plan = o.plan ? ((await readJson(o.plan)) as Record<string, unknown>) : null;
     await api.run(workflow, key).run(plan ? { ...plan, dryRun: o.dryRun ?? false } : null);
     console.log(
       `${plan ? "started" : "resumed"} ${workflow}/${key}; watch: autobrowse status ${workflow} ${key}`,
@@ -98,7 +84,7 @@ program
       if (!workflow) throw new Error(`unknown workflow ${name}; see: autobrowse workflows`);
       if (WORKFLOWS.includes(workflow))
         throw new Error(`${name} needs the worker's deps (APIs); run it with: autobrowse run`);
-      const raw = o.plan ? ((await readPlan(o.plan)) as Record<string, unknown>) : {};
+      const raw = o.plan ? ((await readJson(o.plan)) as Record<string, unknown>) : {};
       const plan = workflow.plan.parse({ ...raw, dryRun: o.dryRun ?? false });
       if (o.prove) {
         // A proof is its own kind of run: gates declined, nothing bought, the outcome kept beside the flow.
@@ -211,6 +197,7 @@ program
   });
 
 registerRecordCommands(program, settings, local);
+registerSiteCommands(program, local);
 registerAuthCommands(program, settings);
 registerEnvCommands(program, settings, { store: () => envStoreFor(settings) });
 registerDesktopCommands(program, tmpdir());

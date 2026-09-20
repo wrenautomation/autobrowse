@@ -1,0 +1,100 @@
+/**
+ * Site APIs: autobrowse exposes a service under the shape of its official
+ * REST API (`POST /api/sites/linkedin/rest/posts` takes what LinkedIn's
+ * Posts API takes and answers what it answers). Behind one route the
+ * official API answers when a token is in hand; a browser flow answers
+ * otherwise (the API is partner-gated, or there is none). The caller has
+ * one client either way. The same module says how the site's keys and
+ * tokens get made: setup steps that are browser flows (developer app,
+ * OAuth client) and OAuth consents autobrowse drives itself.
+ */
+import type { z } from "zod";
+import type { HttpClient } from "../clients/http.js";
+
+export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+/** What a route's `api` leg is handed: the bearer for this site, the HTTP door. */
+export interface ApiLeg {
+  token: string;
+  http: HttpClient;
+}
+
+/** A route's browser leg: the flow by `site/name` and how the request and answer map onto it. */
+export interface BrowserLeg<I, O> {
+  flow: string;
+  /** The flow's input from the request; the request itself when absent. */
+  input?: (i: I) => unknown;
+  /** The official response shape from the flow's output; the output itself when absent. */
+  output?: (o: unknown) => O;
+}
+
+export interface SiteRoute<I = unknown, O = unknown> {
+  method: Method;
+  /** The official path, `{param}` for a path segment: `/rest/socialActions/{urn}/comments`. */
+  path: string;
+  /** Validates the request the way the official API takes it: body for writes, query + path params for reads. */
+  request: z.ZodType<I>;
+  /** The official API's leg; absent when the API has no such call. */
+  api?: (input: I, leg: ApiLeg) => Promise<O>;
+  /** The browser leg; absent when the API always answers. */
+  browser?: BrowserLeg<I, O>;
+  /** Publishes something: said in the route listing so an orchestrator gates it. */
+  irreversible?: boolean;
+  summary: string;
+}
+
+/** One key or token the site needs, and what makes it. */
+export interface SetupStep {
+  name: string;
+  /** Env names this step produces. */
+  makes: readonly string[];
+  /** Env names it needs first. */
+  needs?: readonly string[];
+  /** A browser flow by `site/name` (`linkedin/developer-app`), or an OAuth consent autobrowse drives. */
+  how: { flow: string; input?: Record<string, unknown> } | { oauth: OAuthSpec };
+  summary: string;
+}
+
+export interface OAuthSpec {
+  authorizeUrl: string;
+  tokenUrl: string;
+  scopes: readonly string[];
+  /** Env names of the client id and secret this consent uses. */
+  clientId: string;
+  clientSecret: string;
+  /** Extra query on the authorize URL (`access_type=offline`, `prompt=consent`). */
+  params?: Record<string, string>;
+  /** Env name the refresh token is kept as; the access token is minted from it on demand. */
+  refreshToken: string;
+  /**
+   * Env name the access token itself is kept as, for a site that hands no refresh
+   * token (LinkedIn without programmatic refresh: 60-day tokens; consent again).
+   */
+  accessToken?: string;
+  /** The flow that clicks through the consent page in the site's logged-in profile. */
+  consentFlow: string;
+}
+
+export interface SiteApi {
+  site: string;
+  /** The official API's origin, for the api legs: `https://api.linkedin.com`. */
+  origin: string;
+  /** Env name of the bearer, or an OAuth spec to mint one from a refresh token. */
+  auth: { token: string } | { oauth: OAuthSpec };
+  routes: readonly SiteRoute<never, unknown>[];
+  setup: readonly SetupStep[];
+}
+
+export class SiteError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "SiteError";
+    this.status = status;
+  }
+}
+
+/** Define a route with its input type inferred from the schema. */
+export function route<I, O>(r: SiteRoute<I, O>): SiteRoute<never, unknown> {
+  return r as unknown as SiteRoute<never, unknown>;
+}

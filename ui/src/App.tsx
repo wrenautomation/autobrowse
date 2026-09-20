@@ -5,6 +5,7 @@ import { AgentPage, ExplorePage } from "./pages/Explore.js";
 import { RecordingPage, RecordingsPage } from "./pages/Recordings.js";
 import { RunPage } from "./pages/Run.js";
 import { RunsPage } from "./pages/Runs.js";
+import { SitesPage } from "./pages/Sites.js";
 import { StatusPage } from "./pages/Status.js";
 import { WorkflowPage } from "./pages/Workflow.js";
 
@@ -27,6 +28,7 @@ export function App() {
           {nav("runs", "Runs")}
           {nav("recordings", "Recordings")}
           {nav("explore", "Explore")}
+          {nav("sites", "Sites")}
           {nav("status", "Status")}
         </nav>
         <span className="spacer" />
@@ -45,6 +47,8 @@ export function App() {
           <AgentPage id={a} />
         ) : page === "explore" ? (
           <ExplorePage />
+        ) : page === "sites" ? (
+          <SitesPage />
         ) : page === "status" ? (
           <StatusPage />
         ) : (

@@ -50,6 +50,8 @@ const schema = z.object({
   /** Where the Restate endpoint listens; the UI is on `uiPort`. */
   restatePort: z.coerce.number().int().default(9081),
   uiPort: z.coerce.number().int().default(9080),
+  /** Loopback port OAuth consents redirect to; the OAuth clients register http://127.0.0.1:<port>/oauth/callback. */
+  oauthPort: z.coerce.number().int().default(9400),
   /** Bearer the UI and inbound hooks need for anything that changes a run. Unset = local only, no auth. */
   uiToken: z.string().min(1).optional(),
   /** Bind address for the UI; see `startUiServer`. */
@@ -177,6 +179,7 @@ export const ENV_KEYS = {
   logLevel: "LOG_LEVEL",
   restatePort: "RESTATE_PORT",
   uiPort: "UI_PORT",
+  oauthPort: "OAUTH_PORT",
   uiToken: "UI_TOKEN",
   uiHost: "UI_HOST",
   webhookUrl: "WEBHOOK_URL",

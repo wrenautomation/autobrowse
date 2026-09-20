@@ -13,6 +13,7 @@ import type { RunEvent } from "../../src/engine/events.js";
 import type { RunStatusView } from "../../src/engine/object.js";
 import type { ListQuery, RunRow } from "../../src/engine/registry.js";
 import type { Recording, RecordingSummary } from "../../src/recorder/types.js";
+import type { SiteRow } from "../../src/sites/facade.js";
 import type { JobView } from "../../src/ui/jobs.js";
 
 export type {
@@ -26,6 +27,7 @@ export type {
   RunStatusView,
   SessionSummary,
   SessionView,
+  SiteRow,
   StartRequest,
   Status,
 };
@@ -103,6 +105,18 @@ async function finish<T>(job: JobView): Promise<T> {
 
 export const api = {
   status: () => call<Status | null>("/api/status"),
+  sites: () => call<SiteRow[]>("/api/sites"),
+  site: (site: string) => call<SiteRow>(`/api/sites/${site}`),
+  /** One official call through the facade; the answer is the API's own shape. */
+  siteCall: (site: string, method: string, path: string, input?: unknown) =>
+    call<unknown>(`/api/sites/${site}${path}`, {
+      method,
+      body: method === "GET" || method === "DELETE" ? null : JSON.stringify(input ?? {}),
+    }),
+  siteSetup: (site: string, step: string) =>
+    (post(`/api/sites/${site}/setup/${step}`) as Promise<JobView>).then((j) =>
+      finish<{ made: string[] }>(j),
+    ),
   workflows: () => call<WorkflowInfo[]>("/api/workflows"),
   prove: (workflow: string) =>
     (post(`/api/workflows/${workflow}/prove`) as Promise<JobView>).then((j) => finish<Proof>(j)),

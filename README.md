@@ -259,3 +259,23 @@ Sentry issues tagged workflow/key/step.
 
 Thin: writes the roster to SSM, dispatches wren's deploy, calls its ingress
 to start loops. No imports in either direction.
+
+## Site APIs
+
+A service under its own API's shape: `POST /api/sites/linkedin/rest/posts`
+takes what LinkedIn's Posts API takes and answers what it answers; `GET
+/api/sites/youtube/youtube/v3/videos?part=statistics&id=…` is the Data API.
+Behind one route the official API answers when a token is in hand, a browser
+flow otherwise (gated reads, community posts). The caller has one client.
+
+```sh
+pnpm autobrowse site                        # sites, token state, setup left
+pnpm autobrowse site status linkedin        # every route: api | browser | none (why)
+pnpm autobrowse site setup youtube oauth-client   # a browser flow on Cloud Console keeps the client id/secret
+pnpm autobrowse site setup youtube consent        # OAuth consent in the logged-in profile; refresh token kept
+pnpm autobrowse site call linkedin POST /rest/posts --body '{"author":"urn:li:person:…","commentary":"hi"}'
+```
+
+Keys and tokens land in the env store (`autobrowse env`) through the same
+sink `keep` uses. `OAUTH_PORT` (9400) is the loopback redirect the OAuth
+clients register. Design: `designs/2026-09-21-site-apis.md`.
