@@ -1,34 +1,16 @@
 /** Restate endpoint (:9081) and the UI + API (:9080) in one process, sharing the event bus. */
 
-import { join } from "node:path";
 import { serve } from "@restatedev/restate-sdk/node";
 import pino from "pino";
-import { agentSessions } from "../agent/sessions.js";
-import type { FailureRecord } from "../browser/session.js";
 import { httpClient } from "../clients/http.js";
-import { compile, loadOutline, rerender, saveOutline, writeRendered } from "../compiler/index.js";
-import { startExplore } from "../explore/server.js";
-import { expandHome } from "../google-auth.js";
-import type { Recording } from "../recorder/types.js";
 import { startUiServer } from "../ui/server.js";
+import { backendFor } from "./backend.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
 import { cloudAdminUrl, planEndpoint } from "./endpoint.js";
 import { registerDeployment } from "./register.js";
 import { initSentry } from "./sentry.js";
-import {
-  approverFor,
-  browserOptions,
-  budgetOf,
-  buildApp,
-  COMPILED_DIR,
-  COMPILED_LIB,
-  gmailFor,
-  linqFor,
-  llmFor,
-  loginFor,
-  paceFor,
-} from "./services.js";
+import { approverFor, budgetOf, buildApp, gmailFor, linqFor, llmFor } from "./services.js";
 import { statusOf } from "./status.js";
 
 const root = loadEnvFile();
@@ -83,29 +65,29 @@ const llm = llmFor(settings, undefined, (err) => {
   log.warn({ used: err.used, cap: err.cap }, "model budget spent");
   void app.channel.note?.(`autobrowse: ${err.message}`).catch(() => undefined);
 });
-const approver = approverFor(settings, gmailFor(settings));
-if (!approver) log.warn("no channel a person can answer on: payment steps will be refused");
-const agent = llm
-  ? agentSessions({
-      llm,
-      dir: join(expandHome(settings.recordingsDir), ".sessions"),
-      ...(app.channel.note ? { notify: app.channel.note.bind(app.channel) } : {}),
-      open: (site, port) =>
-        startExplore({
-          site,
-          browser: browserOptions(settings, false),
-          recordingsDir: expandHome(settings.recordingsDir),
-          port,
-          login: loginFor(settings, gmailFor(settings)),
-          pace: paceFor(settings), // an agent browses at a person's pace: sites watch for the other kind
-          sink: app.sink,
-          ...(approver ? { approve: approver } : {}),
-        }),
-    })
-  : undefined;
-if (settings.autoHeal && agent) {
-  const { healFailure, healLine } = await import("../agent/heal.js");
-  const { proofLine } = await import("../workflows/proof.js");
+const linq = linqFor(settings);
+const status = statusOf(settings, {
+  llm: llm?.id ?? null,
+  budget: budgetOf(llm),
+  memory: app.memory.id,
+  workflows: (await app.workflows()).map((w) => w.name),
+});
+log.info(status, "autobrowse setup");
+const backend = backendFor(settings, app, {
+  llm,
+  status,
+  ingress: ingress({
+    url: settings.restateIngressUrl,
+    authToken: settings.restateAuthToken ?? null,
+  }),
+  ...(app.channel.note ? { notify: app.channel.note.bind(app.channel) } : {}),
+});
+if (!approverFor(settings, gmailFor(settings))) {
+  log.warn("no channel a person can answer on: payment steps will be refused");
+}
+if (settings.autoHeal && backend.heal) {
+  const { healLine } = await import("../agent/heal.js");
+  const heal = backend.heal;
   const healing = new Set<string>();
   app.onFailure = (record, file) => {
     // Only a plain failure heals; a person's step stays theirs, an interrupted leg retries itself.
@@ -113,13 +95,7 @@ if (settings.autoHeal && agent) {
     const key = `${record.site}/${record.flow}`;
     if (healing.has(key)) return;
     healing.add(key);
-    void healFailure(record, {
-      agent,
-      compiledDir: COMPILED_DIR,
-      recordingsDir: expandHome(settings.recordingsDir),
-      lib: COMPILED_LIB,
-      prove: async (name) => proofLine(await proveCompiled(name)),
-    })
+    void heal(record)
       .then((out) => {
         log.info({ heal: out, file }, "heal");
         return app.channel.note?.(healLine(out));
@@ -131,18 +107,8 @@ if (settings.autoHeal && agent) {
 } else if (settings.autoHeal) {
   log.warn("AUTO_HEAL set without a model: nothing heals");
 }
-const linq = linqFor(settings);
-const status = statusOf(settings, {
-  llm: llm?.id ?? null,
-  budget: budgetOf(llm),
-  memory: app.memory.id,
-  workflows: (await app.workflows()).map((w) => w.name),
-});
-log.info(status, "autobrowse setup");
 startUiServer({
-  status,
-  ...(agent ? { agent } : {}),
-  ...(llm ? { llm } : {}),
+  ...backend,
   ...(linq
     ? {
         linq: {
@@ -154,86 +120,35 @@ startUiServer({
   port: settings.uiPort,
   ...(settings.uiHost ? { host: settings.uiHost } : {}),
   distDir: `${root}/ui/dist`,
-  workflows: app.workflows,
-  proofs: app.proofs,
-  prove: proveCompiled,
-  ...(agent
-    ? {
-        heal: async (record: FailureRecord) => {
-          const { healFailure } = await import("../agent/heal.js");
-          const { proofLine } = await import("../workflows/proof.js");
-          return healFailure(record, {
-            agent,
-            compiledDir: COMPILED_DIR,
-            recordingsDir: expandHome(settings.recordingsDir),
-            lib: COMPILED_LIB,
-            prove: async (name) => proofLine(await proveCompiled(name)),
-          });
-        },
-      }
-    : {}),
-  budget: () => budgetOf(llm),
-  ingress: ingress({
-    url: settings.restateIngressUrl,
-    authToken: settings.restateAuthToken ?? null,
-  }),
-  bus: app.bus,
-  recordingsDir: expandHome(settings.recordingsDir),
-  artifactsDir: expandHome(settings.artifactsDir),
-  compile: compileRecording,
-  outline: {
-    load: (name) => loadOutline(join(COMPILED_DIR, name)).catch(() => null),
-    save: (name, outline) => rerender(join(COMPILED_DIR, name), outline, { lib: COMPILED_LIB }),
-  },
   token: settings.uiToken,
 });
-async function compileRecording(rec: Recording) {
-  const out = await compile(rec, { llm, lib: COMPILED_LIB });
-  // Written where the Compiled object loads from: it is on the Runs page at once.
-  // The outline beside it is the editable source; healing rewrites one step of it.
-  const dir = join(COMPILED_DIR, out.outline.name);
-  await writeRendered(dir, out);
-  await saveOutline(dir, out.outline);
-  return out;
-}
-/** One proof run of a compiled flow, kept beside it; the catalog reads it back on the next listing. */
-async function proveCompiled(workflow: string) {
-  const { proveWorkflow, writeProof } = await import("../workflows/proof.js");
-  const found = await app.catalog.get(workflow);
-  if (!found) throw new Error(`compiled workflow ${workflow} did not load`);
-  const proof = await proveWorkflow(found.workflow, app.browser);
-  await writeProof(found.dir, proof);
-  return proof;
-}
 if (llm && settings.evaluateEveryHours > 0 && app.channel.note) {
   const { proposeWorkflows, readFailures } = await import("../agent/evaluator.js");
   const { scheduleEvaluator } = await import("../agent/schedule.js");
   const { listRecordings, loadRecording } = await import("../recorder/store.js");
-  const recordingsDir = expandHome(settings.recordingsDir);
+  const { proofLine } = await import("../workflows/proof.js");
   const note = app.channel.note.bind(app.channel);
+  const { agent, prove } = backend;
   const builder =
-    settings.autoBuild && agent
+    settings.autoBuild && agent && prove
       ? {
           agent,
           notify: note,
           remember: new Set<string>(),
           compile: async (name: string) => ({
-            workflow: (await compileRecording(await loadRecording(recordingsDir, name))).outline
-              .name,
+            workflow: (await backend.compile(await loadRecording(backend.recordingsDir, name)))
+              .outline.name,
           }),
-          prove: async (workflow: string) => {
-            const { proofLine } = await import("../workflows/proof.js");
-            return proofLine(await proveCompiled(workflow));
-          },
+          prove: async (workflow: string) => proofLine(await prove(workflow)),
         }
       : null;
   if (settings.autoBuild && !builder) log.warn("AUTO_BUILD set without a model: nothing builds");
   scheduleEvaluator({
     everyHours: settings.evaluateEveryHours,
     evidence: async () => ({
-      failures: await readFailures(expandHome(settings.artifactsDir)),
+      failures: await readFailures(backend.artifactsDir),
       sessions: agent?.list() ?? [],
-      recordings: (await listRecordings(recordingsDir)).map((r) => ({
+      recordings: (await listRecordings(backend.recordingsDir)).map((r) => ({
         name: r.name,
         site: r.site,
       })),

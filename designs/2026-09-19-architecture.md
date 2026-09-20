@@ -22,8 +22,36 @@ table's "may import" column.
 | `deps/` | `SecretSource` (env, memory), `Shell` (local, fake): what compiled workflows depend on | nothing |
 | `channels/` | deliver `RunEvent`s (email, webhook, iMessage, memory); parse inbound commands | `engine` types, `memory` types |
 | `workflows/<name>/` | plan (zod), deps, steps, flows | `engine`, `browser`, `clients` |
-| `ui/` | Hono API + React app | `engine` types, `recorder`, `compiler` |
-| `app/` | composition root: settings → deps → services; CLI; main | everything |
+| `ui/` | Hono API + React app | `engine` types, `recorder`, `compiler`, `app/backend` (the port, type only) |
+| `app/` | composition root: settings → deps → services; the `Backend` port and its one composition (`backend.ts`); CLI; main | everything |
+
+## Backend port (2026-09-21)
+
+Two faces, one interface. `src/app/backend.ts` declares `Backend`: what a
+worker can do (workflows, proofs, `prove`, `heal`, `outline`, `compile`,
+runs via `ingress`, `bus`, dirs, `agent`, `llm`, `status`, `budget`). The
+HTTP API is `ApiDeps extends Backend` plus transport (`token`, `linq`);
+the CLI takes the same `Backend`. Neither composes a proof run, an agent
+session or a heal of its own.
+
+- `backendFor(settings, parts, { llm, ingress, notify?, status?,
+  proveAfterHeal? })` is the one composition. `parts` is what a backend is
+  made from: `catalog`, `browser`, `sink`, `bus`, `workflows`, `proofs`.
+  The worker passes its `App` (Restate services, memory, channels behind
+  it); the CLI passes `localParts(settings)` (catalog on disk, one
+  browser, the configured sink) and gets the same behaviour in-process.
+- `explorerOpener(settings, sink?)` is how every face opens an explore
+  server (`explore`, `mcp`, `agent`, sessions, heal): one browser on a
+  site, the worker's login, a person's pace, the sink, the payment
+  approver. Options are not repeated at call sites.
+- `proveCompiled`, `compileRecording`, `outlineEditor`, `healer`,
+  `agentFor` are the pieces; `workflowsOf`/`proofsOf` read the port's
+  value-or-loader fields.
+- Dependency rule (DIP): `ui/api.ts` and `app/cli*.ts` depend on the
+  `Backend` type; `engine`, `agent`, `compiler`, `workflows` know nothing
+  of either face. A big module above a big module talks through the
+  interface, never the concrete composition, so a test hands `backendFor`
+  fake parts and the API tests hand `api()` a fake `Backend`.
 
 ## Engine
 

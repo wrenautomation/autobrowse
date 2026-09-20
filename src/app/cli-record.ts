@@ -1,25 +1,16 @@
 /** `autobrowse login <site>` and `autobrowse record <name>`: the recorder's command line. */
 import { join } from "node:path";
 import type { Command } from "commander";
-import { expandHome } from "../google-auth.js";
+import { explorerOpener, type LocalBackend } from "./backend.js";
 import type { Settings } from "./config.js";
-import {
-  approverFor,
-  browserOptions,
-  gmailFor,
-  llmFor,
-  loginFor,
-  paceFor,
-  sinkFor,
-} from "./services.js";
+import { browserOptions, COMPILED_DIR, llmFor } from "./services.js";
 
-/** The payment gate's answerer, when a channel can carry the question. */
-const approve = (settings: Settings) => {
-  const a = approverFor(settings, gmailFor(settings));
-  return a ? { approve: a } : {};
-};
-
-export function registerRecordCommands(program: Command, settings: Settings): void {
+export function registerRecordCommands(
+  program: Command,
+  settings: Settings,
+  local: LocalBackend,
+): void {
+  const open = explorerOpener(settings);
   program
     .command("explore <site>")
     .description(
@@ -28,18 +19,9 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
     .option("--url <url>", "start here")
     .option("--port <port>", "loopback port", "9090")
     .action(async (site: string, o: { url?: string; port: string }) => {
-      const { startExplore, tokenFileFor } = await import("../explore/server.js");
+      const { tokenFileFor } = await import("../explore/server.js");
       const tokenFile = tokenFileFor(Number(o.port));
-      const ex = await startExplore({
-        site,
-        browser: browserOptions(settings, false),
-        recordingsDir: settings.recordingsDir,
-        port: Number(o.port),
-        login: loginFor(settings, gmailFor(settings)),
-        sink: sinkFor(settings),
-        tokenFile,
-        ...approve(settings),
-      });
+      const ex = await open(site, Number(o.port), { tokenFile });
       // The token lives in an owner-only file, not in this output: logs get pasted, files do not.
       console.log(
         `exploring ${site} on http://127.0.0.1:${ex.port}\ntoken file ${tokenFile}\ncurl -s -X POST -H "Authorization: Bearer $(cat ${tokenFile})" http://127.0.0.1:${ex.port}/ -d '{"cmd":"aria"}'`,
@@ -61,7 +43,6 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
     .option("--port <port>", "first loopback port for sessions", "9300")
     .action(async (o: { port: string }) => {
       const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
-      const { startExplore } = await import("../explore/server.js");
       const { buildMcpServer } = await import("../mcp/server.js");
       const { version } = JSON.parse(
         await import("node:fs").then((fs) =>
@@ -72,16 +53,7 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
       const server = buildMcpServer({
         version,
         open: async (site, url) => {
-          const ex = await startExplore({
-            site,
-            browser: browserOptions(settings, false),
-            recordingsDir: settings.recordingsDir,
-            port: port++,
-            login: loginFor(settings, gmailFor(settings)),
-            pace: paceFor(settings),
-            sink: sinkFor(settings),
-            ...approve(settings),
-          });
+          const ex = await open(site, port++);
           if (url) await ex.exec({ cmd: "open", url });
           return ex;
         },
@@ -179,107 +151,42 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
     )
     .option("--no-prove", "rewrite only; skip the proof run")
     .action(async (failure: string, o: { prove: boolean }) => {
-      const { healFailure, healLine } = await import("../agent/heal.js");
+      const { healLine } = await import("../agent/heal.js");
       const { readFailure } = await import("../agent/repair.js");
-      const { agentSessions } = await import("../agent/sessions.js");
-      const { startExplore } = await import("../explore/server.js");
-      const { COMPILED_DIR, COMPILED_LIB } = await import("./services.js");
-      const llm = llmFor(settings);
-      if (!llm) throw new Error("heal needs a model: set a model key or LLM_PROVIDER=claude-code");
-      const recordingsDir = expandHome(settings.recordingsDir);
-      const agent = agentSessions({
-        llm,
-        dir: join(recordingsDir, ".sessions"),
-        open: (site, port) =>
-          startExplore({
-            site,
-            browser: browserOptions(settings, false),
-            recordingsDir,
-            port,
-            login: loginFor(settings, gmailFor(settings)),
-            pace: paceFor(settings),
-            sink: sinkFor(settings),
-            ...approve(settings),
-          }),
-      });
-      const record = readFailure(failure, expandHome(settings.artifactsDir));
-      const out = await healFailure(record, {
-        agent,
-        compiledDir: COMPILED_DIR,
-        recordingsDir,
-        lib: COMPILED_LIB,
-        ...(o.prove
-          ? {
-              prove: async (name: string) => {
-                const { loadCompiledWorkflows } = await import("../workflows/compiled.js");
-                const { proofLine, proveWorkflow, writeProof } = await import(
-                  "../workflows/proof.js"
-                );
-                const { flowRunner } = await import("../browser/flow.js");
-                const found = (await loadCompiledWorkflows(COMPILED_DIR)).find(
-                  (c) => c.workflow.name === name,
-                );
-                if (!found) throw new Error(`healed workflow ${name} did not load`);
-                const proof = await proveWorkflow(
-                  found.workflow,
-                  flowRunner(browserOptions(settings), {
-                    pace: paceFor(settings),
-                    login: loginFor(settings, gmailFor(settings)),
-                  }),
-                );
-                writeProof(found.dir, proof);
-                return proofLine(proof);
-              },
-            }
-          : {}),
-      });
+      const { backend } = local({ proveAfterHeal: o.prove });
+      if (!backend.heal)
+        throw new Error("heal needs a model: set a model key or LLM_PROVIDER=claude-code");
+      const out = await backend.heal(readFailure(failure, backend.artifactsDir));
       console.log(healLine(out));
       if (out.status !== "healed") process.exitCode = 1;
     });
   program
     .command("compile <name>")
     .description(
-      "Recording → workflow module under --out, with its editable outline.json beside it",
+      `Recording → workflow module under ${COMPILED_DIR}, with its editable outline.json beside it`,
     )
-    .option("--out <dir>", "where the module goes", "src/workflows")
-    .option("--lib <module>", "what the module imports the library as", "../../index.js")
     .option("--no-llm", "skip the model pass (names, proofs); pure template output")
-    .option(
-      "--from-outline",
-      "re-render <name>'s edited outline.json under --out instead of re-structuring",
-    )
-    .action(
-      async (
-        name: string,
-        o: { out: string; lib: string; llm: boolean; fromOutline?: boolean },
-      ) => {
-        const { compile, loadOutline, rerender, writeRendered, saveOutline } = await import(
-          "../compiler/index.js"
-        );
-        const { loadRecording } = await import("../recorder/store.js");
-        const llm = o.llm ? llmFor(settings) : null;
-        if (o.llm && !llm) console.log("no model key set; template output only");
-        let out: Awaited<ReturnType<typeof compile>>;
-        if (o.fromOutline) {
-          out = await rerender(join(o.out, name), await loadOutline(join(o.out, name)), {
-            lib: o.lib,
-          });
-        } else {
-          out = await compile(await loadRecording(settings.recordingsDir, name), {
-            llm,
-            lib: o.lib,
-          });
-          await writeRendered(join(o.out, out.outline.name), out);
-          await saveOutline(join(o.out, out.outline.name), out.outline);
-        }
-        for (const f of Object.keys(out.files)) console.log(join(o.out, out.outline.name, f));
-        if (out.usage)
-          console.log(`model: ${out.usage.inputTokens} in / ${out.usage.outputTokens} out`);
-        console.log(
-          `steps: ${out.outline.steps.map((s) => `${s.name}${s.irreversible ? "!" : ""}`).join(" → ")}`,
-        );
-      },
-    );
+    .option("--from-outline", "re-render <name>'s edited outline.json instead of re-structuring")
+    .action(async (name: string, o: { llm: boolean; fromOutline?: boolean }) => {
+      const { loadRecording } = await import("../recorder/store.js");
+      const { backend } = local({ llm: o.llm });
+      if (o.llm && !backend.llm) console.log("no model key set; template output only");
+      let out: Awaited<ReturnType<typeof backend.compile>>;
+      if (o.fromOutline) {
+        if (!backend.outline) throw new Error("no outline editor here");
+        const outline = await backend.outline.load(name);
+        if (!outline) throw new Error(`${name} has no outline.json under ${COMPILED_DIR}`);
+        out = await backend.outline.save(name, outline);
+      } else {
+        out = await backend.compile(await loadRecording(backend.recordingsDir, name));
+      }
+      for (const f of Object.keys(out.files)) console.log(join(COMPILED_DIR, out.outline.name, f));
+      if (out.usage)
+        console.log(`model: ${out.usage.inputTokens} in / ${out.usage.outputTokens} out`);
+      console.log(
+        `steps: ${out.outline.steps.map((s) => `${s.name}${s.irreversible ? "!" : ""}`).join(" → ")}`,
+      );
+    });
 }
 
 interface AgentRun {
@@ -294,20 +201,10 @@ interface AgentRun {
 
 /** One agent session: explore server up, agent to the goal, journal saved as a recording. */
 async function runAgent(settings: Settings, r: AgentRun): Promise<void> {
-  const { startExplore } = await import("../explore/server.js");
   const { exploreWithAgent } = await import("../agent/explorer.js");
   const llm = llmFor(settings);
   if (!llm) throw new Error("the agent needs a model: set LLM_PROVIDER and its key");
-  const ex = await startExplore({
-    site: r.site,
-    browser: browserOptions(settings, false),
-    recordingsDir: settings.recordingsDir,
-    port: r.port,
-    login: loginFor(settings, gmailFor(settings)),
-    pace: paceFor(settings),
-    sink: sinkFor(settings),
-    ...approve(settings),
-  });
+  const ex = await explorerOpener(settings)(r.site, r.port);
   console.log(
     `agent on ${r.site}; pause/resume: curl -s -X POST -H "Authorization: Bearer ${ex.token}" http://127.0.0.1:${ex.port}/ -d '{"cmd":"pause"}'`,
   );

@@ -13,11 +13,9 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { proposeWorkflows, readFailures } from "../agent/evaluator.js";
-import type { HealOutcome } from "../agent/heal.js";
 import { readFailure, repairRequest } from "../agent/repair.js";
-import { type AgentSessions, summarizeSession } from "../agent/sessions.js";
-import type { Ingress } from "../app/client.js";
-import type { Status } from "../app/status.js";
+import { summarizeSession } from "../agent/sessions.js";
+import { type Backend, proofsOf, workflowsOf } from "../app/backend.js";
 import type { FailureRecord } from "../browser/session.js";
 import { parseCommand } from "../channels/commands.js";
 import {
@@ -27,52 +25,21 @@ import {
   textOf,
   verifyLinqWebhook,
 } from "../clients/linq.js";
-import { type Compiled, type Outline, outlineSchema } from "../compiler/index.js";
+import { outlineSchema } from "../compiler/index.js";
 import type { GateName } from "../engine/effects.js";
 import type { RunEvent } from "../engine/events.js";
 import type { RunRow } from "../engine/registry.js";
-import type { AnyWorkflow } from "../engine/workflow.js";
 import { commandSchema } from "../explore/server.js";
-import type { Llm } from "../llm/types.js";
 import { listRecordings, loadRecording, recordingDir } from "../recorder/store.js";
-import { type Recording, summarizeRecording } from "../recorder/types.js";
-import type { Proof } from "../workflows/proof.js";
+import { summarizeRecording } from "../recorder/types.js";
 import { bearerAuth, rateLimit } from "./auth.js";
-import type { EventBus } from "./bus.js";
 import { Jobs } from "./jobs.js";
 
-export interface ApiDeps {
-  /** The workflows a run may name; a function when compiled ones come and go without a restart. */
-  workflows: readonly AnyWorkflow[] | (() => Promise<readonly AnyWorkflow[]>);
-  /** Compiled workflows' proof runs by name; a name absent here is hand-written. */
-  proofs?: Record<string, Proof | null> | (() => Promise<Record<string, Proof | null>>);
-  /** Run a compiled workflow once as its proof and keep it; absent when the worker has no browser. */
-  prove?(workflow: string): Promise<Proof>;
-  /** Heal a failed compiled step from its failure record: agent finishes it, step rewritten, proven. */
-  heal?(record: FailureRecord): Promise<HealOutcome>;
-  /** Where prove/heal run; one per process, injectable for tests. */
-  jobs?: Jobs;
-  /** A compiled workflow's editable outline: read it, or save an edit and re-render the module. */
-  outline?: {
-    load(name: string): Promise<Outline | null>;
-    save(name: string, outline: Outline): Promise<Compiled>;
-  };
-  ingress: Ingress;
-  bus: EventBus;
-  recordingsDir: string;
-  artifactsDir: string;
-  compile(rec: Recording): Promise<Compiled>;
+/** The HTTP face: the shared `Backend` port plus what only this transport needs. */
+export interface ApiDeps extends Backend {
   token: string | undefined;
-  /** Agent sessions (explore by model with play/pause); absent when no model is configured. */
-  agent?: AgentSessions;
-  /** The model the evaluator uses; absent when none is configured. */
-  llm?: Llm;
   /** Linq: replies to the operator's iMessages; `secret` verifies the webhook. */
   linq?: { client: LinqClient; to: string; secret?: string };
-  /** What the worker is made of (vendor names, channels); shown on the Status page. */
-  status?: Status;
-  /** Today's model spend against the cap, read live; absent = as the status says. */
-  budget?(): Status["budget"];
 }
 
 const agentStart = z.object({
@@ -121,10 +88,8 @@ function serveUnder(root: string, file: string): Response | null {
 
 export function api(deps: ApiDeps): Hono {
   const app = new Hono();
-  const workflows = async () =>
-    typeof deps.workflows === "function" ? deps.workflows() : deps.workflows;
-  const proofs = async () =>
-    typeof deps.proofs === "function" ? deps.proofs() : (deps.proofs ?? {});
+  const workflows = () => workflowsOf(deps);
+  const proofs = () => proofsOf(deps);
   const find = async (name: string) => (await workflows()).find((w) => w.name === name) ?? null;
   const runOf = (workflow: string, key: string) => deps.ingress.run(workflow, key);
 

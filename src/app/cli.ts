@@ -10,13 +10,14 @@ import { Command } from "commander";
 import type { GateName } from "../engine/effects.js";
 import { summarize } from "../engine/run.js";
 import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
+import { localBackend, proofsOf, workflowsOf } from "./backend.js";
 import { registerAuthCommands } from "./cli-auth.js";
 import { registerDesktopCommands } from "./cli-desktop.js";
 import { registerEnvCommands } from "./cli-env.js";
 import { registerRecordCommands } from "./cli-record.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
-import { COMPILED_DIR, envStoreFor, WORKFLOWS } from "./services.js";
+import { envStoreFor, WORKFLOWS } from "./services.js";
 
 loadEnvFile();
 const settings = loadSettings();
@@ -25,23 +26,24 @@ const api = ingress({
   authToken: settings.restateAuthToken ?? null,
 });
 
+const local = localBackend(settings, api);
+
 const program = new Command("autobrowse").showHelpAfterError();
 
 program
   .command("workflows")
   .description("What this worker can run")
   .action(async () => {
-    const { loadCompiledWorkflows } = await import("../workflows/compiled.js");
     const { proofLine } = await import("../workflows/proof.js");
-    const compiled = await loadCompiledWorkflows(COMPILED_DIR);
-    const rows = [
-      ...WORKFLOWS.map((w) => ({ w, note: "hand-written" })),
-      ...compiled.map((c) => ({ w: c.workflow, note: c.proof ? proofLine(c.proof) : "draft" })),
-    ];
-    for (const { w, note } of rows)
+    const { backend } = local();
+    const [workflows, proofs] = await Promise.all([workflowsOf(backend), proofsOf(backend)]);
+    for (const w of workflows) {
+      const proof = proofs[w.name];
+      const note = proof ? proofLine(proof) : w.name in proofs ? "draft" : "hand-written";
       console.log(
         `${w.name.padEnd(16)} ${w.description}  [${w.steps.map((s) => s.name).join(" → ")}]  ${note}`,
       );
+    }
   });
 
 /** A plan as typed (`{"domain":"x.com"}`), from a file, or piped in (`-`). */
@@ -88,41 +90,29 @@ program
       name: string,
       o: { plan?: string; dryRun?: boolean; ask?: boolean; headed?: boolean; prove?: boolean },
     ) => {
-      const { compiledDeps, loadCompiledWorkflows } = await import("../workflows/compiled.js");
+      const { compiledDeps } = await import("../workflows/compiled.js");
       const { memoryEffects } = await import("../engine/memory.js");
       const { runFlow } = await import("../engine/run.js");
-      const { flowRunner } = await import("../browser/flow.js");
-      const { browserOptions, gmailFor, loginFor, paceFor } = await import("./services.js");
-      const compiled = await loadCompiledWorkflows(COMPILED_DIR);
-      const workflow = [...WORKFLOWS, ...compiled.map((c) => c.workflow)].find(
-        (w) => w.name === name,
-      );
+      const { backend, parts } = local({ headless: o.headed ? false : settings.browserHeadless });
+      const workflow = (await workflowsOf(backend)).find((w) => w.name === name);
       if (!workflow) throw new Error(`unknown workflow ${name}; see: autobrowse workflows`);
       if (WORKFLOWS.includes(workflow))
         throw new Error(`${name} needs the worker's deps (APIs); run it with: autobrowse run`);
-      const raw = o.plan ? ((await readPlan(o.plan)) as object) : {};
+      const raw = o.plan ? ((await readPlan(o.plan)) as Record<string, unknown>) : {};
       const plan = workflow.plan.parse({ ...raw, dryRun: o.dryRun ?? false });
-      const browser = flowRunner(
-        browserOptions(settings, o.headed ? false : settings.browserHeadless),
-        { login: loginFor(settings, gmailFor(settings)), pace: paceFor(settings) },
-      );
       if (o.prove) {
         // A proof is its own kind of run: gates declined, nothing bought, the outcome kept beside the flow.
-        const { proveWorkflow, writeProof } = await import("../workflows/proof.js");
-        const dir = compiled.find((c) => c.workflow.name === name)?.dir;
-        if (!dir) throw new Error("--prove is for compiled workflows");
-        const proof = await proveWorkflow(workflow, browser, {
-          plan: raw as Record<string, unknown>,
-        });
+        if (!backend.prove) throw new Error("no browser here to prove with");
+        const proof = await backend.prove(name, raw);
         for (const s of proof.steps) console.log(`${s.name.padEnd(28)} ${s.status}  ${s.detail}`);
-        console.log(`${proof.status} → ${writeProof(dir, proof)}`);
+        console.log(proof.status);
         if (proof.status !== "done") process.exitCode = 1;
         return;
       }
       const out = await runFlow(
         memoryEffects().fx,
         workflow as never,
-        compiledDeps(browser) as never,
+        compiledDeps(parts.browser) as never,
         plan,
         () =>
           o.ask ? null : { approved: true, note: "autobrowse try", at: new Date().toISOString() },
@@ -220,7 +210,7 @@ program
       );
   });
 
-registerRecordCommands(program, settings);
+registerRecordCommands(program, settings, local);
 registerAuthCommands(program, settings);
 registerEnvCommands(program, settings, { store: () => envStoreFor(settings) });
 registerDesktopCommands(program, tmpdir());
