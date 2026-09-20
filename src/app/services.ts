@@ -67,6 +67,7 @@ import {
 import { type BudgetExceeded, type BudgetedLlm, budgetedLlm, fileLedger } from "../llm/budget.js";
 import { type Llm, makeLlm } from "../llm/index.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
+import { type SiteFacade, type SitesService, sitesFor, sitesService } from "../sites/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import { type BootstrapDeps, bootstrapWorkflow } from "../workflows/bootstrap/index.js";
 import {
@@ -165,7 +166,9 @@ export const COMPILED_DIR = "src/workflows";
 export const COMPILED_LIB = "../../index.js";
 
 export interface App {
-  services: Array<ReturnType<typeof makeRunObject> | typeof runsRegistry | BrowserService>;
+  services: Array<
+    ReturnType<typeof makeRunObject> | typeof runsRegistry | BrowserService | SitesService
+  >;
   channel: Channel;
   /** Hand-written plus compiled, as of now: a compile shows up at once. */
   workflows(): Promise<readonly AnyWorkflow[]>;
@@ -179,6 +182,8 @@ export interface App {
   memory: Memory;
   /** Where minted secrets go (`keep` ops, bootstrap). */
   sink: SecretSink;
+  /** The site APIs, one instance: the HTTP face, the CLI and the `sites` service share it. */
+  sites: SiteFacade;
   /** Set by the host once the agent exists: every failure record goes here (healing). */
   onFailure: ((record: FailureRecord, file: string) => void) | null;
 }
@@ -511,11 +516,14 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     });
   const extra = await compiledNow();
   if (extra.length) log.info({ compiled: extra.map((c) => c.workflow.name) }, "compiled workflows");
+  const sites = sitesFor({ catalog, browser, sink, oauthPort: settings.oauthPort });
   return {
     services: [
       runsRegistry,
       // The browser legs for an orchestrator that owns the API steps (wren); compiled flows by name too.
       browserService({ runner: browser }),
+      // The site APIs for the same orchestrator: official shapes, durable over the tunnel.
+      sitesService(sites),
       makeRunObject(domainWorkflow, domainDeps, host, { guards }),
       makeRunObject(bootstrapWorkflow, bootstrapDeps, host, { guards }),
       // Every compiled flow, present and future, runs under this one object.
@@ -530,6 +538,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     bus,
     memory,
     sink,
+    sites,
     get onFailure() {
       return failures.hook;
     },

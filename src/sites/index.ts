@@ -9,7 +9,9 @@ export {
 } from "./facade.js";
 export { linkedin } from "./linkedin.js";
 export { accessTokens, runConsent } from "./oauth.js";
+export { SITES_SERVICE, type SitesService, sitesService } from "./service.js";
 export * from "./types.js";
+export { type SiteParts, sitesFor } from "./wire.js";
 export { youtube } from "./youtube.js";
 
 import { linkedin } from "./linkedin.js";

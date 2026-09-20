@@ -278,4 +278,7 @@ pnpm autobrowse site call linkedin POST /rest/posts --body '{"author":"urn:li:pe
 
 Keys and tokens land in the env store (`autobrowse env`) through the same
 sink `keep` uses. `OAUTH_PORT` (9400) is the loopback redirect the OAuth
-clients register. Design: `designs/2026-09-21-site-apis.md`.
+clients register. The same facade is the Restate service `sites`
+(`sites/call`, `sites/status`, `sites/setup`) for an orchestrator on the same
+Restate (wren's `Content` service): no port on the box, a call queues while
+the box is down, a write runs once. Design: `designs/2026-09-21-site-apis.md`.

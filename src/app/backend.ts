@@ -22,7 +22,7 @@ import type { Approver } from "../gates/payment.js";
 import { expandHome } from "../google-auth.js";
 import type { Llm } from "../llm/types.js";
 import type { Recording } from "../recorder/types.js";
-import { SITES, type SiteFacade, siteFacade } from "../sites/index.js";
+import { type SiteFacade, sitesFor } from "../sites/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import type { Jobs } from "../ui/jobs.js";
 import { type CompiledCatalog, compiledCatalog } from "../workflows/compiled.js";
@@ -172,7 +172,7 @@ export function agentFor(
 /** What a backend is composed from: the worker's `App` has all of it; the CLI makes a local set. */
 export type BackendParts = Pick<
   App,
-  "catalog" | "browser" | "sink" | "bus" | "workflows" | "proofs"
+  "catalog" | "browser" | "sink" | "bus" | "workflows" | "proofs" | "sites"
 >;
 
 /**
@@ -183,13 +183,16 @@ export type BackendParts = Pick<
 export function localParts(settings: Settings, o: { headless?: boolean } = {}): BackendParts {
   const catalog = compiledCatalog(COMPILED_DIR);
   const gmail = gmailFor(settings);
+  const browser = flowRunner(browserOptions(settings, o.headless ?? settings.browserHeadless), {
+    login: loginFor(settings, gmail),
+    pace: paceFor(settings),
+  });
+  const sink = sinkFor(settings);
   return {
     catalog,
-    browser: flowRunner(browserOptions(settings, o.headless ?? settings.browserHeadless), {
-      login: loginFor(settings, gmail),
-      pace: paceFor(settings),
-    }),
-    sink: sinkFor(settings),
+    browser,
+    sink,
+    sites: sitesFor({ catalog, browser, sink, oauthPort: settings.oauthPort }),
     bus: eventBus(),
     workflows: async () => [...WORKFLOWS, ...(await catalog.list()).map((c) => c.workflow)],
     proofs: () => catalog.proofs(),
@@ -218,31 +221,11 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
   const agent = o.llm
     ? agentFor(settings, o.llm, { sink: app.sink, ...(o.notify ? { notify: o.notify } : {}) })
     : undefined;
-  // What setup keeps is visible to the next call at once, whichever sink is behind it.
-  const made = new Map<string, string>();
-  const sites = siteFacade(SITES, {
-    http: httpClient(),
-    env: (name) => made.get(name) ?? process.env[name],
-    sink: {
-      put: async (name, value) => {
-        await app.sink.put(name, value);
-        made.set(name, value);
-      },
-    },
-    runner: app.browser,
-    flow: (name) => BROWSER_FLOWS[name] ?? null,
-    compiled: {
-      get: async (name) => (await app.catalog.get(name))?.workflow ?? null,
-      run: (workflow, plan) =>
-        runCompiled(workflow, app.browser, { plan, sink: app.sink, approve: true }),
-    },
-    oauthPort: settings.oauthPort,
-  });
   return {
     workflows: app.workflows,
     proofs: app.proofs,
     prove,
-    sites,
+    sites: app.sites,
     ...(agent
       ? { agent, heal: healer(agent, settings, o.proveAfterHeal === false ? undefined : prove) }
       : {}),
