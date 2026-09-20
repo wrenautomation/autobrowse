@@ -34,14 +34,17 @@ const browserCalls: string[] = [];
 const browser = fakeBrowser(browserCalls);
 let env: RestateTestEnvironment;
 beforeAll(async () => {
-  env = await RestateTestEnvironment.start({
-    services: [
-      runsRegistry,
-      makeRunObject(domainWorkflow, deps, host),
-      makeCompiledRunObject({ catalog, browser, host }),
-    ],
-    alwaysReplay: true,
-  });
+  const start = () =>
+    RestateTestEnvironment.start({
+      services: [
+        runsRegistry,
+        makeRunObject(domainWorkflow, deps, host),
+        makeCompiledRunObject({ catalog, browser, host }),
+      ],
+      alwaysReplay: true,
+    });
+  // The container start is the one flaky thing in the suite (port or pull timing): one more try.
+  env = await start().catch(start);
 });
 afterAll(async () => {
   await env?.stop();
