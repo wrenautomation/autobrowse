@@ -48,7 +48,7 @@ function renderOp(op: OutlineOp): string {
   const plan = planLocator(op.hints);
   const hints = `{ ${Object.entries(op.hints)
     .filter(([, v]) => v)
-    .map(([k, v]) => `${k}: ${q(String(v))}`)
+    .map(([k, v]) => `${k}: ${typeof v === "number" ? v : q(String(v))}`)
     .join(", ")} }`;
   const locatorNote = plan ? ` // ${renderLocator(plan)}` : " // TODO: no usable hints";
   if (op.kind === "read") return `    out.${op.as} = await fp.read(${hints});${locatorNote}`;

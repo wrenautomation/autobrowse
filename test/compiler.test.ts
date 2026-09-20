@@ -151,7 +151,7 @@ describe("keep", () => {
           t: 2,
           kind: "keep",
           url: "https://x.test/keys",
-          target: h({ tag: "p", role: "paragraph", name: null }),
+          target: { ...h({ tag: "p", role: null, name: null }), css: "[role=dialog] p", nth: 1 },
           env: "X_API_KEY",
         },
       ],
@@ -162,7 +162,10 @@ describe("keep", () => {
       env: "X_API_KEY",
     });
     const src = render(o).files["index.ts"] ?? "";
-    expect(src).toContain('await input.sink.put("X_API_KEY", await fp.read(');
+    // Numbers stay numbers: `nth: "1"` would not typecheck against the locator hints.
+    expect(src).toContain(
+      'await input.sink.put("X_API_KEY", await fp.read({ tag: "p", css: "[role=dialog] p", nth: 1 }));',
+    );
     expect(src).toContain("sink: SecretSink;");
     expect(src).toContain("{ sink: deps.sink }");
     expect(src).not.toContain("JSON.stringify(out)");
