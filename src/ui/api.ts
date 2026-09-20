@@ -123,7 +123,12 @@ export function api(deps: ApiDeps): Hono {
     deps.linq?.secret ? next() : bearerAuth(deps.token)(c, next),
   );
 
-  app.get("/api/status", (c) => c.json(deps.status ?? null));
+  /** The status is fixed at boot except the workflow list, which compiles change. */
+  app.get("/api/status", async (c) =>
+    c.json(
+      deps.status ? { ...deps.status, workflows: (await workflows()).map((w) => w.name) } : null,
+    ),
+  );
 
   app.get("/api/workflows", async (c) => {
     const proven = await proofs();

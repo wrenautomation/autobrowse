@@ -13,7 +13,7 @@ import { registerAuthCommands } from "./cli-auth.js";
 import { registerRecordCommands } from "./cli-record.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
-import { WORKFLOWS } from "./services.js";
+import { COMPILED_DIR, WORKFLOWS } from "./services.js";
 
 loadEnvFile();
 const settings = loadSettings();
@@ -29,10 +29,15 @@ program
   .description("What this worker can run")
   .action(async () => {
     const { loadCompiledWorkflows } = await import("../workflows/compiled.js");
-    const compiled = (await loadCompiledWorkflows("src/workflows")).map((c) => c.workflow);
-    for (const w of [...WORKFLOWS, ...compiled])
+    const { proofLine } = await import("../workflows/proof.js");
+    const compiled = await loadCompiledWorkflows(COMPILED_DIR);
+    const rows = [
+      ...WORKFLOWS.map((w) => ({ w, note: "hand-written" })),
+      ...compiled.map((c) => ({ w: c.workflow, note: c.proof ? proofLine(c.proof) : "draft" })),
+    ];
+    for (const { w, note } of rows)
       console.log(
-        `${w.name.padEnd(12)} ${w.description}  [${w.steps.map((s) => s.name).join(" → ")}]`,
+        `${w.name.padEnd(16)} ${w.description}  [${w.steps.map((s) => s.name).join(" → ")}]  ${note}`,
       );
   });
 
@@ -71,7 +76,7 @@ program
       const { runFlow } = await import("../engine/run.js");
       const { flowRunner } = await import("../browser/flow.js");
       const { browserOptions, gmailFor, loginFor, paceFor } = await import("./services.js");
-      const compiled = await loadCompiledWorkflows("src/workflows");
+      const compiled = await loadCompiledWorkflows(COMPILED_DIR);
       const workflow = [...WORKFLOWS, ...compiled.map((c) => c.workflow)].find(
         (w) => w.name === name,
       );
