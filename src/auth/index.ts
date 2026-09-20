@@ -30,7 +30,7 @@ export {
 } from "./credentials.js";
 export { enrollTotpFlow, readSecretFromPage, storeSeed } from "./enroll.js";
 export { ingest, parseCredentialLines, takeClipboard, takeFile } from "./ingest.js";
-export type { PasswordChangeSpec } from "./login.js";
+export type { PasskeySetupSpec, PasswordChangeSpec } from "./login.js";
 export {
   type FormLoginSpec,
   formLogin,
@@ -44,6 +44,7 @@ export {
   type SiteLogin,
   signInToGoogle,
 } from "./login.js";
+export { enrollPasskeyFlow } from "./passkey.js";
 export { newPassword, rotatePasswordFlow } from "./rotate.js";
 export { SITE_LOGINS } from "./sites.js";
 export { base32Decode, findTotpSecret, parseOtpauth, totp, totpRemainingMs } from "./totp.js";

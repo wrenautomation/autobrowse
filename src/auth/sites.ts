@@ -8,6 +8,7 @@ import {
   formLogin,
   LoginFailed,
   oauthLogin,
+  type PasskeySetupSpec,
   type PasswordChangeSpec,
   type SignInContext,
   type SiteLogin,
@@ -83,6 +84,15 @@ const GOOGLE_PASSWORD_CHANGE: PasswordChangeSpec = {
   done: /password changed|password was changed|your password has been changed|sign in with your new password|security checkup|myaccount\.google\.com\/(security|signinoptions\/password\?)/i,
 };
 
+/** Mapped 2026-09-19: "Create a passkey" runs the WebAuthn ceremony; the virtual authenticator answers it. */
+const GOOGLE_PASSKEY_SETUP: PasskeySetupSpec = {
+  url: (cred) =>
+    `https://myaccount.google.com/signinoptions/passkeys?authuser=${encodeURIComponent(cred.username)}`,
+  create: { role: "button", name: "/create a passkey|create passkey/i" },
+  then: [{ role: "button", name: "/^continue passkey enrollment$/i" }],
+  done: /passkey created|you can now use your passkey|passkeys? you created|created (a )?passkey/i,
+};
+
 /** Google re-asks for the password on security pages; answer on the spot. */
 const GOOGLE_SIGN_IN_HERE = { at: /accounts\.google\.com/, run: signInToGoogle };
 
@@ -105,6 +115,7 @@ const google: SiteLogin = {
   signInHere: GOOGLE_SIGN_IN_HERE,
   totpSetup: GOOGLE_TOTP_SETUP,
   passwordChange: GOOGLE_PASSWORD_CHANGE,
+  passkeySetup: GOOGLE_PASSKEY_SETUP,
 };
 
 /**
@@ -138,6 +149,7 @@ const googleAdmin: SiteLogin = {
   signInHere: GOOGLE_SIGN_IN_HERE,
   totpSetup: GOOGLE_TOTP_SETUP,
   passwordChange: GOOGLE_PASSWORD_CHANGE,
+  passkeySetup: GOOGLE_PASSKEY_SETUP,
 };
 
 const instantly: SiteLogin = {

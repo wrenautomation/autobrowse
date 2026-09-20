@@ -27,6 +27,7 @@ import {
   NeedsHuman,
   openSession,
 } from "./session.js";
+import type { Passkeys } from "./webauthn.js";
 
 /** A site names a persistent profile; any kebab-case string. Known ones have a home page for `login`. */
 export type Site = string;
@@ -62,6 +63,8 @@ export interface OpenOptions {
 
 export interface FlowPage {
   page: Page;
+  /** The session's virtual authenticator: export after a passkey enrollment. */
+  passkeys: Passkeys;
   /**
    * Navigate. On a login wall the runner signs in with stored credentials
    * and tries again; a captcha, or a site nobody has credentials for,
@@ -359,6 +362,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           human(reason) {
             throw new NeedsHuman(`${flow.site}: ${reason}`);
           },
+          passkeys: session.passkeys,
         };
         try {
           return await flow.run(fp, input);

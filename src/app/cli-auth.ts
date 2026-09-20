@@ -8,6 +8,7 @@ import { resolve } from "node:path";
 import type { Command } from "commander";
 import {
   credentialSchema,
+  enrollPasskeyFlow,
   enrollTotpFlow,
   ingest,
   parseCredentialLines,
@@ -155,6 +156,24 @@ export function registerAuthCommands(program: Command, settings: Settings): void
         },
       );
       console.log(await runner.run(googleWorkspaceLogo, { file: resolve(file) }));
+    });
+
+  program
+    .command("enroll-passkey <site>")
+    .description(
+      "Create a passkey on the site with our own authenticator and keep it; sign-ins then need no password or code",
+    )
+    .option("--headed", "show the browser")
+    .action(async (site: string, o: { headed?: boolean }) => {
+      const login = SITE_LOGINS.find((s) => s.site === site);
+      if (!login) throw new Error(`unknown site ${site}; one of ${SITES.join(", ")}`);
+      const runner = flowRunner(
+        browserOptions(settings, o.headed ? false : settings.browserHeadless),
+        {
+          login: loginFor(settings, gmailFor(settings)),
+        },
+      );
+      console.log(await runner.run(enrollPasskeyFlow(login, credentialsFor(settings)), undefined));
     });
 
   program

@@ -32,6 +32,19 @@ export const credentialSchema = z.object({
   recoveryCodes: z.array(z.string().min(1)).default([]),
   /** Where the site sends email codes; defaults to `username` when that is an address. */
   codesInbox: z.string().email().optional(),
+  /** Passkeys enrolled by us (the virtual authenticator's export); loaded into the site's browser session. */
+  passkeys: z
+    .array(
+      z.object({
+        rpId: z.string(),
+        credentialId: z.string(),
+        privateKey: z.string(),
+        userHandle: z.string().optional(),
+        signCount: z.number(),
+        isResidentCredential: z.boolean(),
+      }),
+    )
+    .default([]),
   /** Sign in through this identity provider's button instead of the password; the provider's own credential is used. */
   via: z.enum(["google"]).optional(),
 });

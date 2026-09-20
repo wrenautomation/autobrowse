@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
 import type { HttpClient } from "../clients/http.js";
 import { expandHome } from "../google-auth.js";
-import { virtualAuthenticator } from "./webauthn.js";
+import { type PasskeyRecord, type Passkeys, virtualAuthenticator } from "./webauthn.js";
 
 /** A page needs a person: login, captcha, consent, or a layout nobody planned for. */
 export class NeedsHuman extends Error {
@@ -43,11 +43,15 @@ export interface BrowserOptions {
    */
   channel?: "chrome" | "chromium";
   browserbase?: { apiKey: string; projectId: string; http: HttpClient } | null;
+  /** Passkeys to load into the site's session: the ones enrolled for its account. */
+  passkeys?: (site: string) => Promise<readonly PasskeyRecord[]>;
 }
 
 export interface Session {
   context: BrowserContext;
   page: Page;
+  /** The virtual authenticator: export after an enrollment. */
+  passkeys: Passkeys;
   close(): Promise<void>;
 }
 
@@ -71,10 +75,11 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
     );
   }
   const page = context.pages()[0] ?? (await context.newPage());
-  virtualAuthenticator(context);
+  const passkeys = virtualAuthenticator(context, await opts.passkeys?.(site).catch(() => []));
   return {
     context,
     page,
+    passkeys,
     async close() {
       await context.close().catch(() => undefined);
       await browser?.close().catch(() => undefined);

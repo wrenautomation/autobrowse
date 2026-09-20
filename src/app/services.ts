@@ -87,7 +87,13 @@ export function browserOptions(
   settings: Settings,
   headless = settings.browserHeadless,
 ): BrowserOptions {
+  const store = credentialsFor(settings);
   return {
+    // The site's account's passkeys ride along in its session.
+    passkeys: async (site) => {
+      const name = SITE_LOGINS.find((s) => s.site === site)?.credential ?? site;
+      return (await store.get(name))?.passkeys ?? [];
+    },
     tier: settings.browser,
     profilesDir: settings.profilesDir,
     channel: settings.browserChannel,

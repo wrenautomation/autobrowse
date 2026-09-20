@@ -59,6 +59,17 @@ export interface SiteLogin {
   totpSetup?: TotpSetupSpec;
   /** How this site's change-password page walks, for `creds rotate`. */
   passwordChange?: PasswordChangeSpec;
+  /** How this site's passkey page walks, for `enroll-passkey`. */
+  passkeySetup?: PasskeySetupSpec;
+}
+
+/** The passkeys page: the button that starts the ceremony (our authenticator answers it), what the page says after. */
+export interface PasskeySetupSpec {
+  url: string | ((cred: Credential) => string);
+  create: Hints;
+  /** Confirmations after `create`, clicked when present ("Continue passkey enrollment"). */
+  then?: Hints[];
+  done: RegExp;
 }
 
 /** The change-password page: fields to fill, the submit, what the page says after. */
@@ -207,6 +218,15 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
   // An account with a passkey is asked for it first ("Verifying it's
   // you... Complete sign-in using your passkey", challenge/pk). There is
   // no passkey here; the selection page offers the password (mapped 2026-09-19).
+  if (
+    cred.passkeys.length &&
+    (/using your passkey/i.test(text) || /challenge\/pk/.test(fp.url()))
+  ) {
+    // Our authenticator holds the passkey: the ceremony completes on its own.
+    await fp.waitForUrl((u) => !/challenge\/pk/.test(u), 20_000);
+    await fp.wait(SETTLE_MS);
+    text = await fp.text();
+  }
   if (/using your passkey/i.test(text) || /challenge\/pk/.test(fp.url())) {
     // "Try another way" on a sign-in, "More ways to verify" on a re-auth.
     await fp.act(
