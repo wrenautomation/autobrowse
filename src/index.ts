@@ -37,6 +37,7 @@ export {
 } from "./compiler/index.js";
 export { envSecrets, memorySecrets, type SecretSource } from "./deps/secrets.js";
 export { fakeShell, localShell, type Shell, type ShellResult } from "./deps/shell.js";
+export { envFileSink, memorySink, type SecretSink } from "./deps/sink.js";
 export { macDesktop } from "./desktop/mac.js";
 export {
   type Desktop,

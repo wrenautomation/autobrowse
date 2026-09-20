@@ -35,6 +35,8 @@ export const stepSchema = z.object({
     z.object({ cmd: z.literal("key"), key: z.string() }),
     /** Read a control's or heading's text and keep it under a name; the compiled flow reads it too. */
     z.object({ cmd: z.literal("read"), ref, as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/) }),
+    /** A secret the site minted goes to the sink under an env name; the model never sees it. */
+    z.object({ cmd: z.literal("keep"), ref, env: z.string().regex(/^[A-Z][A-Z0-9_]*$/) }),
     /** The goal is met (or cannot be): say what happened. */
     /** Outside the browser: an app, a menu, a key, a shell command on this machine. */
     z.object({ cmd: z.literal("os"), act: desktopOpSchema, goal: z.string() }),
@@ -93,6 +95,7 @@ Actions, with "cmd" set to exactly one of these words:
   {"cmd":"open","url":"https://..."}
   {"cmd":"key","key":"Escape"}
   {"cmd":"read","ref":n,"as":"camelName"}   (keep an element's text under a name; a workflow built from this run will read it the same way)
+  {"cmd":"keep","ref":n,"env":"SOME_API_KEY"}   (a key, token or password the site just minted: it goes straight to the secret store under that env name; never read or quote it)
   {"cmd":"os","act":{"op":"tree"},"goal":"why"}   (the desktop, outside the browser: the front app's controls as role "name" lines)
   {"cmd":"os","act":{"op":"open","app":"System Settings"},"goal":"why"}
   {"cmd":"os","act":{"op":"click","role":"button","name":"Allow"},"goal":"why"}   (role and name exactly as the tree printed them; "app" narrows to one app)
@@ -223,6 +226,8 @@ function toCommand(a: Act, page: Digest): ExploreCommand {
       return { cmd: "upload", hints, files: a.files, goal: a.goal };
     case "read":
       return { cmd: "read", hints, as: a.as };
+    case "keep":
+      return { cmd: "keep", hints, env: a.env };
   }
 }
 
@@ -260,6 +265,8 @@ function describe(s: StepRecord): string {
           ? ` "${a.value}"`
           : a.cmd === "read"
             ? ` as ${a.as}`
-            : "";
+            : a.cmd === "keep"
+              ? ` as ${a.env}`
+              : "";
   return `${a.cmd}${at}${what}`;
 }

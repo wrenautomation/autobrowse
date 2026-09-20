@@ -6,6 +6,7 @@
 import type { FlowRunner } from "../browser/flow.js";
 import { envSecrets, type SecretSource } from "../deps/secrets.js";
 import { localShell, type Shell } from "../deps/shell.js";
+import { envFileSink, type SecretSink } from "../deps/sink.js";
 import { macDesktop } from "../desktop/mac.js";
 import { type Desktop, noDesktop } from "../desktop/types.js";
 
@@ -18,16 +19,19 @@ export interface CompiledDeps {
   shell: Shell;
   /** Desktop legs (apps, menus, root commands); this Mac, or a host that says it has none. */
   desktop: Desktop;
+  /** Where a `keep` op puts a secret the site minted; the local .env unless given. */
+  sink: SecretSink;
 }
 
 export function compiledDeps(
   browser: FlowRunner,
-  o: { secrets?: SecretSource; shell?: Shell; desktop?: Desktop } = {},
+  o: { secrets?: SecretSource; shell?: Shell; desktop?: Desktop; sink?: SecretSink } = {},
 ): CompiledDeps {
   return {
     browser,
     secrets: o.secrets ?? envSecrets(),
     shell: o.shell ?? localShell(),
+    sink: o.sink ?? envFileSink(".env"),
     desktop: o.desktop ?? (process.platform === "darwin" ? macDesktop() : noDesktop()),
   };
 }

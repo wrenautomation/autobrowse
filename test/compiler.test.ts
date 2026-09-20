@@ -132,6 +132,43 @@ describe("render", () => {
   });
 });
 
+describe("keep", () => {
+  it("renders a minted secret through the input sink, never the journaled result", () => {
+    const rec: Recording = {
+      ...recording,
+      name: "mint-key",
+      commands: [],
+      terminal: null,
+      actions: [
+        { t: 0, kind: "navigate", url: "https://x.test/keys" },
+        {
+          t: 1,
+          kind: "click",
+          url: "https://x.test/keys",
+          target: h({ tag: "button", role: "button", name: "Create key" }),
+        },
+        {
+          t: 2,
+          kind: "keep",
+          url: "https://x.test/keys",
+          target: h({ tag: "p", role: "paragraph", name: null }),
+          env: "X_API_KEY",
+        },
+      ],
+    };
+    const o = structure(rec);
+    expect(o.steps[0]?.kind === "browser" && o.steps[0].ops.at(-1)).toMatchObject({
+      kind: "keep",
+      env: "X_API_KEY",
+    });
+    const src = render(o).files["index.ts"] ?? "";
+    expect(src).toContain('await input.sink.put("X_API_KEY", await fp.read(');
+    expect(src).toContain("sink: SecretSink;");
+    expect(src).toContain("{ sink: deps.sink }");
+    expect(src).not.toContain("JSON.stringify(out)");
+  });
+});
+
 describe("polish", () => {
   it("applies names, descriptions, proofs and irreversible upgrades only", async () => {
     const o = structure(recording);

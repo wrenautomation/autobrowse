@@ -95,6 +95,7 @@ const agent = llm
           port,
           login: loginFor(settings, gmailFor(settings)),
           pace: paceFor(settings), // an agent browses at a person's pace: sites watch for the other kind
+          sink: app.sink,
         }),
     })
   : undefined;

@@ -3,17 +3,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { compile } from "../src/compiler/index.js";
+import { memorySink } from "../src/deps/sink.js";
 import { fakeDesktop } from "../src/desktop/types.js";
 import { startExplore } from "../src/explore/server.js";
 import { loadRecording } from "../src/recorder/store.js";
 
+const sink = memorySink();
 const desktop = fakeDesktop([
   { role: "window", name: "General", value: null, enabled: true, depth: 0 },
   { role: "checkbox", name: "Remote Login", value: "0", enabled: true, depth: 1 },
 ]);
 
 const PAGE = `data:text/html,${encodeURIComponent(
-  `<label>Domain <input id="d"></label><label>Password <input type="password" id="p"></label><button id="go" onclick="document.title='clicked'">Buy now</button>`,
+  `<label>Domain <input id="d"></label><label>Password <input type="password" id="p"></label><button id="go" onclick="document.title='clicked'">Buy now</button><p id="key">sk-ant-minted-key-1234567890abcdefghijklmnopqrstuvwxyz</p>`,
 )}`;
 
 describe("explore mode", () => {
@@ -37,6 +39,7 @@ describe("explore mode", () => {
       site: "scratch",
       port,
       desktop,
+      sink,
       recordingsDir: join(dir, "recordings"),
       browser: {
         tier: "local",
@@ -99,6 +102,11 @@ describe("explore mode", () => {
       (await send({ cmd: "eval", js: "document.querySelector('#p').value" })).body.result,
     ).toBe("hunter2hunter2");
 
+    // A minted secret goes to the sink; the journal and the socket never carry it.
+    const kept = await send({ cmd: "keep", hints: { css: "#key" }, env: "TEST_MINTED_KEY" });
+    expect(kept.body).toEqual({ env: "TEST_MINTED_KEY", length: 54 });
+    expect(sink.values.TEST_MINTED_KEY).toMatch(/^sk-ant-minted-key-/);
+
     // Desktop acts share the session and the journal; looking is not journaled, typed secrets are hidden.
     const tree = (await send({ cmd: "os", act: { op: "tree" } })).body.tree as string;
     expect(tree).toContain('- checkbox "Remote Login": 0');
@@ -112,18 +120,23 @@ describe("explore mode", () => {
     expect(desktop.acts.map((a) => a.op)).toEqual(["click", "type", "shell"]);
 
     const saved = await send({ cmd: "save", name: "buy" });
-    expect(saved.body.actions).toBe(7);
+    expect(saved.body.actions).toBe(8);
     const rec = await loadRecording(join(dir, "recordings"), "buy");
+    // (the page's own data: URL holds the fixture; the acts must not)
+    expect(JSON.stringify(rec.actions.map(({ url: _u, ...a }) => a))).not.toContain(
+      "sk-ant-minted",
+    );
     expect(rec.actions.map((a) => a.kind)).toEqual([
       "navigate",
       "input",
       "input",
       "click",
+      "keep",
       "desktop",
       "desktop",
       "desktop",
     ]);
-    const typed = rec.actions[5];
+    const typed = rec.actions[6];
     expect(
       typed.kind === "desktop" && typed.redacted && typed.op.op === "type" && typed.op.text,
     ).toBe("<redacted>");

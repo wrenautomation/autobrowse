@@ -283,6 +283,14 @@ export function structure(rec: Recording): Outline {
           as: a.as,
         });
         break;
+      case "keep":
+        add({
+          kind: "keep",
+          goal: `keep ${describe(a.target)} as ${a.env}`,
+          hints: stripHints(a.target),
+          env: a.env,
+        });
+        break;
       case "submit":
         // Follows the click or Enter that caused it.
         break;

@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as restate from "@restatedev/restate-sdk";
 import type { FlowRunner } from "../browser/flow.js";
+import type { SecretSink } from "../deps/sink.js";
 import { type HostDeps, makeRunObjectFrom, type RunObjectDefinition } from "../engine/object.js";
 import type { AdvanceOptions } from "../engine/run.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
@@ -104,6 +105,8 @@ export function makeCompiledRunObject(o: {
   browser: FlowRunner;
   host: HostDeps;
   opts?: AdvanceOptions;
+  /** The worker's secret sink (.env or SSM) for `keep` ops. */
+  sink?: SecretSink;
 }): RunObjectDefinition<AnyWorkflow> {
   return makeRunObjectFrom(
     COMPILED_OBJECT.name,
@@ -114,7 +117,11 @@ export function makeCompiledRunObject(o: {
         throw new restate.TerminalError(`no compiled workflow named ${ref.workflow}`, {
           errorCode: 404,
         });
-      return { workflow: found.workflow, deps: compiledDeps(o.browser), ref };
+      return {
+        workflow: found.workflow,
+        deps: compiledDeps(o.browser, o.sink ? { sink: o.sink } : {}),
+        ref,
+      };
     },
     o.host,
     o.opts ?? {},

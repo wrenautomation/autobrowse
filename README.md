@@ -86,6 +86,11 @@ Browserbase takes them.
   that works is journaled as a recording; `save` writes it, `compile`
   takes it from there. Failing flows leave the same aria tree next to the
   screenshot (`<stamp>.aria.txt`).
+- **Minted secrets.** `{"cmd":"keep","hints":…,"env":"X_API_KEY"}` reads
+  a key the site just showed straight into the secret sink (`.env` locally,
+  SSM in prod) under that name. The journal keeps the element and the env
+  name, never the value; a compiled `keep` op does the same through
+  `deps.sink`, outside the run's journal. The agent has `keep{ref,env}`.
 - **Claude Code.** `autobrowse mcp` (registered by `.mcp.json`) gives
   Claude Code the session as tools: `start`, `aria`, `click`, `fill`,
   `open`, `os`, `command`, `save`, `close`. Same journal, same redaction,

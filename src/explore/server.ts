@@ -19,6 +19,7 @@ import { defineFlow, type FlowPage, flowRunner, type RunnerOptions } from "../br
 import { type Hints, locate, locateAll } from "../browser/locate.js";
 import { snapshotPage } from "../browser/repair.js";
 import { type BrowserOptions, looksLikeWall } from "../browser/session.js";
+import type { SecretSink } from "../deps/sink.js";
 import { macDesktop } from "../desktop/mac.js";
 import {
   type Desktop,
@@ -100,6 +101,8 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   targetSchema.extend({ cmd: z.literal("count") }),
   /** Read an element's text and keep it under `as`; journaled, so the compiled flow reads it too. */
   targetSchema.extend({ cmd: z.literal("read"), as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/) }),
+  /** Read a secret the site just minted straight into the secret sink under `env`; nothing shows it. */
+  targetSchema.extend({ cmd: z.literal("keep"), env: z.string().regex(/^[A-Z][A-Z0-9_]*$/) }),
   z.object({ cmd: z.literal("note"), text: z.string() }),
   /** Write the journal as a recording under `recordingsDir/<name>`. */
   z.object({ cmd: z.literal("save"), name: z.string().regex(/^[a-z][a-z0-9-]*$/) }),
@@ -124,6 +127,8 @@ export interface ExploreOptions {
   pace?: RunnerOptions["pace"];
   /** The desktop `os` acts run on; this Mac by default, none on a headless host. */
   desktop?: Desktop;
+  /** Where `keep` puts a secret read off the page (.env locally, SSM in prod). */
+  sink?: SecretSink;
   now?: () => number;
 }
 
@@ -390,6 +395,14 @@ async function serve(
         const shown = out(text, false);
         journalAct(c, (target) => ({ kind: "read", target, as: c.as, value: shown }));
         return { as: c.as, text: shown };
+      }
+      case "keep": {
+        if (!opts.sink) throw new Error("keep needs a secret sink (SECRET_SINK / .env)");
+        const value = (await find(c).first().innerText({ timeout: 10_000 })).trim();
+        if (!value) throw new Error("keep: the element is empty");
+        await opts.sink.put(c.env, value);
+        journalAct(c, (target) => ({ kind: "keep", target, env: c.env }));
+        return { env: c.env, length: value.length };
       }
       case "note":
         journal({ kind: "note", text: c.text });

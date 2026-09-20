@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Command } from "commander";
 import { expandHome } from "../google-auth.js";
 import type { Settings } from "./config.js";
-import { browserOptions, gmailFor, llmFor, loginFor, paceFor } from "./services.js";
+import { browserOptions, gmailFor, llmFor, loginFor, paceFor, sinkFor } from "./services.js";
 
 export function registerRecordCommands(program: Command, settings: Settings): void {
   program
@@ -21,6 +21,7 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
         recordingsDir: settings.recordingsDir,
         port: Number(o.port),
         login: loginFor(settings, gmailFor(settings)),
+        sink: sinkFor(settings),
       });
       console.log(
         `exploring ${site} on http://127.0.0.1:${ex.port}\ntoken ${ex.token}\ncurl -s -X POST -H "Authorization: Bearer ${ex.token}" http://127.0.0.1:${ex.port}/ -d '{"cmd":"aria"}'`,
@@ -60,6 +61,7 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
             port: port++,
             login: loginFor(settings, gmailFor(settings)),
             pace: paceFor(settings),
+            sink: sinkFor(settings),
           });
           if (url) await ex.exec({ cmd: "open", url });
           return ex;
@@ -177,6 +179,7 @@ export function registerRecordCommands(program: Command, settings: Settings): vo
             port,
             login: loginFor(settings, gmailFor(settings)),
             pace: paceFor(settings),
+            sink: sinkFor(settings),
           }),
       });
       const record = readFailure(failure, expandHome(settings.artifactsDir));
@@ -278,6 +281,7 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<void> {
     port: r.port,
     login: loginFor(settings, gmailFor(settings)),
     pace: paceFor(settings),
+    sink: sinkFor(settings),
   });
   console.log(
     `agent on ${r.site}; pause/resume: curl -s -X POST -H "Authorization: Bearer ${ex.token}" http://127.0.0.1:${ex.port}/ -d '{"cmd":"pause"}'`,

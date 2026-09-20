@@ -52,6 +52,9 @@ function renderOp(op: OutlineOp): string {
     .join(", ")} }`;
   const locatorNote = plan ? ` // ${renderLocator(plan)}` : " // TODO: no usable hints";
   if (op.kind === "read") return `    out.${op.as} = await fp.read(${hints});${locatorNote}`;
+  // Through the input, not the result: the flow's return value is journaled, the sink is not.
+  if (op.kind === "keep")
+    return `    await input.sink.put(${q(op.env)}, await fp.read(${hints}));${locatorNote}`;
   const opts = `{ goal: ${q(op.goal)}${op.kind === "click" && op.irreversible ? ", irreversible: true" : ""} }`;
   const opSrc =
     op.kind === "click"
@@ -83,8 +86,13 @@ function renderBrowserStep(o: Outline, step: Extract<OutlineStep, { kind: "brows
   const id = camel(step.name);
   const Input = `${pascal(step.name)}Input`;
   const { fields, secrets } = flowInputs(step);
-  const inputType = [...fields, ...secrets].length
-    ? `export interface ${Input} {\n${[...fields, ...secrets].map((k) => `  ${k}: string;`).join("\n")}\n}`
+  const keeps = step.ops.some((op) => op.kind === "keep");
+  const inputLines = [
+    ...[...fields, ...secrets].map((k) => `  ${k}: string;`),
+    ...(keeps ? ["  sink: SecretSink;"] : []),
+  ];
+  const inputType = inputLines.length
+    ? `export interface ${Input} {\n${inputLines.join("\n")}\n}`
     : `export type ${Input} = Record<string, never>;`;
   const reads = step.ops.filter((op) => op.kind === "read");
   const flowLines = [
@@ -97,7 +105,11 @@ function renderBrowserStep(o: Outline, step: Extract<OutlineStep, { kind: "brows
     (k) =>
       `    // Outside fx.run on purpose: the journal must never hold it.\n    const ${k} = await deps.secrets.get(${q(k)});`,
   );
-  const inputArgs = [...fields.map((f) => `${f}: plan.${f}`), ...secrets].join(", ");
+  const inputArgs = [
+    ...fields.map((f) => `${f}: plan.${f}`),
+    ...secrets,
+    ...(keeps ? ["sink: deps.sink"] : []),
+  ].join(", ");
   const gate = step.irreversible
     ? `    const answer = gate("human", ${q(`Run "${step.name}" (${step.description || "irreversible"})?`)});\n    if (!answer.approved) return rejected(answer.note ?? "declined");\n`
     : "";
@@ -237,6 +249,9 @@ export function render(o: Outline, opts: RenderOptions = {}): Rendered {
   const anyGate = o.steps.some((s) => s.irreversible);
   const anyTerminal = o.steps.some((s) => s.kind === "terminal");
   const anyDesktop = o.steps.some((s) => s.kind === "desktop");
+  const anyKeep = o.steps.some(
+    (s) => s.kind === "browser" && s.ops.some((op) => op.kind === "keep"),
+  );
   const anySecret = o.secrets.length > 0;
   const imports = [
     "defineFlow",
@@ -248,6 +263,7 @@ export function render(o: Outline, opts: RenderOptions = {}): Rendered {
     ...(anySecret ? ["type SecretSource"] : []),
     ...(anyTerminal ? ["type Shell"] : []),
     ...(anyDesktop ? ["type Desktop"] : []),
+    ...(anyKeep ? ["type SecretSink"] : []),
     "type StepDef",
   ].sort((a, b) => a.replace("type ", "").localeCompare(b.replace("type ", "")));
 
@@ -260,6 +276,7 @@ export function render(o: Outline, opts: RenderOptions = {}): Rendered {
     ...(anySecret ? ["  secrets: SecretSource;"] : []),
     ...(anyTerminal ? ["  shell: Shell;"] : []),
     ...(anyDesktop ? ["  desktop: Desktop;"] : []),
+    ...(anyKeep ? ["  sink: SecretSink;"] : []),
   ];
 
   const index = `${banner([
@@ -307,9 +324,11 @@ export const workflow = defineWorkflow<Deps, Memo>()({
       : []),
     ...(anyTerminal ? ["shell: fakeShell()"] : []),
     ...(anyDesktop ? ["desktop: fakeDesktop()"] : []),
+    ...(anyKeep ? ["sink: memorySink()"] : []),
   ].join(", ");
   const testImports = [
     ...(anyDesktop ? ["fakeDesktop"] : []),
+    ...(anyKeep ? ["memorySink"] : []),
     ...(anyTerminal ? ["fakeShell"] : []),
     "memoryEffects",
     ...(anySecret ? ["memorySecrets"] : []),

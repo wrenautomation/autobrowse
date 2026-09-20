@@ -174,6 +174,8 @@ export interface App {
   /** The UI's live feed; also one of the channels. */
   bus: EventBus;
   memory: Memory;
+  /** Where minted secrets go (`keep` ops, bootstrap). */
+  sink: SecretSink;
   /** Set by the host once the agent exists: every failure record goes here (healing). */
   onFailure: ((record: FailureRecord, file: string) => void) | null;
 }
@@ -275,6 +277,26 @@ export function linqFor(
 /** The runner's pace from settings; `fast` means no delays at all. */
 export function paceFor(settings: Settings): Pace | null {
   return settings.pace === "fast" ? null : HUMAN_PACE;
+}
+
+/** Where minted secrets go: SSM under /autobrowse/config in prod, the env file otherwise. */
+export function sinkFor(
+  settings: Settings,
+  ssm: SSMClient = lazy(() => new SSMClient({ region: settings.awsRegion })),
+): SecretSink {
+  if (settings.secretSink !== "ssm") return envFileSink(settings.envFile);
+  return {
+    put: async (name, value) => {
+      await ssm.send(
+        new PutParameterCommand({
+          Name: `/autobrowse/config/${name}`,
+          Value: value,
+          Type: "SecureString",
+          Overwrite: true,
+        }),
+      );
+    },
+  };
 }
 
 export function memoryFor(settings: Settings, http = httpClient()): Memory {
@@ -413,21 +435,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     dmarcRua: settings.dmarcRua ?? null,
   };
 
-  const sink: SecretSink =
-    settings.secretSink === "ssm"
-      ? {
-          put: async (name, value) => {
-            await ssm.send(
-              new PutParameterCommand({
-                Name: `/autobrowse/config/${name}`,
-                Value: value,
-                Type: "SecureString",
-                Overwrite: true,
-              }),
-            );
-          },
-        }
-      : envFileSink(settings.envFile);
+  const sink = sinkFor(settings, ssm);
   const bootstrapDeps: BootstrapDeps = {
     browser,
     sink,
@@ -472,7 +480,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       makeRunObject(domainWorkflow, domainDeps, host, { guards }),
       makeRunObject(bootstrapWorkflow, bootstrapDeps, host, { guards }),
       // Every compiled flow, present and future, runs under this one object.
-      makeCompiledRunObject({ catalog, browser, host, opts: { guards } }),
+      makeCompiledRunObject({ catalog, browser, host, opts: { guards }, sink }),
     ],
     channel,
     workflows: async () => [...WORKFLOWS, ...(await compiledNow()).map((c) => c.workflow)],
@@ -482,6 +490,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     browser,
     bus,
     memory,
+    sink,
     get onFailure() {
       return failures.hook;
     },

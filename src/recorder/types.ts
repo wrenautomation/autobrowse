@@ -46,6 +46,8 @@ export type Action =
   | (Base & { kind: "submit"; target: LocatorHints })
   /** Text read off an element and kept under a name: the scraping half of a workflow. */
   | (Base & { kind: "read"; target: LocatorHints; as: string; value: string })
+  /** A secret read off the page (a minted API key) and put in the secret sink as `env`; the value is never here. */
+  | (Base & { kind: "keep"; target: LocatorHints; env: string })
   | (Base & { kind: "note"; text: string })
   | (Base & { kind: "pause" })
   | (Base & { kind: "resume" });

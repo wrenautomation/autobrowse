@@ -161,6 +161,8 @@ function Actions({ rec }: { rec: Recording }) {
         return "▶ resumed";
       case "desktop":
         return `desktop: ${describeOp(a.op, a.redacted)}`;
+      case "keep":
+        return `keep ${a.target.name ?? a.target.text ?? a.target.tag} as ${a.env} (in the secret sink, not here)`;
     }
   };
   return (

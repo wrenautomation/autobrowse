@@ -48,6 +48,13 @@ const opSchema = z.discriminatedUnion("kind", [
     hints: hintsSchema,
     as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
   }),
+  /** A secret read off the page into the sink under an env name; never in the plan, result or journal. */
+  z.object({
+    kind: z.literal("keep"),
+    goal: z.string(),
+    hints: hintsSchema,
+    env: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
+  }),
   /** The recorder was paused here: a person did something private. */
   z.object({ kind: z.literal("human"), reason: z.string() }),
 ]);
