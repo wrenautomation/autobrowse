@@ -125,10 +125,16 @@ export function api(deps: ApiDeps): Hono {
     deps.linq?.secret ? next() : bearerAuth(deps.token)(c, next),
   );
 
-  /** The status is fixed at boot except the workflow list, which compiles change. */
+  /** Fixed at boot except the workflow list (compiles) and the model spend (every call). */
   app.get("/api/status", async (c) =>
     c.json(
-      deps.status ? { ...deps.status, workflows: (await workflows()).map((w) => w.name) } : null,
+      deps.status
+        ? {
+            ...deps.status,
+            workflows: (await workflows()).map((w) => w.name),
+            ...(deps.budget ? { budget: deps.budget() } : {}),
+          }
+        : null,
     ),
   );
 
