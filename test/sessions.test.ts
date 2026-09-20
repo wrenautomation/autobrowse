@@ -107,14 +107,24 @@ describe("agentSessions", () => {
       { thought: "captcha", action: { cmd: "human", reason: "a captcha" } },
       { thought: "past it", action: { cmd: "done", summary: "through", achieved: true } },
     ]);
-    const s = agentSessions({ llm, open: async () => ex, basePort: 9700 });
+    const notes: string[] = [];
+    const s = agentSessions({
+      llm,
+      open: async () => ex,
+      basePort: 9700,
+      notify: async (t) => {
+        notes.push(t);
+      },
+    });
     const v = await s.start({ site: "site", goal: "g" });
     for (let i = 0; i < 20 && s.get(v.id)?.status !== "needs-human"; i++) await tick();
     expect(s.get(v.id)).toMatchObject({ status: "needs-human", prompt: "a captcha" });
+    expect(notes[0]).toMatch(/^agent on site needs you: a captcha/);
     expect(ex.paused()).toBe(true);
     await s.resume(v.id);
     for (let i = 0; i < 20 && s.get(v.id)?.status !== "done"; i++) await tick();
     expect(s.get(v.id)).toMatchObject({ status: "done", achieved: true, prompt: null });
+    expect(notes[1]).toMatch(/^agent on site achieved: g — through/);
   });
   it("views persist to disk and come back closed after a restart", async () => {
     const dir = mkdtempSync(join(tmpdir(), "sessions-"));

@@ -81,6 +81,8 @@ export interface SessionsOptions {
   basePort?: number;
   maxSteps?: number;
   now?: () => Date;
+  /** A line to the person when the agent needs them or finishes (a phone, email); optional. */
+  notify?: (text: string) => Promise<void>;
   /**
    * Where session views are written (one JSON per session) so the list,
    * and the evaluator's evidence, survive a worker restart. Sessions that
@@ -196,6 +198,10 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
               view.status = "needs-human";
               view.prompt = reason;
               await ex.exec({ cmd: "pause" });
+              persist(view);
+              await o
+                .notify?.(`agent on ${req.site} needs you: ${reason} (session ${id})`)
+                .catch(() => undefined);
               await ex.resumed();
               view.prompt = null;
               if (!live.stopFlag) view.status = "running";
@@ -218,6 +224,12 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
           view.achieved = result.achieved;
           view.summary = result.summary;
           view.status = live.stopFlag ? "stopped" : "done";
+          if (!live.stopFlag)
+            await o
+              .notify?.(
+                `agent on ${req.site} ${result.achieved ? "achieved" : "did not achieve"}: ${req.goal} — ${result.summary}`,
+              )
+              .catch(() => undefined);
         } catch (err) {
           view.error = err instanceof Error ? err.message : String(err);
           view.status = "failed";

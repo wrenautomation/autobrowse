@@ -43,6 +43,7 @@ const agent = llm
   ? agentSessions({
       llm,
       dir: join(expandHome(settings.recordingsDir), ".sessions"),
+      ...(app.channel.note ? { notify: app.channel.note.bind(app.channel) } : {}),
       open: (site, port) =>
         startExplore({
           site,
