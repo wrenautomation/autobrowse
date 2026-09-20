@@ -40,5 +40,12 @@ describe("looksLikeWall", () => {
     expect((await looksLikeWall(page("https://x.com/", "Complete the CAPTCHA below")))?.kind).toBe(
       "captcha",
     );
+    expect(
+      (
+        await looksLikeWall(
+          page("https://x.com/settings/billing", "Continue with Google\nOR\nContinue with email"),
+        )
+      )?.kind,
+    ).toBe("login");
   });
 });

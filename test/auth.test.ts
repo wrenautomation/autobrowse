@@ -436,6 +436,15 @@ describe("signInToGoogle second step", () => {
     credFor: async () => base,
     as: () => ctx(fp, kinds, notify),
   });
+  it("continues past the OAuth consent page", async () => {
+    const { fp, acts } = fakePage({
+      text: ["Loading"],
+      present: (h) => h.name === "/^continue$/i",
+      url: "https://accounts.google.com/signin/oauth/id?authuser=0",
+    });
+    await signInToGoogle(ctx(fp, ["totp"]));
+    expect(acts.map((a) => a.hints.name)).toEqual(["/^continue$/i"]);
+  });
   it("switches account when the profile is signed in as someone else", async () => {
     const { fp, acts } = fakePage({
       text: [

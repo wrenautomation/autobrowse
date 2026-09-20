@@ -287,6 +287,14 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
   }
   if (/verify it.s you|confirm your recovery|tap yes on your/i.test(text))
     throw new LoginFailed(site, "Google asked for a second step this tool cannot answer");
+  // The OAuth consent ("Google will allow x.com to access this info about you",
+  // "You're signing back in to x"): Continue.
+  // The page renders late ("Loading"), so the button is awaited, not the text.
+  const consent = { role: "button", name: "/^continue$/i" } as const;
+  if (/signin\/oauth/.test(fp.url()) && (await fp.has(consent, 8_000))) {
+    await fp.act({ kind: "click" }, consent, { goal: "consent to the sign-in" });
+    await fp.waitForUrl((u) => !/signin\/oauth/.test(u), 15_000);
+  }
 }
 
 /** A 6+ digit code goes into the code box and Next. */

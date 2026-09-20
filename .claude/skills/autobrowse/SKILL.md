@@ -19,7 +19,7 @@ scripts/cmd.sh <port> '<json>'         # one command, JSON back
 scripts/stop.sh <port>                 # close browser + socket
 ```
 
-`<site>` is a profile name: `google`, `cloudflare`, `aws`, `anthropic`,
+`<site>` is a profile name: `google`, `cloudflare`, `aws`, `anthropic`, `sentry`,
 `twilio`, `instantly`, `google-admin`, or `scratch` (no login). Profiles
 are listed by `pnpm autobrowse creds list`. Start one session per site;
 `start.sh` on an open port just reports it.

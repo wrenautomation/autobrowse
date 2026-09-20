@@ -216,5 +216,12 @@ export async function looksLikeWall(page: Page): Promise<Wall | null> {
     return { kind: "captcha", detail: "captcha" };
   if (/verify your phone|enter the code|2-step verification/i.test(text))
     return { kind: "challenge", detail: "verification challenge" };
+  // A login form rendered under whatever URL was asked for (platform.claude.com does this).
+  if (
+    /\b(continue|sign ?in|log ?in|sign ?up) with (google|email|sso|github|microsoft|apple)\b/i.test(
+      text,
+    )
+  )
+    return { kind: "login", detail: `login form on ${url}` };
   return null;
 }

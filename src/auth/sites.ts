@@ -280,7 +280,10 @@ const anthropic: SiteLogin = {
   home: "https://platform.claude.com/dashboard",
   ask: "Your Claude Console account (platform.claude.com), where API keys are minted",
   via: ["google"],
-  loggedIn: async (fp) => ANTHROPIC_HOME.test(fp.url()),
+  // The login form renders under the requested URL (/settings/billing stays), so the URL alone lies.
+  loggedIn: async (fp) =>
+    ANTHROPIC_HOME.test(fp.url()) &&
+    !(await fp.has({ role: "button", name: "/continue with google/i" }, 1_500)),
   signIn: oauthLogin("anthropic", {
     start: "https://platform.claude.com/login",
     button: { role: "button", name: "/google/i" },
