@@ -304,6 +304,32 @@ const twilio: SiteLogin = {
     start: "https://www.twilio.com/try-twilio",
     button: { role: "button", name: "/google/i" },
     success: TWILIO_HOME,
+    // Twilio texts a code after the Google round trip (mapped 2026-09-21);
+    // "remember this browser" keeps the profile clear of it for a while.
+    challenge: {
+      at: /login\.twilio\.com\/u\/mfa-sms-challenge/,
+      async run(ctx) {
+        const { fp } = ctx;
+        // A code sent for an earlier attempt is older than this sign-in: ask for a fresh one.
+        await fp.act(
+          { kind: "click" },
+          { role: "button", name: "/^resend$/i" },
+          { goal: "have Twilio text a fresh code" },
+        );
+        const code = await ctx.code("sms", "twilio");
+        await fp.act(
+          { kind: "click" },
+          { id: "rememberBrowser" },
+          { goal: "remember this browser" },
+        );
+        await fp.act({ kind: "fill", value: code }, { id: "code" }, { goal: "enter the SMS code" });
+        await fp.act(
+          { kind: "click" },
+          { role: "button", name: "/^continue$/i" },
+          { goal: "submit the code" },
+        );
+      },
+    },
   }),
 };
 

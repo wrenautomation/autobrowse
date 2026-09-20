@@ -12,6 +12,7 @@ import {
   findTotpSecret,
   formLogin,
   LoginFailed,
+  landAfterOauth,
   loginProvider,
   type Message,
   memoryCredentials,
@@ -363,6 +364,53 @@ describe("loginProvider on the site's own sign-in page", () => {
     const elsewhere = fakePage({ text: [], present: () => true, url: "https://site.test/x" });
     expect(await login(elsewhere.fp, "s")).toBe("signed-in");
     expect(calls).toEqual(["here", "signIn"]);
+  });
+});
+
+describe("landAfterOauth", () => {
+  const spec = {
+    success: /console\.x\.test\//,
+    challenge: {
+      at: /login\.x\.test\/mfa/,
+      async run(ctx: SignInContext) {
+        await ctx.fp.act({ kind: "fill", value: await ctx.code("sms") }, { id: "code" });
+      },
+    },
+  };
+  const at = (urls: string[]) => {
+    const { fp, acts } = fakePage({ text: [], present: () => true });
+    let i = 0;
+    fp.url = () => urls[Math.min(i, urls.length - 1)] ?? "";
+    fp.waitForUrl = async (p) => {
+      i = Math.min(i + 1, urls.length - 1);
+      return p instanceof RegExp ? p.test(fp.url()) : p(fp.url());
+    };
+    const ctx = {
+      fp,
+      cred: { username: "u", password: "p" },
+      code: async () => "424242",
+      offers: () => true,
+      inbox: () => null,
+      credFor: async () => ({ username: "g", password: "p" }),
+      as: () => ctx,
+    } as SignInContext;
+    return { ctx, acts };
+  };
+  it("answers the site's challenge with the site's code, then reaches home", async () => {
+    const { ctx, acts } = at([
+      "https://accounts.google.test/",
+      "https://login.x.test/mfa?s=1",
+      "https://console.x.test/account/",
+    ]);
+    await landAfterOauth("x", spec, ctx);
+    expect(acts).toEqual([{ op: { kind: "fill", value: "424242" }, hints: { id: "code" } }]);
+  });
+  it("skips the challenge when the site goes straight home, and fails when it goes nowhere", async () => {
+    const home = at(["https://accounts.google.test/", "https://console.x.test/account/"]);
+    await landAfterOauth("x", spec, home.ctx);
+    expect(home.acts).toEqual([]);
+    const stuck = at(["https://accounts.google.test/", "https://login.x.test/error"]);
+    await expect(landAfterOauth("x", spec, stuck.ctx)).rejects.toThrow(/still on .*error/);
   });
 });
 

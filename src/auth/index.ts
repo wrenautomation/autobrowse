@@ -39,6 +39,7 @@ export {
   type LoginOptions,
   type LoginOutcome,
   type LoginProvider,
+  landAfterOauth,
   loginProvider,
   oauthLogin,
   resolveLogin,

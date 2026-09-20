@@ -388,6 +388,11 @@ export interface OauthLoginSpec {
   provider?: "google";
   /** The site's page after the round trip. */
   success: RegExp;
+  /**
+   * The site's own second step after the provider (Twilio texts a code even
+   * to a Google sign-in): answered with the site's credential and inboxes.
+   */
+  challenge?: { at: RegExp; run(ctx: SignInContext): Promise<void> };
 }
 
 /** Sign in through an identity provider's button: popup or redirect, then back to the site. */
@@ -409,9 +414,26 @@ export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signI
     const cred = await ctx.credFor(provider);
     await signInToGoogle(ctx.as(cred));
     fp.switchTo(main);
-    if (!(await fp.waitForUrl(spec.success, 30_000)) && !spec.success.test(fp.url()))
-      throw new LoginFailed(site, `still on ${fp.url()} after the ${provider} round trip`);
+    await landAfterOauth(site, spec, ctx);
   };
+}
+
+/** Back from the provider: the site's own challenge if it shows one, then its signed-in page. */
+export async function landAfterOauth(
+  site: string,
+  spec: Pick<OauthLoginSpec, "success" | "challenge" | "provider">,
+  ctx: SignInContext,
+): Promise<void> {
+  const { fp } = ctx;
+  const provider = spec.provider ?? "google";
+  const fail = () => new LoginFailed(site, `still on ${fp.url()} after the ${provider} round trip`);
+  const challenge = spec.challenge;
+  if (challenge) {
+    const at = (u: string) => spec.success.test(u) || challenge.at.test(u);
+    if (!(await fp.waitForUrl(at, 30_000)) && !at(fp.url())) throw fail();
+    if (challenge.at.test(fp.url())) await challenge.run(ctx);
+  }
+  if (!(await fp.waitForUrl(spec.success, 30_000)) && !spec.success.test(fp.url())) throw fail();
 }
 
 export interface LoginOptions {

@@ -78,7 +78,7 @@ export async function locateFailure(
 /** The outline with one step's ops replaced by what the repair session did. Pure. */
 export function spliceStep(outline: Outline, stepIndex: number, healed: Outline): Outline {
   const step = outline.steps[stepIndex];
-  if (!step || step.kind !== "browser") throw new Error("only a browser step can be healed");
+  if (step?.kind !== "browser") throw new Error("only a browser step can be healed");
   const ops = healed.steps.flatMap((s) => (s.kind === "browser" ? s.ops : []));
   if (ops.length === 0) throw new Error("the repair did nothing the flow could replay");
   const steps = outline.steps.map((s, i) => (i === stepIndex ? { ...step, ops } : s));
@@ -93,7 +93,11 @@ export function spliceStep(outline: Outline, stepIndex: number, healed: Outline)
 
 function dedupe<T>(items: T[], key: (t: T) => string): T[] {
   const seen = new Set<string>();
-  return items.filter((t) => (seen.has(key(t)) ? false : (seen.add(key(t)), true)));
+  return items.filter((t) => {
+    if (seen.has(key(t))) return false;
+    seen.add(key(t));
+    return true;
+  });
 }
 
 const SETTLED = new Set<SessionView["status"]>(["done", "stopped", "failed", "closed"]);
