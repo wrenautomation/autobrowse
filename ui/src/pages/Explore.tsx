@@ -319,6 +319,9 @@ export function AgentPage({ id }: { id: string }) {
         )}
         {data.error && <p className="error">{data.error}</p>}
       </div>
+      {!closed && data.status !== "running" && data.status !== "starting" && (
+        <Console id={id} onDone={reload} />
+      )}
       <h2>Steps</h2>
       <div className="shots">
         {data.steps.map((s, i) => (
@@ -336,6 +339,108 @@ export function AgentPage({ id }: { id: string }) {
       </div>
     </>
   );
+}
+
+/**
+ * Your own commands on the paused page: the explore vocabulary in short
+ * form. `open <url>`, `note <text>`, `click <name>`, `fill <name> = <value>`,
+ * `press <name> <key>`, `aria`, `text`, `url`, or raw JSON.
+ */
+function Console({ id, onDone }: { id: string; onDone: () => void }) {
+  const [line, setLine] = useState("");
+  const [out, setOut] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    const cmd = parseLine(line);
+    if (!cmd) {
+      setOut("could not read that; try `click Save` or raw JSON");
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await api.agentExec(id, cmd);
+      setOut(JSON.stringify(r.result, null, 2).slice(0, 6000));
+      setLine("");
+      onDone();
+    } catch (e) {
+      setOut((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="card">
+      <div className="row">
+        <input
+          className="grow mono"
+          value={line}
+          placeholder="open https://… | note … | click Save | fill Email = a@b.c | press Search Enter | aria | text | url | {json}"
+          onChange={(e) => setLine(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && !busy && send()}
+        />
+        <button type="button" disabled={busy || !line} onClick={send}>
+          {busy ? "…" : "send"}
+        </button>
+      </div>
+      {out && <pre style={{ marginTop: 8 }}>{out}</pre>}
+    </div>
+  );
+}
+
+function parseLine(line: string): unknown {
+  const t = line.trim();
+  if (!t) return null;
+  if (t.startsWith("{")) {
+    try {
+      return JSON.parse(t);
+    } catch {
+      return null;
+    }
+  }
+  const sp = t.indexOf(" ");
+  const cmd = sp < 0 ? t : t.slice(0, sp);
+  const rest = sp < 0 ? "" : t.slice(sp + 1).trim();
+  const hints = (name: string) => (name.startsWith("/") ? { name } : { text: name });
+  switch (cmd) {
+    case "open":
+      return { cmd: "open", url: rest };
+    case "note":
+      return { cmd: "note", text: rest };
+    case "aria":
+    case "text":
+    case "url":
+    case "screenshot":
+    case "snapshot":
+      return { cmd };
+    case "key":
+      return { cmd: "key", key: rest };
+    case "click":
+      return { cmd: "click", hints: hints(rest), goal: `click ${rest}` };
+    case "fill": {
+      const eq = rest.indexOf("=");
+      if (eq < 0) return null;
+      const name = rest.slice(0, eq).trim();
+      return {
+        cmd: "fill",
+        hints: hints(name),
+        value: rest.slice(eq + 1).trim(),
+        goal: `fill ${name}`,
+      };
+    }
+    case "press": {
+      const last = rest.lastIndexOf(" ");
+      if (last < 0) return null;
+      const name = rest.slice(0, last).trim();
+      return {
+        cmd: "press",
+        hints: hints(name),
+        key: rest.slice(last + 1),
+        goal: `press in ${name}`,
+      };
+    }
+    default:
+      return null;
+  }
 }
 
 function describe(s: SessionView["steps"][number]): string {

@@ -241,6 +241,10 @@ describe("api: agent sessions", () => {
         calls.push(`close ${id}`);
         return views.get(id) as SessionView;
       },
+      async exec(id, command) {
+        calls.push(`exec ${id} ${command.cmd}`);
+        return { ok: true };
+      },
     };
     return { agent, calls };
   }
@@ -275,6 +279,18 @@ describe("api: agent sessions", () => {
       (await withAgent.request(post("/api/agent/abc/save", { name: "Bad Name" }))).status,
     ).toBe(400);
     expect((await withAgent.request(post("/api/agent/abc/dance", {}))).status).toBe(400);
-    expect(calls).toEqual(["pause abc", "resume abc", "stop abc", "save abc find-the-name"]);
+    expect(
+      (await withAgent.request(post("/api/agent/abc/exec", { cmd: "note", text: "x" }))).status,
+    ).toBe(200);
+    expect((await withAgent.request(post("/api/agent/abc/exec", { cmd: "dance" }))).status).toBe(
+      400,
+    );
+    expect(calls).toEqual([
+      "pause abc",
+      "resume abc",
+      "stop abc",
+      "save abc find-the-name",
+      "exec abc note",
+    ]);
   });
 });

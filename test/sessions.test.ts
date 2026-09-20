@@ -132,6 +132,27 @@ describe("agentSessions", () => {
     expect(views.find((x) => x.id === v.id)).toMatchObject({ status: "done", goal: "persisted" });
     if (w) expect(views.find((x) => x.id === w.id)?.status).toMatch(/closed|failed/);
   });
+  it("a person's exec is refused while the agent runs, allowed once paused, never close/save", async () => {
+    const { ex, calls } = fakeExplorer();
+    const llm = fakeLlm(
+      Array.from({ length: 6 }, () => ({
+        thought: "t",
+        action: { cmd: "click", ref: 1, goal: "g" },
+      })),
+    );
+    const s = agentSessions({ llm, open: async () => ex, basePort: 9660 });
+    const v = await s.start({ site: "site", goal: "g", maxSteps: 6 });
+    await tick();
+    await expect(s.exec(v.id, { cmd: "note", text: "hi" })).rejects.toThrow(
+      /pause the agent first/,
+    );
+    await s.pause(v.id);
+    await tick();
+    await s.exec(v.id, { cmd: "note", text: "hi" });
+    expect(calls.some((c) => c.cmd === "note" && c.text === "hi")).toBe(true);
+    await expect(s.exec(v.id, { cmd: "close" })).rejects.toThrow(/use the close action/);
+    await s.stop(v.id);
+  });
   it("ports do not collide between live sessions", async () => {
     const llm = fakeLlm([{ thought: "x", action: { cmd: "done", summary: "s", achieved: true } }]);
     const s = agentSessions({ llm, open: async () => fakeExplorer().ex, basePort: 9600 });

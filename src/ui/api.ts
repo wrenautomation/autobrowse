@@ -23,6 +23,7 @@ import type { GateName } from "../engine/effects.js";
 import type { RunEvent } from "../engine/events.js";
 import type { RunRow } from "../engine/registry.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
+import { commandSchema } from "../explore/server.js";
 import type { Llm } from "../llm/types.js";
 import { listRecordings, loadRecording, recordingDir } from "../recorder/store.js";
 import type { Recording } from "../recorder/types.js";
@@ -273,6 +274,21 @@ export function api(deps: ApiDeps): Hono {
       serveUnder(deps.recordingsDir, resolve(step.screenshot)) ??
       c.json({ error: "not found" }, 404)
     );
+  });
+  /** A person's own explore command on a paused session; the reply is what the explore socket would say. */
+  app.post("/api/agent/:id/exec", async (c) => {
+    if (!deps.agent) return c.json({ error: "no model configured" }, 503);
+    const parsed = commandSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: parsed.error.issues[0]?.message ?? "bad command" }, 400);
+    try {
+      return c.json({ result: await deps.agent.exec(c.req.param("id"), parsed.data) });
+    } catch (err) {
+      return c.json(
+        { error: err instanceof Error ? err.message.split("\n")[0] : String(err) },
+        400,
+      );
+    }
   });
   app.post("/api/agent/:id/:action", async (c) => {
     const { id, action } = c.req.param();

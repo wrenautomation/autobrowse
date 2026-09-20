@@ -87,6 +87,8 @@ export const api = {
   agentSave: (id: string, name: string) =>
     post(`/api/agent/${id}/save`, { name }) as Promise<SessionView>,
   agentShot: (id: string, n: number) => `/api/agent/${id}/shot/${n}`,
+  agentExec: (id: string, command: unknown) =>
+    post(`/api/agent/${id}/exec`, command) as Promise<{ result: unknown }>,
   proposals: () =>
     call<{ proposals: Proposal[]; usage: { inputTokens: number; outputTokens: number } }>(
       "/api/agent/proposals",

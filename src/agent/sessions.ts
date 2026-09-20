@@ -8,7 +8,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Explorer } from "../explore/server.js";
+import type { ExploreCommand, Explorer } from "../explore/server.js";
 import type { Llm } from "../llm/types.js";
 import { type AgentResult, exploreWithAgent, type StepRecord } from "./explorer.js";
 
@@ -65,6 +65,11 @@ export interface AgentSessions {
   stop(id: string): Promise<SessionView>;
   /** Journal → recording under the recordings dir; the session stays open for more. */
   save(id: string, name: string): Promise<SessionView>;
+  /**
+   * One explore command from a person (open, click, fill, note, aria …)
+   * while the agent is paused or finished; journaled like the agent's own.
+   */
+  exec(id: string, command: ExploreCommand): Promise<unknown>;
   close(id: string): Promise<SessionView>;
 }
 
@@ -253,6 +258,14 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
       live.view.recordingName = name;
       persist(live.view);
       return live.view;
+    },
+    async exec(id, command) {
+      const live = must(id);
+      if (command.cmd === "close" || command.cmd === "save")
+        throw new Error(`use the ${command.cmd} action, not exec`);
+      if (live.view.status === "running" || live.view.status === "starting")
+        throw new Error("pause the agent first; two drivers on one page collide");
+      return open(live).exec(command);
     },
     async close(id) {
       const live = must(id);
