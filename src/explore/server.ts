@@ -19,7 +19,13 @@ import type { Page } from "playwright";
 import { z } from "zod";
 import { type SecretAudit, SecretLeak, urlWithoutQuery } from "../auth/guard.js";
 import type { SecretValues } from "../auth/signup.js";
-import { defineFlow, type FlowPage, flowRunner, type RunnerOptions } from "../browser/flow.js";
+import {
+  chooseOption,
+  defineFlow,
+  type FlowPage,
+  flowRunner,
+  type RunnerOptions,
+} from "../browser/flow.js";
 import { type Hints, locate, locateAll, textOf } from "../browser/locate.js";
 import { snapshotPage } from "../browser/repair.js";
 import { type BrowserOptions, looksLikeWall } from "../browser/session.js";
@@ -452,7 +458,7 @@ async function serve(
       }
       case "select": {
         await gate("select", c, wait);
-        await find(c).selectOption(c.value, { timeout: 10_000 });
+        await chooseOption(page, find(c), c.value, 10_000);
         journalAct(c, (target) => ({ kind: "select", target, value: c.value }));
         return { ok: true };
       }

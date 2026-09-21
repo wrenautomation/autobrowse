@@ -14,7 +14,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Page } from "playwright";
+import type { Locator, Page } from "playwright";
 import { expandHome } from "../google-auth.js";
 import { redactAria, redactText } from "../recorder/redact.js";
 import { type Hints, locate, textOf } from "./locate.js";
@@ -202,6 +202,38 @@ async function settle(page: Page, url: string): Promise<void> {
   await page.waitForLoadState("networkidle", { timeout: SETTLE_MS }).catch(() => undefined);
 }
 
+/**
+ * Choose a value on a `<select>`, or on a custom dropdown (a combobox/button
+ * that opens a list): open it, then click the option whose text is the value.
+ * The step stays a `select` either way, so a recording replays the same.
+ */
+export async function chooseOption(
+  page: Page,
+  target: Locator,
+  value: string,
+  timeout: number,
+): Promise<void> {
+  try {
+    await target.selectOption(value, { timeout });
+    return;
+  } catch (err) {
+    if (!/not a <select>/i.test(String(err))) throw err;
+  }
+  await target.click({ timeout });
+  const option = page
+    .getByRole("option", { name: value, exact: true })
+    .or(page.getByRole("menuitem", { name: value, exact: true }))
+    .or(page.getByRole("menuitemradio", { name: value, exact: true }))
+    .first();
+  const shown = await option
+    .waitFor({ state: "visible", timeout })
+    .then(() => true)
+    .catch(() => false);
+  if (shown) return option.click({ timeout });
+  // A list with no roles: the first visible element whose whole text is the value.
+  await page.getByText(value, { exact: true }).locator("visible=true").first().click({ timeout });
+}
+
 async function doOp(
   page: Page,
   hints: Hints,
@@ -222,7 +254,7 @@ async function doOp(
       return;
     }
     case "select":
-      return void (await target.selectOption(op.value, { timeout }));
+      return chooseOption(page, target, op.value, timeout);
     case "press":
       return target.press(op.key, { timeout });
     case "upload": {
