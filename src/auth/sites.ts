@@ -6,6 +6,7 @@
  * live on 2026-09-21 (headless explore): github, microsoft (first page), linkedin.
  */
 
+import { INSTAGRAM_LOGIN_URL, signInToInstagram } from "./instagram.js";
 import { LINKEDIN_LOGIN_URL, signInToLinkedin } from "./linkedin.js";
 import {
   formLogin,
@@ -19,6 +20,7 @@ import {
   signInToGoogle,
   type TotpSetupSpec,
 } from "./login.js";
+import { signInToTiktok, TIKTOK_LOGIN_URL } from "./tiktok.js";
 
 const CLOUDFLARE_HOME = /dash\.cloudflare\.com\/[0-9a-f]{32}/;
 
@@ -380,6 +382,33 @@ const linkedin: SiteLogin = {
   signInHere: { at: LINKEDIN_LOGIN_URL, run: signInToLinkedin },
 };
 
+/** Instagram: the professional account's own login. Unverified until a credential exists. */
+const instagram: SiteLogin = {
+  site: "instagram",
+  home: "https://www.instagram.com/",
+  ask: "Your Instagram login (username, password, authenticator key if set)",
+  loggedIn: async (fp) => !INSTAGRAM_LOGIN_URL.test(fp.url()),
+  signIn: async (ctx) => {
+    await ctx.fp.open("https://www.instagram.com/accounts/login/", { allowWall: true });
+    await signInToInstagram(ctx);
+  },
+  signInHere: { at: INSTAGRAM_LOGIN_URL, run: signInToInstagram },
+};
+
+/** TikTok: the account's own login (email or username). Unverified until a credential exists. */
+const tiktok: SiteLogin = {
+  site: "tiktok",
+  home: "https://www.tiktok.com/foryou",
+  ask: "Your TikTok login (email or username, password)",
+  loggedIn: async (fp) =>
+    !TIKTOK_LOGIN_URL.test(fp.url()) && !(await fp.has({ role: "button", name: "/^log in$/i" })),
+  signIn: async (ctx) => {
+    await ctx.fp.open("https://www.tiktok.com/login/phone-or-email/email", { allowWall: true });
+    await signInToTiktok(ctx);
+  },
+  signInHere: { at: TIKTOK_LOGIN_URL, run: signInToTiktok },
+};
+
 export const SITE_LOGINS: readonly SiteLogin[] = [
   cloudflare,
   google,
@@ -390,4 +419,6 @@ export const SITE_LOGINS: readonly SiteLogin[] = [
   twilio,
   sentry,
   linkedin,
+  instagram,
+  tiktok,
 ];

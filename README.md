@@ -160,13 +160,14 @@ Browserbase takes them.
 - **Hand-written legs** (`src/browser/flows/`, callable as the Restate
   `browser` service's `flow`): `cloudflare/buy`, `google-admin/dkim-*`,
   `google-admin/workspace-logo`, `instantly/warmup`, `google/oauth-consent`,
-  `linkedin/oauth-consent`, `google/youtube-community-post`.
+  `linkedin/oauth-consent`, `instagram/oauth-consent`, `tiktok/oauth-consent`,
+  `google/youtube-community-post`.
 - **Compiled from recordings** (`src/workflows/`): `bootstrap` (mints the
   first Cloudflare token), `google-cloud-project`, `google-cloud-oauth-client`,
   `anthropic-console-api-key`, `workspace-skip-passwords`, `google-name`.
 - **Logins** (`src/auth/sites.ts`): cloudflare, google, google-admin,
-  instantly, aws, anthropic, twilio, sentry, linkedin; providers google,
-  github, microsoft behind any "Continue with …" button.
+  instantly, aws, anthropic, twilio, sentry, linkedin, instagram, tiktok;
+  providers google, github, microsoft behind any "Continue with …" button.
 
 ## Run
 
@@ -301,6 +302,10 @@ takes what LinkedIn's Posts API takes and answers what it answers; `GET
 /api/sites/youtube/youtube/v3/videos?part=statistics&id=…` is the Data API.
 Behind one route the official API answers when a token is in hand, a browser
 flow otherwise (gated reads, community posts). The caller has one client.
+Sites: `linkedin`, `youtube`, `instagram` (Graph API, long-lived token),
+`tiktok` (Content Posting API; `client_key`). Instagram and TikTok are
+written from the public docs and unproven until a credential and a
+developer app exist.
 
 ```sh
 pnpm autobrowse site                        # sites, token state, setup left

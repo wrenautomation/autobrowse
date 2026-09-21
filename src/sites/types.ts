@@ -79,6 +79,16 @@ export interface OAuthSpec {
   clientSecret: string;
   /** Extra query on the authorize URL (`access_type=offline`, `prompt=consent`). */
   params?: Record<string, string>;
+  /** The query/form name the client id travels as; TikTok says `client_key`. */
+  clientIdParam?: string;
+  /** Between scopes on the authorize URL: a space unless the site wants commas (TikTok, Meta). */
+  scopeSeparator?: string;
+  /**
+   * A second call that trades the short-lived token the code exchange gave for a
+   * long one (Instagram: 60 days). GET `url` with `fields`, the client secret, and
+   * the short token as `tokenParam`; what it answers is the access token kept.
+   */
+  longLived?: { url: string; fields: Record<string, string>; tokenParam: string };
   /** Env name the refresh token is kept as; the access token is minted from it on demand. */
   refreshToken: string;
   /**

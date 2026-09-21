@@ -51,8 +51,10 @@ describe("browser service", () => {
       "google-admin/workspace-logo",
       "google/oauth-consent",
       "google/youtube-community-post",
+      "instagram/oauth-consent",
       "instantly/warmup",
       "linkedin/oauth-consent",
+      "tiktok/oauth-consent",
     ]);
     const svc = browserService({ runner: { run: async () => "ok" as never } });
     expect(svc.name).toBe("browser");

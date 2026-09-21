@@ -38,7 +38,7 @@ it. Dated 2026-09-21.
   `pnpm autobrowse desktop setup` prints (needs your sudo password;
   the agent never sees it).
 
-## Content channels (YouTube + LinkedIn; wren `designs/2026-09-21-content-channels.md`)
+## Content channels (YouTube, LinkedIn, Instagram, TikTok; wren `designs/2026-09-21-content-channels.md`)
 
 - **LinkedIn login**: the UI's Accounts page (linkedin → add → check), or
   `pnpm autobrowse creds paste linkedin` with `email password
@@ -49,6 +49,16 @@ it. Dated 2026-09-21.
   LinkedIn" + "Sign In with LinkedIn using OpenID Connect"): needs a
   LinkedIn Page to attach to. Say which Page, or that I should create
   one for Wren Automation.
+- **Instagram** (built 2026-09-21, unproven): a professional (business or
+  creator) account, its login via the Accounts page (`instagram`), and a
+  Meta app with "Instagram API with Instagram Login" (developers.facebook.com
+  → Create app → Business). Then `site setup instagram consent` keeps the
+  60-day token. Say which account.
+- **TikTok** (built 2026-09-21, unproven): the account's login via the
+  Accounts page (`tiktok`), and a developer app at developers.tiktok.com
+  with Login Kit + Content Posting API (redirect
+  `http://127.0.0.1:9400/oauth/callback`). Posting needs its app review;
+  reads work unaudited.
 - **YouTube community post**: `google/youtube-community-post` is mapped
   up to the Post button (2026-09-21). Proving it publishes a real post on
   JinstersJournal: say "post a test" (deleted after) or do the first one

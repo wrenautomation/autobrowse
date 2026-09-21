@@ -21,12 +21,20 @@ interface TokenBody {
 
 const form = (fields: Record<string, string>) => new URLSearchParams(fields).toString();
 
-async function tokenCall(http: HttpClient, url: string, fields: Record<string, string>) {
-  const res = await http.json<TokenBody>(url, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    raw: form(fields),
-  });
+async function tokenCall(
+  http: HttpClient,
+  url: string,
+  fields: Record<string, string>,
+  method: "POST" | "GET" = "POST",
+) {
+  const res =
+    method === "GET"
+      ? await http.json<TokenBody>(`${url}?${form(fields)}`)
+      : await http.json<TokenBody>(url, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          raw: form(fields),
+        });
   if (!res.ok || !res.body?.access_token) {
     const why = res.body?.error ? `${res.body.error}: ${res.body.error_description ?? ""}` : "";
     throw new HttpError("POST", url, res.status, why.trim());
@@ -54,7 +62,7 @@ export function accessTokens(
     const body = await tokenCall(http, spec.tokenUrl, {
       grant_type: "refresh_token",
       refresh_token: refresh,
-      client_id: id,
+      [spec.clientIdParam ?? "client_id"]: id,
       client_secret: secret,
     });
     const token = body.access_token as string;
@@ -121,11 +129,12 @@ export async function runConsent(
     server.listen(port, "127.0.0.1");
   });
   const url = new URL(spec.authorizeUrl);
+  const idParam = spec.clientIdParam ?? "client_id";
   for (const [k, v] of Object.entries({
     response_type: "code",
-    client_id: id,
+    [idParam]: id,
     redirect_uri: redirect,
-    scope: spec.scopes.join(" "),
+    scope: spec.scopes.join(spec.scopeSeparator ?? " "),
     state,
     ...(spec.params ?? {}),
   }))
@@ -134,9 +143,19 @@ export async function runConsent(
   const body = await tokenCall(o.http, spec.tokenUrl, {
     grant_type: "authorization_code",
     code: await code,
-    client_id: id,
+    [idParam]: id,
     client_secret: secret,
     redirect_uri: redirect,
   });
-  return { refreshToken: body.refresh_token ?? null, accessToken: body.access_token as string };
+  let accessToken = body.access_token as string;
+  if (spec.longLived) {
+    const long = await tokenCall(
+      o.http,
+      spec.longLived.url,
+      { ...spec.longLived.fields, client_secret: secret, [spec.longLived.tokenParam]: accessToken },
+      "GET",
+    );
+    accessToken = long.access_token as string;
+  }
+  return { refreshToken: body.refresh_token ?? null, accessToken };
 }
