@@ -61,9 +61,14 @@ and keeps it; sign-ins then need no password or code. Neither prints anything.
 ## Signup (Wren's accounts)
 
 ```sh
-pnpm autobrowse signup instagram --email hello@wrenautomation.com --name "Wren Automation" --handle wrenautomation --headed
+pnpm autobrowse signup instagram --name "Wren Automation" --handle wrenautomation --headed   # with your `signup` account (autobrowse accounts)
 pnpm autobrowse signup x --email hello@wrenautomation.com --inbox will@wrenautomation.com --name "Wren Automation" --handle wrenautomation
 ```
+
+A signup that stalled runs again with the same address and picks up its
+minted password; it refuses when a different account is stored under the
+site's name. It also refuses up front when the inbox cannot be read
+(`autobrowse needs` says how to make it readable).
 
 Order: a 24-char password is minted and stored sealed under `instagram`
 **before** the browser opens; the agent fills the form placing `email`,

@@ -38,6 +38,9 @@ describe("signup", () => {
       /already has a stored credential/,
     );
     expect((await store.get("x"))?.username).toBe("hello@wren.test");
+    // The same address again is the stalled attempt resuming: same password, nothing re-minted.
+    const again = await mintCredential(store, { site: "x", email: "Hello@wren.test" });
+    expect(again.password).toBe(c.password);
     const aliased = await mintCredential(store, {
       site: "y",
       email: "hello@wren.test",

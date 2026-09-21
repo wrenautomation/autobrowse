@@ -29,8 +29,8 @@ carry. Dated 2026-09-22.
    `william@wrenautomation.com`; its consent hits Google's passkey challenge
    (the virtual authenticator we enrolled is not the passkey Google wants;
    same wall as admin.google.com), so either you pass that passkey prompt
-   once (`site setup gmail consent --account william@wrenautomation.com
-   --headed`), or add `gmail.readonly` to the domain-wide delegation
+   once (UI header → headed, then `site setup gmail consent --account
+   william@wrenautomation.com`), or add `gmail.readonly` to the domain-wide delegation
    (admin console → Security → API controls → Domain-wide delegation →
    client `107356403027866983613` → add
    `https://www.googleapis.com/auth/gmail.readonly`, then

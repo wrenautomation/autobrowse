@@ -2,12 +2,6 @@
 
 **Goal:** `pnpm autobrowse` works on this Mac; the worker + UI run locally.
 
-## What is still owed
-
-`pnpm autobrowse needs` lists every login, key, consent, phone step, card
-and decision autobrowse is waiting on, each with its command; rows clear
-themselves once the thing is in hand. `needs do <id>` runs the ingestion.
-
 ## Install
 
 ```sh
@@ -65,3 +59,9 @@ docker compose up -d --build        # Restate + worker in containers, .env suppl
 The header's `headed`/`headless` button in the UI (or `PUT /api/settings
 {headless}`) decides how every browser from then on opens. `--headed` on a
 single command overrides it once.
+
+## What is still owed
+
+`pnpm autobrowse needs` lists every login, key, consent, phone step, card
+and decision autobrowse is waiting on, each with its command; rows clear
+themselves once the thing is in hand. `needs do <id>` runs the ingestion.

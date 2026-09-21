@@ -152,7 +152,7 @@ export function accountNeeds(ctx: NeedsContext): Need[] {
       what: `${id.address}: its inbox readable (codes for signups and sign-ins)`,
       unlocks: `signups and logins whose codes land at ${id.address}`,
       how: [
-        `autobrowse site setup gmail consent --account ${id.address}`,
+        `autobrowse site setup gmail consent --account ${id.address}   (headed, from the UI's headed button: a passkey prompt is yours to pass)`,
         ...(id.address.endsWith("@wrenautomation.com")
           ? [
               "or admin.google.com → Security → API controls → Domain-wide delegation → add https://www.googleapis.com/auth/gmail.readonly, then GOOGLE_WORKSPACE_DOMAIN=wrenautomation.com",

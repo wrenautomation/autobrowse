@@ -104,7 +104,10 @@ export async function mintCredential(
   a: Pick<NewAccount, "site" | "email" | "inbox">,
   password: string = newPassword(),
 ): Promise<Credential> {
-  if (await store.get(a.site))
+  const had = await store.get(a.site);
+  // The same address again is the same attempt (a signup that stalled): its minted password stands.
+  if (had && had.username.toLowerCase() === a.email.toLowerCase() && had.password) return had;
+  if (had)
     throw new Error(
       `${a.site} already has a stored credential; sign in with it, or store the new account under another name`,
     );
