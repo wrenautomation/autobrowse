@@ -142,20 +142,40 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       console.log(`stored: ${(await ingest(credentialsFor(settings), lines)).join(", ")}`);
     });
   creds
-    .command("push <site>")
+    .command("push [sites...]")
     .description(
-      "This machine's stored credential into the env store (SSM) as AUTOBROWSE_CRED_<SITE>_*, so the box signs in too; nothing printed",
+      "This machine's stored credentials into the env store (SSM) as AUTOBROWSE_CRED_<SITE>_*, so the box signs in too; --all for every site; nothing printed",
     )
-    .action(async (site: string) => {
-      const { credentialEnv } = await import("../auth/credentials.js");
+    .option("--all", "every stored site (canaries never travel)")
+    .action(async (sites: string[], o: { all?: boolean }) => {
+      if (sites.length === 0 && !o.all) throw new Error("name sites, or --all");
+      const { pushCredentials } = await import("../auth/credentials.js");
       const { envStoreFor } = await import("./services.js");
-      const cred = await credentialsFor(settings).get(site);
-      if (!cred) throw new Error(`no credential stored for ${site}: creds paste ${site} first`);
-      const store = envStoreFor(settings);
-      const entries = credentialEnv(site, cred);
-      for (const e of entries) await store.put(e.name, e.value);
-      console.log(`pushed ${site}: ${entries.map((e) => e.name).join(", ")}`);
+      const pushed = await pushCredentials(credentialsFor(settings), envStoreFor(settings), sites);
+      for (const p of pushed) console.log(`pushed ${p.site}: ${p.names.join(", ")}`);
       console.log("the box reads the store on its next deploy (push to main)");
+    });
+  creds
+    .command("pull [sites...]")
+    .description(
+      "Credentials from the env store into this machine's sealed file (a second laptop); a site already here is kept unless --overwrite; passkeys and recovery codes here always stay",
+    )
+    .option("--overwrite", "replace what is here with the store's username/password/TOTP/via")
+    .action(async (sites: string[], o: { overwrite?: boolean }) => {
+      const { pullCredentials } = await import("../auth/credentials.js");
+      const { envStoreFor } = await import("./services.js");
+      const r = await pullCredentials(
+        envStoreFor(settings),
+        credentialsFor(settings, { armed: false }),
+        sites,
+        {
+          ...(o.overwrite ? { overwrite: true } : {}),
+        },
+      );
+      if (r.written.length) console.log(`pulled ${r.written.join(", ")}`);
+      if (r.kept.length)
+        console.log(`kept (already here; --overwrite to replace): ${r.kept.join(", ")}`);
+      if (!r.written.length && !r.kept.length) console.log("nothing in the store");
     });
   creds
     .command("list")

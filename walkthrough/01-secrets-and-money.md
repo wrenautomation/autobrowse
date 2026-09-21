@@ -11,6 +11,8 @@ pnpm autobrowse creds paste google        # clipboard holds `email password [aut
 pnpm autobrowse creds paste google@ops    # a second identity: its own profile, its own credential
 pnpm autobrowse creds list                # names only, never values
 pnpm autobrowse creds push linkedin       # this credential into SSM so the box signs in too
+pnpm autobrowse creds push --all          # every site (canaries stay home)
+pnpm autobrowse creds pull                # second laptop: SSM → local sealed file
 ```
 
 Stored in `~/.config/autobrowse/credentials.json`, sealed with the login

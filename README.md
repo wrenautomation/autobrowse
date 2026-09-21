@@ -260,6 +260,8 @@ pnpm autobrowse agent google "open Personal info and report the display name" --
 pnpm autobrowse repair ~/.config/autobrowse/artifacts/google-x-2026-….failure.json   # agent picks up where a flow stopped
 pnpm autobrowse creds paste google@ops            # a second account: `email password [key]` on the clipboard (or the UI's Accounts page)
 pnpm autobrowse creds push linkedin               # that stored credential into SSM as AUTOBROWSE_CRED_LINKEDIN_*: the box signs in too
+pnpm autobrowse creds push --all                  # every stored site (canaries never travel)
+pnpm autobrowse creds pull [sites...]             # the other way, on a second laptop; --overwrite to replace what is here
 pnpm autobrowse signup instagram --email hello@wrenautomation.com --name "Wren Automation" --handle wrenautomation --headed
 pnpm autobrowse record buy-domain --site cloudflare --url https://dash.cloudflare.com/ --terminal
 pnpm autobrowse compile buy-domain             # → src/workflows/buy-domain/ with its outline.json (on the Runs page at once; no restart)

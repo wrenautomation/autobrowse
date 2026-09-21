@@ -7,6 +7,8 @@ import {
   envCredentials,
   fileCredentials,
   layeredCredentials,
+  pullCredentials,
+  pushCredentials,
 } from "../src/auth/credentials.js";
 import {
   base32Decode,
@@ -125,6 +127,63 @@ describe("credentials", () => {
     expect(back?.via).toBe("google");
     expect(back?.codesInbox).toBe("codes@wren.co");
     expect(back?.password).toBeUndefined();
+  });
+  it("an account keeps its own mark in the env name and comes back as itself", async () => {
+    const entries = credentialEnv("google@ops", {
+      username: "o@x.co",
+      password: "p",
+      recoveryCodes: [],
+      passkeys: [],
+    });
+    expect(entries[0]?.name).toBe("AUTOBROWSE_CRED_GOOGLE__OPS_USERNAME");
+    const env = Object.fromEntries(entries.map((e) => [e.name, e.value]));
+    expect(await envCredentials(env).list()).toEqual(["google@ops"]);
+    expect((await envCredentials(env).get("google@ops"))?.username).toBe("o@x.co");
+  });
+  it("push sends every site but canaries; pull keeps what is here unless told, and never drops passkeys", async () => {
+    const local = memoryCredentials({
+      a: { username: "a", password: "1", totpSecret: "JBSWY3DPEHPK3PXP" },
+      "b@two": { username: "b", via: "google" },
+      stripe: { username: "bait", password: "x", canary: true },
+    });
+    const kv = new Map<string, string>();
+    const store = {
+      all: async () => [...kv].map(([name, value]) => ({ name, value })),
+      put: async (name: string, value: string) => void kv.set(name, value),
+    };
+    const pushed = await pushCredentials(local, store);
+    expect(pushed.map((p) => p.site)).toEqual(["a", "b@two"]);
+    expect([...kv.keys()]).toEqual([
+      "AUTOBROWSE_CRED_A_USERNAME",
+      "AUTOBROWSE_CRED_A_PASSWORD",
+      "AUTOBROWSE_CRED_A_TOTP_SECRET",
+      "AUTOBROWSE_CRED_B__TWO_USERNAME",
+      "AUTOBROWSE_CRED_B__TWO_VIA",
+    ]);
+    const other = memoryCredentials({
+      a: {
+        username: "old",
+        password: "old",
+        passkeys: [
+          {
+            rpId: "a",
+            credentialId: "k",
+            privateKey: "d",
+            signCount: 0,
+            isResidentCredential: true,
+          },
+        ],
+      },
+    });
+    const first = await pullCredentials(store, other);
+    expect(first).toEqual({ written: ["b@two"], kept: ["a"] });
+    expect((await other.get("a"))?.password).toBe("old");
+    const second = await pullCredentials(store, other, ["a"], { overwrite: true });
+    expect(second).toEqual({ written: ["a"], kept: [] });
+    const a = await other.get("a");
+    expect(a?.password).toBe("1");
+    expect(a?.passkeys).toHaveLength(1);
+    await expect(pullCredentials(store, other, ["nope"])).rejects.toThrow(/creds push nope/);
   });
   it("layered: first hit wins, writes go to the first store", async () => {
     const a = memoryCredentials({ s: { username: "a", password: "1" } });

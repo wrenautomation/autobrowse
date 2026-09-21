@@ -120,8 +120,17 @@ export function memoryCredentials(init: Record<string, CredentialInput> = {}): C
 
 /** `AUTOBROWSE_CRED_<SITE>_<FIELD>`: the env name a credential field travels under. */
 export function credentialEnvName(site: string, field: string): string {
-  return `AUTOBROWSE_CRED_${site.replace(/[^a-zA-Z0-9]+/g, "_").toUpperCase()}_${field}`;
+  return `AUTOBROWSE_CRED_${envSiteName(site)}_${field}`;
 }
+
+/** `google@ops` → `GOOGLE__OPS`, `google-admin` → `GOOGLE_ADMIN`: the account keeps its own mark so `list` can read it back. */
+const envSiteName = (site: string): string =>
+  site
+    .replace(/@/g, "__")
+    .replace(/[^a-zA-Z0-9_]+/g, "_")
+    .toUpperCase();
+const siteFromEnvName = (s: string): string =>
+  s.toLowerCase().replace(/__/g, "@").replace(/_/g, "-");
 
 /**
  * A credential as env entries, for the store the box reads: username,
@@ -171,9 +180,74 @@ export function envCredentials(env: NodeJS.ProcessEnv = process.env): Credential
       return Object.keys(env)
         .map((k) => k.match(m)?.[1])
         .filter((s): s is string => Boolean(s))
-        .map((s) => s.toLowerCase().replace(/_/g, "-"));
+        .map(siteFromEnvName);
     },
   };
+}
+
+/** The env store's side of a sync: what `autobrowse env` reads and writes. */
+export interface CredentialEnvStore {
+  all(): Promise<{ name: string; value: string }[]>;
+  put(name: string, value: string): Promise<void>;
+}
+
+/**
+ * This machine's credentials into the env store, every site or the named
+ * ones: username, password, TOTP seed, via, codes inbox. Canaries never
+ * travel (a tripwire belongs to one machine); passkeys and recovery codes
+ * cannot. Answers what was pushed, never a value.
+ */
+export async function pushCredentials(
+  local: CredentialStore,
+  store: CredentialEnvStore,
+  sites?: string[],
+): Promise<{ site: string; names: string[] }[]> {
+  const chosen = sites?.length ? sites : await local.list();
+  const out: { site: string; names: string[] }[] = [];
+  for (const site of chosen) {
+    const cred = await local.get(site);
+    if (!cred) throw new Error(`no credential stored for ${site}: creds paste ${site} first`);
+    if (cred.canary) continue;
+    const entries = credentialEnv(site, cred);
+    for (const e of entries) await store.put(e.name, e.value);
+    out.push({ site, names: entries.map((e) => e.name) });
+  }
+  return out;
+}
+
+/**
+ * The env store's credentials into this machine's file, the other way: a
+ * second laptop, or a box's file for a passkey site. A site already here is
+ * kept unless `overwrite`, and even then its passkeys and recovery codes
+ * stay (env never carries them). Answers what was written and what was kept.
+ */
+export async function pullCredentials(
+  store: CredentialEnvStore,
+  local: CredentialStore,
+  sites?: string[],
+  o: { overwrite?: boolean } = {},
+): Promise<{ written: string[]; kept: string[] }> {
+  const env = Object.fromEntries((await store.all()).map((e) => [e.name, e.value]));
+  const remote = envCredentials(env);
+  const chosen = sites?.length ? sites : await remote.list();
+  const written: string[] = [];
+  const kept: string[] = [];
+  for (const site of chosen) {
+    const cred = await remote.get(site);
+    if (!cred) throw new Error(`no credential in the store for ${site}: creds push ${site} first`);
+    const here = await local.get(site);
+    if (here && !o.overwrite) {
+      kept.push(site);
+      continue;
+    }
+    await local.put(site, {
+      ...cred,
+      recoveryCodes: here?.recoveryCodes ?? cred.recoveryCodes,
+      passkeys: here?.passkeys ?? cred.passkeys,
+    });
+    written.push(site);
+  }
+  return { written, kept };
 }
 
 /** First store that has the site wins; writes go to `write`, which defaults to the last store. */

@@ -60,5 +60,8 @@ your iPhone paired with this Mac). Instagram, X and TikTok insist.
 ## Where credentials go on the box
 
 `pnpm autobrowse creds push <site>` copies one sealed credential into SSM as
-`AUTOBROWSE_CRED_<SITE>_USERNAME/_PASSWORD/_TOTP_SECRET`; the box reads
-those first. Passkeys cannot ride in env (see `../deploy/README.md`).
+`AUTOBROWSE_CRED_<SITE>_USERNAME/_PASSWORD/_TOTP_SECRET`; `--all` sends every
+site (canaries stay home). The box reads those first. On a second laptop,
+`pnpm autobrowse creds pull` fills the local sealed file from SSM (a site
+already there is kept unless `--overwrite`). Passkeys cannot ride in env
+(see `../deploy/README.md`).
