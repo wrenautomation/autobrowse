@@ -61,8 +61,9 @@ Browserbase takes them.
   is a note. `--terminal` records the shell leg after. Raw recordings
   stay out of git.
 - **Explored.** `autobrowse agent <site> "<goal>"` finds the way itself:
-  each step the model sees the URL and a digest of the page (numbered
-  controls, headings, a little text; ~700 tokens), picks one act, the
+  each step the model sees the URL and an outline of the page (`[n]B Save`
+  refs, containers kept, rows one line, repeats folded; ~1k chars for a
+  GitHub issues page), picks one act, the
   code runs it and journals it. `done` or `human` ends it; the journal is
   a recording, `compile` makes it a deterministic flow the worker serves
   at once (one `Compiled` object keyed `<workflow>/<key>`, loaded from
@@ -179,13 +180,14 @@ Browserbase takes them.
   `browser` service's `flow`): `cloudflare/buy`, `google-admin/dkim-*`,
   `google-admin/workspace-logo`, `instantly/warmup`, `google/oauth-consent`,
   `linkedin/oauth-consent`, `instagram/oauth-consent`, `tiktok/oauth-consent`,
-  `google/youtube-community-post`.
+  `outlook/oauth-consent`, `google/youtube-community-post`.
 - **Compiled from recordings** (`src/workflows/`): `bootstrap` (mints the
   first Cloudflare token), `google-cloud-project`, `google-cloud-oauth-client`,
   `anthropic-console-api-key`, `workspace-skip-passwords`, `google-name`.
 - **Logins** (`src/auth/sites.ts`): cloudflare, google, google-admin,
-  instantly, aws, anthropic, twilio, sentry, linkedin, instagram, tiktok;
-  providers google, github, microsoft behind any "Continue with …" button.
+  instantly, aws, anthropic, twilio, sentry, linkedin, instagram, tiktok,
+  outlook (the `microsoft` credential); providers google, github, microsoft
+  behind any "Continue with …" button.
 
 ## Run
 
@@ -321,9 +323,10 @@ takes what LinkedIn's Posts API takes and answers what it answers; `GET
 Behind one route the official API answers when a token is in hand, a browser
 flow otherwise (gated reads, community posts). The caller has one client.
 Sites: `linkedin`, `youtube`, `instagram` (Graph API, long-lived token),
-`tiktok` (Content Posting API; `client_key`). Instagram and TikTok are
-written from the public docs and unproven until a credential and a
-developer app exist.
+`tiktok` (Content Posting API; `client_key`), `outlook` (Microsoft Graph:
+mail and calendar, `/me/messages`, `/me/sendMail`, `/me/events`). Instagram,
+TikTok and Outlook are written from the public docs and unproven until a
+credential and a developer app exist.
 
 ```sh
 pnpm autobrowse site                        # sites, token state, setup left

@@ -36,9 +36,15 @@ at a keyboard with a hard goal wants B.
 
 ## Token discipline (applies to both)
 
-- The digest (`src/agent/digest.ts`) is the page the model sees: controls as
-  `[n] role "name"`, headings, trimmed text, and only the diff when the page
-  did not change. Raw aria never reaches the model.
+- The outline (`src/agent/digest.ts`) is the page the model sees: `[n]B Save`
+  refs (one code per role, marks for state), containers as `role "name":`
+  with one-space indents, rows and items on one line, look-alike runs folded
+  after 8, cells as text, and only the diff when the same controls are still
+  there. Raw aria never reaches the model. Measured 2026-09-21 (chars, raw
+  aria → outline): GitHub issues 27339 → 4139, Wikipedia article 33244 →
+  2523, YouTube Studio 4262 → 1750, Anthropic login 10601 → 2290; the flat
+  `[n] role "name"` list it replaced was about the same size but lost the
+  tree (which dialog, which row).
 - Secrets never reach it either: `redactAria` masks filled secret fields.
 - Next reducers, in order: `extract` (main-content only, readability-style)
   for reading pages; `eval` results capped; screenshots only on request.

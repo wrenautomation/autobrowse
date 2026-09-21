@@ -64,7 +64,7 @@ describe("exploreWithAgent", () => {
     expect(
       calls.filter((c) => c.cmd === "note").map((c) => (c.cmd === "note" ? c.text : "")),
     ).toEqual(["home page; settings is the way", "dark mode is on"]);
-    expect(llm.requests[0]?.prompt).toContain('[1] button "Settings"');
+    expect(llm.requests[0]?.prompt).toContain("[1]B Settings");
     expect(llm.requests[1]?.prompt).toContain("1. click [1]");
     expect(llm.requests[1]?.prompt).toContain("→ ok");
   });

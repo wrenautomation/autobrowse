@@ -10,6 +10,7 @@ export {
 export { instagram } from "./instagram.js";
 export { linkedin } from "./linkedin.js";
 export { accessTokens, runConsent } from "./oauth.js";
+export { outlook } from "./outlook.js";
 export { SITES_SERVICE, type SitesService, sitesService } from "./service.js";
 export { tiktok } from "./tiktok.js";
 export * from "./types.js";
@@ -18,9 +19,10 @@ export { youtube } from "./youtube.js";
 
 import { instagram } from "./instagram.js";
 import { linkedin } from "./linkedin.js";
+import { outlook } from "./outlook.js";
 import { tiktok } from "./tiktok.js";
 import type { SiteApi } from "./types.js";
 import { youtube } from "./youtube.js";
 
 /** Every site autobrowse serves under its official API's shape. */
-export const SITES: readonly SiteApi[] = [linkedin, youtube, instagram, tiktok];
+export const SITES: readonly SiteApi[] = [linkedin, youtube, instagram, tiktok, outlook];

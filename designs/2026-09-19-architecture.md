@@ -133,8 +133,9 @@ session or a heal of its own.
 `src/agent/`. `exploreWithAgent` drives one explore session: `url` +
 `aria` → `digest` → one model call (`stepSchema`: thought + action) →
 one explore command → journal. The model points at controls by ref
-number; `digest.ts` turns the aria tree into `[n] role "name" [attrs]`
-lines (actionable roles only), headings, and deduplicated text, and
+number; `digest.ts` turns the aria tree into an outline (`[n]B Save` refs,
+containers kept as `role "name":`, rows one line, repeats folded; see
+`designs/2026-09-21-claude-code-driver.md` "Token discipline") and
 resolves a ref back to `{role, name, nth}`: the recorder's own hints, so
 the compiled flow uses the same locator the agent used. A malformed
 reply or a ref not on the page is a failed step the model sees next

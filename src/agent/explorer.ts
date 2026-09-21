@@ -12,7 +12,7 @@ import { desktopOpSchema } from "../desktop/types.js";
 import type { ExploreCommand, Explorer } from "../explore/server.js";
 import { PaymentGate } from "../gates/payment.js";
 import { completeJson, type Llm, LlmOutputInvalid, type LlmUsage } from "../llm/types.js";
-import { type Digest, digest, hintsFor, pageForModel } from "./digest.js";
+import { type Digest, digest, hintsFor, LEGEND, pageForModel } from "./digest.js";
 
 /** A ref number from the digest; the code turns it back into locator hints. */
 const ref = z.number().int().positive();
@@ -84,8 +84,11 @@ export interface AgentResult {
 }
 
 const SYSTEM = `You drive a real web browser to reach a goal, one step at a time.
-Each turn you get the page URL, a digest of the page (controls as [n] role "name", plus headings and text), and what your recent steps did.
-When the page is the same as last turn, the digest says so and lists only what changed; the [n] refs you saw before still apply.
+Each turn you get the page URL, an outline of the page, and what your recent steps did.
+The outline: containers as role "name": with their contents indented beneath; controls as [n] plus a role code and the name; several on one line separated by " · "; plain text as itself.
+${LEGEND}.
+"(+N more like these)" folds a long run of look-alike rows; scroll or narrow the goal to see them.
+When the page is the same as last turn, the outline says so and lists only what changed; the [n] refs you saw before still apply.
 Reply with ONE JSON object: {"thought": "...", "action": {...}}.
 Actions, with "cmd" set to exactly one of these words:
   {"cmd":"click","ref":n,"goal":"why"}
@@ -105,7 +108,7 @@ Actions, with "cmd" set to exactly one of these words:
   {"cmd":"os","act":{"op":"shell","command":"...","root":false},"goal":"why"}   (root=true only when the goal needs it; output comes back)
   {"cmd":"done","summary":"what happened","achieved":true|false}
   {"cmd":"human","reason":"why a person must do this"}
-ref is the [n] of a control in the digest; only those numbers exist.
+ref is the [n] of a control in the outline; only those numbers exist.
 Use os acts only when the goal is outside the browser (an app, a system setting, a file, a command); look with tree before clicking.
 Control names carry content too: a link named "Name Jane Doe" tells you the name is Jane Doe. When the goal asks you to report or collect something, read it with read{ref,as} first, then quote it in the done summary.
 Rules: never invent values; use only the inputs given. Never buy, delete, or submit money-related forms: return human{reason} instead.

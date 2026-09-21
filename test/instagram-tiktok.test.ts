@@ -172,7 +172,13 @@ describe("tiktok sign-in", () => {
 
 describe("instagram and tiktok consents and OAuth shapes", () => {
   it("are registered sites whose consent legs are catalogued flows", () => {
-    expect(SITES.map((s) => s.site)).toEqual(["linkedin", "youtube", "instagram", "tiktok"]);
+    expect(SITES.map((s) => s.site)).toEqual([
+      "linkedin",
+      "youtube",
+      "instagram",
+      "tiktok",
+      "outlook",
+    ]);
     expect(instagramOAuth.consent).toEqual({ flow: "instagram/oauth-consent" });
     expect(tiktokOAuth.consent).toEqual({ flow: "tiktok/oauth-consent" });
     expect(BROWSER_FLOWS["instagram/oauth-consent"]).toBe(instagramOauthConsent);

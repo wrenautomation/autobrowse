@@ -20,6 +20,7 @@ import {
   signInToGoogle,
   type TotpSetupSpec,
 } from "./login.js";
+import { MICROSOFT_HOST, signInToMicrosoft } from "./microsoft.js";
 import { signInToTiktok, TIKTOK_LOGIN_URL } from "./tiktok.js";
 
 const CLOUDFLARE_HOME = /dash\.cloudflare\.com\/[0-9a-f]{32}/;
@@ -409,6 +410,27 @@ const tiktok: SiteLogin = {
   signInHere: { at: TIKTOK_LOGIN_URL, run: signInToTiktok },
 };
 
+/**
+ * Outlook on the web: the `microsoft` credential signs in (personal at
+ * outlook.live.com, work at outlook.office.com; the sign-in host is the
+ * same). Unverified until a credential exists.
+ */
+const OUTLOOK_HOME = /outlook\.(live|office)\.com\/mail/;
+const outlook: SiteLogin = {
+  site: "outlook",
+  home: "https://outlook.live.com/mail/0/",
+  credential: "microsoft",
+  ask: "The Microsoft account whose mailbox Outlook shows (personal or work)",
+  loggedIn: async (fp) => OUTLOOK_HOME.test(fp.url()) && !MICROSOFT_HOST.test(fp.url()),
+  signIn: async (ctx) => {
+    await ctx.fp.open("https://outlook.live.com/mail/0/", { allowWall: true });
+    if (MICROSOFT_HOST.test(ctx.fp.url())) await signInToMicrosoft(ctx);
+    if (!(await ctx.fp.waitForUrl(OUTLOOK_HOME, 30_000)))
+      throw new LoginFailed("outlook", `still on ${ctx.fp.url()} after the Microsoft sign-in`);
+  },
+  signInHere: { at: MICROSOFT_HOST, run: signInToMicrosoft },
+};
+
 export const SITE_LOGINS: readonly SiteLogin[] = [
   cloudflare,
   google,
@@ -421,4 +443,5 @@ export const SITE_LOGINS: readonly SiteLogin[] = [
   linkedin,
   instagram,
   tiktok,
+  outlook,
 ];

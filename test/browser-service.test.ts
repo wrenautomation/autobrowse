@@ -54,6 +54,7 @@ describe("browser service", () => {
       "instagram/oauth-consent",
       "instantly/warmup",
       "linkedin/oauth-consent",
+      "outlook/oauth-consent",
       "tiktok/oauth-consent",
     ]);
     const svc = browserService({ runner: { run: async () => "ok" as never } });
