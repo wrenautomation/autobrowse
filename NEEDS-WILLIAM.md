@@ -186,3 +186,9 @@ you the window at a captcha. What each needs from you first:
 - `BROWSERBASE_*`: skipped on purpose (no Browserbase).
 - htn-2026 demo branch: waits on a spec beyond "config, copy, time
   compression".
+- **Unsubscribe chore** (asked 2026-09-22, built the same day): `pnpm
+  autobrowse unsubscribe` lists the recent senders you can leave; nothing
+  leaves until you run it again with `--yes` (add `--only …` for a subset,
+  `--keep domain` for senders to keep). It reads the consented Gmail
+  (`--account` for another); run it where that token lives (the box, or
+  a laptop with `site setup gmail consent` done).

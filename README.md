@@ -414,6 +414,18 @@ clients register. The same facade is the Restate service `sites`
 Restate (wren's `Content` service): no port on the box, a call queues while
 the box is down, a write runs once. Design: `designs/2026-09-21-site-apis.md`.
 
+### Chores on those APIs
+
+```sh
+pnpm autobrowse unsubscribe --days 30                 # every recent sender with List-Unsubscribe: count, path, latest subject
+pnpm autobrowse unsubscribe --yes --keep wrenautomation.com      # leave them: one-click POST, else mailto, else the link in the browser
+pnpm autobrowse unsubscribe --yes --only news@x.io,hi@tool.io    # a subset
+```
+
+Only mail that says how to leave it is listed (a receipt, a code, a person
+has no `List-Unsubscribe`); nothing leaves without `--yes`. The list is
+`src/chores/unsubscribe.ts`.
+
 ## Use as a library
 
 Every layer is a plain function over explicit parts; only the composers

@@ -18,6 +18,7 @@ import { registerEnvCommands } from "./cli-env.js";
 import { readJson } from "./cli-json.js";
 import { registerRecordCommands } from "./cli-record.js";
 import { registerSiteCommands } from "./cli-site.js";
+import { registerUnsubscribe } from "./cli-unsubscribe.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
 import { envStoreFor, WORKFLOWS } from "./services.js";
@@ -199,6 +200,7 @@ program
 
 registerRecordCommands(program, settings, local);
 registerSiteCommands(program, local);
+registerUnsubscribe(program, local);
 registerDoCommands(program, local);
 registerAuthCommands(program, settings);
 registerEnvCommands(program, settings, { store: () => envStoreFor(settings) });
