@@ -234,7 +234,7 @@ describe("site facade", () => {
     expect(row.authed).toBe(true);
     expect(row.routes.find((r) => r.path === "/studio/communityPosts")).toMatchObject({
       via: "none",
-      missing: "workflow youtube-community-post not recorded",
+      missing: "flow google/youtube-community-post not recorded",
     });
   });
 

@@ -50,6 +50,7 @@ describe("browser service", () => {
       "google-admin/dkim-start",
       "google-admin/workspace-logo",
       "google/oauth-consent",
+      "google/youtube-community-post",
       "instantly/warmup",
       "linkedin/oauth-consent",
     ]);

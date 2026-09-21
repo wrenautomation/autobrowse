@@ -226,7 +226,7 @@ export const youtube: SiteApi = {
         "A community post (no official API; autobrowse-only path, YouTube Studio in the browser)",
       request: communityPost,
       irreversible: true,
-      browser: { workflow: "youtube-community-post" },
+      browser: { flow: "google/youtube-community-post" },
     }),
   ],
   setup: [

@@ -48,6 +48,10 @@ it. Dated 2026-09-21.
   LinkedIn" + "Sign In with LinkedIn using OpenID Connect"): needs a
   LinkedIn Page to attach to. Say which Page, or that I should create
   one for Wren Automation.
+- **YouTube community post**: `google/youtube-community-post` is mapped
+  up to the Post button (2026-09-21). Proving it publishes a real post on
+  JinstersJournal: say "post a test" (deleted after) or do the first one
+  yourself.
 - ~~YouTube~~ done 2026-09-20 with jinwilliam.jin@gmail.com (channel
   JinstersJournal): Cloud project `wren-509223`, OAuth client, consent,
   refresh token kept; the Data API answers. Say if another Google account

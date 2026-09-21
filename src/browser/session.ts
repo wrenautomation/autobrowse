@@ -138,22 +138,40 @@ function keepOutOfTheWay(profileDir: string): void {
 /** Launch flags that keep a site from telling the browser apart from a person's. */
 const LOCAL_ARGS = ["--disable-blink-features=AutomationControlled"];
 
+/** The user agent a headed Chrome of the installed version would send; learned from the first headless launch. */
+let headedUserAgent: string | null = null;
+
 async function launchLocal(profileDir: string, opts: BrowserOptions): Promise<BrowserContext> {
+  const headless = opts.headless ?? true;
   const base = {
-    headless: opts.headless ?? true,
+    headless,
     viewport: { width: 1280, height: 900 },
     args: LOCAL_ARGS,
     ignoreDefaultArgs: ["--enable-automation"],
+    ...(headless && headedUserAgent ? { userAgent: headedUserAgent } : {}),
   };
-  if (opts.channel !== "chromium") {
-    try {
-      return await chromium.launchPersistentContext(profileDir, { ...base, channel: "chrome" });
-    } catch (err) {
-      if (!/executable doesn't exist|chrome/i.test(err instanceof Error ? err.message : ""))
-        throw err;
+  const launch = async (o: typeof base) => {
+    if (opts.channel !== "chromium") {
+      try {
+        return await chromium.launchPersistentContext(profileDir, { ...o, channel: "chrome" });
+      } catch (err) {
+        if (!/executable doesn't exist|chrome/i.test(err instanceof Error ? err.message : ""))
+          throw err;
+      }
     }
-  }
-  return chromium.launchPersistentContext(profileDir, base);
+    return chromium.launchPersistentContext(profileDir, o);
+  };
+  const context = await launch(base);
+  if (!headless || headedUserAgent) return context;
+  // Headless Chrome says "HeadlessChrome/153…" and sites like YouTube Studio refuse it as an
+  // unsupported browser. The version is only known once launched: learn it, relaunch as the headed one.
+  const ua = await (context.pages()[0] ?? (await context.newPage())).evaluate(
+    () => navigator.userAgent,
+  );
+  if (!ua.includes("HeadlessChrome")) return context;
+  headedUserAgent = ua.replace("HeadlessChrome", "Chrome");
+  await context.close();
+  return launch({ ...base, userAgent: headedUserAgent });
 }
 
 // --- Browserbase: persistent contexts keyed by site name -------------------
