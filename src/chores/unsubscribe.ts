@@ -94,8 +94,7 @@ export async function findSubscriptions(
 
   const bySender = new Map<string, Subscription>();
   for (const id of ids) {
-    const m = (await mailbox.call("GET", "/gmail/v1/users/me/messages/{id}", {
-      id,
+    const m = (await mailbox.call("GET", `/gmail/v1/users/me/messages/${encodeURIComponent(id)}`, {
       format: "metadata",
     })) as Message;
     const lu = header(m, "List-Unsubscribe");

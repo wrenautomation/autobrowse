@@ -30,7 +30,7 @@ function inbox(messages: ReturnType<typeof msg>[]) {
             ...(!second && messages.length > 2 ? { nextPageToken: "p2" } : {}),
           };
         }
-        return messages.find((m) => m.id === input.id);
+        return messages.find((m) => m.id === path.split("/").pop());
       },
     },
   };
@@ -89,7 +89,7 @@ describe("unsubscribe", () => {
     });
     expect(rows[1]).toMatchObject({ mailto: { to: "leave@tool.io", subject: "unsubscribe" } });
     expect(calls[0]?.input).toMatchObject({ q: "newer_than:14d unsubscribe" });
-    expect(calls.filter((c) => c.path.endsWith("{id}"))).toHaveLength(5);
+    expect(calls.filter((c) => /messages\/\d$/.test(c.path))).toHaveLength(5);
     expect(subscriptionLines(rows)[0]).toMatch(
       /^ {2}2 {2}noreply@namecheap.com\s+one-click 2026-09-22 {2}Sale$/,
     );

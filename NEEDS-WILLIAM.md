@@ -191,4 +191,11 @@ you the window at a captcha. What each needs from you first:
   leaves until you run it again with `--yes` (add `--only …` for a subset,
   `--keep domain` for senders to keep). It reads the consented Gmail
   (`--account` for another); run it where that token lives (the box, or
-  a laptop with `site setup gmail consent` done).
+  a laptop with `site setup gmail consent` done). Ran the list on
+  2026-09-22 (45 days): 63 senders. Nothing left. The tool/registry noise
+  from the fleet work, ready to paste (banks, Google, Instagram, LinkedIn,
+  Claude/OpenAI and the newsletters you read are not in it):
+
+  ```sh
+  pnpm autobrowse unsubscribe --days 45 --yes --only donotreply@e.godaddy.com,support@apollo.io,hello@mail.apollo.io,welcome@supabase.com,tidbcloud-team@pingcap.com,pingcapevent@pingcap.com,tidbscaile@pingcap.com,info@cerebras.net,welcome@cerebras.ai,forward@updates.resend.com,marc@updates.langfuse.com,agno@hello.agno.com,hello@inceptionlabs.ai,devx@backboard.io,team@ship.emergent.sh,team@m.ngrok.com,hi@creativefabrica.com,darlyze@devpost.com,akatos@user.luma-mail.com,thebarn@user.luma-mail.com,socratica@user.wygo-mail.com,hello@m.fontawesome.com,news@nvidia.com,marketing@plans.eventbrite.com,hello@newsletter.life360.com,vsco@customer.vsco.co,no-reply@jm.indeed.com,noreply@qualtrics-research.com
+  ```
