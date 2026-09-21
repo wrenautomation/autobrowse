@@ -275,13 +275,17 @@ pnpm autobrowse compile buy-domain --no-llm --from-outline
 
 pnpm autobrowse domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin --dry-run
 pnpm autobrowse domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin
-pnpm autobrowse status wren-six.com
-pnpm autobrowse approve wren-six.com purchase
-pnpm autobrowse approve wren-six.com human     # after doing what the email asked
-pnpm autobrowse pause wren-six.com
-pnpm autobrowse play wren-six.com
-pnpm autobrowse resume wren-six.com            # after a failure
-pnpm autobrowse reset wren-six.com
+pnpm autobrowse workflows                      # what this worker can run
+pnpm autobrowse runs --limit 20                # the registry, newest first (--before <cursor> pages)
+pnpm autobrowse status domain wren-six.com     # every run is <workflow> <key>
+pnpm autobrowse approve domain wren-six.com purchase
+pnpm autobrowse approve domain wren-six.com human     # after doing what the email asked
+pnpm autobrowse reject domain wren-six.com purchase
+pnpm autobrowse pause domain wren-six.com
+pnpm autobrowse play domain wren-six.com
+pnpm autobrowse run domain wren-six.com        # after a failure: resumes the stored plan
+pnpm autobrowse reset domain wren-six.com
+pnpm autobrowse desktop                        # the Mac outside the browser: apps, menus, root commands
 ```
 
 `pnpm gates` = lint + typecheck + tests (the Restate test needs Docker).

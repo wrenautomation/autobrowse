@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { Command } from "commander";
 import type { GateName } from "../engine/effects.js";
+import { cursorOf } from "../engine/rows.js";
 import { summarize } from "../engine/run.js";
 import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
 import { localBackend, proofsOf, workflowsOf } from "./backend.js";
@@ -193,13 +194,19 @@ program
   .command("runs")
   .description("Runs the registry knows, newest first")
   .option("--limit <n>", "how many", "100")
-  .option("--before <updatedAt>", "the page after this time (the last row's updatedAt)")
+  .option(
+    "--before <cursor>",
+    "the next page: the cursor the last line printed (a bare updatedAt works too)",
+  )
   .action(async (opts: { limit: string; before?: string }) => {
     const q = { limit: Number(opts.limit) || 100, ...(opts.before ? { before: opts.before } : {}) };
-    for (const r of await api.registry().list(q))
+    const rows = await api.registry().list(q);
+    for (const r of rows)
       console.log(
         `${r.status.padEnd(9)} ${`${r.workflow}/${r.key}`.padEnd(40)} ${r.gate ? `gate:${r.gate}` : (r.lastStep ?? "")}  ${r.updatedAt}`,
       );
+    const last = rows.at(-1);
+    if (last && rows.length === q.limit) console.log(`next: --before ${cursorOf(last)}`);
   });
 
 registerRecordCommands(program, settings, local);
