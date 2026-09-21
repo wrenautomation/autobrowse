@@ -71,6 +71,15 @@ describe("linkedin sign-in", () => {
     await signInToLinkedin(ctx(emailed.fp, ["email"]));
     expect(emailed.acts[3]?.op).toMatchObject({ kind: "fill", value: "123456" });
 
+    const noSeed = fakePage({
+      text: ["Sign in Email or phone Password", "Enter the code from your authenticator app"],
+      present: () => true,
+      url: "https://www.linkedin.com/checkpoint/challenge/3",
+    });
+    await expect(signInToLinkedin(ctx(noSeed.fp, ["email"]))).rejects.toThrow(
+      /totp code; store totpSecret/,
+    );
+
     const rejected = fakePage({
       text: ["Sign in Email or phone Password", "Wrong email or password. Try again"],
       present: () => true,

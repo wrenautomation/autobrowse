@@ -45,11 +45,16 @@ export async function signInToLinkedin(ctx: SignInContext): Promise<void> {
         return fp.human("LinkedIn wants a security check only a person can pass");
       throw new LoginFailed(site, `checkpoint without a code box: ${fp.url()}`);
     }
-    const kind = ctx.offers("totp") ? "totp" : "email";
+    // The page says where the code comes from; the credential says what we can read.
+    const kind = /authenticator app/i.test(text)
+      ? "totp"
+      : /text message|sms|phone number/i.test(text)
+        ? "sms"
+        : "email";
     if (!ctx.offers(kind))
       throw new LoginFailed(
         site,
-        "the checkpoint asks for a code; store totpSecret or set codesInbox",
+        `the checkpoint asks for a ${kind} code; ${kind === "totp" ? "store totpSecret" : "set codesInbox"}`,
       );
     await fp.act({ kind: "fill", value: await code(kind, "linkedin") }, otp, {
       goal: `type the ${kind} code`,
