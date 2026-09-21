@@ -64,7 +64,5 @@ jobs:
           done
           echo "deploy still running after 5 min"; exit 1
         env: { INSTANCE_ID: "${{ secrets.INSTANCE_ID }}" }
-      - name: release the box
-        if: ${{ always() }}
-        run: deploy/scripts/box.sh release
-        env: { AUTOBROWSE_INSTANCE_ID: "${{ secrets.INSTANCE_ID }}" }
+      # No release step: the worker stops the box itself once idle (IDLE_STOP_MINUTES),
+      # and a deploy must not pull it from under a call that queued while it booted.

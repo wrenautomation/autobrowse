@@ -2,11 +2,11 @@
 # The worker box on demand: a stopped instance bills nothing but its volume.
 #   box.sh start     boot it and wait until SSM can reach it (then the worker is up in ~1 min)
 #   box.sh stop      shut it down; flows resume from Restate's journal on the next start
-#   box.sh release   stop it unless a person started it (what a deploy runs last, always)
+#   box.sh release   stop it unless a person started it (by hand; a deploy leaves the stop to the worker's idle stop)
 #   box.sh status
 # Who started it is an instance tag (autobrowse:started-by = person|deploy), set on
-# a start from stopped and cleared on stop: a deploy never leaves a box running
-# that it booted, and never stops one a person booted. BOX_STARTED_BY=deploy in CI.
+# a start from stopped and cleared on stop: the worker's idle stop and `release` end
+# a deploy's or a caller's box, never one a person booted. BOX_STARTED_BY=deploy in CI.
 set -euo pipefail
 ID="${AUTOBROWSE_INSTANCE_ID:-$(cd "$(dirname "$0")/../terraform" && tofu output -raw instance_id)}"
 TAG="autobrowse:started-by"

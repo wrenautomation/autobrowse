@@ -5,9 +5,10 @@ secrets in SSM, no inbound port. Restate Cloud reaches the worker through the
 tunnel the worker dials; you reach the UI through SSM port forwarding. The box is
 **stopped between jobs**: a stopped instance bills nothing, the volume ~$2/month.
 Running it is ~$1/day (t3.medium). `deploy/scripts/box.sh start|stop|release|status`.
-A deploy starts it, ships, and releases it: stopped again unless a person started it
-(the `autobrowse:started-by` instance tag; `box.sh start` by hand sets `person`).
-Between deploys it wakes and sleeps on its own: see "Idle stop".
+A deploy starts it (tag `autobrowse:started-by=deploy`) and ships; the worker
+stops it again once idle ("Idle stop"), never a deploy: a stop from CI could land
+under a call that queued while the box booted. `box.sh start` by hand sets
+`person`, which nothing stops but you (`box.sh stop`).
 
 ## Once
 
@@ -52,7 +53,8 @@ limit to 2 so the container can reach metadata. A stop that is refused
 Waking is the caller's: wren's worker starts the instance (tag `wren`)
 before its first `sites` call and Restate holds the call until the tunnel
 is back (~1–2 min). Anyone else: `box.sh start`. A Content call then costs
-minutes of box time, not a day.
+minutes of box time, not a day. Without `IDLE_STOP_MINUTES` the box stays
+up after a deploy until `box.sh stop` (or `release`).
 
 ## After
 
