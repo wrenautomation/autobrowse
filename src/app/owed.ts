@@ -55,12 +55,18 @@ export function needsContextFor(
     credentials: credentialsFor(settings, { armed: false }),
     env: (n) => env[n],
     workspaceDomain: settings.googleWorkspaceDomain?.toLowerCase() ?? null,
+    // Each probe spawns a tool; several rows ask, one context answers once.
     phone: (() => {
       const phone = phoneFor(settings);
-      return phone ? () => phoneStatus(phone.dbPath) : null;
+      return phone ? once(() => phoneStatus(phone.dbPath)) : null;
     })(),
-    desktop: process.platform === "darwin" ? () => macDesktop().permissions() : null,
+    desktop: process.platform === "darwin" ? once(() => macDesktop().permissions()) : null,
   });
+}
+
+function once<T>(f: () => Promise<T>): () => Promise<T> {
+  let p: Promise<T> | null = null;
+  return () => (p ??= f());
 }
 
 export const DONE_FILE = "~/.config/autobrowse/needs-done.json";

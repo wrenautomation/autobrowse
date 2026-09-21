@@ -5,10 +5,11 @@
  * ledger: which credential, which field, which site, which page, by whom.
  * Values are never written anywhere here.
  */
-import { appendFile, chmod, mkdir, readFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { BrowserFlow, FlowPage, FlowRunner } from "../browser/flow.js";
 import type { SecretSource } from "../deps/secrets.js";
+import { tailJson } from "../deps/tail.js";
 import type { Credential } from "./credentials.js";
 
 export interface SecretUse {
@@ -46,12 +47,7 @@ export function fileAudit(path: string): SecretAudit {
       await appendFile(path, `${JSON.stringify(use)}\n`, { mode: 0o600 });
     },
     async recent(n = 50) {
-      const text = await readFile(path, "utf8").catch(() => "");
-      return text
-        .split("\n")
-        .filter(Boolean)
-        .slice(-n)
-        .map((l) => JSON.parse(l) as SecretUse);
+      return tailJson<SecretUse>(path, n);
     },
   };
 }

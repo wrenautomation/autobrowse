@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { fileCredentials } from "../src/auth/credentials.js";
 import { gmailClient } from "../src/clients/gmail.js";
 import { httpClient } from "../src/clients/http.js";
+import { tailJson, tailLines } from "../src/deps/tail.js";
 import type { RunEvent } from "../src/engine/events.js";
 import { type RunRow, trimRows } from "../src/engine/rows.js";
 import { eventBus } from "../src/ui/bus.js";
@@ -96,5 +97,24 @@ describe("cached reads", () => {
     // Another inbox is another mailbox: its bodies are its own.
     await client.recent("other@x.dev", new Date(0));
     expect(urls.filter((u) => u.includes("format=full"))).toHaveLength(4);
+  });
+});
+
+describe("tail reads", () => {
+  it("reads the last n lines from the file's end across block edges; a torn last line is skipped as JSON", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "autobrowse-tail-"));
+    const file = join(dir, "a.jsonl");
+    // ~1.5 MB: many 64 KB blocks, so the window starts mid-line.
+    const lines = Array.from({ length: 30_000 }, (_, i) =>
+      JSON.stringify({ i, pad: "x".repeat(40) }),
+    );
+    writeFileSync(file, `${lines.join("\n")}\n`);
+    const got = await tailLines(file, 3);
+    expect(got).toEqual(lines.slice(-3));
+    expect((await tailLines(file, 5_000)).length).toBe(5_000);
+    expect(await tailLines(file, 100_000)).toHaveLength(30_000);
+    expect(await tailLines(join(dir, "missing"), 3)).toEqual([]);
+    writeFileSync(file, `${lines.slice(0, 2).join("\n")}\n{"i":`);
+    expect((await tailJson<{ i: number }>(file, 5)).map((r) => r.i)).toEqual([0, 1]);
   });
 });

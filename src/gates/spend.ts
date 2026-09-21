@@ -5,8 +5,9 @@
  * button with no amount on it is always a question. Every decision is one
  * line in the spend ledger, next to the secret audit.
  */
-import { appendFile, chmod, mkdir, readFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
+import { tailJson } from "../deps/tail.js";
 import type { Approval, Approver } from "./payment.js";
 
 export interface Amount {
@@ -90,12 +91,7 @@ export function fileSpendLedger(path: string): SpendLedger {
       await appendFile(path, `${JSON.stringify(r)}\n`, { mode: 0o600 });
     },
     async recent(n = 50) {
-      const text = await readFile(path, "utf8").catch(() => "");
-      return text
-        .split("\n")
-        .filter(Boolean)
-        .slice(-n)
-        .map((l) => JSON.parse(l) as SpendRecord);
+      return tailJson<SpendRecord>(path, n);
     },
   };
 }

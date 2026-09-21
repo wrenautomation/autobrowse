@@ -219,6 +219,8 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
           live.explorer = ex;
           void ex.done.then(() => {
             if (view.status !== "closed" && view.status !== "done") view.status = "closed";
+            // The browser is gone; nothing keeps its pages and journal alive.
+            live.explorer = null;
           });
           if (req.url) await ex.exec({ cmd: "open", url: req.url });
           view.status = "running";
@@ -323,6 +325,7 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
         if (live.explorer.paused()) await live.explorer.exec({ cmd: "resume" });
         await live.finished;
         await live.explorer.exec({ cmd: "close" }).catch(() => undefined);
+        live.explorer = null;
       }
       live.view.status = "closed";
       persist(live.view);
