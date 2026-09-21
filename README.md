@@ -342,3 +342,56 @@ clients register. The same facade is the Restate service `sites`
 (`sites/call`, `sites/status`, `sites/setup`) for an orchestrator on the same
 Restate (wren's `Content` service): no port on the box, a call queues while
 the box is down, a write runs once. Design: `designs/2026-09-21-site-apis.md`.
+
+## Use as a library
+
+Every layer is a plain function over explicit parts; only the composers
+(`loadSettings`, `sitesFor` defaults, `backendFor`) read the process. Take
+the whole thing, one site, or one piece. `pnpm build` emits `dist/` with
+types; the subpaths are in `package.json` `exports`.
+
+**The whole thing: one verb.**
+
+```ts
+import { doer, abilitiesOf } from "autobrowse/do";
+const verb = doer({ llm, abilities, sites, callSite, runWorkflow, runFlow, agent, compile });
+await verb.do({ goal: "upload this to youtube", inputs: { file: "talk.mp4" } });
+```
+
+Or over HTTP/Restate/MCP from any language: `POST /api/do`, `do/run`, the
+`do` tool. Sites, workflows and flows you hand `abilitiesOf` are what it can
+route to; anything else the agent explores once.
+
+**One site, your wiring.** The facade takes your env store, HTTP client,
+sink, flow catalog and site list; nothing is read from `process.env` unless
+you leave `env` out.
+
+```ts
+import { sitesFor, youtube } from "autobrowse/sites";
+const sites = sitesFor({ sites: [youtube], env: (n) => vault.get(n), sink: vault, http, flows, catalog, browser, oauthPort: 9400 });
+await sites.status("youtube");                       // routes: api | browser | none (why); setup left
+await sites.setup("youtube", "consent");             // refresh token → your sink
+await sites.call("youtube", "GET", "/youtube/v3/videos?part=snippet&mine=true", {});
+```
+
+**One piece.** Your own token against a route's API leg; your own consent
+page opener against the token exchange; a site login on a page you drive.
+
+```ts
+import { youtube, runConsent, accessTokens } from "autobrowse/sites";
+const videos = youtube.routes.find((r) => r.path === "/youtube/v3/{resource}");
+await videos.api({ resource: "videos", part: "snippet", mine: true }, { token, http });
+const mint = accessTokens(http, env);                // refresh token → bearer, cached
+await runConsent(spec, { http, env, open: ({ url }) => myBrowser.consent(url), port: 9400 });
+
+import { SITE_LOGINS, formLogin, signInToGoogle } from "autobrowse/auth";
+import { consentFlow, googleOauthConsent } from "autobrowse/flows";
+import { digest, exploreWithAgent } from "autobrowse/agent";
+```
+
+Adding a site is one module: a `SiteApi` (routes with `request` schema,
+`api` leg, `browser` leg, `setup` steps that say which env names they make
+and need) and, when it has a login, a `SiteLogin`. `route()` infers the
+input type from the schema. Setup steps are the collectable part: a step is
+a recorded flow on the developer console or an OAuth consent, and `setup`
+runs it into whichever sink you pass (the `.env`, SSM, your vault).

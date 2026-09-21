@@ -38,6 +38,9 @@ it. Dated 2026-09-21.
   `pnpm autobrowse desktop setup` prints (needs your sudo password;
   the agent never sees it).
 
+- **AWS session expired** (2026-09-22 ~07:45 UTC): `aws login` on this Mac;
+  until then the box state, SSM env and Terraform cannot be checked from here.
+
 ## Content channels (YouTube, LinkedIn, Instagram, TikTok; wren `designs/2026-09-21-content-channels.md`)
 
 - **LinkedIn login**: the UI's Accounts page (linkedin → add → check), or
@@ -59,6 +62,12 @@ it. Dated 2026-09-21.
   with Login Kit + Content Posting API (redirect
   `http://127.0.0.1:9400/oauth/callback`). Posting needs its app review;
   reads work unaudited.
+- **Outlook** (built 2026-09-21, unproven): the Microsoft account via the
+  Accounts page (`microsoft`), and an app registration at
+  entra.microsoft.com (any account type, web redirect
+  `http://127.0.0.1:9400/oauth/callback`, a client secret) →
+  `MICROSOFT_CLIENT_ID`/`MICROSOFT_CLIENT_SECRET` via `autobrowse env`; then
+  `site setup outlook consent`.
 - **YouTube community post**: `google/youtube-community-post` is mapped
   up to the Post button (2026-09-21). Proving it publishes a real post on
   JinstersJournal: say "post a test" (deleted after) or do the first one

@@ -2,6 +2,39 @@
   "name": "autobrowse",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./sites": {
+      "types": "./dist/sites/index.d.ts",
+      "import": "./dist/sites/index.js"
+    },
+    "./auth": {
+      "types": "./dist/auth/index.d.ts",
+      "import": "./dist/auth/index.js"
+    },
+    "./do": {
+      "types": "./dist/do/index.d.ts",
+      "import": "./dist/do/index.js"
+    },
+    "./agent": {
+      "types": "./dist/agent/index.d.ts",
+      "import": "./dist/agent/index.js"
+    },
+    "./flows": {
+      "types": "./dist/browser/flows/index.d.ts",
+      "import": "./dist/browser/flows/index.js"
+    },
+    "./llm": {
+      "types": "./dist/llm/index.d.ts",
+      "import": "./dist/llm/index.js"
+    }
+  },
+  "bin": {
+    "autobrowse": "./dist/app/cli.js"
+  },
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=24"
@@ -10,6 +43,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "tsc --noEmit && tsc -p ui --noEmit",
+    "build": "tsc",
     "test": "vitest run",
     "worker": "tsx src/app/main.ts",
     "autobrowse": "tsx src/app/cli.ts",

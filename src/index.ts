@@ -1,4 +1,11 @@
-/** Library surface: define workflows and flows, host them, drive them. */
+/**
+ * Library surface: define workflows and flows, host them, drive them. The
+ * layers a caller can take on their own live under subpaths (README "Use
+ * as a library"): `autobrowse/sites` (site APIs, the facade, OAuth consent
+ * and token minting), `autobrowse/auth` (site logins, providers, credential
+ * stores), `autobrowse/do` (the one verb), `autobrowse/agent` (the page
+ * outline, the exploring agent), `autobrowse/flows` (the hand-written legs).
+ */
 export type {
   ActOptions,
   BrowserFlow,
