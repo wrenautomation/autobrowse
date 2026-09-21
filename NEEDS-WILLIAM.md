@@ -15,7 +15,8 @@ the polish pass, `BROWSER=cdp` for Electron apps. Everything still open in
 or a real account to prove against. 2026-09-22 later: `creds push <site>`
 (laptop credential → SSM, so the box signs in too), `place{secret}` +
 `autobrowse signup <site>` (accounts made by the agent, password minted
-and sealed first; see "Wren accounts" below).
+and sealed first; see "Wren accounts" below), origin binding + secret
+audit ledger (`creds audit`; `designs/2026-09-22-secrets-and-money-sandbox.md`).
 
 ## Money (your decision)
 
@@ -29,6 +30,9 @@ and sealed first; see "Wren accounts" below).
   (see Twilio texts below). `TWILIO_NUMBER` unset → SMS-by-Twilio off.
 - **Linq** (`LINQ_API_KEY`, `LINQ_NUMBER`, `LINQ_TO`, `LINQ_WEBHOOK_SECRET`):
   paid; only needed when the Mac is not around to read/send texts.
+- **Virtual cards vendor.** The sandbox plan wants one card per site with
+  its own cap (Privacy.com, or your bank's). Pick one; the rest (placed
+  card numbers, origin-bound to the merchant) is built like passwords.
 
 ## Phone
 

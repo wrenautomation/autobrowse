@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { exploreWithAgent } from "../src/agent/explorer.js";
 import type { CodeSource } from "../src/auth/codes.js";
 import { memoryCredentials } from "../src/auth/credentials.js";
-import { mintCredential, signupGoal, signupSecrets } from "../src/auth/signup.js";
+import { mintCredential, signupGoal, signupHosts, signupSecrets } from "../src/auth/signup.js";
 import type { ExploreCommand, Explorer } from "../src/explore/server.js";
 import { fakeLlm } from "../src/llm/fake.js";
 
@@ -113,5 +113,17 @@ describe("signup", () => {
     expect(llm.requests[0]?.prompt).toContain("SECRETS (use place): email, password, code");
     expect(llm.requests[1]?.prompt).toContain("1. place [1] secret password");
     expect(JSON.stringify(llm.requests)).not.toContain("Minted");
+  });
+});
+
+describe("signupHosts", () => {
+  it("binds placed secrets to hosts carrying the site's name or the signup URL's host", () => {
+    const hosts = signupHosts("instagram@wren", "https://accounts.example.com/signup?x=1");
+    expect(hosts("www.instagram.com")).toBe(true);
+    expect(hosts("accounts.example.com")).toBe(true);
+    expect(hosts("instagram.evil.net")).toBe(true); // name-carrying: the agent's own click, not a redirect
+    expect(hosts("evil.net")).toBe(false);
+    expect(signupHosts("x")("x.com")).toBe(true);
+    expect(signupHosts("x")("google.com")).toBe(false);
   });
 });

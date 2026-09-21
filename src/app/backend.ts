@@ -39,6 +39,7 @@ import { type Screen, screenOf } from "./screen.js";
 import {
   type App,
   approverFor,
+  auditFor,
   browserOptions,
   budgetOf,
   COMPILED_DIR,
@@ -157,7 +158,7 @@ export function explorerOpener(
 ): (
   site: string,
   port: number,
-  extra?: Pick<ExploreOptions, "tokenFile" | "secrets">,
+  extra?: Pick<ExploreOptions, "tokenFile" | "secrets" | "secretHosts">,
 ) => Promise<Explorer> {
   const approver: Approver | null = approverFor(settings, gmailFor(settings));
   return (site, port, extra = {}) =>
@@ -167,6 +168,7 @@ export function explorerOpener(
       recordingsDir: expandHome(settings.recordingsDir),
       port,
       login: loginFor(settings, gmailFor(settings)),
+      audit: auditFor(settings),
       pace: paceFor(settings), // an agent browses at a person's pace: sites watch for the other kind
       sink,
       ...(approver ? { approve: approver } : {}),

@@ -1,6 +1,6 @@
 /** Composition root: settings → clients → workflow deps → Restate services. Secrets stay inside the clients. */
 
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Logger } from "pino";
 import {
@@ -10,6 +10,7 @@ import {
   codeSources,
   credentialFor,
   envCredentials,
+  fileAudit,
   fileCredentials,
   keychainKey,
   type LoginProvider,
@@ -17,6 +18,7 @@ import {
   loginProvider,
   messageSource,
   plainCipher,
+  type SecretAudit,
   SITE_LOGINS,
   totpSource,
 } from "../auth/index.js";
@@ -224,6 +226,11 @@ export function credentialsFor(settings: Settings): CredentialStore {
   return layeredCredentials([envCredentials(), fileCredentials(settings.credentialsFile, cipher)]);
 }
 
+/** Where every secret use is written: next to the credential file, 0600, one JSON line each. */
+export function auditFor(settings: Settings): SecretAudit {
+  return fileAudit(join(dirname(expandHome(settings.credentialsFile)), "audit.jsonl"));
+}
+
 /** The paired phone, when one is configured: reader, notifier and channel share these options. */
 export function phoneFor(settings: Settings): PhoneOptions | null {
   if (!settings.phoneNumber) return null;
@@ -310,6 +317,7 @@ export function loginFor(
   return loginProvider(SITE_LOGINS, {
     credentials: credentialsFor(settings),
     codes: codesFor(settings, gmail, http),
+    audit: auditFor(settings),
     ...(notify ? { notify } : {}),
   });
 }

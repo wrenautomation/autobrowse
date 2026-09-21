@@ -12,6 +12,7 @@ import type { Hints } from "../browser/locate.js";
 import { wallOf } from "../browser/session.js";
 import type { CodeKind, CodeSource } from "./codes.js";
 import type { Credential, CredentialStore } from "./credentials.js";
+import { guardedPage, registrable, type SecretAudit } from "./guard.js";
 import { type IdentityProvider, type Provider, providerOf, registerProvider } from "./providers.js";
 
 export interface SignInContext {
@@ -69,6 +70,12 @@ export interface SiteLogin {
   passwordChange?: PasswordChangeSpec;
   /** How this site's passkey page walks, for `enroll-passkey`. */
   passkeySetup?: PasskeySetupSpec;
+  /**
+   * Registrable domains the credential's password may be typed on, beside
+   * `home`'s own (Google signs in on accounts.google.com, Microsoft on
+   * live.com and microsoftonline.com). Anywhere else is a leak.
+   */
+  origins?: readonly string[];
 }
 
 /** The passkeys page: the button that starts the ceremony (our authenticator answers it), what the page says after. */
@@ -515,7 +522,30 @@ export interface LoginOptions {
   credentials: CredentialStore;
   codes: CodeSource;
   notify?: (text: string) => Promise<void>;
+  /** Where every password use is recorded (allowed or refused). */
+  audit?: SecretAudit;
   now?: () => Date;
+}
+
+/**
+ * The domains a credential's password may be typed on: its site's `home`
+ * and `origins`, the credential's own `url`; for a name no spec knows, hosts
+ * that carry the name (`instantly` → app.instantly.ai).
+ */
+export function passwordDomains(
+  sites: readonly SiteLogin[],
+  name: string,
+  cred: Pick<Credential, "url">,
+): string[] {
+  const base = name.split("@")[0] ?? name;
+  const login = sites.find((s) => (s.credential ?? s.site) === base) ?? resolveLogin(sites, base);
+  const out = new Set<string>();
+  if (login) {
+    out.add(registrable(new URL(login.home).host));
+    for (const d of login.origins ?? []) out.add(d);
+  }
+  if (cred.url) out.add(registrable(new URL(cred.url).host));
+  return [...out];
 }
 
 export type LoginOutcome = "signed-in" | "no-credential" | "unknown-site";
@@ -549,6 +579,11 @@ export interface SignInParts {
   notify?: (text: string) => Promise<void>;
   /** Only codes that arrived after this count; now unless said. */
   since?: Date;
+  /** The credential's store name (`google@will`); the site's when absent. */
+  credential?: string;
+  /** Domains a credential's password may be typed on; the page refuses it elsewhere. Absent: unbound. */
+  domainsFor?: (name: string, cred: Credential) => readonly string[];
+  audit?: SecretAudit;
 }
 
 /**
@@ -559,10 +594,28 @@ export interface SignInParts {
  * provider's (`ctx.as(cred)`), and its TOTP must answer, not the site's.
  */
 export function signInContext(p: SignInParts): SignInContext {
-  const { fp, site } = p;
+  const { site } = p;
   const since = p.since ?? new Date();
+  // Which store name a credential came from, so its page is bound to that name's origins.
+  const names = new WeakMap<Credential, string>();
+  names.set(p.cred, p.credential ?? site);
+  const pageFor = (cred: Credential): FlowPage => {
+    const name = names.get(cred) ?? site;
+    const domains = p.domainsFor?.(name, cred);
+    if (!domains && !p.audit) return p.fp;
+    return guardedPage(p.fp, {
+      name,
+      cred,
+      // No domains known: the name itself must be in the host (`instantly` → app.instantly.ai).
+      domains: domains?.length ? domains : [],
+      site,
+      by: "login",
+      ...(p.audit ? { audit: p.audit } : {}),
+      ...(domains?.length ? {} : { fallback: name.split("@")[0] ?? name }),
+    });
+  };
   const contextAs = (cred: Credential): SignInContext => ({
-    fp,
+    fp: pageFor(cred),
     cred,
     async code(kind, hint) {
       const req = hint ? { site, kind, since, hint } : { site, kind, since };
@@ -576,12 +629,16 @@ export function signInContext(p: SignInParts): SignInContext {
     async credFor(other, account) {
       const c = await p.credentials.get(other);
       if (!c) throw new LoginFailed(site, `no credential stored for ${other}`);
+      names.set(c, other);
       if (!account || sameUser(c.username, account)) return c;
       // A second account at the provider lives as `<provider>@<label>`.
       for (const name of await p.credentials.list()) {
         if (!name.startsWith(`${other}@`)) continue;
         const alt = await p.credentials.get(name);
-        if (alt && sameUser(alt.username, account)) return alt;
+        if (alt && sameUser(alt.username, account)) {
+          names.set(alt, name);
+          return alt;
+        }
       }
       throw new LoginFailed(
         site,
@@ -613,8 +670,11 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
       site,
       cred,
       since,
+      credential: known?.credential ?? site,
       credentials: opts.credentials,
       codes: opts.codes,
+      domainsFor: (name, c) => passwordDomains(sites, name, c),
+      ...(opts.audit ? { audit: opts.audit } : {}),
       ...(opts.notify ? { notify: opts.notify } : {}),
     });
     const here = login.signInHere;

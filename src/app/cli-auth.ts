@@ -168,6 +168,23 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       }
     });
 
+  creds
+    .command("audit")
+    .description(
+      "Where secrets went: every fill of a password or placed secret, allowed or refused (never the value)",
+    )
+    .option("--last <n>", "how many lines", "50")
+    .action(async (o: { last: string }) => {
+      const { auditFor } = await import("./services.js");
+      const uses = await auditFor(settings).recent(Number(o.last));
+      if (!uses.length) console.log("no secret uses recorded yet");
+      for (const u of uses) {
+        console.log(
+          `${u.at}\t${u.allowed ? "ok     " : "REFUSED"}\t${u.credential}.${u.field}\t${u.url}\t${u.by}`,
+        );
+      }
+    });
+
   program
     .command("login <site>")
     .description(

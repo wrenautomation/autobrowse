@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { memoryAudit } from "../src/auth/guard.js";
 import { compile } from "../src/compiler/index.js";
 import { memorySink } from "../src/deps/sink.js";
 import { fakeDesktop } from "../src/desktop/types.js";
@@ -28,6 +29,9 @@ describe("explore mode", () => {
   /** The person behind the payment gate: says yes, remembers what was asked. */
   const asks: string[] = [];
   let answer = true;
+  /** Where placed secrets may land; the test page is a data: URL, so its host is "". */
+  let allowHost = (_host: string) => true;
+  const audit = memoryAudit();
   const send = async (cmd: Record<string, unknown>, wait = false) => {
     const r = await fetch(`http://127.0.0.1:${port}/${wait ? "?wait=1" : ""}`, {
       method: "POST",
@@ -47,6 +51,8 @@ describe("explore mode", () => {
       sink,
       tokenFile: join(dir, "explore.token"),
       secrets: async (name) => (name === "minted" ? "Placed-Value-77" : null),
+      secretHosts: (host) => allowHost(host),
+      audit,
       approve: async (ask) => {
         asks.push(ask.what);
         return answer;
@@ -123,6 +129,22 @@ describe("explore mode", () => {
     const unknown = await send({ cmd: "place", hints: { css: "#d" }, secret: "nope" });
     expect(unknown.status).toBe(500);
     expect(unknown.body.error).toMatch(/no secret named nope/);
+    // A page off the bound hosts never gets the value; the refusal is in the ledger, the value is not.
+    allowHost = () => false;
+    await send({ cmd: "fill", hints: { css: "#d" }, value: "" });
+    const leak = await send({ cmd: "place", hints: { css: "#d" }, secret: "minted" });
+    expect(leak.status).toBe(500);
+    expect(leak.body.error).toMatch(/scratch \(minted\)'s password is not typed on/);
+    expect(
+      (await send({ cmd: "eval", js: "document.querySelector('#d').value" })).body.result,
+    ).toBe("");
+    allowHost = () => true;
+    const uses = await audit.recent();
+    expect(uses.map((u) => [u.by, u.allowed])).toEqual([
+      ["place minted", true],
+      ["place minted", false],
+    ]);
+    expect(JSON.stringify(uses)).not.toContain("Placed-Value-77");
     // "Buy now" spends: over the socket the person is asked once (202) and the same
     // command comes back after the reply; a no leaves the page untouched.
     const buy = { cmd: "click", hints: { role: "button", name: "Buy now" } };
@@ -193,7 +215,7 @@ describe("explore mode", () => {
     expect(asks.at(-1)).toMatch(/^press "Buy", which spends in \w+$/);
 
     const saved = await send({ cmd: "save", name: "buy" });
-    expect(saved.body.actions).toBe(11); // the ordering test's open is journaled too
+    expect(saved.body.actions).toBe(12); // the ordering test's open is journaled too
     const rec = await loadRecording(join(dir, "recordings"), "buy");
     // (the page's own data: URL holds the fixture; the acts must not)
     expect(JSON.stringify(rec.actions.map(({ url: _u, ...a }) => a))).not.toContain(
@@ -205,6 +227,7 @@ describe("explore mode", () => {
       "input",
       "input",
       "input",
+      "input",
       "click",
       "keep",
       "desktop",
@@ -212,7 +235,7 @@ describe("explore mode", () => {
       "desktop",
       "desktop",
     ]);
-    const typed = rec.actions[8];
+    const typed = rec.actions[9];
     expect(
       typed.kind === "desktop" && typed.redacted && typed.op.op === "type" && typed.op.text,
     ).toBe("<redacted>");

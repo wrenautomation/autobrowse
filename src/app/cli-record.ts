@@ -164,9 +164,8 @@ export function registerRecordCommands(
           headed?: boolean;
         },
       ) => {
-        const { mintCredential, SIGNUP_SECRETS, signupGoal, signupSecrets } = await import(
-          "../auth/signup.js"
-        );
+        const { mintCredential, SIGNUP_SECRETS, signupGoal, signupHosts, signupSecrets } =
+          await import("../auth/signup.js");
         const { codesFor, credentialsFor, gmailFor, ourPhone } = await import("./services.js");
         const account = {
           site,
@@ -186,7 +185,11 @@ export function registerRecordCommands(
           goal: signupGoal(account),
           url: o.url ?? null,
           inputs: {},
-          secrets: { names: SIGNUP_SECRETS, values: secrets },
+          secrets: {
+            names: SIGNUP_SECRETS,
+            values: secrets,
+            hosts: signupHosts(site, o.url ?? null),
+          },
           save: `signup-${site}`,
           maxSteps: Number(o.maxSteps),
           port: Number(o.port),
@@ -280,8 +283,8 @@ interface AgentRun {
   maxSteps: number;
   port: number;
   headed: boolean;
-  /** Named values the agent may `place` and never sees. */
-  secrets?: { names: readonly string[]; values: SecretValues };
+  /** Named values the agent may `place` and never sees; `hosts` says where they may land. */
+  secrets?: { names: readonly string[]; values: SecretValues; hosts: (host: string) => boolean };
 }
 
 /** One agent session: explore server up, agent to the goal, journal saved as a recording. */
@@ -292,7 +295,7 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<void> {
   const ex = await explorerOpener(settings, undefined, r.headed ? headed : undefined)(
     r.site,
     r.port,
-    r.secrets ? { secrets: r.secrets.values } : {},
+    r.secrets ? { secrets: r.secrets.values, secretHosts: r.secrets.hosts } : {},
   );
   console.log(
     `agent on ${r.site}; pause/resume: curl -s -X POST -H "Authorization: Bearer ${ex.token}" http://127.0.0.1:${ex.port}/ -d '{"cmd":"pause"}'`,

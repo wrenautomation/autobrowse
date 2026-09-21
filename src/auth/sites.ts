@@ -107,6 +107,7 @@ const GOOGLE_SIGN_IN_HERE = { at: /accounts\.google\.com/, run: signInToGoogle }
 const google: SiteLogin = {
   site: "google",
   home: "https://myaccount.google.com/",
+  origins: ["google.com"],
   ask: 'Your Google account: the one behind every "Sign in with Google" button',
   loggedIn: async (fp) =>
     /myaccount\.google\.com/.test(fp.url()) && !/accounts\.google\.com/.test(fp.url()),
@@ -420,6 +421,7 @@ const outlook: SiteLogin = {
   site: "outlook",
   home: "https://outlook.live.com/mail/0/",
   credential: "microsoft",
+  origins: ["live.com", "microsoftonline.com", "microsoft.com"],
   ask: "The Microsoft account whose mailbox Outlook shows (personal or work)",
   loggedIn: async (fp) => OUTLOOK_HOME.test(fp.url()) && !MICROSOFT_HOST.test(fp.url()),
   signIn: async (ctx) => {

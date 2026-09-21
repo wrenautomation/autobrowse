@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import type { Page } from "playwright";
 import { z } from "zod";
+import { type SecretAudit, SecretLeak, urlWithoutQuery } from "../auth/guard.js";
 import type { SecretValues } from "../auth/signup.js";
 import { defineFlow, type FlowPage, flowRunner, type RunnerOptions } from "../browser/flow.js";
 import { type Hints, locate, locateAll, textOf } from "../browser/locate.js";
@@ -142,6 +143,10 @@ export interface ExploreOptions {
   sink?: SecretSink;
   /** What `place` may fill by name; without it `place` is refused. */
   secrets?: SecretValues;
+  /** Hosts a placed secret may land on; any other host refuses the `place`. Absent: any. */
+  secretHosts?: (host: string) => boolean;
+  /** Where every `place` is recorded (allowed or refused); never the value. */
+  audit?: SecretAudit;
   /**
    * Who says yes to a billing field or a button that spends. Without one
    * such acts are refused: money is never a session's own call.
@@ -405,6 +410,18 @@ async function serve(
         if (!opts.secrets) throw new Error("place needs secrets (a signup or a login gives them)");
         const value = await opts.secrets(c.secret);
         if (!value) throw new Error(`place: no secret named ${c.secret}`);
+        const host = new URL(page.url()).host;
+        const allowed = opts.secretHosts ? opts.secretHosts(host) : true;
+        await opts.audit?.record({
+          at: new Date().toISOString(),
+          credential: opts.site,
+          field: "secret",
+          site: opts.site,
+          url: urlWithoutQuery(page.url()),
+          by: `place ${c.secret}`,
+          allowed,
+        });
+        if (!allowed) throw new SecretLeak(`${opts.site} (${c.secret})`, host);
         await gate("fill", c, wait);
         await find(c).fill(value, { timeout: 10_000 });
         journalAct(c, (target) => ({ kind: "input", target, value: REDACTED, redacted: true }));

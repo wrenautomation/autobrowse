@@ -56,6 +56,17 @@ export function signupSecrets(o: SignupSecretsOptions): SecretValues {
   };
 }
 
+/**
+ * Where a signup's secrets may be placed: hosts that carry the site's name
+ * (`instagram` → www.instagram.com), or the signup URL's own host.
+ */
+export function signupHosts(site: string, url?: string | null): (host: string) => boolean {
+  const word = site.split("@")[0]?.toLowerCase() ?? site;
+  const own = url ? new URL(url).host.toLowerCase() : null;
+  return (host) =>
+    host.toLowerCase().includes(word) || (own !== null && host.toLowerCase() === own);
+}
+
 export interface NewAccount {
   site: string;
   /** The address the account is made with. */

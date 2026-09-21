@@ -30,6 +30,16 @@ export {
 } from "./credentials.js";
 export { enrollTotpFlow, readSecretFromPage, storeSeed } from "./enroll.js";
 export { signInToGithub } from "./github.js";
+export {
+  fileAudit,
+  guardedPage,
+  hostUnder,
+  memoryAudit,
+  registrable,
+  type SecretAudit,
+  SecretLeak,
+  type SecretUse,
+} from "./guard.js";
 export { ingest, parseCredentialLines, takeClipboard, takeFile } from "./ingest.js";
 export type { PasskeySetupSpec, PasswordChangeSpec } from "./login.js";
 export {
@@ -43,6 +53,7 @@ export {
   landAfterOauth,
   loginProvider,
   oauthLogin,
+  passwordDomains,
   passwordOf,
   resolveLogin,
   type SignInContext,
@@ -70,6 +81,7 @@ export {
   SIGNUP_SECRETS,
   type SignupSecretsOptions,
   signupGoal,
+  signupHosts,
   signupSecrets,
 } from "./signup.js";
 export { SITE_LOGINS } from "./sites.js";
