@@ -22,9 +22,17 @@ for name, v in json.load(sys.stdin):
         with open(path, "w") as f: f.write(v)
         os.chmod(path, 0o600); os.chown(path, 1000, 1000)
         v = path
-    print(f"{k}={v}")' > /data/env/.env.tmp
+    # compose interpolates `$VAR` inside env_file values (a secret with a `$` got truncated
+    # once); `$$` is the escape for a literal dollar.
+    print(f"{k}={v.replace(chr(36), chr(36) * 2)}")' > /data/env/.env.tmp
 chmod 600 /data/env/.env.tmp
 mv /data/env/.env.tmp /data/env/.env
+# Room first: every autobrowse image but the one running goes (61 of them filled the
+# 16 GB root once, and the pull failed with "no space left on device"). The running one
+# stays so a failed pull changes nothing.
+running="$(docker inspect --format '{{.Config.Image}}' "$(docker compose ps -q worker 2>/dev/null)" 2>/dev/null || true)"
+docker images --format '{{.Repository}}:{{.Tag}}' | grep "/autobrowse-prod:" | grep -vxF "${running:-none}" | grep -vxF "$ECR_IMAGE" \
+  | xargs -r docker rmi >/dev/null 2>&1 || true
 docker compose pull --quiet
 docker compose up -d --remove-orphans
 docker image prune -f >/dev/null

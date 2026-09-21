@@ -60,6 +60,17 @@ is back (~1–2 min). Anyone else: `box.sh start`. A Content call then costs
 minutes of box time, not a day. Without `IDLE_STOP_MINUTES` the box stays
 up after a deploy until `box.sh stop` (or `release`).
 
+## Two things the deploy script guards (2026-09-22)
+
+- **Disk.** Every deploy pulled a new 2.6 GB image and pruned only dangling ones; 61
+  tagged images filled the 16 GB root and the pull died with "no space left on
+  device". The script now removes every `autobrowse-prod` image but the running one
+  before it pulls.
+- **`$` in a secret.** Compose interpolates `$VAR` inside `env_file` values, so a
+  password holding `$Eo…` reached the container truncated (compose warned
+  `The "EoyB" variable is not set`). The script writes `$$` for every `$`, which
+  compose turns back into one.
+
 ## After
 
 - UI: the `ui_forward` output, then `http://localhost:9080` with the token.
