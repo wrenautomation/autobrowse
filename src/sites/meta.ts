@@ -113,6 +113,11 @@ const update = z.object({
   lifetime_budget: minor.optional(),
 });
 const object = z.object({ objectId: id, fields: z.string().default("id") });
+const search = z.object({
+  type: z.enum(["adinterest", "adgeolocation", "adworkposition", "adeducationmajor"]),
+  q: z.string().min(1),
+  limit: z.number().int().positive().max(100).default(25),
+});
 const insights = z.object({
   adAccountId: adAccount,
   fields: z.string().default("campaign_name,impressions,reach,clicks,ctr,cpc,cpm,spend,actions"),
@@ -341,6 +346,13 @@ export const meta: SiteApi = {
         "Any Graph object by id with `fields` (a post's `likes.summary(true),comments.summary(true),shares`)",
       request: object,
       api: ({ objectId, fields }, leg) => get(leg, objectId, { fields }),
+    }),
+    route({
+      method: "GET",
+      path: "/search",
+      summary: "Targeting search: interests (`type=adinterest&q=shopify`), places, job titles",
+      request: search,
+      api: (q, leg) => get(leg, "search", q),
     }),
     route({
       method: "GET",
