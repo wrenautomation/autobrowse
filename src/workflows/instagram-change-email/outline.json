@@ -1,0 +1,247 @@
+{
+  "name": "instagram-change-email",
+  "site": "instagram",
+  "description": "Change the email address on an Instagram account by navigating to Accounts Center, adding a new contact email, and verifying it with a confirmation code.",
+  "fields": [
+    {
+      "key": "newEmail",
+      "label": "Enter email",
+      "example": "william@wrenautomation.com"
+    }
+  ],
+  "secrets": [
+    {
+      "key": "code",
+      "label": "Enter confirmation code"
+    }
+  ],
+  "steps": [
+    {
+      "kind": "browser",
+      "name": "open-accounts-center",
+      "description": "Open the Accounts Center from the Instagram account edit page to access contact info settings.",
+      "irreversible": false,
+      "proof": null,
+      "url": "https://www.instagram.com/accounts/edit/",
+      "ops": [
+        {
+          "kind": "click",
+          "goal": "click Accounts Center Password, security, personal details, connected experiences, ad preferences",
+          "hints": {
+            "tag": "",
+            "role": "link",
+            "name": "Accounts Center Password, security, personal details, connected experiences, ad preferences",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        }
+      ]
+    },
+    {
+      "kind": "browser",
+      "name": "open-contact-info",
+      "description": "Click Contact info to view the current email address on file.",
+      "irreversible": false,
+      "proof": null,
+      "url": "https://www.instagram.com/accounts/edit/",
+      "ops": [
+        {
+          "kind": "click",
+          "goal": "click Contact info jinwilliam.jin+wren@gmail.com",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "/^Contact info/",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        }
+      ]
+    },
+    {
+      "kind": "browser",
+      "name": "start-add-email",
+      "description": "Open the contact info sub-page and click Add email to begin adding a new email address.",
+      "irreversible": false,
+      "proof": null,
+      "url": "https://www.instagram.com/accounts/edit/",
+      "ops": [
+        {
+          "kind": "click",
+          "goal": "click Add new contact Collapsed",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Add new contact Collapsed",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click Add email",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Add email",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        }
+      ]
+    },
+    {
+      "kind": "browser",
+      "name": "add-and-verify-email",
+      "description": "Enter the new email address, select it for the Instagram account, submit, enter the confirmation code sent to that email, confirm, and close the dialog.",
+      "irreversible": true,
+      "proof": "GET https://accountscenter.instagram.com/youraccount/contact_points/ shows the new email listed as verified/confirmed on the account.",
+      "url": "https://accountscenter.instagram.com/youraccount/contact_points/?entrypoint=profile_page&is_from_dialog=true",
+      "ops": [
+        {
+          "kind": "click",
+          "goal": "click Add new contact Collapsed",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Add new contact Collapsed",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click Add email",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Add email",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "fill",
+          "goal": "fill Enter email",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Enter email",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "newEmail"
+          }
+        },
+        {
+          "kind": "click",
+          "goal": "click wrenautomation Instagram",
+          "hints": {
+            "tag": "",
+            "role": "checkbox",
+            "name": "wrenautomation Instagram",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click Next",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Next",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "fill",
+          "goal": "fill Enter confirmation code",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Enter confirmation code",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "secret",
+            "key": "code"
+          }
+        },
+        {
+          "kind": "click",
+          "goal": "click Next",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Next",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click Close",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Close",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null,
+            "nth": 1
+          },
+          "irreversible": false
+        }
+      ]
+    }
+  ]
+}

@@ -69,10 +69,67 @@ function uniquer(sep = "-") {
   };
 }
 
+const EMAIL = /[\w.+-]+@[\w-]+(\.[\w-]+)+/;
+
+/**
+ * A name that carries the account's current state ("Contact info
+ * jin@x.com", "Phone (587) 555-0100") would not match once that state
+ * changes: keep the label before it as a loose prefix match, the way a
+ * hand-written hint would.
+ */
+export function looseName(name: string): string {
+  const m = name.match(EMAIL);
+  if (!m || m.index === undefined) return name;
+  const label = name.slice(0, m.index).trim();
+  if (!label) return name;
+  return `/^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/`;
+}
+
 function stripHints(h: LocatorHints): Hints {
   // Keep only what locates; the compiled flow does not need the element's href.
   const { href: _href, ...rest } = h;
-  return rest;
+  return rest.name ? { ...rest, name: looseName(rest.name) } : rest;
+}
+
+/** Verifying and observing words in an agent's thought: it is looking, not doing. */
+const LOOK_AROUND =
+  /\b(verif\w*|confirm\w*|check(ing|ed|s)?|make sure|ensur\w*|see (the|whether|if)|look(ing)? at|already|still|show(s|ing|ed)?|appears?|indicat\w*|listed|displayed)\b/i;
+const DISMISS = /^(close|back|cancel|ok|okay|done|got it|not now|dismiss)$/i;
+
+/**
+ * An agent that met the goal looks around to be sure: it re-opens the
+ * page, clicks into what it changed, closes it again. Trailing steps after
+ * the last one that changed anything are dropped when each is clicks only
+ * and either described in looking words or made of clicks on controls
+ * the flow already clicked (re-opening) and dismissals.
+ */
+export function dropLookAround(steps: OutlineStep[]): OutlineStep[] {
+  const changes = (s: OutlineStep) =>
+    s.kind === "terminal" ||
+    s.kind === "desktop" ||
+    s.ops.some((o) => o.kind !== "click" || o.irreversible);
+  let last = -1;
+  steps.forEach((s, i) => {
+    if (changes(s)) last = i;
+  });
+  if (last < 0) return steps;
+  const seen = new Set<string>();
+  for (const s of steps.slice(0, last + 1))
+    if (s.kind === "browser")
+      for (const o of s.ops) if (o.kind === "click") seen.add(JSON.stringify(o.hints));
+  const tail = steps.slice(last + 1);
+  const churn = tail.every(
+    (s) =>
+      s.kind === "browser" &&
+      s.ops.every((o) => o.kind === "click") &&
+      (LOOK_AROUND.test(s.description) ||
+        s.ops.every(
+          (o) =>
+            o.kind === "click" &&
+            (seen.has(JSON.stringify(o.hints)) || DISMISS.test(o.hints.name ?? "")),
+        )),
+  );
+  return churn ? steps.slice(0, last + 1) : steps;
 }
 
 export function structure(rec: Recording): Outline {
@@ -361,10 +418,11 @@ export function structure(rec: Recording): Outline {
     });
   }
 
+  const kept = dropLookAround(steps);
   // Only what an op still reads (a browser fill or a desktop type), after replaced fills dropped theirs;
   // a step URL's `{field}` counts too.
   const used = new Set<string>();
-  for (const s of steps) {
+  for (const s of kept) {
     if (s.kind === "terminal") continue;
     if (s.kind === "browser" && s.url)
       for (const m of s.url.matchAll(/\{([a-z][a-zA-Z0-9]*)\}/g)) used.add(m[1] as string);
@@ -381,6 +439,6 @@ export function structure(rec: Recording): Outline {
     description: `Recorded ${rec.startedAt.slice(0, 10)} on ${rec.site}`,
     fields: fields.filter((f) => used.has(f.key)),
     secrets: secrets.filter((f) => used.has(f.key)),
-    steps,
+    steps: kept,
   };
 }

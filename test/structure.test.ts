@@ -11,7 +11,7 @@ describe("kebab", () => {
   });
 });
 
-import { structure } from "../src/compiler/structure.js";
+import { dropLookAround, looseName, structure } from "../src/compiler/structure.js";
 
 describe("structure names", () => {
   it("names a step from a short note, and from the page when the note is a sentence", () => {
@@ -160,5 +160,61 @@ describe("structure fields", () => {
     expect(ops.filter((op) => op.kind === "select")).toHaveLength(1);
     expect(ops.find((op) => op.kind === "select")).toMatchObject({ value: "June" });
     expect(o.fields).toEqual([{ key: "username", label: "Username", example: "wrenautomation" }]);
+  });
+});
+
+describe("looseName", () => {
+  it("keeps the label before an address as a prefix match, and leaves other names alone", () => {
+    expect(looseName("Contact info jin+wren@gmail.com")).toBe("/^Contact info/");
+    expect(looseName("jin@gmail.com")).toBe("jin@gmail.com");
+    expect(looseName("Change photo")).toBe("Change photo");
+    expect(looseName("Add (new) a@b.co")).toBe("/^Add \\(new\\)/");
+  });
+});
+
+describe("dropLookAround", () => {
+  const click = (name: string, irreversible = false) => ({
+    kind: "click" as const,
+    goal: `click ${name}`,
+    hints: { role: "button", name },
+    irreversible,
+  });
+  const step = (name: string, description: string, ops: unknown[]) =>
+    ({
+      kind: "browser",
+      name,
+      description,
+      irreversible: false,
+      proof: null,
+      url: null,
+      ops,
+    }) as never;
+  it("drops trailing verifying clicks after the last change, and keeps a tail that does more", () => {
+    const change = step("add-email", "Add the email", [
+      {
+        kind: "fill",
+        goal: "fill",
+        hints: { role: "textbox", name: "Email" },
+        value: { from: "plan", field: "email" },
+      },
+      click("Next"),
+    ]);
+    const look = step("verify", "Let me verify the email shows now.", [
+      click("Contact info"),
+      click("Close"),
+    ]);
+    const again = step("check", "Check it once more to confirm.", [click("Contact info")]);
+    expect(dropLookAround([change, look, again]).map((s) => s.name)).toEqual(["add-email"]);
+    const more = step("remove", "Remove the old one.", [click("Remove", true)]);
+    expect(dropLookAround([change, look, more]).map((s) => s.name)).toEqual([
+      "add-email",
+      "verify",
+      "remove",
+    ]);
+    // Unsaid intent: a dismissal or a re-click is looking; a new control is not.
+    const closes = step("after", "on /profile", [click("Close")]);
+    expect(dropLookAround([change, closes]).map((s) => s.name)).toEqual(["add-email"]);
+    const elsewhere = step("after", "on /profile", [click("Settings")]);
+    expect(dropLookAround([change, elsewhere]).map((s) => s.name)).toEqual(["add-email", "after"]);
   });
 });
