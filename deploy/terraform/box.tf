@@ -114,6 +114,27 @@ resource "aws_iam_role_policy" "box" {
   policy = data.aws_iam_policy_document.box.json
 }
 
+# The worker stops its own machine when idle (IDLE_STOP_MINUTES): this one instance, nothing else.
+# Describe cannot be scoped; it only reads the started-by tag.
+data "aws_iam_policy_document" "box_self" {
+  statement {
+    sid       = "StopSelf"
+    actions   = ["ec2:StopInstances", "ec2:DeleteTags"]
+    resources = [aws_instance.box.arn]
+  }
+  statement {
+    sid       = "ReadSelf"
+    actions   = ["ec2:DescribeInstances"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "box_self" {
+  name   = "box-self"
+  role   = aws_iam_role.box.id
+  policy = data.aws_iam_policy_document.box_self.json
+}
+
 resource "aws_iam_instance_profile" "box" {
   name = "${local.prefix}-box"
   role = aws_iam_role.box.name
@@ -144,12 +165,14 @@ resource "aws_instance" "box" {
 
   metadata_options {
     http_tokens = "required"
+    # The worker runs in a container one hop away: IMDSv2 tokens must cross it (its role credentials, its instance id).
+    http_put_response_hop_limit = 2
   }
 
   user_data = templatefile("${path.module}/user-data.sh", {
-    region    = var.region
-    account   = data.aws_caller_identity.me.account_id
-    volume_id = aws_ebs_volume.data.id
+    region        = var.region
+    account       = data.aws_caller_identity.me.account_id
+    volume_id     = aws_ebs_volume.data.id
     ecr           = aws_ecr_repository.worker.repository_url
     compose       = file("${path.module}/../compose.prod.yml")
     deploy_script = file("${path.module}/../scripts/on-box-deploy.sh")

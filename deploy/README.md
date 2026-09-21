@@ -7,6 +7,7 @@ tunnel the worker dials; you reach the UI through SSM port forwarding. The box i
 Running it is ~$1/day (t3.medium). `deploy/scripts/box.sh start|stop|release|status`.
 A deploy starts it, ships, and releases it: stopped again unless a person started it
 (the `autobrowse:started-by` instance tag; `box.sh start` by hand sets `person`).
+Between deploys it wakes and sleeps on its own: see "Idle stop".
 
 ## Once
 
@@ -34,6 +35,24 @@ the root email or `<account>/<iam user>`, the console password and the MFA
 seed. Then `aws login --remote` prints a URL; an explore session on it with
 site `aws` signs in and allows the CLI. Restate Cloud's device login was done
 this way on 2026-09-21 (Google button, stored `google` credential).
+
+## Idle stop
+
+`IDLE_STOP_MINUTES=30` (env store) and the worker stops its own instance once
+nothing has needed it for that long: no flow or site call running, no agent
+session mid-goal, no run event, no write to the UI API (reads never count:
+an open tab does not keep the box up). A person's box (`box.sh start` by
+hand, tag `person`) is never stopped; a deploy's or a caller's is, and the
+tag is cleared like `box.sh stop`. The worker learns its instance id over
+IMDSv2 (`AUTOBROWSE_INSTANCE_ID` overrides). Terraform gives the instance
+role `ec2:StopInstances` + `DeleteTags` on itself and sets the IMDS hop
+limit to 2 so the container can reach metadata. A stop that is refused
+(no policy yet, off EC2) is one warn line and the span restarts.
+
+Waking is the caller's: wren's worker starts the instance (tag `wren`)
+before its first `sites` call and Restate holds the call until the tunnel
+is back (~1–2 min). Anyone else: `box.sh start`. A Content call then costs
+minutes of box time, not a day.
 
 ## After
 

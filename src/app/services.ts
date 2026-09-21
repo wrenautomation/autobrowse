@@ -78,6 +78,7 @@ import {
 import { type DomainDeps, domainWorkflow } from "../workflows/domain/index.js";
 import type { Proof } from "../workflows/proof.js";
 import type { Settings } from "./config.js";
+import { holding, type Idle, idleTracker } from "./idle.js";
 import type { DeviceLink } from "./setup.js";
 
 function required<T>(value: T | undefined, env: string): T {
@@ -184,6 +185,8 @@ export interface App {
   sink: SecretSink;
   /** The site APIs, one instance: the HTTP face, the CLI and the `sites` service share it. */
   sites: SiteFacade;
+  /** Busy while a flow or site call runs; touched by every event. The idle stop reads it. */
+  idle: Idle;
   /** Set by the host once the agent exists: every failure record goes here (healing). */
   onFailure: ((record: FailureRecord, file: string) => void) | null;
 }
@@ -417,21 +420,26 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   if (list.length === 0) log.warn("no channel configured: gates are visible only in the UI/CLI");
   const bus = eventBus();
   const channel = channels([...list, bus, memoryChannel(memory)]);
+  const idle = idleTracker();
+  bus.subscribe(() => idle.touch());
 
   const guards = parseGuards(settings.guards);
   const failures: { hook: App["onFailure"] } = { hook: null };
-  const browser = flowRunner(browserOptions(settings), {
-    onFailure: (record, file) => failures.hook?.(record, file),
-    pace: paceFor(settings),
-    repairer: rememberingRepairer(memory, llm ? llmRepairer(llm) : noRepairer),
-    login: loginFor(settings, gmail),
-    repairIrreversible: !guards.has("irreversible"),
-    onRepair: (r) =>
-      log.warn(
-        { repair: r },
-        `locator ${r.ok ? "repaired" : "not repaired"} in ${r.flow}: ${r.goal}`,
-      ),
-  });
+  const browser = holding(
+    idle,
+    flowRunner(browserOptions(settings), {
+      onFailure: (record, file) => failures.hook?.(record, file),
+      pace: paceFor(settings),
+      repairer: rememberingRepairer(memory, llm ? llmRepairer(llm) : noRepairer),
+      login: loginFor(settings, gmail),
+      repairIrreversible: !guards.has("irreversible"),
+      onRepair: (r) =>
+        log.warn(
+          { repair: r },
+          `locator ${r.ok ? "repaired" : "not repaired"} in ${r.flow}: ${r.goal}`,
+        ),
+    }),
+  );
 
   const domainDeps: DomainDeps = {
     cloudflare: lazy(() =>
@@ -516,7 +524,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     });
   const extra = await compiledNow();
   if (extra.length) log.info({ compiled: extra.map((c) => c.workflow.name) }, "compiled workflows");
-  const sites = sitesFor({ catalog, browser, sink, oauthPort: settings.oauthPort });
+  const sites = holding(idle, sitesFor({ catalog, browser, sink, oauthPort: settings.oauthPort }));
   return {
     services: [
       runsRegistry,
@@ -539,6 +547,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     memory,
     sink,
     sites,
+    idle,
     get onFailure() {
       return failures.hook;
     },

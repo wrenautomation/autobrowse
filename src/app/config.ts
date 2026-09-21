@@ -79,6 +79,14 @@ const schema = z.object({
   /** Sentry: failed runs, failed steps and crashes become issues. Off when unset. */
   sentryDsn: z.string().url().optional(),
   sentryEnvironment: z.string().min(1).default("local"),
+  /**
+   * Stop the machine after this many idle minutes (no run, flow, site call, agent
+   * session or UI request): a box that bills nothing between jobs. 0 = never.
+   * Needs the instance role to stop itself (deploy/terraform box policy).
+   */
+  idleStopMinutes: z.coerce.number().min(0).default(0),
+  /** This machine's EC2 instance id; read from IMDS when unset. */
+  instanceId: z.string().min(1).optional(),
   /** Run the evaluator every N hours and tell the person what deserves a workflow; 0 = off. */
   evaluateEveryHours: z.coerce.number().min(0).default(0),
   /** Let the evaluator's proposals be explored, saved and compiled with nobody clicking. */
@@ -199,6 +207,8 @@ export const ENV_KEYS = {
   sentryDsn: "SENTRY_DSN",
   sentryEnvironment: "SENTRY_ENVIRONMENT",
   evaluateEveryHours: "EVALUATE_EVERY_HOURS",
+  idleStopMinutes: "IDLE_STOP_MINUTES",
+  instanceId: "AUTOBROWSE_INSTANCE_ID",
   autoBuild: "AUTO_BUILD",
   autoHeal: "AUTO_HEAL",
   credentialsFile: "CREDENTIALS_FILE",

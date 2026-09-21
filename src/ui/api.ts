@@ -42,6 +42,8 @@ export interface ApiDeps extends Backend {
   token: string | undefined;
   /** Linq: replies to the operator's iMessages; `secret` verifies the webhook. */
   linq?: { client: LinqClient; to: string; secret?: string };
+  /** Called on every request that changes something: a person is here (the idle stop listens). Reads never count. */
+  touch?: () => void;
 }
 
 /** A site error keeps its status (404 route, 400 request, 501 no leg, 409 blocked); the site's own HTTP error keeps its status too. */
@@ -103,6 +105,10 @@ export function api(deps: ApiDeps): Hono {
   const runOf = (workflow: string, key: string) => deps.ingress.run(workflow, key);
 
   app.use("/api/*", bearerAuth(deps.token));
+  app.use("*", (c, next) => {
+    if (c.req.method !== "GET" && c.req.method !== "HEAD") deps.touch?.();
+    return next();
+  });
   app.use("/hooks/*", rateLimit({ perMinute: 60 }));
   app.use("/hooks/inbound", bearerAuth(deps.token));
   // Linq cannot send our bearer; its signature stands in when a secret is set.

@@ -109,6 +109,7 @@ if (settings.autoHeal && backend.heal) {
 }
 startUiServer({
   ...backend,
+  touch: () => app.idle.touch(),
   ...(linq
     ? {
         linq: {
@@ -122,6 +123,24 @@ startUiServer({
   distDir: `${root}/ui/dist`,
   token: settings.uiToken,
 });
+if (settings.idleStopMinutes > 0) {
+  const { EC2Client } = await import("@aws-sdk/client-ec2");
+  const { ec2Port, instanceIdFromMetadata, selfStopper } = await import("./box.js");
+  const { scheduleIdleStop } = await import("./idle.js");
+  const busyStates = new Set(["starting", "running"]);
+  scheduleIdleStop({
+    idle: app.idle,
+    minutes: settings.idleStopMinutes,
+    // An agent mid-goal is work; a session waiting on a person is not (it is not durable, and the person left).
+    alsoBusy: () => (backend.agent?.list() ?? []).some((s) => busyStates.has(s.status)),
+    stop: selfStopper({
+      ec2: ec2Port(new EC2Client({ region: settings.awsRegion })),
+      instanceId: async () => settings.instanceId ?? (await instanceIdFromMetadata()),
+    }),
+    log,
+  });
+  log.info({ minutes: settings.idleStopMinutes }, "idle stop armed");
+}
 if (llm && settings.evaluateEveryHours > 0 && app.channel.note) {
   const { proposeWorkflows, readFailures } = await import("../agent/evaluator.js");
   const { scheduleEvaluator } = await import("../agent/schedule.js");

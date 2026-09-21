@@ -332,6 +332,16 @@ describe("api", () => {
     expect(sent).toHaveLength(1);
   });
 
+  it("touches on writes, never on reads", async () => {
+    let touched = 0;
+    const { app } = await setup(undefined, { touch: () => touched++ });
+    await app.request(new Request("http://x/api/status"));
+    await app.request(new Request("http://x/api/workflows"));
+    expect(touched).toBe(0);
+    await app.request(post("/api/runs/domain/x.com", { plan: { nope: 1 } }));
+    expect(touched).toBe(1);
+  });
+
   it("requires the bearer when one is set", async () => {
     const { app } = await setup("s3cret");
     expect((await app.request("/api/runs")).status).toBe(401);

@@ -17,6 +17,19 @@ it. Dated 2026-09-21.
 - **Linq** (`LINQ_API_KEY`, `LINQ_NUMBER`, `LINQ_TO`, `LINQ_WEBHOOK_SECRET`):
   paid; only needed when the Mac is not around to read/send texts.
 
+## AWS (one `aws login`, then two applies)
+
+- **Box sleeps on its own** (idle stop + wake, 2026-09-20). Code is live;
+  the IAM is not. Run: `cd autobrowse/deploy/terraform && tofu apply`
+  (instance role may stop itself; IMDS hop limit 2), then in wren
+  `deploy/terraform`: set `autobrowse_instance_id` in `terraform.tfvars`
+  (`tofu output -raw instance_id` from autobrowse) and `tofu apply`
+  (Lambda may start it). Then `IDLE_STOP_MINUTES=30` into the env store
+  (`pnpm autobrowse env push IDLE_STOP_MINUTES` after adding it to `.env`)
+  and one deploy. Until then the worker warns "idle stop failed" once per
+  span and the box stays as it is (stopped after each deploy, started by
+  `box.sh start`).
+
 ## Phone
 
 - **Twilio texts not reaching this Mac.** Twilio's signup texts (13:44,
