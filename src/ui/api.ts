@@ -16,6 +16,7 @@ import { proposeWorkflows, readFailures } from "../agent/evaluator.js";
 import { readFailure, repairRequest } from "../agent/repair.js";
 import { summarizeSession } from "../agent/sessions.js";
 import { type Backend, proofsOf, workflowsOf } from "../app/backend.js";
+import { accountEdit } from "../auth/accounts.js";
 import type { FailureRecord } from "../browser/session.js";
 import { parseCommand } from "../channels/commands.js";
 import { HttpError } from "../clients/http.js";
@@ -182,6 +183,25 @@ export function api(deps: ApiDeps): Hono {
    * not a Restate run. Minutes long: a job, answered at once and polled.
    */
   const jobs = deps.jobs ?? new Jobs();
+  /** Sign-ins by site: what is stored (never the values), add/change, and a headless sign-in as the proof. */
+  app.get("/api/accounts", async (c) => c.json(await deps.accounts.list()));
+  app.put("/api/accounts/:site", async (c) => {
+    const parsed = accountEdit.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: parsed.error.message }, 400);
+    try {
+      return c.json(await deps.accounts.save(c.req.param("site"), parsed.data));
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+    }
+  });
+  app.post("/api/accounts/:site/check", (c) => {
+    const { site } = c.req.param();
+    return c.json(
+      jobs.start("login", site, () => deps.accounts.check(site)),
+      202,
+    );
+  });
+
   app.post("/api/workflows/:name/prove", async (c) => {
     const { name } = c.req.param();
     const prove = deps.prove;

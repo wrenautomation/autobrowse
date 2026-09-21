@@ -193,6 +193,8 @@ export interface App {
   idle: Idle;
   /** Headed or headless for every browser opened from now; the API flips it. */
   screen: Screen;
+  /** The sealed credential store (env layer first); the Accounts page and `creds` write to it. */
+  credentials: CredentialStore;
   /** Set by the host once the agent exists: every failure record goes here (healing). */
   onFailure: ((record: FailureRecord, file: string) => void) | null;
 }
@@ -556,6 +558,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     sites,
     idle,
     screen,
+    credentials: credentialsFor(settings),
     get onFailure() {
       return failures.hook;
     },

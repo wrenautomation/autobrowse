@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { api, getToken, type RunEvent, setToken } from "./api.js";
 import { href, useEvents, useLoad, useRoute } from "./hooks.js";
+import { AccountsPage } from "./pages/Accounts.js";
 import { AgentPage, ExplorePage } from "./pages/Explore.js";
 import { RecordingPage, RecordingsPage } from "./pages/Recordings.js";
 import { RunPage } from "./pages/Run.js";
@@ -29,6 +30,7 @@ export function App() {
           {nav("recordings", "Recordings")}
           {nav("explore", "Explore")}
           {nav("sites", "Sites")}
+          {nav("accounts", "Accounts")}
           {nav("status", "Status")}
         </nav>
         <span className="spacer" />
@@ -50,6 +52,8 @@ export function App() {
           <ExplorePage />
         ) : page === "sites" ? (
           <SitesPage />
+        ) : page === "accounts" ? (
+          <AccountsPage />
         ) : page === "status" ? (
           <StatusPage />
         ) : (

@@ -69,6 +69,31 @@ function fakeIngress() {
   return { ingress, calls };
 }
 
+const fakeAccounts = {
+  list: async () => [
+    {
+      site: "instantly",
+      known: true,
+      ask: null,
+      username: "a",
+      via: null,
+      url: null,
+      has: {
+        password: true,
+        totpSecret: false,
+        passkeys: false,
+        recoveryCodes: false,
+        codesInbox: false,
+      },
+    },
+  ],
+  save: async (site: string, edit: { username?: string }) => {
+    if (!edit.username) throw new Error("a credential has a password or a via provider");
+    return { ...(await fakeAccounts.list())[0], site, username: edit.username };
+  },
+  check: async (site: string) => `signed in to ${site}`,
+};
+
 async function setup(token?: string, extra: Partial<Parameters<typeof api>[0]> = {}) {
   const dir = await mkdtemp(join(tmpdir(), "api-"));
   const recordingsDir = join(dir, "rec");
@@ -90,6 +115,7 @@ async function setup(token?: string, extra: Partial<Parameters<typeof api>[0]> =
     ingress,
     bus,
     screen: { headless: true },
+    accounts: fakeAccounts,
     recordingsDir,
     artifactsDir: join(dir, "art"),
     compile: async (rec) => ({
@@ -380,6 +406,44 @@ describe("api", () => {
     expect((await findRow(registry, (r) => r.status === "waiting"))?.key).toBe("k230");
     expect(await findRow(registry, (r) => r.key === "nope")).toBeUndefined();
     expect(await findRow(registry, (r) => r.key === "k230", 2)).toBeUndefined();
+  });
+
+  it("lists accounts without values, saves an edit, and proves a sign-in as a job", async () => {
+    const { app } = await setup();
+    const rows = await (await app.request("/api/accounts")).json();
+    expect(rows).toMatchObject([{ site: "instantly", username: "a", has: { password: true } }]);
+    const saved = await app.request(
+      new Request("http://x/api/accounts/instantly", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "b", password: "p" }),
+      }),
+    );
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({ site: "instantly", username: "b" });
+    const bad = await app.request(
+      new Request("http://x/api/accounts/sentry", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ via: "google" }),
+      }),
+    );
+    expect(bad.status).toBe(400);
+    expect((await bad.json()).error).toMatch(/password or a via/);
+    const notJson = await app.request(
+      new Request("http://x/api/accounts/sentry", { method: "PUT", body: "nope" }),
+    );
+    expect(notJson.status).toBe(400);
+    const check = await app.request(post("/api/accounts/instantly/check"));
+    expect(check.status).toBe(202);
+    const job = (await check.json()) as { id: string };
+    const done = await (await app.request(`/api/jobs/${job.id}?wait=1000`)).json();
+    expect(done).toMatchObject({
+      kind: "login",
+      key: "instantly",
+      status: "done",
+      result: "signed in to instantly",
+    });
   });
 
   it("touches on writes, never on reads", async () => {

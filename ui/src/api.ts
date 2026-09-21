@@ -7,6 +7,7 @@
 import type { Proposal } from "../../src/agent/evaluator.js";
 import type { SessionSummary, SessionView, StartRequest } from "../../src/agent/sessions.js";
 import type { Status } from "../../src/app/status.js";
+import type { AccountEdit, AccountRow } from "../../src/auth/accounts.js";
 import type { Compiled } from "../../src/compiler/index.js";
 import type { Outline } from "../../src/compiler/outline.js";
 import type { RunEvent } from "../../src/engine/events.js";
@@ -111,6 +112,12 @@ export const api = {
   settings: () => call<LiveSettings>("/api/settings"),
   putSettings: (s: LiveSettings) =>
     call<LiveSettings>("/api/settings", { method: "PUT", body: JSON.stringify(s) }),
+  /** Sign-ins by site: what is stored (never the values); save an edit; prove one with a headless sign-in. */
+  accounts: () => call<AccountRow[]>("/api/accounts"),
+  saveAccount: (site: string, edit: AccountEdit) =>
+    call<AccountRow>(`/api/accounts/${site}`, { method: "PUT", body: JSON.stringify(edit) }),
+  checkAccount: (site: string) =>
+    (post(`/api/accounts/${site}/check`) as Promise<JobView>).then((j) => finish<string>(j)),
   sites: () => call<SiteRow[]>("/api/sites"),
   site: (site: string) => call<SiteRow>(`/api/sites/${site}`),
   /** One official call through the facade; the answer is the API's own shape. */

@@ -9,6 +9,8 @@
 import { join } from "node:path";
 import { type HealOutcome, healFailure } from "../agent/heal.js";
 import { type AgentSessions, agentSessions } from "../agent/sessions.js";
+import { type Accounts, accountsOf } from "../auth/accounts.js";
+import { SITE_LOGINS } from "../auth/sites.js";
 import { type FlowRunner, flowRunner } from "../browser/flow.js";
 import type { FailureRecord } from "../browser/session.js";
 import { httpClient } from "../clients/http.js";
@@ -38,6 +40,7 @@ import {
   budgetOf,
   COMPILED_DIR,
   COMPILED_LIB,
+  credentialsFor,
   gmailFor,
   llmFor,
   loginFor,
@@ -80,6 +83,8 @@ export interface Backend {
   sites?: SiteFacade;
   /** The one live setting: headed or headless for the next browser. */
   screen: Screen;
+  /** Stored sign-ins by site (never the values), add/change, prove with a sign-in. */
+  accounts: Accounts;
 }
 
 /** The port allows a value or a loader for these; every face reads them the same way. */
@@ -176,7 +181,15 @@ export function agentFor(
 /** What a backend is composed from: the worker's `App` has all of it; the CLI makes a local set. */
 export type BackendParts = Pick<
   App,
-  "catalog" | "browser" | "sink" | "bus" | "workflows" | "proofs" | "sites" | "screen"
+  | "catalog"
+  | "browser"
+  | "sink"
+  | "bus"
+  | "workflows"
+  | "proofs"
+  | "sites"
+  | "screen"
+  | "credentials"
 >;
 
 /**
@@ -199,6 +212,7 @@ export function localParts(settings: Settings, o: { headless?: boolean } = {}): 
     sink,
     screen,
     sites: sitesFor({ catalog, browser, sink, oauthPort: settings.oauthPort }),
+    credentials: credentialsFor(settings),
     bus: eventBus(),
     workflows: async () => [...WORKFLOWS, ...(await catalog.list()).map((c) => c.workflow)],
     proofs: () => catalog.proofs(),
@@ -237,6 +251,7 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
     prove,
     sites: app.sites,
     screen: app.screen,
+    accounts: accountsOf({ store: app.credentials, logins: SITE_LOGINS, runner: app.browser }),
     ...(agent
       ? { agent, heal: healer(agent, settings, o.proveAfterHeal === false ? undefined : prove) }
       : {}),

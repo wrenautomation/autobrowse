@@ -187,7 +187,7 @@ pnpm autobrowse explore cloudflare --url https://dash.cloudflare.com/profile/api
 curl -s -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9090/ -d '{"cmd":"aria","hints":{"css":"main"}}'
 pnpm autobrowse agent google "open Personal info and report the display name" --save google-name   # model explores, journal → recording
 pnpm autobrowse repair ~/.config/autobrowse/artifacts/google-x-2026-….failure.json   # agent picks up where a flow stopped
-pnpm autobrowse creds paste google@ops            # a second account: `email password [key]` on the clipboard
+pnpm autobrowse creds paste google@ops            # a second account: `email password [key]` on the clipboard (or the UI's Accounts page)
 pnpm autobrowse record buy-domain --site cloudflare --url https://dash.cloudflare.com/ --terminal
 pnpm autobrowse compile buy-domain             # → src/workflows/buy-domain/ with its outline.json (on the Runs page at once; no restart)
 pnpm autobrowse try google-name                # run a compiled workflow here, no Restate: the proof it is deterministic

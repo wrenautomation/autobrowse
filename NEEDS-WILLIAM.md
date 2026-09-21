@@ -40,8 +40,9 @@ it. Dated 2026-09-21.
 
 ## Content channels (YouTube + LinkedIn; wren `designs/2026-09-21-content-channels.md`)
 
-- **LinkedIn login**: `pnpm autobrowse creds paste linkedin` with
-  `email password [authenticator key]` on the clipboard. The `linkedin`
+- **LinkedIn login**: the UI's Accounts page (linkedin → add → check), or
+  `pnpm autobrowse creds paste linkedin` with `email password
+  [authenticator key]` on the clipboard. The `linkedin`
   login and `linkedin/oauth-consent` are written (2026-09-21) but unproven:
   the credential proves them and unlocks the developer-app recording.
 - **LinkedIn developer app** (Client ID/secret; products "Share on
@@ -59,11 +60,11 @@ it. Dated 2026-09-21.
 
 ## Sign-in providers
 
-- **GitHub**: `pnpm autobrowse creds set github` (stdin JSON
-  `{"username","password","totpSecret"?}`) to prove the new `github`
-  provider live; then any "Continue with GitHub" site is
+- **GitHub**: Accounts page → add `github` (or `creds set github`, stdin
+  JSON `{"username","password","totpSecret"?}`) and "check" to prove the
+  new `github` provider live; then any "Continue with GitHub" site is
   `creds via <site> github --url …`. Built and unit-tested 2026-09-20.
-- **Microsoft**: same, `creds set microsoft`, if you have an account that
+- **Microsoft**: same, `microsoft`, if you have an account that
   signs in anywhere. Built and unit-tested 2026-09-20; unproven.
 
 ## Keys not yet obtained
