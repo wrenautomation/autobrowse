@@ -382,10 +382,10 @@ export function hintsFor(ref: Ref): Hints {
 }
 
 /**
- * The page as the model should see it after the previous step: the whole
- * outline when controls moved, else only what changed. Refs keep their
- * numbers only when the same controls are there in the same order, so that
- * is the condition for a delta; unchanged pages cost a line.
+ * The page as a delta from the previous step: the whole outline when
+ * controls moved, else only what changed. Not what the agent sends (a model
+ * with no memory between calls needs the whole outline every step); kept
+ * for a caller that holds a conversation.
  */
 export function pageForModel(prev: Digest | null, next: Digest): string {
   if (!prev) return next.text;

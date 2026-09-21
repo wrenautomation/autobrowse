@@ -12,7 +12,7 @@ import { desktopOpSchema } from "../desktop/types.js";
 import type { ExploreCommand, Explorer } from "../explore/server.js";
 import { PaymentGate } from "../gates/payment.js";
 import { completeJson, type Llm, LlmOutputInvalid, type LlmUsage } from "../llm/types.js";
-import { type Digest, digest, hintsFor, LEGEND, pageForModel } from "./digest.js";
+import { type Digest, digest, hintsFor, LEGEND } from "./digest.js";
 
 /** A ref number from the digest; the code turns it back into locator hints. */
 const ref = z.number().int().positive();
@@ -128,8 +128,6 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
   let nudged = false;
   /** The page the last journaled thought was on: one note per page keeps compiled steps page-sized. */
   let notedOn: string | null = null;
-  /** What the model saw last turn, to send only the change when the page is the same. */
-  let seen: { url: string; page: Digest } | null = null;
   const inputs = [
     ...Object.entries(o.inputs ?? {}).map(([k, v]) => `${k}: ${v}`),
     ...(o.secrets?.length ? [`SECRETS (use place): ${o.secrets.join(", ")}`] : []),
@@ -139,9 +137,9 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
     if (o.stopped?.()) return { achieved: false, summary: "stopped by a person", steps, usage };
     const url = (await o.explorer.exec({ cmd: "url" })) as { url: string };
     const aria = (await o.explorer.exec({ cmd: "aria", limit: 60_000 })) as { aria: string };
+    // The whole outline every step: a model with no memory between calls (claude-code) guessed refs from a delta.
     const page = digest(aria.aria, { maxRefs: o.maxRefs ?? 80 });
-    const shown = pageForModel(seen?.url === url.url ? seen.page : null, page);
-    seen = { url: url.url, page };
+    const shown = page.text;
     const history = steps
       .slice(-6)
       .map((s) => `${s.n}. ${describe(s)} → ${s.error ? `FAILED: ${s.error}` : outcome(s)}`)
