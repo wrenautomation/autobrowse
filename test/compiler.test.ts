@@ -256,6 +256,42 @@ describe("polish", () => {
     expect(outline.steps[2]?.irreversible).toBe(true); // never downgraded
     expect(outline.steps).toHaveLength(4);
   });
+  it("renames an opaque plan field everywhere it is read, never onto a taken or bad key", async () => {
+    const o = structure(recording);
+    o.fields.push({ key: "field1", label: "field1", example: "p1" });
+    const step = o.steps[0];
+    if (step?.kind !== "browser") throw new Error("expected a browser step");
+    step.url = "https://x.test/{field1}";
+    step.ops.push({
+      kind: "fill",
+      goal: "fill field1",
+      hints: { role: "textbox" },
+      value: { from: "plan", field: "field1" },
+    });
+    const llm = fakeLlm([
+      {
+        fields: [
+          { key: "field1", name: "Project Id" },
+          { key: "domain", name: "project-id" },
+          { key: "ghost", name: "x" },
+          { key: "cardCvv", name: "1bad" },
+        ],
+        steps: [],
+      },
+    ]);
+    const { outline } = await polish(o, llm);
+    expect(outline.fields.map((f) => f.key)).toEqual(["domain", "projectId"]);
+    const first = outline.steps[0];
+    if (first?.kind !== "browser") throw new Error("expected a browser step");
+    expect(first.url).toBe("https://x.test/{projectId}");
+    expect(first.ops.at(-1)).toMatchObject({ value: { from: "plan", field: "projectId" } });
+    expect(
+      first.ops.find(
+        (op) => op.kind === "fill" && op.value.from === "plan" && op.value.field === "domain",
+      ),
+    ).toBeDefined();
+    expect(() => outlineSchema.parse(outline)).not.toThrow();
+  });
 });
 
 describe("compile", () => {
