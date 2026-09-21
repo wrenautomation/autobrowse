@@ -7,11 +7,11 @@
  * tiers on X's side. Written from the docs 2026-09-22; unproven until a
  * developer app and an account exist.
  */
-import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import { bytesOf } from "./youtube.js";
 
 export const X_ORIGIN = "https://api.x.com";
 const CHUNK = 4 * 1024 * 1024;
@@ -127,7 +127,9 @@ async function uploadMedia(
   input: z.infer<typeof upload>,
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
 ): Promise<unknown> {
-  const type = MIME[extname(input.file).toLowerCase()] ?? "application/octet-stream";
+  // A path on this machine or a URL (a presigned S3 object from wren); the query is not the name.
+  const plain = input.file.replace(/[?#].*$/, "");
+  const type = MIME[extname(plain).toLowerCase()] ?? "application/octet-stream";
   const category =
     input.media_category ??
     (type.startsWith("video/")
@@ -135,8 +137,8 @@ async function uploadMedia(
       : type === "image/gif"
         ? "tweet_gif"
         : "tweet_image");
-  const bytes = await readFile(input.file);
-  const name = basename(input.file);
+  const bytes = await bytesOf(input.file);
+  const name = basename(plain);
   if (category === "tweet_image" || (category === "tweet_gif" && bytes.byteLength <= CHUNK)) {
     const form = multipart({ media_category: category, media_type: type }, { name, type, bytes });
     return must(
@@ -253,7 +255,7 @@ export const x: SiteApi = {
       method: "POST",
       path: "/2/media/upload",
       summary:
-        "Upload a local image or video for a post; answers `data.id` (a video is chunked and waited on until processed)",
+        "Upload an image or video (`file`: path or URL) for a post; answers `data.id` (a video is chunked and waited on until processed)",
       request: upload,
       api: (input, leg) => uploadMedia(leg, input),
     }),

@@ -123,7 +123,9 @@ you the window at a captcha. What each needs from you first:
   method on business.facebook.com — the card is yours to add (the gate
   would stop me at it anyway); (4) `site setup meta consent`. Ads that go
   ACTIVE ask you over the channel with the budget; `SPEND_*` in the env
-  store sets what may run without asking.
+  store sets what may run without asking. Then from wren: `wren ads launch
+  spec.json` (PAUSED) → `wren ads start … --daily 20` → `wren ads insights`
+  (wren `designs/2026-09-22-meta-ads.md`).
 - **X**: standalone signup with the inbox + phone; then the `x` site
   (built 2026-09-22: posts, media upload, metrics) needs a developer
   account + app at developer.x.com (Free tier posts; reads are paid):
