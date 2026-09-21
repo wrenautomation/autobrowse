@@ -151,7 +151,12 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       if (sites.length === 0 && !o.all) throw new Error("name sites, or --all");
       const { pushCredentials } = await import("../auth/credentials.js");
       const { envStoreFor } = await import("./services.js");
-      const pushed = await pushCredentials(credentialsFor(settings), envStoreFor(settings), sites);
+      // Unarmed: the push reads every site to skip the canaries; an armed read of one would trip it.
+      const pushed = await pushCredentials(
+        credentialsFor(settings, { armed: false }),
+        envStoreFor(settings),
+        sites,
+      );
       for (const p of pushed) console.log(`pushed ${p.site}: ${p.names.join(", ")}`);
       console.log("the box reads the store on its next deploy (push to main)");
     });
