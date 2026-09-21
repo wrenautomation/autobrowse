@@ -55,6 +55,11 @@ not proof-run candidates.
    `notify` with the number → "Stay signed in?" → "Permissions requested");
    same status: unit-tested, unproven. Both providers fail closed
    (LoginFailed) when a page reads differently from what they expect.
+   2026-09-21: the public first pages read as expected in a headless
+   explore (GitHub: "Username or email address"/"Password"/"Sign in";
+   Microsoft: "Enter your email, phone, or Skype."/"Next"; LinkedIn:
+   "Email or phone"/"Password"/"Sign in"). Password and second steps still
+   need an account.
 2. Popup vs redirect: `oauthLogin` handles both, but a provider that opens
    in a popup and closes it on consent leaves `main` to land; verify on
    a site that does that (Twilio did on 2026-09-21).

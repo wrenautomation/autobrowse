@@ -2,7 +2,8 @@
  * Login pages we know. Locators are visible labels, so a redesign fails
  * loudly and the repairer gets a chance. Every one is UNVERIFIED against
  * the live page until its first run; the memory layer keeps what worked.
- * Verified: cloudflare via Google (2026-09-19).
+ * Verified: cloudflare via Google (2026-09-19). Public login forms read
+ * live on 2026-09-21 (headless explore): github, microsoft (first page), linkedin.
  */
 
 import { LINKEDIN_LOGIN_URL, signInToLinkedin } from "./linkedin.js";
