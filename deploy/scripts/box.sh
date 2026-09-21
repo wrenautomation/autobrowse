@@ -44,6 +44,8 @@ case "${1:-status}" in
     if [ "$by" = "person" ]; then echo "$ID left running: a person started it"; exit 0; fi
     [ "$(state)" = "stopped" ] && { echo "$ID already stopped"; exit 0; }
     stop ;;
-  status) state ;;
+  status)
+    s="$(state)"; by="$(started_by)"
+    if [ "$s" = "running" ] && [ "$by" != "None" ]; then echo "$s (started by $by)"; else echo "$s"; fi ;;
   *) echo "usage: box.sh start|stop|release|status" >&2; exit 2 ;;
 esac
