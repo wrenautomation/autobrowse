@@ -183,3 +183,20 @@ describe("one login on a page the caller drives", () => {
     expect(ctx.as(await ctx.credFor("google")).cred.username).toBe("w@x.co");
   });
 });
+
+describe("browser tiers", () => {
+  it("cdp needs its URL; local and browserbase are unchanged", async () => {
+    const { openSession } = await import("../src/browser/session.js");
+    await expect(
+      openSession("outlook-app", {
+        tier: "cdp",
+        profilesDir: "/tmp/x",
+        artifactsDir: "/tmp/x",
+        cdpUrl: null,
+      }),
+    ).rejects.toThrow(/BROWSER_CDP_URL/);
+    const { budgetedLlm, memoryLedger, fakeLlm } = await import("../src/llm/index.js");
+    const llm = budgetedLlm(fakeLlm(["ok"]), { dailyTokens: 1000, ledger: memoryLedger() });
+    expect(llm.id).toBeDefined();
+  });
+});

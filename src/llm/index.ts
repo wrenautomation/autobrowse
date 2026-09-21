@@ -37,6 +37,16 @@ export function makeLlm(s: LlmSettings, http: HttpClient): Llm | null {
     : null;
 }
 
+export {
+  BudgetExceeded,
+  type BudgetedLlm,
+  budgetedLlm,
+  type DayLedger,
+  dayOf,
+  fileLedger,
+  type Ledger,
+  memoryLedger,
+} from "./budget.js";
 export { fakeLlm } from "./fake.js";
 export {
   completeJson,

@@ -42,6 +42,15 @@ before running it. Revoke = delete one file; audit = read one file. A bare
 - The three install commands `desktop setup` prints (they ask for the
   password once).
 
+## Electron apps (2026-09-21)
+
+`BROWSER=cdp` + `BROWSER_CDP_URL` attaches the browser leg to a running
+Chromium: an Electron app started with `--remote-debugging-port` (new
+Outlook, Slack, Notion, Figma, VS Code) is a site whose pages are the
+app's windows. Same `FlowPage`, same agent outline, same gates; `close`
+detaches without closing the app. Native apps stay on the accessibility
+tree; editors on their scripting APIs. `src/browser/session.ts` `Tier`.
+
 ## Not built
 
 - Linux desktops (the prod box has none; `noDesktop` says so).

@@ -4,6 +4,16 @@ What autobrowse cannot do for itself. Kept current by the agent; strike a
 line when it is done. Each says why it is stuck and what one action clears
 it. Dated 2026-09-21.
 
+## Done without you tonight (2026-09-22, autobrowse main)
+
+Page outline digest, Outlook site + login + consent, library layers
+(`autobrowse/sites|auth|do|agent|flows|llm`, `pnpm build:check`),
+`doerFor`/`signInContext`, `do` over command-line tools (`wrangler-deploy`,
+`gh-pr-create`, `ffmpeg-convert`) with pick memory, plan-field naming in
+the polish pass, `BROWSER=cdp` for Electron apps. Everything still open in
+`designs/` waits on a credential, a developer app, funded model credits,
+or `aws login` (below).
+
 ## Money (your decision)
 
 - **Anthropic API credits.** Console org "William's Individual Org" has

@@ -45,7 +45,14 @@ export interface FailureRecord {
   aria?: string;
 }
 
-export type Tier = "local" | "browserbase";
+/**
+ * Where the browser is: launched here with a profile per site, a Browserbase
+ * session, or a browser already running that the caller names by its CDP
+ * endpoint (a Chrome with `--remote-debugging-port`, or an Electron app such
+ * as the new Outlook, Slack, Notion started with it: the desktop leg for
+ * apps that are web pages inside).
+ */
+export type Tier = "local" | "browserbase" | "cdp";
 
 export interface BrowserOptions {
   tier: Tier;
@@ -59,6 +66,8 @@ export interface BrowserOptions {
    */
   channel?: "chrome" | "chromium";
   browserbase?: { apiKey: string; projectId: string; http: HttpClient } | null;
+  /** `BROWSER=cdp`: the endpoint to attach to (`http://127.0.0.1:9222` or a `ws://` URL). */
+  cdpUrl?: string | null;
   /** Passkeys to load into the site's session: the ones enrolled for its account. */
   passkeys?: (site: string) => Promise<readonly PasskeyRecord[]>;
 }
@@ -81,6 +90,11 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
     const session = await browserbaseSession(opts.browserbase, contextId);
     browser = await chromium.connectOverCDP(session.connectUrl);
     context = browser.contexts()[0] ?? (await browser.newContext());
+  } else if (opts.tier === "cdp") {
+    if (!opts.cdpUrl) throw new Error("BROWSER=cdp needs BROWSER_CDP_URL");
+    // The app's own context and pages: nothing is launched, nothing closed on our way out.
+    browser = await chromium.connectOverCDP(opts.cdpUrl);
+    context = browser.contexts()[0] ?? (await browser.newContext());
   } else {
     const profileDir = join(expandHome(opts.profilesDir), site);
     context = await launchLocal(profileDir, opts);
@@ -97,6 +111,11 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
     page,
     passkeys,
     async close() {
+      // An attached app keeps its windows; only what we launched or rented closes.
+      if (opts.tier === "cdp") {
+        await browser?.close().catch(() => undefined);
+        return;
+      }
       await context.close().catch(() => undefined);
       await browser?.close().catch(() => undefined);
     },

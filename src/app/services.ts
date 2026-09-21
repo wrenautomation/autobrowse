@@ -120,6 +120,7 @@ export function browserOptions(
       return (await store.get(credentialFor(SITE_LOGINS, site)))?.passkeys ?? [];
     },
     tier: settings.browser,
+    cdpUrl: settings.browserCdpUrl ?? null,
     profilesDir: settings.profilesDir,
     channel: settings.browserChannel,
     artifactsDir: settings.artifactsDir,

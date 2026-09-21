@@ -27,10 +27,11 @@ const schema = z.object({
   /** GitHub token that may dispatch wren's deploy workflow (roster reload). */
   githubToken: z.string().min(1).optional(),
   wrenRepo: z.string().min(1).default("wrenautomation/wren"),
-  /** Browser tier: a local Chromium with a persistent profile, or Browserbase. */
-  browser: z.enum(["local", "browserbase"]).default("local"),
+  /** Browser tier: a local Chromium with a persistent profile, Browserbase, or a running browser/Electron app by its CDP endpoint. */
+  browser: z.enum(["local", "browserbase", "cdp"]).default("local"),
   browserbaseApiKey: z.string().min(1).optional(),
   browserbaseProjectId: z.string().min(1).optional(),
+  browserCdpUrl: z.string().url().optional(),
   /** Persistent browser profiles (logins survive between runs). */
   profilesDir: z.string().min(1).default("~/.config/autobrowse/profiles"),
   /** Local browser: the installed Chrome (default, falls back) or Playwright's chromium (containers). */
@@ -178,6 +179,7 @@ export const ENV_KEYS = {
   browser: "BROWSER",
   browserbaseApiKey: "BROWSERBASE_API_KEY",
   browserbaseProjectId: "BROWSERBASE_PROJECT_ID",
+  browserCdpUrl: "BROWSER_CDP_URL",
   profilesDir: "PROFILES_DIR",
   browserChannel: "BROWSER_CHANNEL",
   browserHeadless: "BROWSER_HEADLESS",

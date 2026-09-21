@@ -175,6 +175,12 @@ Browserbase takes them.
   `BROWSER_HEADLESS` is only its value at boot. `explore`, `agent`, `repair`
   and `login` take `--headed` when you want to watch one; `record` is always
   headed.
+- **Where the browser is.** `BROWSER=local` (a Chrome per site profile),
+  `browserbase`, or `cdp` with `BROWSER_CDP_URL=http://127.0.0.1:9222`: a
+  browser already running, or an Electron app (new Outlook, Slack, Notion)
+  started with `--remote-debugging-port=9222`; its pages are the site, the
+  same flows and agent drive them, and nothing of it is closed on the way
+  out. The desktop leg for apps that are web pages inside.
 
 ## Flows built
 

@@ -67,8 +67,8 @@ consent); `status(site).setup` says what is done, blocked or unrecorded;
    imports every subpath in `exports`, naming what each must export; CI runs
    it after typecheck. Not in `gates` (a full emit per commit is not worth
    the wait).
-4. `llmFor(settings)` reads the budget file path and the provider from
-   settings; a caller passing an `Llm` of their own already works
-   (`DoerDeps.llm`), but the budget ledger is not reusable on its own.
+4. ✅ `budgetedLlm(llm, {dailyTokens, ledger})`, `fileLedger`, `memoryLedger` are
+   exported from `autobrowse/llm` (2026-09-21); `llmFor(settings)` is their
+   composer.
 5. ✅ Each entry module opens with a line saying what it is for; a generated
    API listing is not worth it yet.
