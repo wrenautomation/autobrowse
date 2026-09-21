@@ -112,6 +112,7 @@ const update = z.object({
   daily_budget: minor.optional(),
   lifetime_budget: minor.optional(),
 });
+const object = z.object({ objectId: id, fields: z.string().default("id") });
 const insights = z.object({
   adAccountId: adAccount,
   fields: z.string().default("campaign_name,impressions,reach,clicks,ctr,cpc,cpm,spend,actions"),
@@ -155,6 +156,23 @@ const igContainer = z.object({
   share_to_feed: z.boolean().optional(),
 });
 const igPublish = z.object({ igUserId: id, creation_id: id });
+const igMedia = z.object({
+  igUserId: id,
+  fields: z
+    .string()
+    .default("id,caption,media_type,media_url,permalink,timestamp,like_count,comments_count"),
+  ...page,
+});
+const igInsights = z.object({
+  mediaId: id,
+  metric: z.string().default("reach,saved,likes,comments,shares,views"),
+});
+const igComments = z.object({
+  mediaId: id,
+  fields: z.string().default("id,text,username,timestamp,like_count"),
+  ...page,
+});
+const igReply = z.object({ commentId: id, message: z.string().min(1).max(2200) });
 
 async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
   if (!res.ok) throw new HttpError("CALL", `${META_ORIGIN}/${what}`, res.status);
@@ -318,6 +336,14 @@ export const meta: SiteApi = {
     }),
     route({
       method: "GET",
+      path: "/{objectId}",
+      summary:
+        "Any Graph object by id with `fields` (a post's `likes.summary(true),comments.summary(true),shares`)",
+      request: object,
+      api: ({ objectId, fields }, leg) => get(leg, objectId, { fields }),
+    }),
+    route({
+      method: "GET",
       path: "/act_{adAccountId}/insights",
       summary:
         "Results by campaign/adset/ad (`fields`, `level`, `date_preset=last_7d`, `time_increment`)",
@@ -375,6 +401,35 @@ export const meta: SiteApi = {
       irreversible: true,
       api: ({ igUserId, creation_id }, leg) =>
         post(leg, `${igUserId}/media_publish`, { creation_id }),
+    }),
+    route({
+      method: "GET",
+      path: "/{igUserId}/media",
+      summary: "The Instagram account's posts, newest first",
+      request: igMedia,
+      api: ({ igUserId, ...q }, leg) => get(leg, `${igUserId}/media`, q),
+    }),
+    route({
+      method: "GET",
+      path: "/{mediaId}/insights",
+      summary: "An Instagram post's metrics (`metric=reach,saved,likes,comments,shares,views`)",
+      request: igInsights,
+      api: ({ mediaId, metric }, leg) => get(leg, `${mediaId}/insights`, { metric }),
+    }),
+    route({
+      method: "GET",
+      path: "/{mediaId}/comments",
+      summary: "Comments on an Instagram post",
+      request: igComments,
+      api: ({ mediaId, ...q }, leg) => get(leg, `${mediaId}/comments`, q),
+    }),
+    route({
+      method: "POST",
+      path: "/{commentId}/replies",
+      summary: "Reply to an Instagram comment",
+      request: igReply,
+      irreversible: true,
+      api: ({ commentId, message }, leg) => post(leg, `${commentId}/replies`, { message }),
     }),
   ],
   setup: [
