@@ -50,6 +50,7 @@ export {
   signInToGoogle,
   viaLogin,
 } from "./login.js";
+export { signInToMicrosoft } from "./microsoft.js";
 export { enrollPasskeyFlow } from "./passkey.js";
 export {
   type IdentityProvider,

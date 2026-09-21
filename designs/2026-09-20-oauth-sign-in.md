@@ -50,7 +50,11 @@ not proof-run candidates.
    verification email → authorize page; acts on the page the button landed
    on, never re-opens /login, so `return_to` survives); unit-tested, not
    yet proven live (needs `creds set github`, NEEDS-WILLIAM). `microsoft`
-   open.
+   built the same night (`src/auth/microsoft.ts`: account picker → email →
+   password → authenticator code, or the phone's approve prompt through
+   `notify` with the number → "Stay signed in?" → "Permissions requested");
+   same status: unit-tested, unproven. Both providers fail closed
+   (LoginFailed) when a page reads differently from what they expect.
 2. Popup vs redirect: `oauthLogin` handles both, but a provider that opens
    in a popup and closes it on consent leaves `main` to land; verify on
    a site that does that (Twilio did on 2026-09-21).

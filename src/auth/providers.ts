@@ -8,7 +8,7 @@
 import type { Hints } from "../browser/locate.js";
 import type { SignInContext } from "./login.js";
 
-export const PROVIDERS = ["google", "github"] as const;
+export const PROVIDERS = ["google", "github", "microsoft"] as const;
 export type Provider = (typeof PROVIDERS)[number];
 
 export interface IdentityProvider {

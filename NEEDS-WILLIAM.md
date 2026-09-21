@@ -58,6 +58,8 @@ it. Dated 2026-09-21.
   `{"username","password","totpSecret"?}`) to prove the new `github`
   provider live; then any "Continue with GitHub" site is
   `creds via <site> github --url …`. Built and unit-tested 2026-09-20.
+- **Microsoft**: same, `creds set microsoft`, if you have an account that
+  signs in anywhere. Built and unit-tested 2026-09-20; unproven.
 
 ## Keys not yet obtained
 
