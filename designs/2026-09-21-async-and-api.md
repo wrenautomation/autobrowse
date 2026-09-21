@@ -51,8 +51,9 @@ trips", "options first class, not inconvenient".
    tabs waiting on one job hold many timers. Fine at one operator.
 2. The Runs page merge re-sorts the whole list per event; fine under
    1k rows, the page size caps it anyway.
-3. `listRecordings` still reads every manifest to make rows; a manifest
-   index would save that once recordings number in the hundreds.
+3. ✅ (2026-09-22) `summary.json` beside each manifest; `listRecordingSummaries`
+   reads those (and writes one for an older recording on first sight). Lists
+   and the evaluator use it; `listRecordings` stays for whole loads.
 4. ✅ (2026-09-20) `inbound` pages back through the registry (`findRow`, up
    to 10 pages) for the named or the waiting run.
 5. ✅ (2026-09-21) `before` is `cursorOf(row)` = `<updatedAt>~<workflow/key>`;

@@ -34,8 +34,7 @@ import type { RunEvent } from "../engine/events.js";
 import type { RunRow } from "../engine/registry.js";
 import { cursorOf, LIST_LIMIT, type ListQuery } from "../engine/rows.js";
 import { commandSchema } from "../explore/server.js";
-import { listRecordings, loadRecording, recordingDir } from "../recorder/store.js";
-import { summarizeRecording } from "../recorder/types.js";
+import { listRecordingSummaries, loadRecording, recordingDir } from "../recorder/store.js";
 import { type Method, SiteError } from "../sites/index.js";
 import { bearerAuth, rateLimit } from "./auth.js";
 import { Jobs } from "./jobs.js";
@@ -409,9 +408,7 @@ export function api(deps: ApiDeps): Hono {
     });
   });
 
-  app.get("/api/recordings", async (c) =>
-    c.json((await listRecordings(deps.recordingsDir)).map(summarizeRecording)),
-  );
+  app.get("/api/recordings", async (c) => c.json(await listRecordingSummaries(deps.recordingsDir)));
 
   app.get("/api/recordings/:name", async (c) => {
     const { name } = c.req.param();
@@ -452,7 +449,7 @@ export function api(deps: ApiDeps): Hono {
   /** The evaluator: which recurring needs deserve a workflow, from failures, sessions and recordings. */
   app.get("/api/agent/proposals", async (c) => {
     if (!deps.llm) return c.json({ error: "no model configured: set LLM_PROVIDER" }, 503);
-    const recordings = (await listRecordings(deps.recordingsDir)).map((r) => ({
+    const recordings = (await listRecordingSummaries(deps.recordingsDir)).map((r) => ({
       name: r.name,
       site: r.site,
     }));

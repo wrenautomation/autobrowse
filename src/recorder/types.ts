@@ -85,3 +85,5 @@ export const summarizeRecording = (r: Recording): RecordingSummary => ({
 });
 
 export const MANIFEST = "manifest.json";
+/** The summary beside it: what a list reads, so listing never opens every action. */
+export const SUMMARY = "summary.json";

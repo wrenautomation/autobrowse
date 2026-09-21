@@ -1,4 +1,5 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright";
@@ -10,7 +11,7 @@ import {
   redactAria,
   redactText,
 } from "../src/recorder/redact.js";
-import { listRecordings, saveRecording } from "../src/recorder/store.js";
+import { listRecordingSummaries, listRecordings, saveRecording } from "../src/recorder/store.js";
 import { extractCommands, scriptArgs, stripAnsi } from "../src/recorder/terminal.js";
 import type { Recording } from "../src/recorder/types.js";
 
@@ -56,6 +57,39 @@ describe("store", () => {
     await saveRecording(root, { ...base, name: "b", startedAt: "2026-09-19T11:00:00Z" });
     expect((await listRecordings(root)).map((r) => r.name)).toEqual(["b", "a"]);
     await expect(saveRecording(root, { ...base, name: "Bad Name" })).rejects.toThrow(/kebab/);
+  });
+  it("lists from summaries, and writes one for a recording saved without", async () => {
+    const root = await mkdtemp(join(tmpdir(), "rec-"));
+    const rec: Recording = {
+      name: "old",
+      site: "scratch",
+      startedAt: "2026-09-19T10:00:00Z",
+      finishedAt: "2026-09-19T10:01:00Z",
+      actions: [
+        {
+          kind: "click",
+          at: "2026-09-19T10:00:30Z",
+          target: { role: "button", name: "Go" },
+        } as never,
+      ],
+      trace: null,
+      terminal: null,
+      commands: ["ls"],
+    };
+    await saveRecording(root, rec);
+    await rm(join(root, "old", "summary.json"));
+    const rows = await listRecordingSummaries(root);
+    expect(rows).toEqual([
+      {
+        name: "old",
+        site: "scratch",
+        startedAt: rec.startedAt,
+        finishedAt: rec.finishedAt,
+        actionCount: 1,
+        commandCount: 1,
+      },
+    ]);
+    expect(existsSync(join(root, "old", "summary.json"))).toBe(true);
   });
 });
 

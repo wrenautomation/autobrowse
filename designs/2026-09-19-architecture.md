@@ -93,7 +93,9 @@ session or a heal of its own.
 - Play/pause from the CLI. Paused = nothing is captured and a `pause`
   marker is written, so a person can type a secret or do a private step.
   Password fields and secret-shaped values are redacted always.
-- Output: `recordings/<name>/manifest.json` + screenshots + trace +
+- Output: `recordings/<name>/manifest.json` (+ `summary.json`, the list row,
+  written beside it since 2026-09-22 so a list never opens every action) +
+  screenshots + trace +
   terminal log. Gitignored.
 
 ## Explore

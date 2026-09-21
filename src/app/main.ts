@@ -180,7 +180,7 @@ if (settings.idleStopMinutes > 0) {
 if (llm && settings.evaluateEveryHours > 0 && app.channel.note) {
   const { proposeWorkflows, readFailures } = await import("../agent/evaluator.js");
   const { scheduleEvaluator } = await import("../agent/schedule.js");
-  const { listRecordings, loadRecording } = await import("../recorder/store.js");
+  const { listRecordingSummaries, loadRecording } = await import("../recorder/store.js");
   const { proofLine } = await import("../workflows/proof.js");
   const note = app.channel.note.bind(app.channel);
   const { agent, prove } = backend;
@@ -203,7 +203,7 @@ if (llm && settings.evaluateEveryHours > 0 && app.channel.note) {
     evidence: async () => ({
       failures: await readFailures(backend.artifactsDir),
       sessions: agent?.list() ?? [],
-      recordings: (await listRecordings(backend.recordingsDir)).map((r) => ({
+      recordings: (await listRecordingSummaries(backend.recordingsDir)).map((r) => ({
         name: r.name,
         site: r.site,
       })),

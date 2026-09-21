@@ -75,5 +75,11 @@ export async function recordChore(opts: RecordOptions): Promise<string> {
 }
 
 export { type RecorderControl, recorderControl } from "./browser.js";
-export { listRecordings, loadRecording, recordingDir, saveRecording } from "./store.js";
+export {
+  listRecordingSummaries,
+  listRecordings,
+  loadRecording,
+  recordingDir,
+  saveRecording,
+} from "./store.js";
 export * from "./types.js";
