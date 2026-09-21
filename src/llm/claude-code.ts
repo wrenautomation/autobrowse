@@ -83,6 +83,14 @@ export function claudeCodeLlm(o: ClaudeCodeOptions): Llm {
         system,
         "--tools",
         "",
+        // Nothing of the operator's own setup leaks in: no MCP servers, skills or settings
+        // (the Docs connector's instructions once had the model "refocusing" every step).
+        "--strict-mcp-config",
+        "--mcp-config",
+        '{"mcpServers":{}}',
+        "--disable-slash-commands",
+        "--setting-sources",
+        "",
         "--no-session-persistence",
       ];
       const out = await run(args, req.prompt, { cwd, timeoutMs });

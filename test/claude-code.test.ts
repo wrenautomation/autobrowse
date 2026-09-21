@@ -32,6 +32,9 @@ describe("claudeCodeLlm", () => {
     expect(c?.stdin).toBe("hi");
     expect(c?.args.slice(0, 3)).toEqual(["-p", "--output-format", "json"]);
     expect(c?.args).toContain("--no-session-persistence");
+    expect(c?.args).toContain("--strict-mcp-config");
+    expect(c?.args[c.args.indexOf("--mcp-config") + 1]).toBe('{"mcpServers":{}}');
+    expect(c?.args[c.args.indexOf("--setting-sources") + 1]).toBe("");
     expect(c?.args[c.args.indexOf("--tools") + 1]).toBe("");
     expect(c?.args[c.args.indexOf("--system-prompt") + 1]).toMatch(
       /be terse[\s\S]*one JSON object/,
