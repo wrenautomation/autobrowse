@@ -128,7 +128,7 @@ describe("explore mode", () => {
     ).toBe("Placed-Value-77");
     const unknown = await send({ cmd: "place", hints: { css: "#d" }, secret: "nope" });
     expect(unknown.status).toBe(500);
-    expect(unknown.body.error).toMatch(/no secret named nope/);
+    expect(unknown.body.error).toMatch(/nope is not available now/);
     // A page off the bound hosts never gets the value; the refusal is in the ledger, the value is not.
     allowHost = () => false;
     await send({ cmd: "fill", hints: { css: "#d" }, value: "" });

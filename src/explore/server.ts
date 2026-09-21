@@ -438,7 +438,10 @@ async function serve(
       case "place": {
         if (!opts.secrets) throw new Error("place needs secrets (a signup or a login gives them)");
         const value = await opts.secrets(c.secret);
-        if (!value) throw new Error(`place: no secret named ${c.secret}`);
+        if (!value)
+          throw new Error(
+            `place: ${c.secret} is not available now (a code: the site's message has not arrived in the inbox this run reads; else no secret has that name)`,
+          );
         const host = new URL(page.url()).host;
         const allowed = opts.secretHosts ? opts.secretHosts(host) : true;
         await opts.audit?.record({

@@ -303,7 +303,11 @@ export const WREN_SIGNUPS: readonly {
     handoff:
       "email signup is refused (X pushes phone or the app); the phone dialog loops on the number, so a headed run past its check is yours",
   },
-  { site: "tiktok", handoff: null },
+  {
+    site: "tiktok",
+    handoff:
+      "the email route fills to the code step, but headless 'Send code' never sends (a silent bot check), so a headed run past it is yours",
+  },
 ];
 
 /** Needs for Wren's own accounts: one per signup not yet stored, plus the profile steps after. */

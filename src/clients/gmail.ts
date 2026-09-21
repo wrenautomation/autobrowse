@@ -107,7 +107,8 @@ export function gmailClient(opts: {
       const list = await authedJson<{ messages?: Array<{ id: string }> }>(
         opts.http,
         token,
-        `${GMAIL}/messages?q=${q}&maxResults=10`,
+        // A code that landed in spam is still the code.
+        `${GMAIL}/messages?q=${q}&maxResults=10&includeSpamTrash=true`,
       );
       if (list.status >= 400) throw new GmailError("list", list.status, list.body);
       const out: GmailMessage[] = [];
