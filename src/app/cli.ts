@@ -13,6 +13,7 @@ import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
 import { localBackend, proofsOf, workflowsOf } from "./backend.js";
 import { registerAuthCommands } from "./cli-auth.js";
 import { registerDesktopCommands } from "./cli-desktop.js";
+import { registerDoCommands } from "./cli-do.js";
 import { registerEnvCommands } from "./cli-env.js";
 import { readJson } from "./cli-json.js";
 import { registerRecordCommands } from "./cli-record.js";
@@ -198,6 +199,7 @@ program
 
 registerRecordCommands(program, settings, local);
 registerSiteCommands(program, local);
+registerDoCommands(program, local);
 registerAuthCommands(program, settings);
 registerEnvCommands(program, settings, { store: () => envStoreFor(settings) });
 registerDesktopCommands(program, tmpdir());

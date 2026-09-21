@@ -116,6 +116,31 @@ async function setup(token?: string, extra: Partial<Parameters<typeof api>[0]> =
     bus,
     screen: { headless: true },
     accounts: fakeAccounts,
+    do: {
+      do: async (req) => ({
+        via: req.dryRun ? "none" : "site",
+        name: req.dryRun ? null : "tube POST /v1/videos",
+        input: req.inputs ?? {},
+        output: req.dryRun ? null : { id: "v1" },
+        status: req.dryRun ? "planned" : "done",
+        built: null,
+        session: null,
+        summary: req.dryRun ? "nothing does this yet" : "tube POST /v1/videos answered",
+        usage: { inputTokens: 0, outputTokens: 0 },
+      }),
+    },
+    abilities: async () => [
+      {
+        kind: "site",
+        name: "tube POST /v1/videos",
+        site: "tube",
+        summary: "upload",
+        inputs: ["file"],
+        irreversible: true,
+        ready: true,
+        missing: null,
+      },
+    ],
     recordingsDir,
     artifactsDir: join(dir, "art"),
     compile: async (rec) => ({
@@ -443,6 +468,28 @@ describe("api", () => {
       key: "instantly",
       status: "done",
       result: "signed in to instantly",
+    });
+  });
+
+  it("routes a goal: a dry run answers at once, a real one is a job", async () => {
+    const { app } = await setup();
+    expect(await (await app.request("/api/abilities")).json()).toMatchObject([
+      { name: "tube POST /v1/videos", ready: true },
+    ]);
+    const dry = await app.request(post("/api/do", { goal: "upload", dryRun: true }));
+    expect(dry.status).toBe(200);
+    expect(await dry.json()).toMatchObject({ status: "planned" });
+    const bad = await app.request(post("/api/do", { goal: "" }));
+    expect(bad.status).toBe(400);
+    const started = await app.request(post("/api/do", { goal: "upload", inputs: { file: "a" } }));
+    expect(started.status).toBe(202);
+    const job = (await started.json()) as { id: string };
+    const done = await (await app.request(`/api/jobs/${job.id}?wait=1000`)).json();
+    expect(done).toMatchObject({
+      kind: "do",
+      key: "upload",
+      status: "done",
+      result: { via: "site", status: "done", output: { id: "v1" } },
     });
   });
 

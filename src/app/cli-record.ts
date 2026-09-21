@@ -63,6 +63,7 @@ export function registerRecordCommands(
           if (url) await ex.exec({ cmd: "open", url });
           return ex;
         },
+        do: (req) => local().backend.do.do(req),
       });
       // stdout is the protocol: anything else goes to stderr.
       console.log = (...a: unknown[]) => console.error(...a);

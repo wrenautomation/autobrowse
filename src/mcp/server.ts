@@ -9,11 +9,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { desktopOpSchema } from "../desktop/types.js";
+import type { DoOutcome, DoRequest } from "../do/doer.js";
 import { type Command, commandSchema, type Explorer } from "../explore/server.js";
 
 export interface McpDeps {
   /** Open a journaled session on a site (the site's stored login applies). */
   open(site: string, url: string | null): Promise<Explorer>;
+  /** The one verb; absent when the CLI has no backend to route through. */
+  do?: (req: DoRequest) => Promise<DoOutcome>;
   version?: string;
 }
 
@@ -64,6 +67,38 @@ export function buildMcpServer(deps: McpDeps): McpServer & { sessions: Map<strin
       }
     },
   );
+  if (deps.do) {
+    const verb = deps.do;
+    server.registerTool(
+      "do",
+      {
+        description:
+          'One verb over everything autobrowse can do: "upload this to youtube", "list my linkedin posts". Routes to a site API, a compiled workflow or a flow and runs it; with nothing ready, the agent explores and the result is compiled for next time. dryRun says what would run.',
+        inputSchema: {
+          goal: z.string().min(1),
+          inputs: z.record(z.string(), z.string()).optional(),
+          site: z.string().optional(),
+          url: z.string().url().optional(),
+          dryRun: z.boolean().optional(),
+        },
+      },
+      async ({ goal, inputs, site: s, url, dryRun }) => {
+        try {
+          return text(
+            await verb({
+              goal,
+              inputs: inputs ?? {},
+              site: s ?? null,
+              url: url ?? null,
+              dryRun: dryRun ?? false,
+            }),
+          );
+        } catch (err) {
+          return fail(err);
+        }
+      },
+    );
+  }
   server.registerTool("sessions", { description: "Sites with an open session." }, async () =>
     text({ sites: [...sessions.keys()] }),
   );

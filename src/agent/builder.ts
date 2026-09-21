@@ -62,7 +62,11 @@ export function pickBuildable(proposals: Proposal[], o: BuilderOptions): Proposa
 const SETTLE_MS = 30 * 60_000;
 
 /** Wait for the session to settle or to ask for a person. */
-async function settle(o: BuilderOptions, id: string): Promise<SessionView> {
+/** Wait for the session to finish or ask for a person; `do` waits the same way. */
+export async function settleSession(
+  o: Pick<BuilderOptions, "agent" | "sleep" | "now">,
+  id: string,
+): Promise<SessionView> {
   const sleep = o.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)));
   const now = o.now ?? Date.now;
   const deadline = now() + SETTLE_MS;
@@ -74,6 +78,7 @@ async function settle(o: BuilderOptions, id: string): Promise<SessionView> {
     await sleep(2_000);
   }
 }
+const settle = settleSession;
 
 /** Explore, and when the agent got there, save + compile (+ prove). */
 async function buildOne(p: Proposal, o: BuilderOptions): Promise<BuildOutcome> {

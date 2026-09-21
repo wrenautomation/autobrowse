@@ -7,6 +7,24 @@ Separate from `wren` (the campaign system) on purpose: different
 credentials, different runtime (browser sessions, waits for a human),
 different release pace.
 
+## One verb
+
+```sh
+pnpm autobrowse do "upload this to youtube" --input file=talk.mp4 --input title="Talk"
+pnpm autobrowse do "list my linkedin posts"
+pnpm autobrowse do "rename my google account" --input name=Wren --site google --dry-run
+pnpm autobrowse abilities                        # what `do` can pick from, and what is not recorded yet
+```
+
+`do` routes a goal to what does it: a site route under its official API
+shape, a compiled workflow, a hand-written flow. With nothing ready, the
+agent explores the site once; what it achieved is saved and compiled,
+under the missing leg's name when a route was waiting on one, so the second
+same ask runs deterministically. Gates hold inside every leg. The same verb
+is `POST /api/do` (a job; `dryRun` answers at once), the Restate service
+`do/run` for wren (`restateDo` in `@wren/core/content`), and the `do` tool
+of the MCP server. `src/do/`.
+
 ## Hands off
 
 Nothing waits for a person unless a guard says so. Login walls are solved

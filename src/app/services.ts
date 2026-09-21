@@ -49,6 +49,8 @@ import {
   phoneReader,
   phoneStatus,
 } from "../devices/phone.js";
+import type { Doer } from "../do/doer.js";
+import { doService } from "../do/service.js";
 import { type BrowserService, browserService } from "../engine/browser-service.js";
 import { Unrecoverable } from "../engine/effects.js";
 import { parseGuards } from "../engine/guards.js";
@@ -172,7 +174,11 @@ export const COMPILED_LIB = "../../index.js";
 
 export interface App {
   services: Array<
-    ReturnType<typeof makeRunObject> | typeof runsRegistry | BrowserService | SitesService
+    | ReturnType<typeof makeRunObject>
+    | typeof runsRegistry
+    | BrowserService
+    | SitesService
+    | ReturnType<typeof doService>
   >;
   channel: Channel;
   /** Hand-written plus compiled, as of now: a compile shows up at once. */
@@ -197,6 +203,8 @@ export interface App {
   credentials: CredentialStore;
   /** Set by the host once the agent exists: every failure record goes here (healing). */
   onFailure: ((record: FailureRecord, file: string) => void) | null;
+  /** Set by the host once the backend exists: the `do` service runs goals through it (held busy). */
+  doer: Doer | null;
 }
 
 /** Env credentials first (a Secret in k8s), then the sealed 0600 file; writes go to the file. */
@@ -534,6 +542,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   const extra = await compiledNow();
   if (extra.length) log.info({ compiled: extra.map((c) => c.workflow.name) }, "compiled workflows");
   const sites = holding(idle, sitesFor({ catalog, browser, sink, oauthPort: settings.oauthPort }));
+  const late: { doer: Doer | null } = { doer: null };
   return {
     services: [
       runsRegistry,
@@ -541,6 +550,8 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       browserService({ runner: browser }),
       // The site APIs for the same orchestrator: official shapes, durable over the tunnel.
       sitesService(sites),
+      // One verb for the same orchestrator; the backend wires the doer in after the model exists.
+      doService(() => (late.doer ? holding(idle, late.doer) : null)),
       makeRunObject(domainWorkflow, domainDeps, host, { guards }),
       makeRunObject(bootstrapWorkflow, bootstrapDeps, host, { guards }),
       // Every compiled flow, present and future, runs under this one object.
@@ -564,6 +575,12 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     },
     set onFailure(hook) {
       failures.hook = hook;
+    },
+    get doer() {
+      return late.doer;
+    },
+    set doer(d) {
+      late.doer = d;
     },
   };
 }

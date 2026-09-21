@@ -28,6 +28,7 @@ import {
   verifyLinqWebhook,
 } from "../clients/linq.js";
 import { outlineSchema } from "../compiler/index.js";
+import { DoError } from "../do/doer.js";
 import type { GateName } from "../engine/effects.js";
 import type { RunEvent } from "../engine/events.js";
 import type { RunRow } from "../engine/registry.js";
@@ -198,6 +199,32 @@ export function api(deps: ApiDeps): Hono {
     const { site } = c.req.param();
     return c.json(
       jobs.start("login", site, () => deps.accounts.check(site)),
+      202,
+    );
+  });
+
+  /** One verb: a goal in, what ran (or what the agent built) out. A dry run answers at once; the rest is a job. */
+  const doBody = z.object({
+    goal: z.string().min(1),
+    inputs: z.record(z.string(), z.string()).default({}),
+    site: z.string().nullable().default(null),
+    url: z.string().nullable().default(null),
+    dryRun: z.boolean().default(false),
+  });
+  app.get("/api/abilities", async (c) => c.json(await deps.abilities()));
+  app.post("/api/do", async (c) => {
+    const body = doBody.safeParse((await c.req.json().catch(() => null)) ?? null);
+    if (!body.success) return c.json({ error: "bad body", issues: body.error.issues }, 400);
+    if (body.data.dryRun) {
+      try {
+        return c.json(await deps.do.do(body.data));
+      } catch (err) {
+        if (err instanceof DoError) return c.json({ error: err.message }, err.status as 400);
+        throw err;
+      }
+    }
+    return c.json(
+      jobs.start("do", body.data.goal.slice(0, 60), () => deps.do.do(body.data)),
       202,
     );
   });

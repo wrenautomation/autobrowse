@@ -82,6 +82,7 @@ const backend = backendFor(settings, app, {
   }),
   ...(app.channel.note ? { notify: app.channel.note.bind(app.channel) } : {}),
 });
+app.doer = backend.do;
 if (!approverFor(settings, gmailFor(settings))) {
   log.warn("no channel a person can answer on: payment steps will be refused");
 }
