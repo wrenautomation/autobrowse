@@ -6,7 +6,7 @@
  */
 import { useState } from "react";
 import type { AccountEdit, AccountRow } from "../../../src/auth/accounts.js";
-import { api } from "../api.js";
+import { type AccountReadiness, api } from "../api.js";
 import { useLoad } from "../hooks.js";
 
 const PROVIDERS = ["", "google", "github", "microsoft"] as const;
@@ -20,7 +20,8 @@ export function AccountsPage() {
   if (!rows.data) return <p>loading…</p>;
   return (
     <>
-      <h2>Accounts</h2>
+      <Policy />
+      <h2>Sign-ins</h2>
       <p className="muted">
         One sign-in per site, kept sealed on this machine. Values never come back here; the marks
         say what is stored. "check" signs in headless with it.
@@ -247,5 +248,105 @@ function AccountForm({
       </div>
       {err ? <div className="error">{err}</div> : null}
     </form>
+  );
+}
+
+/**
+ * Which of the person's accounts is for what (pays, default, signup) and
+ * how ready each is: a stored credential, a readable inbox, kept tokens.
+ * Every signup, consent and provider sign-in reads this when nothing
+ * names an account.
+ */
+function Policy() {
+  const [version, setVersion] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const rows = useLoad(() => api.policy(), [version]);
+  const use = async (purpose: string, address: string) => {
+    setError(null);
+    try {
+      await api.assignPolicy(purpose, address);
+      setVersion((v) => v + 1);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const purposes = rows.data?.purposes ?? {};
+  return (
+    <>
+      <h2>Which account for what</h2>
+      <p className="muted">
+        {Object.entries(purposes)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(" · ")}
+        . Pick who holds each purpose; it moves from whoever had it.
+      </p>
+      {rows.error ? <p className="error">{rows.error}</p> : null}
+      {error ? <p className="error">{error}</p> : null}
+      {rows.data ? (
+        rows.data.accounts.length ? (
+          <table>
+            <thead>
+              <tr>
+                <th>account</th>
+                <th>at</th>
+                <th>for</th>
+                <th>credential</th>
+                <th>inbox</th>
+                <th>tokens</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.data.accounts.map((r) => (
+                <PolicyRow key={r.address} row={r} use={use} purposes={Object.keys(purposes)} />
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="muted">
+            no accounts yet:{" "}
+            <code>autobrowse accounts add &lt;address&gt; --for pays|default|signup</code>
+          </p>
+        )
+      ) : (
+        <p>loading…</p>
+      )}
+    </>
+  );
+}
+
+function PolicyRow({
+  row: r,
+  use,
+  purposes,
+}: {
+  row: AccountReadiness;
+  use: (purpose: string, address: string) => Promise<void>;
+  purposes: string[];
+}) {
+  const missing = purposes.filter((p) => !r.for.includes(p));
+  return (
+    <tr>
+      <td>
+        <strong>{r.address}</strong>
+      </td>
+      <td>{r.at}</td>
+      <td>{r.for.join(", ") || "—"}</td>
+      <td>{r.credential ?? <span className="muted">none (creds paste)</span>}</td>
+      <td>{r.inbox ? `via ${r.inbox}` : <span className="muted">not readable</span>}</td>
+      <td>{r.tokens.join(", ") || "—"}</td>
+      <td>
+        {missing.length ? (
+          <select value="" onChange={(e) => e.target.value && void use(e.target.value, r.address)}>
+            <option value="">use for…</option>
+            {missing.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        ) : null}
+      </td>
+    </tr>
   );
 }

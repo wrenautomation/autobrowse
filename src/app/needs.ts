@@ -382,6 +382,13 @@ export interface NeedRow extends Need {
   note?: string;
 }
 
+/** A row over the wire: the check itself stays here, only whether there is one travels. */
+export type NeedView = Omit<NeedRow, "check"> & { checked: boolean };
+export function needView(r: NeedRow): NeedView {
+  const { check, ...rest } = r;
+  return { ...rest, checked: Boolean(check) };
+}
+
 export async function resolveNeeds(needs: Need[], marks: DoneMarks): Promise<NeedRow[]> {
   const out: NeedRow[] = [];
   for (const n of needs) {
@@ -394,7 +401,7 @@ export async function resolveNeeds(needs: Need[], marks: DoneMarks): Promise<Nee
   return out;
 }
 
-const KIND_TITLES: Record<NeedKind, string> = {
+export const KIND_TITLES: Record<NeedKind, string> = {
   credential: "Logins (creds paste; the clipboard holds `email password [authenticator key]`)",
   keys: "Developer apps and keys",
   consent: "Consents and inboxes",

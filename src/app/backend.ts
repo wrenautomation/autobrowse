@@ -36,6 +36,7 @@ import type { Proof } from "../workflows/proof.js";
 import { proofLine, proveWorkflow, writeProof } from "../workflows/proof.js";
 import type { Ingress } from "./client.js";
 import type { Settings } from "./config.js";
+import { needsContextFor, type Owed, owedOf, type Policy, policyOf } from "./owed.js";
 import { type Screen, screenOf } from "./screen.js";
 import {
   type App,
@@ -98,6 +99,10 @@ export interface Backend {
   abilities(): Promise<Ability[]>;
   /** Where secrets went and what the payment gate decided since a time (never a value). */
   ledger?(since: Date): Promise<LedgerWindow>;
+  /** What only the person can give, each row with its check; done-marks for decisions. */
+  owed?: Owed;
+  /** Which account is for what, and how ready each is. */
+  policy?: Policy;
 }
 
 /** The port allows a value or a loader for these; every face reads them the same way. */
@@ -306,6 +311,8 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
     ...(o.llm ? { llm: o.llm, budget: () => budgetOf(o.llm) } : {}),
     ...(o.status ? { status: o.status } : {}),
     ledger: (since) => ledgerSince(auditFor(settings), spendLedgerFor(settings), since),
+    owed: owedOf(needsContextFor(settings)),
+    policy: policyOf(settings),
   };
 }
 

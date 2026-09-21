@@ -185,6 +185,76 @@ describe("api", () => {
     expect((await (await app.request("/api/status")).json()).budget.usedToday).toBe(50);
   });
 
+  it("serves the owed list and the account policy; a decision is marked done and undone; 501 without them", async () => {
+    const marks: Record<string, string | undefined> = {};
+    const purposes: Record<string, string[]> = { "w@wren.test": ["default"] };
+    const { app } = await setup(undefined, {
+      owed: {
+        rows: async () => ({
+          titles: { decision: "Decisions" } as never,
+          rows: [
+            {
+              id: "linkedin-page",
+              kind: "decision",
+              what: "A Page",
+              unlocks: "posts",
+              how: ["autobrowse needs done linkedin-page"],
+              done: "linkedin-page" in marks,
+              by: "linkedin-page" in marks ? "you" : null,
+              checked: false,
+            },
+          ],
+        }),
+        done: async (id, note) => {
+          marks[id] = note;
+        },
+        undo: async (id) => {
+          delete marks[id];
+        },
+      },
+      policy: {
+        list: async () => ({
+          purposes: { default: "the rest", pays: "cards" },
+          accounts: Object.entries(purposes).map(([address, f]) => ({
+            address,
+            at: "google" as const,
+            for: f,
+            credential: null,
+            inbox: null,
+            tokens: [],
+          })),
+        }),
+        use: async (purpose, address) => {
+          purposes[address] = [...(purposes[address] ?? []), purpose];
+          return [];
+        },
+      },
+    });
+    expect((await (await app.request("/api/needs")).json()).rows[0]).toMatchObject({
+      id: "linkedin-page",
+      done: false,
+    });
+    await app.request(post("/api/needs/linkedin-page/done", { note: "Wren's own" }));
+    expect(marks["linkedin-page"]).toBe("Wren's own");
+    expect((await (await app.request("/api/needs")).json()).rows[0].by).toBe("you");
+    await app.request(new Request("http://x/api/needs/linkedin-page/done", { method: "DELETE" }));
+    expect("linkedin-page" in marks).toBe(false);
+    const used = await app.request(
+      new Request("http://x/api/policy/use", {
+        method: "PUT",
+        body: JSON.stringify({ purpose: "pays", address: "w@wren.test" }),
+      }),
+    );
+    expect((await used.json()).accounts[0].for).toEqual(["default", "pays"]);
+    expect(
+      (await app.request(new Request("http://x/api/policy/use", { method: "PUT", body: "{}" })))
+        .status,
+    ).toBe(400);
+    const bare = await setup();
+    expect((await bare.app.request("/api/needs")).status).toBe(501);
+    expect((await bare.app.request("/api/policy")).status).toBe(501);
+  });
+
   it("serves both ledgers since a time, 501 without one", async () => {
     const asked: string[] = [];
     const { app } = await setup(undefined, {

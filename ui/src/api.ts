@@ -6,6 +6,9 @@
 
 import type { Proposal } from "../../src/agent/evaluator.js";
 import type { SessionSummary, SessionView, StartRequest } from "../../src/agent/sessions.js";
+import type { AccountReadiness } from "../../src/app/cli-accounts.js";
+import type { NeedView } from "../../src/app/needs.js";
+import type { PolicyView } from "../../src/app/owed.js";
 import type { Status } from "../../src/app/status.js";
 import type { AccountEdit, AccountRow } from "../../src/auth/accounts.js";
 import type { Compiled } from "../../src/compiler/index.js";
@@ -19,9 +22,12 @@ import type { LiveSettings } from "../../src/ui/api.js";
 import type { JobView } from "../../src/ui/jobs.js";
 
 export type {
+  AccountReadiness,
   Compiled,
   JobView,
   LiveSettings,
+  NeedView,
+  PolicyView,
   Proposal,
   Recording,
   RecordingSummary,
@@ -118,6 +124,18 @@ export const api = {
     call<AccountRow>(`/api/accounts/${site}`, { method: "PUT", body: JSON.stringify(edit) }),
   checkAccount: (site: string) =>
     (post(`/api/accounts/${site}/check`) as Promise<JobView>).then((j) => finish<string>(j)),
+  /** What only the person can give; a decision is marked done (or undone) here. */
+  needs: () => call<{ titles: Record<string, string>; rows: NeedView[] }>("/api/needs"),
+  needDone: (id: string, note?: string) =>
+    call<{ ok: true }>(`/api/needs/${id}/done`, { method: "POST", body: JSON.stringify({ note }) }),
+  needUndo: (id: string) => call<{ ok: true }>(`/api/needs/${id}/done`, { method: "DELETE" }),
+  /** Which account is for what, and how ready each is; `use` moves a purpose. */
+  policy: () => call<PolicyView>("/api/policy"),
+  assignPolicy: (purpose: string, address: string) =>
+    call<PolicyView>("/api/policy/use", {
+      method: "PUT",
+      body: JSON.stringify({ purpose, address }),
+    }),
   sites: () => call<SiteRow[]>("/api/sites"),
   site: (site: string) => call<SiteRow>(`/api/sites/${site}`),
   /** One official call through the facade; the answer is the API's own shape. */

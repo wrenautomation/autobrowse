@@ -7,12 +7,8 @@
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { Command } from "commander";
-import { SITE_LOGINS } from "../auth/sites.js";
-import { macDesktop } from "../desktop/mac.js";
-import { phoneStatus } from "../devices/phone.js";
 import type { GateName } from "../engine/effects.js";
 import { summarize } from "../engine/run.js";
-import { SITES } from "../sites/index.js";
 import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
 import { localBackend, proofsOf, workflowsOf } from "./backend.js";
 import { registerAccountsCommands } from "./cli-accounts.js";
@@ -28,6 +24,7 @@ import { registerUnsubscribe } from "./cli-unsubscribe.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
 import { fileDone } from "./needs.js";
+import { DONE_FILE, needsContextFor } from "./owed.js";
 import { credentialsFor, envStoreFor, identitiesFor, phoneFor, WORKFLOWS } from "./services.js";
 
 loadEnvFile();
@@ -211,20 +208,8 @@ registerUnsubscribe(program, local);
 registerDoCommands(program, local);
 registerAuthCommands(program, settings);
 registerNeedsCommands(program, () => ({
-  context: async () => ({
-    sites: SITES,
-    logins: SITE_LOGINS,
-    identities: await identitiesFor(settings).list(),
-    credentials: credentialsFor(settings, { armed: false }),
-    env: (n) => process.env[n],
-    workspaceDomain: settings.googleWorkspaceDomain?.toLowerCase() ?? null,
-    phone: (() => {
-      const phone = phoneFor(settings);
-      return phone ? () => phoneStatus(phone.dbPath) : null;
-    })(),
-    desktop: process.platform === "darwin" ? () => macDesktop().permissions() : null,
-  }),
-  done: fileDone("~/.config/autobrowse/needs-done.json"),
+  context: needsContextFor(settings),
+  done: fileDone(DONE_FILE),
   credentials: () => credentialsFor(settings),
   sites: () => local().backend.sites ?? null,
 }));

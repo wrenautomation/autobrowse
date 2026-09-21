@@ -262,6 +262,7 @@ pnpm autobrowse creds paste google@ops            # a second account: `email pas
 pnpm autobrowse accounts add ops@x.com --for pays  # which of your accounts is for what (pays, default, signup); consents, signups, `via` read it
 pnpm autobrowse accounts                          # each account's purposes and readiness (credential, inbox, tokens); names only
 pnpm autobrowse needs                             # what only you can give (logins, keys, consents, phone, money, decisions), each with its check + command
+                                                  # (the UI has the same list on its Needs page, and the account policy on Accounts)
 pnpm autobrowse needs do login-linkedin           # runs the row's ingestion (clipboard creds, a consent, a setup step); `needs done <id>` for decisions
 pnpm autobrowse creds push linkedin               # that stored credential into SSM as AUTOBROWSE_CRED_LINKEDIN_*: the box signs in too
 pnpm autobrowse creds push --all                  # every stored site (canaries never travel)

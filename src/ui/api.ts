@@ -211,6 +211,43 @@ export function api(deps: ApiDeps): Hono {
     );
   });
 
+  /** What only the person can give, with each row's check; a decision is marked done here (never a value). */
+  app.get("/api/needs", async (c) =>
+    deps.owed ? c.json(await deps.owed.rows()) : c.json({ error: "no owed list here" }, 501),
+  );
+  const doneBody = z.object({ note: z.string().max(500).optional() });
+  app.post("/api/needs/:id/done", async (c) => {
+    if (!deps.owed) return c.json({ error: "no owed list here" }, 501);
+    const parsed = doneBody.safeParse((await c.req.json().catch(() => ({}))) ?? {});
+    if (!parsed.success) return c.json({ error: parsed.error.message }, 400);
+    deps.touch?.();
+    await deps.owed.done(c.req.param("id"), parsed.data.note);
+    return c.json({ ok: true });
+  });
+  app.delete("/api/needs/:id/done", async (c) => {
+    if (!deps.owed) return c.json({ error: "no owed list here" }, 501);
+    deps.touch?.();
+    await deps.owed.undo(c.req.param("id"));
+    return c.json({ ok: true });
+  });
+  /** Which account is for what, and how ready each is; `use` moves a purpose. */
+  app.get("/api/policy", async (c) =>
+    deps.policy ? c.json(await deps.policy.list()) : c.json({ error: "no policy here" }, 501),
+  );
+  const useBody = z.object({ purpose: z.string().min(1).max(40), address: z.string().email() });
+  app.put("/api/policy/use", async (c) => {
+    if (!deps.policy) return c.json({ error: "no policy here" }, 501);
+    const parsed = useBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: parsed.error.message }, 400);
+    deps.touch?.();
+    try {
+      await deps.policy.use(parsed.data.purpose, parsed.data.address);
+      return c.json(await deps.policy.list());
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+    }
+  });
+
   /** One verb: a goal in, what ran (or what the agent built) out. A dry run answers at once; the rest is a job. */
   const doBody = z.object({
     goal: z.string().min(1),
