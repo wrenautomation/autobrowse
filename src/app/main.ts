@@ -127,12 +127,37 @@ if (settings.idleStopMinutes > 0) {
   const { EC2Client } = await import("@aws-sdk/client-ec2");
   const { ec2Port, instanceIdFromMetadata, selfStopper } = await import("./box.js");
   const { scheduleIdleStop } = await import("./idle.js");
+  const { pendingInvocations } = await import("./pending.js");
   const busyStates = new Set(["starting", "running"]);
+  const services = app.services.map((s) => s.name);
+  const admin = register
+    ? { adminUrl: register.adminUrl, authToken: settings.restateAuthToken ?? null }
+    : null;
+  if (!admin)
+    log.warn(
+      "idle stop cannot see Restate's queue (no admin URL): a call queued while the box boots may find it stopping",
+    );
   scheduleIdleStop({
     idle: app.idle,
     minutes: settings.idleStopMinutes,
     // An agent mid-goal is work; a session waiting on a person is not (it is not durable, and the person left).
-    alsoBusy: () => (backend.agent?.list() ?? []).some((s) => busyStates.has(s.status)),
+    // Work Restate holds for our services is work too, even before it reaches us.
+    alsoBusy: async () => {
+      if ((backend.agent?.list() ?? []).some((s) => busyStates.has(s.status))) return true;
+      if (!admin) return false;
+      try {
+        const n = await pendingInvocations({ ...admin, http: httpClient(), services });
+        if (n > 0) log.info({ pending: n }, "idle, but Restate holds work for this worker");
+        return n > 0;
+      } catch (err) {
+        // Better a box that stays up than one stopped under queued work.
+        log.warn(
+          { err: err instanceof Error ? err.message : String(err) },
+          "pending check failed; staying up",
+        );
+        return true;
+      }
+    },
     stop: selfStopper({
       ec2: ec2Port(new EC2Client({ region: settings.awsRegion })),
       instanceId: async () => settings.instanceId ?? (await instanceIdFromMetadata()),

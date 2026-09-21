@@ -42,7 +42,10 @@ this way on 2026-09-21 (Google button, stored `google` credential).
 `IDLE_STOP_MINUTES=30` (env store) and the worker stops its own instance once
 nothing has needed it for that long: no flow or site call running, no agent
 session mid-goal, no run event, no write to the UI API (reads never count:
-an open tab does not keep the box up). A person's box (`box.sh start` by
+an open tab does not keep the box up), and nothing queued for its services
+in Restate (`sys_invocation` over the admin API: a call that arrived while
+the box was booting counts before it reaches the worker; a run suspended on
+a person does not, it resumes from the journal next boot). A person's box (`box.sh start` by
 hand, tag `person`) is never stopped; a deploy's or a caller's is, and the
 tag is cleared like `box.sh stop`. The worker learns its instance id over
 IMDSv2 (`AUTOBROWSE_INSTANCE_ID` overrides). Terraform gives the instance

@@ -54,8 +54,8 @@ export function holding<T extends object>(idle: Idle, target: T): T {
 export interface IdleStopOptions {
   idle: Idle;
   minutes: number;
-  /** Beyond holds: an open agent session, a person at the keyboard. */
-  alsoBusy?: () => boolean;
+  /** Beyond holds: an agent session mid-goal, work Restate holds for this worker. */
+  alsoBusy?: () => boolean | Promise<boolean>;
   /** Stop the machine. `false` = declined (a person started it); try again after another idle span. */
   stop: () => Promise<boolean>;
   log: Logger;
@@ -70,9 +70,10 @@ export function scheduleIdleStop(o: IdleStopOptions): () => void {
   const every = o.every ?? 60_000;
   let stopping = false;
   const tick = async () => {
-    if (stopping || o.idle.busy() || o.alsoBusy?.() || o.idle.idleFor() < limit) return;
+    if (stopping || o.idle.busy() || o.idle.idleFor() < limit) return;
     stopping = true;
     try {
+      if ((await o.alsoBusy?.()) || o.idle.busy()) return;
       const done = await o.stop();
       o.log.info(
         { idleMinutes: Math.round(o.idle.idleFor() / 60_000) },

@@ -198,3 +198,63 @@ describe("self stopper", () => {
     expect(await instanceIdFromMetadata(denied)).toBeNull();
   });
 });
+
+describe("pending invocations", () => {
+  it("counts queued, running and retrying invocations of the worker's services", async () => {
+    const { pendingInvocations } = await import("../src/app/pending.js");
+    const seen: Array<{ url: string; query: string; auth: string | undefined }> = [];
+    const http = {
+      json: async (
+        url: string,
+        req: { body: { query: string }; headers: Record<string, string> },
+      ) => {
+        seen.push({ url, query: req.body.query, auth: req.headers.authorization });
+        return { ok: true, status: 200, body: { rows: [{ n: "2" }] }, headers: new Headers() };
+      },
+    } as never;
+    const n = await pendingInvocations({
+      adminUrl: "https://env.restate.cloud:9070/",
+      authToken: "t",
+      http,
+      services: ["sites", "browser", "it's"],
+    });
+    expect(n).toBe(2);
+    expect(seen[0]?.url).toBe("https://env.restate.cloud:9070/query");
+    expect(seen[0]?.auth).toBe("Bearer t");
+    expect(seen[0]?.query).toBe(
+      "SELECT COUNT(*) AS n FROM sys_invocation WHERE target_service_name IN ('sites', 'browser', 'it''s') AND status IN ('pending', 'ready', 'running', 'backing-off')",
+    );
+  });
+
+  it("the idle stop waits on a busy answer, async or not", async () => {
+    let t = 0;
+    const idle = idleTracker(() => t);
+    let tick: () => void = () => undefined;
+    let stops = 0;
+    let queued = 1;
+    scheduleIdleStop({
+      idle,
+      minutes: 1,
+      alsoBusy: async () => queued > 0,
+      stop: async () => {
+        stops++;
+        return true;
+      },
+      log: silent,
+      setInterval: ((fn: () => void) => {
+        tick = fn;
+        return 0 as never;
+      }) as never,
+    });
+    const at = async (ms: number) => {
+      t = ms;
+      tick();
+      await new Promise((r) => setImmediate(r));
+    };
+    await at(120_000);
+    expect(stops).toBe(0);
+    queued = 0;
+    await at(180_000);
+    expect(stops).toBe(1);
+  });
+});
