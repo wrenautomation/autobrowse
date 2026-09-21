@@ -7,6 +7,10 @@ Separate from `wren` (the campaign system) on purpose: different
 credentials, different runtime (browser sessions, waits for a human),
 different release pace.
 
+New here: `walkthrough/` is the guided path (setup → secrets → sites →
+Meta → Google → explore → agent → accounts → chores → the box) with demos
+that run now.
+
 ## One verb
 
 ```sh
