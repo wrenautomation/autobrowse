@@ -6,7 +6,7 @@
  */
 import { z } from "zod";
 import { completeJson, type Llm, type LlmUsage } from "../llm/index.js";
-import type { Ability } from "./catalog.js";
+import { type Ability, fieldLine } from "./catalog.js";
 
 export interface Pick {
   ability: Ability | null;
@@ -32,11 +32,12 @@ Reply with one JSON object: {"ability": <exact name from the list or null>, "inp
 Rules:
 - Pick an ability only when it does what the request asks; a near miss is null.
 - "input" uses the ability's field names only; take values from the request's words and its named inputs; leave a field out when nothing gives it.
+- A field marked "path" is a segment of the route: give it one of its listed values and nothing else (no query string); the other fields are separate keys.
 - An ability marked "not ready" may still be picked: the agent will build it. Prefer a ready one that fits.
 - "site" is where the agent should work when ability is null: one of the sites listed, or null for a site not listed.`;
 
 const line = (a: Ability) =>
-  `- ${a.name}${a.irreversible ? " (publishes)" : ""}${a.ready ? "" : ` (not ready: ${a.missing ?? "unrecorded"})`}: ${a.summary}${a.inputs.length ? ` — inputs: ${a.inputs.join(", ")}` : ""}`;
+  `- ${a.name}${a.irreversible ? " (publishes)" : ""}${a.ready ? "" : ` (not ready: ${a.missing ?? "unrecorded"})`}: ${a.summary}${a.inputs.length ? ` — inputs: ${a.inputs.map(fieldLine).join(", ")}` : ""}`;
 
 export interface PickRequest {
   goal: string;

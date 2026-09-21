@@ -33,13 +33,23 @@ interface HeadlessResult {
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
+/**
+ * The subscription pays: an ANTHROPIC_API_KEY in this process (a dead or
+ * budgeted key meant for the direct provider) would take precedence over
+ * the Claude Code login, so the child does not see it.
+ */
+export function childEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const { ANTHROPIC_API_KEY: _drop, ...rest } = env;
+  return rest;
+}
+
 function spawnClaude(bin: string) {
   return (args: string[], stdin: string, o: { cwd: string; timeoutMs: number }) =>
     new Promise<string>((resolve, reject) => {
       const child = execFile(
         bin,
         args,
-        { cwd: o.cwd, timeout: o.timeoutMs, maxBuffer: 16 * 1024 * 1024, env: process.env },
+        { cwd: o.cwd, timeout: o.timeoutMs, maxBuffer: 16 * 1024 * 1024, env: childEnv() },
         (err, stdout, stderr) => {
           if (err)
             reject(

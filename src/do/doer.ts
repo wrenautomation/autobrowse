@@ -104,7 +104,16 @@ export function doer(d: DoerDeps): Doer {
     if (a.kind === "site") {
       const p = parseSiteAbility(a.name);
       if (!p) throw new DoError(500, `bad site ability ${a.name}`);
-      const output = await d.callSite(p.site, p.method as Method, p.path, input);
+      // `{param}` segments come from the input by name, as the official path carries them.
+      const path = p.path.replace(/\{([^}]+)\}/g, (seg, k: string) =>
+        input[k] === undefined ? seg : encodeURIComponent(String(input[k])),
+      );
+      if (/\{[^}]+\}/.test(path))
+        throw new DoError(
+          400,
+          `${a.name} needs ${path.match(/\{[^}]+\}/g)?.join(", ")} in the input`,
+        );
+      const output = await d.callSite(p.site, p.method as Method, path, input);
       return { output, status: "done", summary: `${a.name} answered` };
     }
     if (a.kind === "workflow") {

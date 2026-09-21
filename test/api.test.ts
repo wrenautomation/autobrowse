@@ -135,7 +135,7 @@ async function setup(token?: string, extra: Partial<Parameters<typeof api>[0]> =
         name: "tube POST /v1/videos",
         site: "tube",
         summary: "upload",
-        inputs: ["file"],
+        inputs: [{ name: "file" }],
         irreversible: true,
         ready: true,
         missing: null,

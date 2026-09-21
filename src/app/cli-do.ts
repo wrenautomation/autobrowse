@@ -4,6 +4,7 @@
  * ready, the agent explores and what it achieved is compiled for next time.
  */
 import type { Command } from "commander";
+import { fieldLine } from "../do/catalog.js";
 import type { LocalBackend } from "./backend.js";
 
 export function registerDoCommands(program: Command, local: LocalBackend): void {
@@ -37,6 +38,7 @@ export function registerDoCommands(program: Command, local: LocalBackend): void 
         console.log(
           `${out.status} via ${out.via}${out.name ? ` ${out.name}` : ""}: ${out.summary}`,
         );
+        if (Object.keys(out.input).length) console.log(`input ${JSON.stringify(out.input)}`);
         if (out.output !== null && out.output !== undefined)
           console.log(
             typeof out.output === "string" ? out.output : JSON.stringify(out.output, null, 2),
@@ -51,7 +53,7 @@ export function registerDoCommands(program: Command, local: LocalBackend): void 
     .action(async () => {
       for (const a of await local().backend.abilities())
         console.log(
-          `${a.kind.padEnd(8)} ${a.name.padEnd(48)} ${a.ready ? "ready" : `not ready: ${a.missing}`}${a.irreversible ? "  !" : ""}`,
+          `${a.kind.padEnd(8)} ${a.name.padEnd(48)} ${a.ready ? "ready" : `not ready: ${a.missing}`}${a.irreversible ? "  !" : ""}${a.inputs.length ? `\n         ${a.inputs.map(fieldLine).join(", ")}` : ""}`,
         );
     });
 }

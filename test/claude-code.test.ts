@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { claudeCodeLlm } from "../src/llm/claude-code.js";
+import { childEnv, claudeCodeLlm } from "../src/llm/claude-code.js";
 import { makeLlm } from "../src/llm/index.js";
 
 describe("claudeCodeLlm", () => {
+  it("the child never sees ANTHROPIC_API_KEY: the login pays", () => {
+    expect(childEnv({ ANTHROPIC_API_KEY: "sk-dead", HOME: "/h" })).toEqual({ HOME: "/h" });
+  });
+
   it("runs claude -p headless with tools off and reads the result", async () => {
     const calls: Array<{ args: string[]; stdin: string }> = [];
     const llm = claudeCodeLlm({

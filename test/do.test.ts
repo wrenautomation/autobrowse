@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { AgentSessions, SessionView } from "../src/agent/sessions.js";
-import { abilitiesOf, fieldsOf, parseSiteAbility } from "../src/do/catalog.js";
+import { abilitiesOf, fieldLine, fieldsOf, parseSiteAbility } from "../src/do/catalog.js";
 import { type DoerDeps, doer, missingWorkflowName, recordingNameOf } from "../src/do/doer.js";
 import { pickAbility } from "../src/do/pick.js";
 import { defineWorkflow, done } from "../src/engine/workflow.js";
@@ -73,7 +73,9 @@ describe("abilities", () => {
       workflows: [rename],
       flows: ["google/oauth-consent"],
     });
-    expect(list.map((a) => [a.kind, a.name, a.ready, a.inputs, a.irreversible])).toEqual([
+    expect(
+      list.map((a) => [a.kind, a.name, a.ready, a.inputs.map((f) => f.name), a.irreversible]),
+    ).toEqual([
       ["site", "tube POST /v1/videos", true, ["file", "title"], true],
       ["site", "tube GET /v1/videos", false, [], false],
       ["workflow", "google-name", true, ["name"], false],
@@ -81,6 +83,24 @@ describe("abilities", () => {
     ]);
     expect(list[1]?.missing).toBe("workflow tube-list-videos not recorded");
     expect(fieldsOf(z.string())).toEqual([]);
+    const fields = fieldsOf(
+      z.object({
+        resource: z.enum(["videos", "channels"]),
+        part: z.string().optional(),
+        mine: z.boolean().default(true),
+      }),
+      "/v3/{resource}",
+    );
+    expect(fields).toEqual([
+      { name: "resource", inPath: true, values: ["videos", "channels"], type: "enum" },
+      { name: "part", type: "string" },
+      { name: "mine", type: "boolean" },
+    ]);
+    expect(fields.map(fieldLine)).toEqual([
+      "resource (path: videos|channels)",
+      "part",
+      "mine (boolean)",
+    ]);
     expect(parseSiteAbility("tube POST /v1/videos")).toEqual({
       site: "tube",
       method: "POST",
@@ -256,6 +276,52 @@ describe("do", () => {
       "flow google/oauth-consent {}",
     ]);
     await expect(verb.do({ goal: "  " })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("fills a route's {param} segments from the input, or says which are missing", async () => {
+    const d = deps({
+      abilities: async () =>
+        abilitiesOf({
+          sites: {
+            apis: [
+              {
+                ...api,
+                routes: [
+                  {
+                    method: "GET",
+                    path: "/v1/{resource}/{id}",
+                    request: z.object({ resource: z.string(), id: z.string() }),
+                    summary: "one",
+                  },
+                ],
+              },
+            ],
+            rows: [
+              {
+                ...(rows[0] as SiteRow),
+                routes: [
+                  {
+                    method: "GET",
+                    path: "/v1/{resource}/{id}",
+                    summary: "one",
+                    via: "api",
+                    irreversible: false,
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+    });
+    const verb = doer(d);
+    await verb.do({
+      goal: "tube GET /v1/{resource}/{id}",
+      inputs: { resource: "videos", id: "a b" },
+    });
+    expect(d.calls).toEqual(['site tube GET /v1/videos/a%20b {"resource":"videos","id":"a b"}']);
+    await expect(
+      verb.do({ goal: "tube GET /v1/{resource}/{id}", inputs: { resource: "videos" } }),
+    ).rejects.toThrow(/needs \{id\}/);
   });
 
   it("a dry run says what would run and runs nothing", async () => {

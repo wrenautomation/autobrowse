@@ -17,8 +17,8 @@ export interface Ability {
   name: string;
   site: string | null;
   summary: string;
-  /** Input field names it takes (a route's request, a workflow's plan). */
-  inputs: string[];
+  /** The input fields it takes (a route's request, a workflow's plan). */
+  inputs: Field[];
   irreversible: boolean;
   /** It answers now; `missing` says why not. */
   ready: boolean;
@@ -36,11 +36,40 @@ export function parseSiteAbility(
   return m ? { site: m[1] as string, method: m[2] as string, path: m[3] as string } : null;
 }
 
-/** Field names of an object schema; nothing for any other shape. */
-export function fieldsOf(schema: unknown): string[] {
-  const shape = (schema as { shape?: unknown } | null)?.shape;
-  return shape && typeof shape === "object" ? Object.keys(shape as object) : [];
+export interface Field {
+  name: string;
+  /** A path segment of the route (`/youtube/v3/{resource}`): required, and only the value. */
+  inPath?: boolean;
+  /** The values an enum field takes. */
+  values?: string[];
+  type?: string;
 }
+
+/** Fields of an object schema (zod 4: name, type, enum values); nothing for any other shape. */
+export function fieldsOf(schema: unknown, path = ""): Field[] {
+  const shape = (schema as { shape?: unknown } | null)?.shape;
+  if (!shape || typeof shape !== "object") return [];
+  return Object.entries(shape as Record<string, unknown>).map(([name, v]) => {
+    let t = v as { def?: { type?: string; innerType?: unknown }; options?: unknown };
+    while (t?.def?.innerType) t = t.def.innerType as typeof t;
+    const values = Array.isArray(t?.options) ? t.options.map(String) : undefined;
+    return {
+      name,
+      ...(path.includes(`{${name}}`) ? { inPath: true } : {}),
+      ...(values ? { values } : {}),
+      ...(t?.def?.type ? { type: t.def.type } : {}),
+    };
+  });
+}
+
+/** `resource (path: videos|channels)`, `part`, `mine (boolean)`: one field as the picker reads it. */
+export const fieldLine = (f: Field): string => {
+  const notes = [
+    ...(f.inPath ? ["path"] : []),
+    ...(f.values ? [f.values.join("|")] : f.type && f.type !== "string" ? [f.type] : []),
+  ];
+  return notes.length ? `${f.name} (${notes.join(": ")})` : f.name;
+};
 
 export interface AbilitySources {
   /** The site modules (request shapes) and their live rows (how each route answers now). */
@@ -62,7 +91,7 @@ export function abilitiesOf(s: AbilitySources): Ability[] {
         name: siteAbilityName(api.site, route.method, route.path),
         site: api.site,
         summary: route.summary,
-        inputs: fieldsOf(route.request),
+        inputs: fieldsOf(route.request, route.path),
         irreversible: Boolean(route.irreversible),
         ready: live ? live.via !== "none" : false,
         missing: live?.missing ?? (live ? null : "site not served here"),
@@ -75,7 +104,7 @@ export function abilitiesOf(s: AbilitySources): Ability[] {
       name: w.name,
       site: null,
       summary: w.description,
-      inputs: fieldsOf(w.plan).filter((f) => f !== "dryRun"),
+      inputs: fieldsOf(w.plan).filter((f) => f.name !== "dryRun"),
       irreversible: w.steps.some((st) => Boolean(st.irreversible)),
       ready: true,
       missing: null,
