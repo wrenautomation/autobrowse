@@ -28,7 +28,7 @@ import {
 } from "../browser/flow.js";
 import { type Hints, locate, locateAll, textOf } from "../browser/locate.js";
 import { snapshotPage } from "../browser/repair.js";
-import { type BrowserOptions, looksLikeWall } from "../browser/session.js";
+import { type BrowserOptions, bodyText, looksLikeWall } from "../browser/session.js";
 import type { SecretSink } from "../deps/sink.js";
 import { macDesktop } from "../desktop/mac.js";
 import {
@@ -501,13 +501,8 @@ async function serve(
       }
       case "snapshot":
         return { rows: await snapshotPage(page, c.limit ?? 120) };
-      case "text": {
-        const text = await page
-          .locator("body")
-          .innerText()
-          .catch(() => "");
-        return { text: out(text.slice(0, c.limit ?? 4_000), c.raw) };
-      }
+      case "text":
+        return { text: out(await bodyText(page, c.limit ?? 4_000), c.raw) };
       case "url":
         return { url: page.url() };
       case "pages":

@@ -62,6 +62,24 @@ export function applyRunEvent(row: RunRow | null, event: RunEvent): RunRow {
   return next;
 }
 
+/** Rows the registry keeps; past it the oldest finished ones go (a running or waiting run never does). */
+export const KEEP_ROWS = 2_000;
+
+const SETTLED = new Set<RunRow["status"]>(["done", "failed", "rejected", "reset"]);
+
+/** The rows to keep once over `keep`: every live one, and the newest settled ones up to the cap. */
+export function trimRows(rows: Record<string, RunRow>, keep = KEEP_ROWS): Record<string, RunRow> {
+  const all = Object.entries(rows);
+  if (all.length <= keep) return rows;
+  const settled = all
+    .filter(([, r]) => SETTLED.has(r.status))
+    .sort(([, a], [, b]) => compareRows(a, b));
+  const drop = new Set(
+    settled.slice(Math.max(0, keep - (all.length - settled.length))).map(([id]) => id),
+  );
+  return Object.fromEntries(all.filter(([id]) => !drop.has(id)));
+}
+
 /** A page of the list: newest first, `limit` rows (100 unless asked), those before `before`. */
 export interface ListQuery {
   limit?: number;

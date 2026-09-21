@@ -4,7 +4,7 @@
  * SSM or a Kubernetes Secret when deployed. Read at the moment a login
  * needs it, never carried on a plan or in a memo.
  */
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { expandHome } from "../google-auth.js";
@@ -82,22 +82,34 @@ const fileSchema = z.object({ sites: z.record(z.string(), credentialSchema) });
  */
 export function fileCredentials(path: string, cipher: Cipher = plainCipher): CredentialStore {
   const file = expandHome(path);
-  const read = () => {
-    if (!existsSync(file)) return { sites: {} as Record<string, Credential> };
+  type Data = { sites: Record<string, Credential> };
+  // Opened and parsed once per version of the file: a `list` + `get` per name is one read, and
+  // a file another process rewrote (its mtime or size moved) is read again. A stat per call.
+  let cached: { stamp: string; data: Data } | null = null;
+  const read = (): Data => {
+    if (!existsSync(file)) {
+      cached = null;
+      return { sites: {} };
+    }
+    const st = statSync(file);
+    const stamp = `${st.mtimeMs}:${st.size}`;
+    if (cached?.stamp === stamp) return cached.data;
     const raw = readFileSync(file, "utf8");
-    return fileSchema.parse(JSON.parse(isSealed(raw) ? cipher.open(raw) : raw));
+    const data = fileSchema.parse(JSON.parse(isSealed(raw) ? cipher.open(raw) : raw));
+    cached = { stamp, data };
+    return data;
   };
   return {
     async get(site) {
       return read().sites[site] ?? null;
     },
     async put(site, cred) {
-      const data = read();
-      data.sites[site] = credentialSchema.parse(cred);
+      const data = { sites: { ...read().sites, [site]: credentialSchema.parse(cred) } };
       mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
       const tmp = `${file}.tmp`;
       writeFileSync(tmp, cipher.seal(JSON.stringify(data, null, 2)), { mode: 0o600 });
       renameSync(tmp, file);
+      cached = null;
     },
     async list() {
       return Object.keys(read().sites);

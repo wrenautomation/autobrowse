@@ -3,6 +3,8 @@ import { authedJson, type TokenSupplier } from "../google-auth.js";
 import type { HttpClient } from "./http.js";
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
+/** Bodies kept between polls; oldest out first. */
+const SEEN_CAP = 200;
 
 export interface GmailUserClient {
   /** The primary send-as signature; idempotent. */
@@ -70,6 +72,8 @@ export function gmailClient(opts: {
   scopes: { settings: string; send: string; read: string };
   http: HttpClient;
 }): GmailUserClient {
+  // Bodies by inbox and message id; a message never changes once it landed.
+  const seen = new Map<string, GmailMessage>();
   return {
     async setSignature(email, html) {
       const token = opts.tokenFor(email, [opts.scopes.settings]);
@@ -111,24 +115,34 @@ export function gmailClient(opts: {
         `${GMAIL}/messages?q=${q}&maxResults=10&includeSpamTrash=true`,
       );
       if (list.status >= 400) throw new GmailError("list", list.status, list.body);
-      const out: GmailMessage[] = [];
-      for (const { id } of list.body?.messages ?? []) {
-        const m = await authedJson<RawMessage>(
-          opts.http,
-          token,
-          `${GMAIL}/messages/${encodeURIComponent(id)}?format=full`,
-        );
-        if (m.status >= 400 || !m.body) continue;
-        const header = (name: string) =>
-          m.body?.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? "";
-        out.push({
-          from: header("from"),
-          subject: header("subject"),
-          text: messageText(m.body),
-          at: new Date(Number(m.body.internalDate ?? 0)),
-        });
-      }
-      return out.sort((a, b) => b.at.getTime() - a.at.getTime());
+      // A poll every few seconds lists the same ids: each body is fetched once, all at once.
+      const got = await Promise.all(
+        (list.body?.messages ?? []).map(async ({ id }): Promise<GmailMessage | null> => {
+          const key = `${inbox}\u0000${id}`;
+          const kept = seen.get(key);
+          if (kept) return kept;
+          const m = await authedJson<RawMessage>(
+            opts.http,
+            token,
+            `${GMAIL}/messages/${encodeURIComponent(id)}?format=full`,
+          );
+          if (m.status >= 400 || !m.body) return null;
+          const header = (name: string) =>
+            m.body?.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? "";
+          const msg: GmailMessage = {
+            from: header("from"),
+            subject: header("subject"),
+            text: messageText(m.body),
+            at: new Date(Number(m.body.internalDate ?? 0)),
+          };
+          if (seen.size >= SEEN_CAP) seen.delete(seen.keys().next().value as string);
+          seen.set(key, msg);
+          return msg;
+        }),
+      );
+      return got
+        .filter((m): m is GmailMessage => m !== null)
+        .sort((a, b) => b.at.getTime() - a.at.getTime());
     },
   };
 }

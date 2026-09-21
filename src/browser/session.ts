@@ -227,6 +227,32 @@ async function browserbaseSession(bb: Browserbase, contextId: string) {
 }
 
 /** The page shows a login, captcha or verification wall. */
+/**
+ * The page's visible text, cut in the page: only `limit` characters cross
+ * the CDP socket, not a whole document read for its first lines. Empty
+ * when the page is gone or mid-navigation.
+ */
+export async function bodyText(page: Page, limit: number): Promise<string> {
+  return page
+    .evaluate((n) => (document.body ? document.body.innerText : "").slice(0, n), limit)
+    .catch(() => "");
+}
+// The in-page functions above and below run in the browser; this module compiles without the DOM lib.
+declare const document: {
+  body: { innerText: string } | null;
+  documentElement: { outerHTML: string } | null;
+};
+
+/** The page's HTML, cut in the page the same way. */
+export async function pageHtml(page: Page, limit: number): Promise<string> {
+  return page
+    .evaluate(
+      (n) => (document.documentElement ? document.documentElement.outerHTML : "").slice(0, n),
+      limit,
+    )
+    .catch(() => "");
+}
+
 export interface Wall {
   /** `login` and `challenge` can be solved with credentials and codes; `captcha` still needs a person (or Browserbase). */
   kind: "login" | "challenge" | "captcha";
@@ -238,13 +264,7 @@ export async function looksLikeWall(page: Page): Promise<Wall | null> {
   // A sign-in path segment, not a substring: myaccount's /signinoptions/ is a settings page.
   if (/accounts\.google\.com\/|\/(login|sign-?in)(\/|\?|#|$)/i.test(url))
     return { kind: "login", detail: `login page: ${url}` };
-  const text = (
-    await page
-      .locator("body")
-      .innerText()
-      .catch(() => "")
-  ).slice(0, 4000);
-  return wallOf(url, text);
+  return wallOf(url, await bodyText(page, 4000));
 }
 
 /** The wall a URL and page text show, if any; `looksLikeWall` over a page, this over what a flow already read. */

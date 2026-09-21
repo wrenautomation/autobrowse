@@ -142,7 +142,14 @@ export function parseAria(aria: string): Node[] {
     const prop = raw.match(PROP);
     if (prop) {
       const depth = (prop[1] as string).length;
-      const owner = [...stack].reverse().find((s) => s.depth < depth)?.node;
+      let owner: Node | undefined;
+      for (let i = stack.length - 1; i >= 0; i--) {
+        const s = stack[i] as { depth: number; node: Node };
+        if (s.depth < depth) {
+          owner = s.node;
+          break;
+        }
+      }
       if (owner && prop[2] === "placeholder") owner.placeholder = prop[3] as string;
       continue;
     }

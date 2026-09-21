@@ -6,7 +6,7 @@
 import * as restate from "@restatedev/restate-sdk";
 import type { RunEvent } from "./events.js";
 import { runId } from "./events.js";
-import { applyRunEvent, type ListQuery, pageOf, type RunRow } from "./rows.js";
+import { applyRunEvent, type ListQuery, pageOf, type RunRow, trimRows } from "./rows.js";
 
 export const REGISTRY = { name: "Runs" } as const;
 export const REGISTRY_KEY = "all";
@@ -14,7 +14,16 @@ export const REGISTRY_KEY = "all";
 const ROWS = "rows";
 
 export type { ListQuery, RunRow } from "./rows.js";
-export { applyRunEvent, compareRows, cursorOf, LIST_LIMIT, pageOf, placeRow } from "./rows.js";
+export {
+  applyRunEvent,
+  compareRows,
+  cursorOf,
+  KEEP_ROWS,
+  LIST_LIMIT,
+  pageOf,
+  placeRow,
+  trimRows,
+} from "./rows.js";
 
 export const runsRegistry = restate.object({
   name: REGISTRY.name,
@@ -23,7 +32,7 @@ export const runsRegistry = restate.object({
       const rows = (await ctx.get<Record<string, RunRow>>(ROWS)) ?? {};
       const id = runId(event.run);
       rows[id] = applyRunEvent(rows[id] ?? null, event);
-      ctx.set(ROWS, rows);
+      ctx.set(ROWS, trimRows(rows));
     },
     list: restate.handlers.object.shared(
       async (ctx: restate.ObjectSharedContext, q: ListQuery): Promise<RunRow[]> =>

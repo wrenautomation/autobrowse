@@ -6,7 +6,7 @@ import { looksLikeWall } from "../src/browser/session.js";
 const page = (url: string, text = "") =>
   ({
     url: () => url,
-    locator: () => ({ innerText: async () => text }),
+    evaluate: async (_fn: unknown, n: number) => text.slice(0, n),
   }) as unknown as Page;
 
 describe("looksLikeWall", () => {

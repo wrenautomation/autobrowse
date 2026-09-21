@@ -23,10 +23,12 @@ import { canLearn, noRepairer, type Repairer, type RepairReport, snapshotPage } 
 import {
   type Artifacts,
   type BrowserOptions,
+  bodyText,
   type FailureRecord,
   looksLikeWall,
   NeedsHuman,
   openSession,
+  pageHtml,
 } from "./session.js";
 import type { Passkeys } from "./webauthn.js";
 
@@ -326,14 +328,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             }
           },
           url: () => active.url(),
-          text: async () =>
-            (
-              await active
-                .locator("body")
-                .innerText()
-                .catch(() => "")
-            ).slice(0, 20_000),
-          html: async () => (await active.content().catch(() => "")).slice(0, 400_000),
+          text: () => bodyText(active, 20_000),
+          html: () => pageHtml(active, 400_000),
           has: (hints, withinMs = 0) =>
             withinMs > 0
               ? locate(active, hints)

@@ -80,13 +80,20 @@ function store(hex: string): void {
  */
 export function keychainKey(): Buffer {
   if (process.platform !== "darwin") throw new Error("keychain cipher needs macOS");
+  // One `security` subprocess per process, not per store: the key does not change while we run.
+  if (keyCache) return keyCache;
   const found = security(`find-generic-password -s ${SERVICE} -a ${ACCOUNT} -w`);
   const hex = found.out.match(/\b[0-9a-f]{64}\b/)?.[0];
-  if (found.status === 0 && hex) return Buffer.from(hex, "hex");
+  if (found.status === 0 && hex) {
+    keyCache = Buffer.from(hex, "hex");
+    return keyCache;
+  }
   const fresh = randomBytes(32).toString("hex");
   store(fresh);
-  return Buffer.from(fresh, "hex");
+  keyCache = Buffer.from(fresh, "hex");
+  return keyCache;
 }
+let keyCache: Buffer | null = null;
 
 /** Re-store the existing key with the tool trusted (an item made before `TRUST` prompts on every read). */
 export function trustKeychainKey(): "retrusted" | "none" {
@@ -95,5 +102,6 @@ export function trustKeychainKey(): "retrusted" | "none" {
   if (found.status !== 0 || !hex) return "none";
   security(`delete-generic-password -s ${SERVICE} -a ${ACCOUNT}`);
   store(hex);
+  keyCache = null;
   return "retrusted";
 }
