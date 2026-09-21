@@ -115,6 +115,10 @@ export interface OAuthSpec {
    * token (LinkedIn without programmatic refresh: 60-day tokens; consent again).
    */
   accessToken?: string;
+  /** PKCE (S256): a code verifier on the authorize URL and the token call (X requires it). */
+  pkce?: boolean;
+  /** How the token endpoint takes the client: form fields (default) or an HTTP Basic header (X). */
+  tokenAuth?: "form" | "basic";
   /** The leg that opens the authorize URL (`{url}`) in the site's logged-in profile and clicks through. */
   consent: Leg;
 }

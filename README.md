@@ -367,8 +367,11 @@ mail and calendar, `/me/messages`, `/me/sendMail`, `/me/events`), `gmail`
 (`/gmail/v1/users/me/...`; proven 2026-09-22), `meta` (one Facebook Login
 app: Marketing API campaigns/ad sets/creatives/ads/insights under
 `/act_{id}/…`, Page posts/photos/videos with the Page's own token, Instagram
-publishing for the Page's professional account). Instagram, TikTok, Outlook
-and Meta are written from the public docs and unproven until a credential
+publishing for the Page's professional account), `x` (API v2: `/2/tweets`,
+`/2/users/me`, a user's posts, metrics, `/2/media/upload` from a local
+image or video — chunked and waited on; OAuth 2.0 with PKCE, the refresh
+token rolls on every mint and is kept). Instagram, TikTok, Outlook, Meta
+and X are written from the public docs and unproven until a credential
 and a developer app exist.
 
 A route that can start spending (`spends`: a campaign, ad set or ad set to

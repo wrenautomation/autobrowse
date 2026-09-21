@@ -57,6 +57,7 @@ describe("browser service", () => {
       "linkedin/oauth-consent",
       "outlook/oauth-consent",
       "tiktok/oauth-consent",
+      "x/oauth-consent",
     ]);
     const svc = browserService({ runner: { run: async () => "ok" as never } });
     expect(svc.name).toBe("browser");

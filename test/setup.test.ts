@@ -45,6 +45,7 @@ describe("setup", () => {
       "", // linkedin skipped
       "", // instagram skipped
       "", // facebook skipped
+      "", // x skipped
       "", // tiktok skipped
       "", // microsoft skipped
     ]);
@@ -60,6 +61,7 @@ describe("setup", () => {
       "linkedin",
       "instagram",
       "facebook",
+      "x",
       "tiktok",
       "microsoft",
     ]);
@@ -79,12 +81,13 @@ describe("setup", () => {
       linkedin: { username: "w@x.com", password: "h" },
       instagram: { username: "wren", password: "i" },
       facebook: { username: "w@x.com", password: "f" },
+      x: { username: "wren", password: "x" },
       tiktok: { username: "wren", password: "t" },
       microsoft: { username: "w@outlook.com", password: "m" },
     });
     const { io, asked, said } = scripted([]);
     await runSetup(io, store, SITE_LOGINS);
     expect(asked).toEqual([]);
-    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(13);
+    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(14);
   });
 });

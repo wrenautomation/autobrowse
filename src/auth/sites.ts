@@ -23,6 +23,7 @@ import {
 } from "./login.js";
 import { MICROSOFT_HOST, signInToMicrosoft } from "./microsoft.js";
 import { signInToTiktok, TIKTOK_LOGIN_URL } from "./tiktok.js";
+import { signInToX, X_LOGIN_URL } from "./x.js";
 
 const CLOUDFLARE_HOME = /dash\.cloudflare\.com\/[0-9a-f]{32}/;
 
@@ -412,6 +413,20 @@ const facebook: SiteLogin = {
   signInHere: { at: FACEBOOK_LOGIN_URL, run: signInToFacebook },
 };
 
+/** X: the account's own login (username/email, password, then a code). Unverified until a credential exists. */
+const x: SiteLogin = {
+  site: "x",
+  home: "https://x.com/home",
+  origins: ["x.com", "twitter.com"],
+  ask: "Your X login (username or email, password, authenticator key if set)",
+  loggedIn: async (fp) => !X_LOGIN_URL.test(fp.url()),
+  signIn: async (ctx) => {
+    await ctx.fp.open("https://x.com/i/flow/login", { allowWall: true });
+    await signInToX(ctx);
+  },
+  signInHere: { at: X_LOGIN_URL, run: signInToX },
+};
+
 /** TikTok: the account's own login (email or username). Unverified until a credential exists. */
 const tiktok: SiteLogin = {
   site: "tiktok",
@@ -460,6 +475,7 @@ export const SITE_LOGINS: readonly SiteLogin[] = [
   linkedin,
   instagram,
   facebook,
+  x,
   tiktok,
   outlook,
 ];

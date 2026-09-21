@@ -6,7 +6,7 @@
  * nothing here logs a value.
  */
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { type HttpClient, HttpError } from "../clients/http.js";
 import type { OAuthSpec } from "./types.js";
@@ -26,13 +26,14 @@ async function tokenCall(
   url: string,
   fields: Record<string, string>,
   method: "POST" | "GET" = "POST",
+  headers: Record<string, string> = {},
 ) {
   const res =
     method === "GET"
-      ? await http.json<TokenBody>(`${url}?${form(fields)}`)
+      ? await http.json<TokenBody>(`${url}?${form(fields)}`, { headers })
       : await http.json<TokenBody>(url, {
           method: "POST",
-          headers: { "content-type": "application/x-www-form-urlencoded" },
+          headers: { "content-type": "application/x-www-form-urlencoded", ...headers },
           raw: form(fields),
         });
   if (!res.ok || !res.body?.access_token) {
@@ -47,6 +48,28 @@ async function tokenCall(
  * `GMAIL_REFRESH_TOKEN` for the site's own, `GMAIL_REFRESH_TOKEN__WILL_X_DEV`
  * for will@x.dev. One site, any number of identities.
  */
+/** The client on a token call: form fields, or a Basic header with the id alone in the form. */
+function clientFields(
+  spec: OAuthSpec,
+  id: string,
+  secret: string,
+): { fields: Record<string, string>; headers: Record<string, string> } {
+  const idParam = spec.clientIdParam ?? "client_id";
+  if (spec.tokenAuth === "basic")
+    return {
+      fields: { [idParam]: id },
+      headers: { authorization: `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}` },
+    };
+  return { fields: { [idParam]: id, client_secret: secret }, headers: {} };
+}
+
+/** PKCE: a verifier and its S256 challenge. */
+export function pkcePair(): { verifier: string; challenge: string } {
+  const verifier = randomBytes(48).toString("base64url");
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  return { verifier, challenge };
+}
+
 export function accountEnv(name: string, account?: string | null): string {
   if (!account) return name;
   return `${name}__${account
@@ -64,6 +87,8 @@ export function accessTokens(
   http: HttpClient,
   env: (name: string) => string | undefined,
   now: () => number = Date.now,
+  /** Told when a mint answers a new refresh token (X rolls them): keep it under that name. */
+  keep?: (name: string, value: string) => Promise<void>,
 ): (spec: OAuthSpec, account?: string | null) => Promise<string | null> {
   const cache = new Map<string, { token: string; until: number }>();
   return async (spec, account) => {
@@ -75,14 +100,18 @@ export function accessTokens(
       return (spec.accessToken && env(accountEnv(spec.accessToken, account))) || null;
     const hit = cache.get(refreshName);
     if (hit && hit.until > now()) return hit.token;
-    const body = await tokenCall(http, spec.tokenUrl, {
-      grant_type: "refresh_token",
-      refresh_token: refresh,
-      [spec.clientIdParam ?? "client_id"]: id,
-      client_secret: secret,
-    });
+    const client = clientFields(spec, id, secret);
+    const body = await tokenCall(
+      http,
+      spec.tokenUrl,
+      { grant_type: "refresh_token", refresh_token: refresh, ...client.fields },
+      "POST",
+      client.headers,
+    );
     const token = body.access_token as string;
     cache.set(refreshName, { token, until: now() + ((body.expires_in ?? 3600) - 60) * 1000 });
+    if (keep && body.refresh_token && body.refresh_token !== refresh)
+      await keep(refreshName, body.refresh_token);
     return token;
   };
 }
@@ -150,12 +179,14 @@ export async function runConsent(
   });
   const url = new URL(spec.authorizeUrl);
   const idParam = spec.clientIdParam ?? "client_id";
+  const pkce = spec.pkce ? pkcePair() : null;
   for (const [k, v] of Object.entries({
     response_type: "code",
     [idParam]: id,
     redirect_uri: redirect,
     scope: spec.scopes.join(spec.scopeSeparator ?? " "),
     state,
+    ...(pkce ? { code_challenge: pkce.challenge, code_challenge_method: "S256" } : {}),
     ...(spec.params ?? {}),
   }))
     url.searchParams.set(k, v);
@@ -163,13 +194,20 @@ export async function runConsent(
     o.open({ url: url.toString(), ...(o.account ? { account: o.account } : {}) }),
     code,
   ]);
-  const body = await tokenCall(o.http, spec.tokenUrl, {
-    grant_type: "authorization_code",
-    code: await code,
-    [idParam]: id,
-    client_secret: secret,
-    redirect_uri: redirect,
-  });
+  const client = clientFields(spec, id, secret);
+  const body = await tokenCall(
+    o.http,
+    spec.tokenUrl,
+    {
+      grant_type: "authorization_code",
+      code: await code,
+      redirect_uri: redirect,
+      ...client.fields,
+      ...(pkce ? { code_verifier: pkce.verifier } : {}),
+    },
+    "POST",
+    client.headers,
+  );
   let accessToken = body.access_token as string;
   if (spec.longLived) {
     const long = await tokenCall(

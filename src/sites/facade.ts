@@ -133,7 +133,10 @@ function resolveInput(v: unknown, env: SiteFacadeDeps["env"]): unknown {
 
 export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): SiteFacade {
   const byName = new Map(sites.map((s) => [s.site, s]));
-  const minted = accessTokens(deps.http, deps.env, deps.now);
+  // A site that rolls its refresh token on every mint (X) hands the new one to the sink.
+  const minted = accessTokens(deps.http, deps.env, deps.now, (name, value) =>
+    deps.sink.put(name, value),
+  );
   const identityOf = async (
     id: NonNullable<OAuthSpec["identity"]>,
     token: string,
@@ -141,7 +144,10 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     const res = await deps.http
       .json<Record<string, unknown>>(id.url, { headers: { authorization: `Bearer ${token}` } })
       .catch(() => null);
-    const v = res?.ok ? res.body?.[id.field] : null;
+    // `emailAddress`, or a path into the answer (`data.username`).
+    const v = res?.ok
+      ? id.field.split(".").reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], res.body)
+      : null;
     return typeof v === "string" && v ? v.toLowerCase() : null;
   };
   const site = (name: string) => {
@@ -328,7 +334,8 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           await deps.sink.put(at, got.refreshToken);
           made.push(at);
         }
-        if (spec.accessToken) {
+        // The access token itself only when nothing mints one (no refresh token came back).
+        if (spec.accessToken && !got.refreshToken) {
           const at = accountEnv(spec.accessToken, as);
           await deps.sink.put(at, got.accessToken);
           made.push(at);

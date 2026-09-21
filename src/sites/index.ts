@@ -17,6 +17,7 @@ export { SITES_SERVICE, type SitesService, sitesService } from "./service.js";
 export { tiktok } from "./tiktok.js";
 export * from "./types.js";
 export { profileOf, type SiteParts, sitesFor } from "./wire.js";
+export { x, xOAuth } from "./x.js";
 export { youtube } from "./youtube.js";
 
 import { gmail } from "./gmail.js";
@@ -26,6 +27,7 @@ import { meta } from "./meta.js";
 import { outlook } from "./outlook.js";
 import { tiktok } from "./tiktok.js";
 import type { SiteApi } from "./types.js";
+import { x } from "./x.js";
 import { youtube } from "./youtube.js";
 
 /** Every site autobrowse serves under its official API's shape. */
@@ -37,4 +39,5 @@ export const SITES: readonly SiteApi[] = [
   outlook,
   gmail,
   meta,
+  x,
 ];

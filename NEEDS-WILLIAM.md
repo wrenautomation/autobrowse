@@ -120,12 +120,15 @@ you the window at a captcha. What each needs from you first:
   would stop me at it anyway); (4) `site setup meta consent`. Ads that go
   ACTIVE ask you over the channel with the budget; `SPEND_*` in the env
   store sets what may run without asking.
-- **X**: standalone signup with the inbox + phone; the X API (posting)
-  needs a developer account + app at developer.x.com afterwards (Free tier
-  posts; reads are paid).
+- **X**: standalone signup with the inbox + phone; then the `x` site
+  (built 2026-09-22: posts, media upload, metrics) needs a developer
+  account + app at developer.x.com (Free tier posts; reads are paid):
+  OAuth 2.0 confidential client, read + write, redirect
+  `http://127.0.0.1:9400/oauth/callback`; `env set X_CLIENT_ID` /
+  `X_CLIENT_SECRET`, `creds paste x`, `site setup x consent`.
 - After each account exists: `creds push <site>` so the box has it, then
-  the site API setup (`site setup <site> consent`). The `x` site API is
-  the next build; `meta` is built (above).
+  the site API setup (`site setup <site> consent`). `meta` and `x` site
+  APIs are built (above); each waits on its developer app.
 
 ## Content channels (YouTube, LinkedIn, Instagram, TikTok; wren `designs/2026-09-21-content-channels.md`)
 
