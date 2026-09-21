@@ -51,14 +51,18 @@ consent); `status(site).setup` says what is done, blocked or unrecorded;
 
 ## Where to attack (ranked)
 
-1. `backendFor(settings, app, o)` still builds its parts from `Settings`
-   inside (`explorerOpener`, `agentSessions`, the compiler); a caller who
-   wants the agent with their own browser has to go under it. Split it into
-   `agentFor(parts)`, `compilerFor(parts)`, `doerFor(parts)` composers and
-   keep `backendFor` as the sum.
-2. `SiteLogin.signIn` takes a `SignInContext` the runner builds (`fp`, `cred`,
-   `code`, `inbox`); expose `signInContext({page, credential, codes})` so a
-   caller with their own Playwright page can run one login.
+1. ✅ `doerFor(parts)` (`src/do/wire.ts`, 2026-09-21): the verb from
+   catalog, browser, sink, an optional site facade and agent, with `flows`,
+   `logins`, `siteApis` as options; `backendFor` is its caller. Still inside
+   `backendFor`: `agentFor(settings, …)` and `compileRecording` read
+   `Settings`/`COMPILED_DIR`; a caller who wants the agent over their own
+   browser goes through `agentSessions({llm, dir, open})` directly.
+2. ✅ `signInContext({fp, site, cred, credentials, codes})` (`src/auth/login.ts`,
+   2026-09-21) is what `loginProvider` builds on a wall; a caller with their
+   own `FlowPage` runs one login as `signInToGoogle(signInContext({...}))`.
+   Open: a `FlowPage` over a caller's Playwright page is still built inline
+   in `flowRunner`; lift it to `flowPageOf(page, {login, pace})` when someone
+   needs it.
 3. Publish flow: `pnpm build` is not in gates and `dist/` is not proven by
    a consumer; add a smoke test that imports `dist/sites/index.js` after a
    build (CI only).

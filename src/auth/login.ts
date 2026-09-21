@@ -537,6 +537,60 @@ export function credentialFor(sites: readonly SiteLogin[], name: string): string
   return login?.credential ?? name;
 }
 
+export interface SignInParts {
+  fp: FlowPage;
+  /** The site being signed in to (for messages and code requests). */
+  site: string;
+  cred: Credential;
+  credentials: CredentialStore;
+  codes: CodeSource;
+  notify?: (text: string) => Promise<void>;
+  /** Only codes that arrived after this count; now unless said. */
+  since?: Date;
+}
+
+/**
+ * The context a sign-in runs with, over a page the caller drives and the
+ * stores it names: what `loginProvider` builds on a wall, on its own for a
+ * caller who wants one login (`signInToGoogle(signInContext({...}))`).
+ * Codes belong to the credential: an OAuth sign-in continues as the
+ * provider's (`ctx.as(cred)`), and its TOTP must answer, not the site's.
+ */
+export function signInContext(p: SignInParts): SignInContext {
+  const { fp, site } = p;
+  const since = p.since ?? new Date();
+  const contextAs = (cred: Credential): SignInContext => ({
+    fp,
+    cred,
+    async code(kind, hint) {
+      const req = hint ? { site, kind, since, hint } : { site, kind, since };
+      const c = await p.codes.get(req, cred);
+      if (!c) throw new LoginFailed(site, `no ${kind} code available`);
+      return c;
+    },
+    offers: (kind) => p.codes.offers(kind, cred),
+    inbox: (kind) => p.codes.inbox(kind, cred),
+    ...(p.notify ? { notify: p.notify } : {}),
+    async credFor(other, account) {
+      const c = await p.credentials.get(other);
+      if (!c) throw new LoginFailed(site, `no credential stored for ${other}`);
+      if (!account || sameUser(c.username, account)) return c;
+      // A second account at the provider lives as `<provider>@<label>`.
+      for (const name of await p.credentials.list()) {
+        if (!name.startsWith(`${other}@`)) continue;
+        const alt = await p.credentials.get(name);
+        if (alt && sameUser(alt.username, account)) return alt;
+      }
+      throw new LoginFailed(
+        site,
+        `no ${other} credential for ${account}: autobrowse creds set ${other}@<label> with that username`,
+      );
+    },
+    as: contextAs,
+  });
+  return contextAs(p.cred);
+}
+
 /**
  * The runner's hook: on a login wall for `site`, sign in with what the
  * store has. `LoginFailed` (or a NeedsHuman from inside) propagates.
@@ -552,38 +606,15 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
     const login = cred.via && !known?.via?.includes(cred.via) ? viaLogin(site, cred) : known;
     if (!login) return "unknown-site";
     const since = now();
-    // Codes belong to the credential: an OAuth sign-in continues as the
-    // provider's (`ctx.as(cred)`), and its TOTP must answer, not the site's.
-    const contextAs = (cred: Credential): SignInContext => ({
+    const ctx = signInContext({
       fp,
+      site,
       cred,
-      async code(kind, hint) {
-        const req = hint ? { site, kind, since, hint } : { site, kind, since };
-        const c = await opts.codes.get(req, cred);
-        if (!c) throw new LoginFailed(site, `no ${kind} code available`);
-        return c;
-      },
-      offers: (kind) => opts.codes.offers(kind, cred),
-      inbox: (kind) => opts.codes.inbox(kind, cred),
+      since,
+      credentials: opts.credentials,
+      codes: opts.codes,
       ...(opts.notify ? { notify: opts.notify } : {}),
-      async credFor(other, account) {
-        const c = await opts.credentials.get(other);
-        if (!c) throw new LoginFailed(site, `no credential stored for ${other}`);
-        if (!account || sameUser(c.username, account)) return c;
-        // A second account at the provider lives as `<provider>@<label>`.
-        for (const name of await opts.credentials.list()) {
-          if (!name.startsWith(`${other}@`)) continue;
-          const alt = await opts.credentials.get(name);
-          if (alt && sameUser(alt.username, account)) return alt;
-        }
-        throw new LoginFailed(
-          site,
-          `no ${other} credential for ${account}: autobrowse creds set ${other}@<label> with that username`,
-        );
-      },
-      as: contextAs,
     });
-    const ctx = contextAs(cred);
     const here = login.signInHere;
     if (here?.at.test(fp.url())) {
       await here.run(ctx);

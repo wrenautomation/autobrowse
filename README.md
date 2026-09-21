@@ -353,8 +353,8 @@ types; the subpaths are in `package.json` `exports`.
 **The whole thing: one verb.**
 
 ```ts
-import { doer, abilitiesOf } from "autobrowse/do";
-const verb = doer({ llm, abilities, sites, callSite, runWorkflow, runFlow, agent, compile });
+import { doerFor } from "autobrowse/do";
+const verb = doerFor({ llm, catalog, browser, sink, sites, agent, compile }); // or doer({...}) over your own legs
 await verb.do({ goal: "upload this to youtube", inputs: { file: "talk.mp4" } });
 ```
 
@@ -384,7 +384,8 @@ await videos.api({ resource: "videos", part: "snippet", mine: true }, { token, h
 const mint = accessTokens(http, env);                // refresh token → bearer, cached
 await runConsent(spec, { http, env, open: ({ url }) => myBrowser.consent(url), port: 9400 });
 
-import { SITE_LOGINS, formLogin, signInToGoogle } from "autobrowse/auth";
+import { SITE_LOGINS, signInContext, signInToGoogle } from "autobrowse/auth";
+await signInToGoogle(signInContext({ fp, site: "google", cred, credentials, codes }));
 import { consentFlow, googleOauthConsent } from "autobrowse/flows";
 import { digest, exploreWithAgent } from "autobrowse/agent";
 ```

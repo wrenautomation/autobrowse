@@ -17,9 +17,9 @@ import { httpClient } from "../clients/http.js";
 import type { Compiled, Outline } from "../compiler/index.js";
 import { compile, loadOutline, rerender, saveOutline, writeRendered } from "../compiler/index.js";
 import type { SecretSink } from "../deps/sink.js";
-import { type Ability, abilitiesOf } from "../do/catalog.js";
-import { type Doer, doer } from "../do/doer.js";
-import { BROWSER_FLOWS } from "../engine/browser-service.js";
+import type { Ability } from "../do/catalog.js";
+import type { Doer } from "../do/doer.js";
+import { doerFor } from "../do/wire.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import { type ExploreOptions, type Explorer, startExplore } from "../explore/server.js";
 import type { Approver } from "../gates/payment.js";
@@ -27,7 +27,7 @@ import { expandHome } from "../google-auth.js";
 import type { Llm } from "../llm/types.js";
 import { loadRecording } from "../recorder/store.js";
 import type { Recording } from "../recorder/types.js";
-import { SITES, type SiteFacade, sitesFor } from "../sites/index.js";
+import { type SiteFacade, sitesFor } from "../sites/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import type { Jobs } from "../ui/jobs.js";
 import { type CompiledCatalog, compiledCatalog } from "../workflows/compiled.js";
@@ -253,30 +253,12 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
       })
     : undefined;
   const recordingsDir = expandHome(settings.recordingsDir);
-  const abilities = async (): Promise<Ability[]> =>
-    abilitiesOf({
-      ...(app.sites ? { sites: { apis: SITES, rows: await app.sites.list() } } : {}),
-      workflows: (await app.catalog.list()).map((c) => c.workflow),
-      flows: Object.keys(BROWSER_FLOWS),
-    });
-  const verb = doer({
+  const verb = doerFor({
     llm: o.llm,
-    abilities,
-    sites: async () => SITE_LOGINS.map((l) => l.site),
-    callSite: (site, method, path, input) => {
-      if (!app.sites) throw new Error("no site apis here");
-      return app.sites.call(site, method, path, input);
-    },
-    runWorkflow: async (name, plan) => {
-      const found = await app.catalog.get(name);
-      if (!found) throw new Error(`no compiled workflow named ${name}`);
-      return runCompiled(found.workflow, app.browser, { plan, sink: app.sink });
-    },
-    runFlow: (name, input) => {
-      const flow = BROWSER_FLOWS[name];
-      if (!flow) throw new Error(`no flow named ${name}`);
-      return app.browser.run(flow as never, input);
-    },
+    catalog: app.catalog,
+    browser: app.browser,
+    sink: app.sink,
+    ...(app.sites ? { sites: app.sites } : {}),
     ...(agent ? { agent } : {}),
     compile: async (name) => ({
       workflow: (await compileRecording(await loadRecording(recordingsDir, name), o.llm)).outline
@@ -289,7 +271,7 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
     prove,
     sites: app.sites,
     do: verb,
-    abilities,
+    abilities: verb.abilities,
     screen: app.screen,
     accounts: accountsOf({ store: app.credentials, logins: SITE_LOGINS, runner: app.browser }),
     ...(agent

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { defineFlow } from "../src/browser/flow.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
-import { abilitiesOf, doer } from "../src/do/index.js";
+import { abilitiesOf, doer, doerFor } from "../src/do/index.js";
 import { accessTokens, SITES, sitesFor, youtube } from "../src/sites/index.js";
 import { fakeBrowser } from "./fakes.js";
 
@@ -127,5 +127,58 @@ describe("use as a library", () => {
     expect(out.status).toBe("done");
     expect(out.output).toEqual({ url: "https://w.example" });
     expect(ran).toEqual(['deploy-worker {"dir":"./dist"}']);
+  });
+
+  it("the verb from parts: a narrowed world of flows and logins, no site facade", async () => {
+    const ran: string[] = [];
+    const browser = fakeBrowser(ran);
+    const ping = defineFlow<{ n: number }, string>({
+      site: "example",
+      name: "ping",
+      async run(_fp, i) {
+        return `pong ${i.n}`;
+      },
+    });
+    browser.on(ping, async (i) => {
+      ran.push(`ping ${i.n}`);
+      return `pong ${i.n}`;
+    });
+    const verb = doerFor({
+      llm: null,
+      catalog: { list: async () => [], get: async () => null, proofs: async () => ({}) },
+      browser,
+      sink: memorySink(),
+      flows: { "example/ping": ping as never },
+      logins: [],
+    });
+    const list = await verb.abilities();
+    expect(list.map((a) => `${a.kind} ${a.name}`)).toEqual(["flow example/ping"]);
+    const out = await verb.do({ goal: "example/ping", inputs: { n: "1" } });
+    expect(out).toMatchObject({ via: "flow", status: "done" });
+    expect(out.output).toBe("pong 1");
+    expect(ran).toEqual(["ping 1"]);
+  });
+});
+
+describe("one login on a page the caller drives", () => {
+  it("signInContext answers codes and provider credentials from the caller's stores", async () => {
+    const { signInContext, LoginFailed } = await import("../src/auth/login.js");
+    const { memoryCredentials } = await import("../src/auth/credentials.js");
+    const { noCodes } = await import("../src/auth/codes.js");
+    const { fakePage } = await import("./auth-fakes.js");
+    const { fp } = fakePage({ text: [""], present: () => false });
+    const credentials = memoryCredentials({
+      github: { username: "w", password: "p", via: "google" },
+      google: { username: "w@x.co", password: "g" },
+      "google@ops": { username: "ops@x.co", password: "o" },
+    });
+    const cred = (await credentials.get("github")) as never;
+    const ctx = signInContext({ fp, site: "github", cred, credentials, codes: noCodes });
+    expect(ctx.offers("totp")).toBe(false);
+    await expect(ctx.code("totp")).rejects.toBeInstanceOf(LoginFailed);
+    expect((await ctx.credFor("google")).username).toBe("w@x.co");
+    expect((await ctx.credFor("google", "ops@x.co")).username).toBe("ops@x.co");
+    await expect(ctx.credFor("google", "nobody@x.co")).rejects.toThrow(/google@<label>/);
+    expect(ctx.as(await ctx.credFor("google")).cred.username).toBe("w@x.co");
   });
 });

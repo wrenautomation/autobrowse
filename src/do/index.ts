@@ -21,3 +21,4 @@ export {
 } from "./doer.js";
 export { type Pick as AbilityPick, pickAbility } from "./pick.js";
 export { DO_SERVICE, doService } from "./service.js";
+export { type DoerParts, doerFor, type Verb } from "./wire.js";

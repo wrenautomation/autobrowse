@@ -46,7 +46,9 @@ export {
   passwordOf,
   resolveLogin,
   type SignInContext,
+  type SignInParts,
   type SiteLogin,
+  signInContext,
   signInToGoogle,
   viaLogin,
 } from "./login.js";
