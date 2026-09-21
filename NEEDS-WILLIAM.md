@@ -9,6 +9,9 @@ pnpm autobrowse needs done <id> --note …   # a decision or a by-hand step you 
 pnpm autobrowse accounts          # which of your accounts is for what, and how ready each is
 ```
 
+The UI has the same: **Needs** (done button, a note) and **Accounts**
+("Which account for what" at the top).
+
 Rows clear themselves when the thing is in hand (a credential stored, an
 env name set, a token kept). This file only keeps the words the rows cannot
 carry. Dated 2026-09-22.

@@ -26,6 +26,7 @@ walkthrough/demos/02-unsubscribe.sh    # the inbox's mailing lists (list only)
 walkthrough/demos/03-explore.sh        # map a page by aria tree, journal two acts, save + compile, try it
 walkthrough/demos/04-do-dry.sh         # how `do` routes three goals, running nothing
 walkthrough/demos/05-ledger.sh         # where secrets went and what the gate decided
+walkthrough/demos/06-needs.sh          # which account is for what; every open need with its command
 ```
 
 Each demo prints what it did; `03-explore.sh` ends with the compiled flow
