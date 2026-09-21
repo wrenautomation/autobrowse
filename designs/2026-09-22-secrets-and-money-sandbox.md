@@ -83,5 +83,6 @@ opposite. There, the model holds the keys and runs shell it wrote. Here:
 1. Amount from the page when the button has none: the order total nearest
    the button, so more purchases fall under the auto line.
 2. Virtual cards (4) once the vendor is chosen.
-3. `creds audit` on the box: the ledger lives on its disk; ship it to the
-   channel daily or read it over `sites`.
+3. ✅ The box sends its ledger summary (`src/auth/ledger.ts`) over the channel right
+   before its idle stop, and serves `GET /api/ledger?since=`. Still local-only:
+   `creds audit`/`spend` read the disk they run on.

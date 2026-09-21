@@ -44,7 +44,12 @@ describe("idle tracker", () => {
 });
 
 describe("idle stop", () => {
-  function arm(o: { minutes?: number; stop: () => Promise<boolean>; alsoBusy?: () => boolean }) {
+  function arm(o: {
+    minutes?: number;
+    stop: () => Promise<boolean>;
+    alsoBusy?: () => boolean;
+    beforeStop?: () => Promise<void>;
+  }) {
     let t = 0;
     const idle = idleTracker(() => t);
     let tick: () => void = () => undefined;
@@ -53,6 +58,7 @@ describe("idle stop", () => {
       minutes: o.minutes ?? 10,
       stop: o.stop,
       ...(o.alsoBusy ? { alsoBusy: o.alsoBusy } : {}),
+      ...(o.beforeStop ? { beforeStop: o.beforeStop } : {}),
       log: silent,
       setInterval: ((fn: () => void) => {
         tick = fn;
@@ -68,6 +74,23 @@ describe("idle stop", () => {
       },
     };
   }
+
+  it("runs the before-stop hook first, and stops even when it fails", async () => {
+    const order: string[] = [];
+    const s = arm({
+      minutes: 1,
+      beforeStop: async () => {
+        order.push("summary");
+        throw new Error("channel down");
+      },
+      stop: async () => {
+        order.push("stop");
+        return true;
+      },
+    });
+    await s.at(61_000);
+    expect(order).toEqual(["summary", "stop"]);
+  });
 
   it("stops once the idle span passes, never while held or otherwise busy", async () => {
     let stops = 0;

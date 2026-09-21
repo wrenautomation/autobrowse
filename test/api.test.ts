@@ -185,6 +185,22 @@ describe("api", () => {
     expect((await (await app.request("/api/status")).json()).budget.usedToday).toBe(50);
   });
 
+  it("serves both ledgers since a time, 501 without one", async () => {
+    const asked: string[] = [];
+    const { app } = await setup(undefined, {
+      ledger: async (since: Date) => {
+        asked.push(since.toISOString());
+        return { since: since.toISOString(), secrets: [], spend: [] };
+      },
+    });
+    const res = await app.request("/api/ledger?since=2026-09-22T09:00:00Z");
+    expect(res.status).toBe(200);
+    expect(asked).toEqual(["2026-09-22T09:00:00.000Z"]);
+    expect((await app.request("/api/ledger?since=yesterday")).status).toBe(400);
+    const bare = await setup();
+    expect((await bare.app.request("/api/ledger")).status).toBe(501);
+  });
+
   it("lists live workflows with proofs, and proves a compiled one on request", async () => {
     const proof = { at: "2026-09-20T05:00:00Z", status: "done", steps: [], output: null };
     const proved: string[] = [];

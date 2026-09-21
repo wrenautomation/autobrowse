@@ -16,6 +16,7 @@ import { statusOf } from "./status.js";
 const root = loadEnvFile();
 const settings = loadSettings();
 const log = pino({ level: settings.logLevel });
+const bootedAt = new Date();
 const sentry = settings.sentryDsn
   ? initSentry({ dsn: settings.sentryDsn, environment: settings.sentryEnvironment })
   : null;
@@ -163,6 +164,15 @@ if (settings.idleStopMinutes > 0) {
       ec2: ec2Port(new EC2Client({ region: settings.awsRegion })),
       instanceId: async () => settings.instanceId ?? (await instanceIdFromMetadata()),
     }),
+    // What this session did with secrets and money, to the person, before the lights go out.
+    beforeStop: async () => {
+      const { ledgerSince, ledgerSummary } = await import("../auth/ledger.js");
+      const { auditFor, spendLedgerFor } = await import("./services.js");
+      const lines = ledgerSummary(
+        await ledgerSince(auditFor(settings), spendLedgerFor(settings), bootedAt),
+      );
+      if (lines.length) await app.channel.note?.(lines.join("\n"));
+    },
     log,
   });
   log.info({ minutes: settings.idleStopMinutes }, "idle stop armed");

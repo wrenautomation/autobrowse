@@ -170,6 +170,11 @@ Browserbase takes them.
   over the ceiling before anyone is asked; a button with no amount is
   always a question. Every decision is a line in
   `~/.config/autobrowse/spend.jsonl`; `pnpm autobrowse spend` reads it.
+- **The ledger comes to you.** Both files live on the box's disk, so when
+  the box stops itself for idleness it first sends the session's summary
+  over the channel (secret uses with every refusal, every gate decision
+  with its amount; nothing when nothing happened). `GET /api/ledger?since=`
+  serves the same window to the UI/CLI.
 - **Desktop.** The same session takes `{"cmd":"os","act":{…}}`: apps,
   the front app's controls as a tree (`tree`, like `aria`), `click` by role
   and name, `type`, `key` ("cmd+shift+4", "return"), `shot`, and `shell`

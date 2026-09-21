@@ -156,6 +156,15 @@ export function api(deps: ApiDeps): Hono {
     ),
   );
 
+  /** Both ledgers since `?since=<iso>` (default: the last 24 h): secret uses and gate decisions, never a value. */
+  app.get("/api/ledger", async (c) => {
+    if (!deps.ledger) return c.json({ error: "no ledger here" }, 501);
+    const raw = c.req.query("since");
+    const since = raw ? new Date(raw) : new Date(Date.now() - 24 * 60 * 60 * 1000);
+    if (Number.isNaN(since.getTime())) return c.json({ error: "since must be an ISO time" }, 400);
+    return c.json(await deps.ledger(since));
+  });
+
   /** The live settings: one resource, read and replaced as a whole. Today: `headless`. */
   app.get("/api/settings", (c) => c.json(settingsView(deps)));
   app.put("/api/settings", async (c) => {

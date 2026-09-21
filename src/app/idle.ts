@@ -58,6 +58,8 @@ export interface IdleStopOptions {
   alsoBusy?: () => boolean | Promise<boolean>;
   /** Stop the machine. `false` = declined (a person started it); try again after another idle span. */
   stop: () => Promise<boolean>;
+  /** Runs right before a stop (the ledger summary to the channel); its failure never blocks the stop. */
+  beforeStop?: () => Promise<void>;
   log: Logger;
   /** Check period, ms. */
   every?: number;
@@ -74,6 +76,10 @@ export function scheduleIdleStop(o: IdleStopOptions): () => void {
     stopping = true;
     try {
       if ((await o.alsoBusy?.()) || o.idle.busy()) return;
+      if (o.beforeStop)
+        await o
+          .beforeStop()
+          .catch((err: Error) => o.log.warn({ err: err.message }, "before-stop hook failed"));
       const done = await o.stop();
       o.log.info(
         { idleMinutes: Math.round(o.idle.idleFor() / 60_000) },

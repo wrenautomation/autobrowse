@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { type HealOutcome, healFailure } from "../agent/heal.js";
 import { type AgentSessions, agentSessions } from "../agent/sessions.js";
 import { type Accounts, accountsOf } from "../auth/accounts.js";
+import { type LedgerWindow, ledgerSince } from "../auth/ledger.js";
 import { SITE_LOGINS } from "../auth/sites.js";
 import { type FlowRunner, flowRunner } from "../browser/flow.js";
 import type { FailureRecord } from "../browser/session.js";
@@ -50,6 +51,7 @@ import {
   loginFor,
   paceFor,
   sinkFor,
+  spendLedgerFor,
   WORKFLOWS,
 } from "./services.js";
 import type { Status } from "./status.js";
@@ -93,6 +95,8 @@ export interface Backend {
   do: Doer;
   /** What `do` can pick from right now. */
   abilities(): Promise<Ability[]>;
+  /** Where secrets went and what the payment gate decided since a time (never a value). */
+  ledger?(since: Date): Promise<LedgerWindow>;
 }
 
 /** The port allows a value or a loader for these; every face reads them the same way. */
@@ -299,6 +303,7 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
     artifactsDir: expandHome(settings.artifactsDir),
     ...(o.llm ? { llm: o.llm, budget: () => budgetOf(o.llm) } : {}),
     ...(o.status ? { status: o.status } : {}),
+    ledger: (since) => ledgerSince(auditFor(settings), spendLedgerFor(settings), since),
   };
 }
 
