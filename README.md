@@ -157,6 +157,16 @@ Browserbase takes them.
 - **Domain** (`designs/2026-09-19-domain-flow.md`): check → buy → zone →
   Workspace → verify → mail DNS → DKIM → inboxes → signatures → warmup →
   roster → loops. Gated at the purchase; hands off at logins/consent.
+- **Hand-written legs** (`src/browser/flows/`, callable as the Restate
+  `browser` service's `flow`): `cloudflare/buy`, `google-admin/dkim-*`,
+  `google-admin/workspace-logo`, `instantly/warmup`, `google/oauth-consent`,
+  `linkedin/oauth-consent`, `google/youtube-community-post`.
+- **Compiled from recordings** (`src/workflows/`): `bootstrap` (mints the
+  first Cloudflare token), `google-cloud-project`, `google-cloud-oauth-client`,
+  `anthropic-console-api-key`, `workspace-skip-passwords`, `google-name`.
+- **Logins** (`src/auth/sites.ts`): cloudflare, google, google-admin,
+  instantly, aws, anthropic, twilio, sentry, linkedin; providers google,
+  github, microsoft behind any "Continue with …" button.
 
 ## Run
 
