@@ -314,17 +314,28 @@ async function serve(
    * process the caller waits.
    */
   const approvals = opts.approve ? new PendingApprovals(opts.approve) : null;
+  const decide = async (key: string, what: string, url: string, wait: boolean) => {
+    if (!approvals) throw new PaymentGate(what, "no-approver");
+    await approvals.decide(key, { what, url, site: opts.site }, wait);
+  };
   const gate = async (act: "fill" | "select" | "click", t: Target, wait: boolean) => {
     const what = paymentGate(act, t.hints as Hints);
     if (!what) return;
     // A miss is a miss, not a question: the element must be there before anyone is asked.
     await find(t).first().waitFor({ state: "visible", timeout: 10_000 });
-    if (!approvals) throw new PaymentGate(what, "no-approver");
-    await approvals.decide(
-      `${act} ${JSON.stringify(t.hints)}`,
-      { what, url: page.url(), site: opts.site },
-      wait,
+    await decide(`${act} ${JSON.stringify(t.hints)}`, what, page.url(), wait);
+  };
+  /** A desktop click that spends (an App Store "Buy") waits for the person the same way; "url" is the app. */
+  const gateDesktop = async (a: DesktopOp, wait: boolean) => {
+    if (a.op !== "click") return;
+    const what = paymentGate("click", { name: a.name, ...(a.role ? { role: a.role } : {}) });
+    if (!what) return;
+    const app = a.app ?? (await desktop.apps())[0] ?? "desktop";
+    const there = (await desktop.tree(a.app)).some(
+      (n) => n.name === a.name && (!a.role || n.role === a.role),
     );
+    if (!there) throw new Error(`no ${a.role ?? "control"} "${a.name}" in ${app}`);
+    await decide(`os ${JSON.stringify(a)}`, `${what} in ${app}`, `app:${app}`, wait);
   };
   const journalAct = (t: Target, act: (target: LocatorHints) => Journaled) =>
     journal(act(toLocatorHints(t.hints)));
@@ -470,6 +481,7 @@ async function serve(
         return { ok: true };
       case "os": {
         const a = c.act;
+        await gateDesktop(a, wait);
         const result = await runDesktop(desktop, a, shotsDir, shotN++);
         // Looking (apps, tree, shot) is not journaled; acts are, with typed secrets hidden.
         if (a.op !== "apps" && a.op !== "tree" && a.op !== "shot") {

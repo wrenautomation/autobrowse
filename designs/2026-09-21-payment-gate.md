@@ -46,4 +46,4 @@ Money is a person's decision; the machine detects the surface and stops.
   through.
 - `type` (into the focused element) and `eval` bypass the gate by design
   of those commands; the skill and the agent prompt say not to.
-- No gate for desktop acts (an App Store purchase).
+- ✅ (2026-09-21) Desktop clicks go through the same gate: an `os` click whose name reads as spending (`PAYMENT_ACTION`) is asked as `press "Buy", which spends in <app>` once the control is in the tree; `type`, `key` and `shell` are not gated (as with the page's `type`/`eval`).

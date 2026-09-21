@@ -13,6 +13,7 @@ const sink = memorySink();
 const desktop = fakeDesktop([
   { role: "window", name: "General", value: null, enabled: true, depth: 0 },
   { role: "checkbox", name: "Remote Login", value: "0", enabled: true, depth: 1 },
+  { role: "button", name: "Buy", value: null, enabled: true, depth: 1 },
 ]);
 
 const PAGE = `data:text/html,${encodeURIComponent(
@@ -166,9 +167,19 @@ describe("explore mode", () => {
     await send({ cmd: "os", act: { op: "type", text: "hunter2hunter2", secret: true } });
     await send({ cmd: "os", act: { op: "shell", command: "true" } });
     expect(desktop.acts.map((a) => a.op)).toEqual(["click", "type", "shell"]);
+    // A desktop "Buy" is gated like the page's: asked, refused on a no, done on a yes.
+    const osBuy = { cmd: "os", act: { op: "click", role: "button", name: "Buy" } };
+    answer = false;
+    expect((await send(osBuy)).body).toMatchObject({ gate: "payment", reason: "asked" });
+    expect((await send(osBuy)).status).toBe(403);
+    expect(desktop.acts.length).toBe(3);
+    answer = true;
+    expect((await send(osBuy, true)).status).toBe(200);
+    expect(desktop.acts.at(-1)).toMatchObject({ op: "click", name: "Buy" });
+    expect(asks.at(-1)).toMatch(/^press "Buy", which spends in \w+$/);
 
     const saved = await send({ cmd: "save", name: "buy" });
-    expect(saved.body.actions).toBe(9); // the ordering test's open is journaled too
+    expect(saved.body.actions).toBe(10); // the ordering test's open is journaled too
     const rec = await loadRecording(join(dir, "recordings"), "buy");
     // (the page's own data: URL holds the fixture; the acts must not)
     expect(JSON.stringify(rec.actions.map(({ url: _u, ...a }) => a))).not.toContain(
@@ -181,6 +192,7 @@ describe("explore mode", () => {
       "input",
       "click",
       "keep",
+      "desktop",
       "desktop",
       "desktop",
       "desktop",
