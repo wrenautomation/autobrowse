@@ -69,8 +69,9 @@ late, after the 90 s code wait; a retry passes). Twilio's own number
 ## Wren accounts (`autobrowse signup <site>`)
 
 Instagram `wrenautomation` exists on william@wrenautomation.com (made
-2026-09-22, Business account, category Marketing Agency; credential sealed
-+ pushed). Nothing left on it until the Meta app (`keys-meta`).
+2026-09-22, Business account, category Marketing Agency, name + Wren mark
+set; credential sealed + pushed). Left for you: bio, link, phone. Nothing
+else until the Meta app (`keys-meta`).
 
 `signup x|tiktok --name "Wren Automation" --handle wrenautomation --headed`
 mints the password sealed first, fills the form placing
@@ -78,7 +79,10 @@ email/password/code/phone by name, and hands you the window at a check.
 X: email signup is refused and the phone dialog loops headless, so run it
 headed and pass the check yourself; then `needs do keys-x` (developer.x.com,
 OAuth 2.0 confidential, read+write, the redirect above). After each:
-`creds push <site>`; finished one by hand → `creds made <site>`.
+`creds push <site>`; finished one by hand → `creds made <site>`. Then the
+housekeeping (name "Wren Automation", photo `assets/brand/wren-pfp.png`)
+is one agent line (`walkthrough/07-accounts.md`); bios, links and stories
+are yours.
 
 ## This Mac (once)
 

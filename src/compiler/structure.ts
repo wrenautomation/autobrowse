@@ -126,6 +126,14 @@ export function structure(rec: Recording): Outline {
    */
   const add = (op: OutlineOp) => {
     const ops = open().ops;
+    // The same control clicked again right away is a retry (a menu that had not opened yet), not two clicks.
+    const last = ops.at(-1);
+    if (
+      op.kind === "click" &&
+      last?.kind === "click" &&
+      JSON.stringify(last.hints) === JSON.stringify(op.hints)
+    )
+      return;
     if (op.kind === "fill" || op.kind === "select") {
       const same = JSON.stringify(op.hints);
       const i = ops.findIndex(
@@ -361,6 +369,7 @@ export function structure(rec: Recording): Outline {
     if (s.kind === "browser" && s.url)
       for (const m of s.url.matchAll(/\{([a-z][a-zA-Z0-9]*)\}/g)) used.add(m[1] as string);
     for (const op of s.ops) {
+      if ("file" in op && op.file.from === "plan") used.add(op.file.field);
       if (!("value" in op) || typeof op.value !== "object") continue;
       if (op.value.from === "secret") used.add(op.value.key);
       if (op.value.from === "plan") used.add(op.value.field);

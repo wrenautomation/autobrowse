@@ -1,0 +1,58 @@
+{
+  "name": "instagram-profile-basics",
+  "site": "instagram",
+  "description": "Upload a new profile photo on Instagram by opening the photo-change dialog and selecting an image file to set as the account's profile picture.",
+  "fields": [
+    {
+      "key": "profilePhotoFile",
+      "label": "Change photo",
+      "example": "/Users/williamjin/Documents/wren_automation/autobrowse/assets/brand/wren-pfp.png"
+    }
+  ],
+  "secrets": [],
+  "steps": [
+    {
+      "kind": "browser",
+      "name": "upload-profile-photo",
+      "description": "Click 'Change photo' on the Instagram profile edit page and upload the specified image file as the new profile picture.",
+      "irreversible": true,
+      "proof": "GET https://graph.instagram.com/me?fields=profile_picture_url (Instagram Graph API) to confirm the profile picture URL reflects the newly uploaded image.",
+      "url": "https://www.instagram.com/accounts/edit/",
+      "ops": [
+        {
+          "kind": "click",
+          "goal": "click Change photo",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Change photo",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "upload",
+          "goal": "upload to Change photo",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Change photo",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "file": {
+            "from": "plan",
+            "field": "profilePhotoFile"
+          }
+        }
+      ]
+    }
+  ]
+}

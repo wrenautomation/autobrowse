@@ -123,6 +123,24 @@ describe("structure fields", () => {
     expect(o.fields.map((f) => f.key)).toEqual(["fullName", "fullName2"]);
   });
 
+  it("a control clicked again right away is one click; an upload keeps its plan field", () => {
+    const button = { ...input("Change photo"), tag: "button", role: "button" };
+    const rec = {
+      ...base,
+      name: "r",
+      actions: [
+        { t: 0, kind: "navigate", url: "https://example.com/" },
+        at(1, "click", button, {}),
+        at(2, "click", button, {}),
+        at(3, "upload", button, { files: ["/tmp/pfp.png"] }),
+      ],
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: fixture
+    const o = structure(rec as any);
+    expect(o.steps[0].ops.map((op) => op.kind)).toEqual(["click", "upload"]);
+    expect(o.fields.map((f) => f.key)).toEqual(["changePhoto"]);
+  });
+
   it("keeps only the last fill of a control within a step and prunes the fields it dropped", () => {
     const rec = {
       ...base,

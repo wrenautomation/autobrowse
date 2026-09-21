@@ -98,6 +98,14 @@ pnpm autobrowse creds address instagram william@wrenautomation.com   # the store
 `--codes <inbox>` gives any agent run one secret, `code`, read from an
 inbox this system reads; nothing else is placed.
 
+Housekeeping on a new account (name, profile photo; no bio, no links —
+that is copy, William's): the Wren mark lives at `assets/brand/wren-pfp.png`.
+
+```sh
+pnpm autobrowse agent instagram 'Set the profile photo to input pfp and the name to "Wren Automation"; touch nothing else' --url https://www.instagram.com/accounts/edit/ --input pfp=$PWD/assets/brand/wren-pfp.png
+pnpm autobrowse run instagram-profile-basics --plan "{\"profilePhotoFile\":\"$PWD/assets/brand/wren-pfp.png\"}"   # the compiled one
+```
+
 When the run ends with `achieved` the credential is stamped `madeAt` and
 `needs` drops the `signup-<site>` row. Finished it by hand after a
 handoff? `pnpm autobrowse creds made <site>` stamps it. Then
