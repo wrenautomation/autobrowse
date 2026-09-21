@@ -3,6 +3,9 @@
  * (which runs one) and `compiled` (which lists them) both import it
  * without importing each other.
  */
+import { boundRunner, type SecretAudit, trackingSecrets } from "../auth/guard.js";
+import { siteAllowsHost } from "../auth/login.js";
+import { SITE_LOGINS } from "../auth/sites.js";
 import type { FlowRunner } from "../browser/flow.js";
 import { envSecrets, type SecretSource } from "../deps/secrets.js";
 import { localShell, type Shell } from "../deps/shell.js";
@@ -23,13 +26,31 @@ export interface CompiledDeps {
   sink: SecretSink;
 }
 
+/**
+ * The deps with the browser bound: a secret a step fetched through
+ * `secrets` is typed only on the flow's own site (its login origins, or a
+ * host carrying its word), and every such fill is audited under the flow's
+ * name. The binding is here, not in the renderer, so every compiled
+ * workflow gets it whatever it was rendered from.
+ */
 export function compiledDeps(
   browser: FlowRunner,
-  o: { secrets?: SecretSource; shell?: Shell; desktop?: Desktop; sink?: SecretSink } = {},
+  o: {
+    secrets?: SecretSource;
+    shell?: Shell;
+    desktop?: Desktop;
+    sink?: SecretSink;
+    audit?: SecretAudit;
+  } = {},
 ): CompiledDeps {
+  const secrets = trackingSecrets(o.secrets ?? envSecrets());
   return {
-    browser,
-    secrets: o.secrets ?? envSecrets(),
+    browser: boundRunner(browser, {
+      secrets,
+      allow: (site, host) => siteAllowsHost(SITE_LOGINS, site, host),
+      audit: o.audit,
+    }),
+    secrets,
     shell: o.shell ?? localShell(),
     sink: o.sink ?? envFileSink(".env"),
     desktop: o.desktop ?? (process.platform === "darwin" ? macDesktop() : noDesktop()),

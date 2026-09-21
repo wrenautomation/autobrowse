@@ -12,7 +12,7 @@ import type { Hints } from "../browser/locate.js";
 import { wallOf } from "../browser/session.js";
 import type { CodeKind, CodeSource } from "./codes.js";
 import type { Credential, CredentialStore } from "./credentials.js";
-import { guardedPage, registrable, type SecretAudit } from "./guard.js";
+import { guardedPage, hostUnder, registrable, type SecretAudit } from "./guard.js";
 import { type IdentityProvider, type Provider, providerOf, registerProvider } from "./providers.js";
 
 export interface SignInContext {
@@ -561,6 +561,22 @@ export function resolveLogin(sites: readonly SiteLogin[], name: string): SiteLog
   const base = sites.find((s) => s.site === (at < 0 ? name : name.slice(0, at)));
   if (!base) return null;
   return at < 0 ? base : { ...base, site: name, credential: name };
+}
+
+/**
+ * May a secret a compiled workflow of `site` fetched be typed on `host`?
+ * A known site: its login origins. Any site: a host whose registrable
+ * name IS the site's word (`instantly` → app.instantly.ai, never
+ * instantly-help.evil.example). Never a host that is neither.
+ */
+export function siteAllowsHost(sites: readonly SiteLogin[], site: string, host: string): boolean {
+  const word = (site.split("@")[0] ?? site).toLowerCase();
+  const h = host.toLowerCase();
+  if (word && registrable(h).split(".")[0] === word) return true;
+  const login = sites.find((s) => (s.credential ?? s.site) === word) ?? resolveLogin(sites, site);
+  if (!login) return false;
+  const origins = [registrable(new URL(login.home).host), ...(login.origins ?? [])];
+  return origins.some((d) => hostUnder(h, d));
 }
 
 /** The credential a site name signs in with. */

@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { noCodes } from "../src/auth/codes.js";
 import { memoryCredentials } from "../src/auth/credentials.js";
-import { guardedPage, memoryAudit, registrable, SecretLeak } from "../src/auth/guard.js";
-import { passwordDomains, SITE_LOGINS, signInContext } from "../src/auth/index.js";
+import {
+  boundRunner,
+  guardedPage,
+  memoryAudit,
+  registrable,
+  SecretLeak,
+  trackingSecrets,
+} from "../src/auth/guard.js";
+import { passwordDomains, SITE_LOGINS, signInContext, siteAllowsHost } from "../src/auth/index.js";
+import { defineFlow, type FlowRunner } from "../src/browser/flow.js";
+import { memorySecrets } from "../src/deps/secrets.js";
 import { fakePage } from "./auth-fakes.js";
 
 const cred = { username: "u", password: "hunter2!", recoveryCodes: [], passkeys: [] };
@@ -96,5 +105,49 @@ describe("passwords bound to their origins", () => {
       "google@cloudflare true",
       "google@cloudflare false",
     ]);
+  });
+
+  it("a compiled run's secrets go only to the flow's site, under the flow's name", async () => {
+    const audit = memoryAudit();
+    let url = "https://app.instantly.ai/settings/api";
+    const { fp, acts } = fakePage({ text: [""], present: () => true, url: () => url });
+    const secrets = trackingSecrets(memorySecrets({ apiKey: "sk-live-1234" }));
+    const runner: FlowRunner = { run: (flow, input) => flow.run(fp, input) };
+    const bound = boundRunner(runner, {
+      secrets,
+      allow: (site, host) => siteAllowsHost(SITE_LOGINS, site, host),
+      audit,
+    });
+    const flow = defineFlow<{ apiKey: string }, void>({
+      site: "instantly",
+      name: "set-key",
+      async run(page, input) {
+        await page.act({ kind: "fill", value: "will" }, { role: "textbox" }, { goal: "name" });
+        await page.act({ kind: "fill", value: input.apiKey }, { role: "textbox" }, { goal: "key" });
+      },
+    });
+    const apiKey = await secrets.get("apiKey");
+    await bound.run(flow, { apiKey });
+    expect(acts.length).toBe(2);
+    url = "https://instantly-help.evil.example/";
+    await expect(bound.run(flow, { apiKey })).rejects.toThrow(/apiKey's value is not typed on/);
+    expect(acts.length).toBe(3);
+    expect(audit.uses.map((u) => `${u.credential} ${u.field} ${u.by} ${u.allowed}`)).toEqual([
+      "apiKey secret instantly/set-key true",
+      "apiKey secret instantly/set-key false",
+    ]);
+    expect(JSON.stringify(audit.uses)).not.toContain("sk-live");
+  });
+
+  it("siteAllowsHost: the site's word, its login origins, nothing else", () => {
+    expect(siteAllowsHost(SITE_LOGINS, "instantly", "app.instantly.ai")).toBe(true);
+    expect(siteAllowsHost(SITE_LOGINS, "google", "accounts.google.com")).toBe(true);
+    expect(siteAllowsHost(SITE_LOGINS, "microsoft", "login.microsoftonline.com")).toBe(true);
+    expect(siteAllowsHost(SITE_LOGINS, "x", "api.x.com")).toBe(true);
+    expect(siteAllowsHost(SITE_LOGINS, "x@wren", "twitter.com")).toBe(true);
+    expect(siteAllowsHost(SITE_LOGINS, "google", "google-login.evil.example")).toBe(false);
+    expect(siteAllowsHost(SITE_LOGINS, "instantly", "instantly.evil.example")).toBe(false);
+    expect(siteAllowsHost(SITE_LOGINS, "cloudflare", "accounts.google.com")).toBe(false);
+    expect(siteAllowsHost(SITE_LOGINS, "nobody", "example.com")).toBe(false);
   });
 });

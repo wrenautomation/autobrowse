@@ -12,6 +12,7 @@ import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as restate from "@restatedev/restate-sdk";
+import type { SecretAudit } from "../auth/guard.js";
 import type { FlowRunner } from "../browser/flow.js";
 import type { SecretSink } from "../deps/sink.js";
 import { type HostDeps, makeRunObjectFrom, type RunObjectDefinition } from "../engine/object.js";
@@ -108,6 +109,8 @@ export function makeCompiledRunObject(o: {
   opts?: AdvanceOptions;
   /** The worker's secret sink (.env or SSM) for `keep` ops. */
   sink?: SecretSink;
+  /** Where every secret fill is recorded (see auth/guard). */
+  audit?: SecretAudit;
 }): RunObjectDefinition<AnyWorkflow> {
   return makeRunObjectFrom(
     COMPILED_OBJECT.name,
@@ -120,7 +123,10 @@ export function makeCompiledRunObject(o: {
         });
       return {
         workflow: found.workflow,
-        deps: compiledDeps(o.browser, o.sink ? { sink: o.sink } : {}),
+        deps: compiledDeps(o.browser, {
+          ...(o.sink ? { sink: o.sink } : {}),
+          ...(o.audit ? { audit: o.audit } : {}),
+        }),
         ref,
       };
     },

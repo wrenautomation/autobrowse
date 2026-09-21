@@ -20,6 +20,17 @@ opposite. There, the model holds the keys and runs shell it wrote. Here:
 
 ## Decisions
 
+1a. **Compiled runs are bound too** (2026-09-22). `compiledDeps` wraps the
+   worker's `secrets` in `trackingSecrets` (remembers every value it hands
+   out, by key) and the browser in `boundRunner`: a `fill` whose value came
+   from `secrets` is checked against `siteAllowsHost(flow.site, host)` —
+   the flow's site as a registrable name (`instantly` → `app.instantly.ai`,
+   never `instantly-help.evil.example`) or its login origins — refused
+   with `SecretLeak` otherwise, and audited under `<site>/<flow>` as
+   `field: "secret"`. The renderer did not change: whatever a workflow was
+   compiled from, its secrets are bound at run time. `boundPage` is the one
+   primitive; `guardedPage` (sign-in) is now built on it.
+
 1. **Origin binding** (`src/auth/guard.ts`, done). A password only types on
    a host under its site's domains: the site's `home` registrable domain,
    `SiteLogin.origins` (google → `google.com`; microsoft → `live.com`,
@@ -61,9 +72,7 @@ opposite. There, the model holds the keys and runs shell it wrote. Here:
 
 1. Amount from the page when the button has none: the order total nearest
    the button, so more purchases fall under the auto line.
-2. Bind the compiled runs too: `flowRunner` fills through `guardedPage`
-   for every `{from:"secret"}` op, not only sign-in.
-3. Canaries (6): one fake credential in the store, an alert in the ledger.
-4. Virtual cards (4) once the vendor is chosen.
-5. `creds audit` on the box: the ledger lives on its disk; ship it to the
+2. Canaries (6): one fake credential in the store, an alert in the ledger.
+3. Virtual cards (4) once the vendor is chosen.
+4. `creds audit` on the box: the ledger lives on its disk; ship it to the
    channel daily or read it over `sites`.

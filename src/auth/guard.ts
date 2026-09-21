@@ -7,7 +7,8 @@
  */
 import { appendFile, chmod, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { FlowPage, Op } from "../browser/flow.js";
+import type { BrowserFlow, FlowPage, FlowRunner } from "../browser/flow.js";
+import type { SecretSource } from "../deps/secrets.js";
 import type { Credential } from "./credentials.js";
 
 export interface SecretUse {
@@ -72,8 +73,9 @@ export class SecretLeak extends Error {
   constructor(
     readonly credential: string,
     readonly host: string,
+    what = "password",
   ) {
-    super(`${credential}'s password is not typed on ${host}: not one of its origins`);
+    super(`${credential}'s ${what} is not typed on ${host}: not one of its origins`);
     this.name = "SecretLeak";
   }
 }
@@ -113,49 +115,142 @@ export interface GuardOptions {
   fallback?: string;
 }
 
+/** A typed value that is a secret: which one, and which field of it. */
+export interface SecretMatch {
+  credential: string;
+  field: SecretUse["field"];
+}
+
+export interface BindOptions {
+  /** The secret a fill's value is, or null for an ordinary value. */
+  secretOf: (value: string) => SecretMatch | null;
+  /** May this secret be typed on this host? */
+  allow: (host: string, match: SecretMatch) => boolean;
+  site: string;
+  by: string;
+  audit?: SecretAudit | undefined;
+}
+
+const hostOf = (url: string): string => {
+  try {
+    return new URL(url).host;
+  } catch {
+    return "";
+  }
+};
+
 /**
- * The page with the credential's password bound to its origins: a `fill`
- * whose value is the password (or the previous one) on any other host is
- * refused with `SecretLeak` before anything is typed, and every such fill
- * is recorded. Other acts pass through untouched.
+ * The page with secrets bound to hosts: a `fill` whose value is a secret is
+ * checked against the page's host before anything is typed, recorded
+ * either way, and refused with `SecretLeak` when the host is not allowed.
+ * Other acts pass through untouched.
+ */
+export function boundPage(fp: FlowPage, b: BindOptions): FlowPage {
+  return {
+    ...fp,
+    async act(op, hints, opts) {
+      const match = op.kind === "fill" ? b.secretOf(op.value) : null;
+      if (match) {
+        const url = fp.url();
+        const host = hostOf(url);
+        const allowed = b.allow(host, match);
+        await b.audit?.record({
+          at: new Date().toISOString(),
+          credential: match.credential,
+          field: match.field,
+          site: b.site,
+          url: urlWithoutQuery(url),
+          by: b.by,
+          allowed,
+        });
+        if (!allowed)
+          throw new SecretLeak(
+            match.credential,
+            host || "(no page)",
+            match.field === "secret" ? "value" : "password",
+          );
+      }
+      return fp.act(op, hints, opts);
+    },
+  };
+}
+
+/**
+ * The page with the credential's password bound to its origins: the
+ * password (or the previous one) is typed only on `domains`, or, with
+ * none known, on a host carrying the site's word.
  */
 export function guardedPage(fp: FlowPage, g: GuardOptions): FlowPage {
   const secrets: [SecretUse["field"], string | undefined][] = [
     ["password", g.cred.password],
     ["previousPassword", g.cred.previousPassword],
   ];
-  const fieldOf = (op: Op): SecretUse["field"] | null => {
-    if (op.kind !== "fill") return null;
-    return secrets.find(([, v]) => v && v === op.value)?.[0] ?? null;
-  };
+  return boundPage(fp, {
+    secretOf: (value) => {
+      const field = secrets.find(([, v]) => v && v === value)?.[0];
+      return field ? { credential: g.name, field } : null;
+    },
+    allow: (host) =>
+      g.domains.length
+        ? g.domains.some((d) => hostUnder(host, d))
+        : Boolean(g.fallback && host.toLowerCase().includes(g.fallback.toLowerCase())),
+    site: g.site,
+    by: g.by,
+    audit: g.audit,
+  });
+}
+
+/** A secret source that remembers what it handed out, so a page can tell a secret's value from any other. */
+export interface TrackingSecrets extends SecretSource {
+  /** The key a value was handed out under, or null. */
+  keyOf(value: string): string | null;
+}
+
+export function trackingSecrets(source: SecretSource): TrackingSecrets {
+  const keys = new Map<string, string>();
   return {
-    ...fp,
-    async act(op, hints, opts) {
-      const field = fieldOf(op);
-      if (field) {
-        const url = fp.url();
-        const host = (() => {
-          try {
-            return new URL(url).host;
-          } catch {
-            return "";
-          }
-        })();
-        const allowed = g.domains.length
-          ? g.domains.some((d) => hostUnder(host, d))
-          : Boolean(g.fallback && host.toLowerCase().includes(g.fallback.toLowerCase()));
-        await g.audit?.record({
-          at: new Date().toISOString(),
-          credential: g.name,
-          field,
-          site: g.site,
-          url: urlWithoutQuery(url),
-          by: g.by,
-          allowed,
-        });
-        if (!allowed) throw new SecretLeak(g.name, host || "(no page)");
-      }
-      return fp.act(op, hints, opts);
+    async get(key) {
+      const value = await source.get(key);
+      keys.set(value, key);
+      return value;
+    },
+    keyOf: (value) => keys.get(value) ?? null,
+  };
+}
+
+export interface BoundRunnerOptions {
+  secrets: TrackingSecrets;
+  /** May a secret be typed on this host while running a flow of `site`? */
+  allow: (site: string, host: string) => boolean;
+  audit?: SecretAudit | undefined;
+}
+
+/**
+ * A runner whose flows see a bound page: any secret a compiled workflow
+ * fetched from `secrets` is typed only where `allow(site, host)` says,
+ * and every such fill is a line in the audit ledger under the flow's name.
+ */
+export function boundRunner(runner: FlowRunner, o: BoundRunnerOptions): FlowRunner {
+  return {
+    run<I, O>(flow: BrowserFlow<I, O>, input: I): Promise<O> {
+      const bound: BrowserFlow<I, O> = {
+        ...flow,
+        run: (fp, i) =>
+          flow.run(
+            boundPage(fp, {
+              secretOf: (value) => {
+                const key = o.secrets.keyOf(value);
+                return key ? { credential: key, field: "secret" } : null;
+              },
+              allow: (host) => o.allow(flow.site, host),
+              site: flow.site,
+              by: `${flow.site}/${flow.name}`,
+              audit: o.audit,
+            }),
+            i,
+          ),
+      };
+      return runner.run(bound, input);
     },
   };
 }

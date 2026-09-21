@@ -152,9 +152,10 @@ Browserbase takes them.
   a host under its site's domains (`src/auth/guard.ts`): the site's home,
   its `origins`, the credential's own URL. Any other host — a redirect, a
   look-alike, a model told to paste it elsewhere — throws `SecretLeak`
-  before a keystroke. Every use, allowed or refused, is one line in
-  `~/.config/autobrowse/audit.jsonl` (never the value); `pnpm autobrowse
-  creds audit --last 50` reads it.
+  before a keystroke. A compiled workflow's secrets (`deps.secrets`) are
+  bound the same way to the flow's own site at run time. Every use,
+  allowed or refused, is one line in `~/.config/autobrowse/audit.jsonl`
+  (never the value); `pnpm autobrowse creds audit --last 50` reads it.
 - **Payment gate.** A billing field or a button that spends (`src/gates/`)
   is never the session's own call: the act waits on a yes from the person
   over a channel they answer on (phone, Linq, email), and is refused

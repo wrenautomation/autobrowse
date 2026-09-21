@@ -31,6 +31,8 @@ export {
 export { enrollTotpFlow, readSecretFromPage, storeSeed } from "./enroll.js";
 export { signInToGithub } from "./github.js";
 export {
+  boundPage,
+  boundRunner,
   fileAudit,
   guardedPage,
   hostUnder,
@@ -39,6 +41,7 @@ export {
   type SecretAudit,
   SecretLeak,
   type SecretUse,
+  trackingSecrets,
 } from "./guard.js";
 export { ingest, parseCredentialLines, takeClipboard, takeFile } from "./ingest.js";
 export type { PasskeySetupSpec, PasswordChangeSpec } from "./login.js";
@@ -61,6 +64,7 @@ export {
   type SiteLogin,
   signInContext,
   signInToGoogle,
+  siteAllowsHost,
   viaLogin,
 } from "./login.js";
 export { signInToMicrosoft } from "./microsoft.js";

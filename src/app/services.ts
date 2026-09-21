@@ -653,7 +653,14 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       makeRunObject(domainWorkflow, domainDeps, host, { guards }),
       makeRunObject(bootstrapWorkflow, bootstrapDeps, host, { guards }),
       // Every compiled flow, present and future, runs under this one object.
-      makeCompiledRunObject({ catalog, browser, host, opts: { guards }, sink }),
+      makeCompiledRunObject({
+        catalog,
+        browser,
+        host,
+        opts: { guards },
+        sink,
+        audit: auditFor(settings),
+      }),
     ],
     channel,
     workflows: async () => [...WORKFLOWS, ...(await compiledNow()).map((c) => c.workflow)],
