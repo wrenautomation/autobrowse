@@ -10,7 +10,7 @@ import type { OpenGate, RunStatusView } from "../src/engine/object.js";
 import { type ListQuery, pageOf, type RunRow } from "../src/engine/registry.js";
 import { saveRecording } from "../src/recorder/store.js";
 import { SiteError, type SiteFacade } from "../src/sites/index.js";
-import { api } from "../src/ui/api.js";
+import { api, findRow } from "../src/ui/api.js";
 import { eventBus } from "../src/ui/bus.js";
 import { domainWorkflow } from "../src/workflows/domain/index.js";
 
@@ -359,6 +359,21 @@ describe("api", () => {
     );
     expect(bad.status).toBe(400);
     expect(screen.headless).toBe(false);
+  });
+
+  it("finds a waiting run under pages of newer ones", async () => {
+    const row = (i: number, status = "done") =>
+      ({
+        workflow: "domain",
+        key: `k${i}`,
+        status,
+        updatedAt: new Date(1e12 - i * 1000).toISOString(),
+      }) as RunRow;
+    const all = [...Array(250)].map((_, i) => row(i, i === 230 ? "waiting" : "done"));
+    const registry = { list: async (q: ListQuery) => pageOf(all, q) };
+    expect((await findRow(registry, (r) => r.status === "waiting"))?.key).toBe("k230");
+    expect(await findRow(registry, (r) => r.key === "nope")).toBeUndefined();
+    expect(await findRow(registry, (r) => r.key === "k230", 2)).toBeUndefined();
   });
 
   it("touches on writes, never on reads", async () => {

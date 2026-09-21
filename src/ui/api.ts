@@ -30,6 +30,7 @@ import { outlineSchema } from "../compiler/index.js";
 import type { GateName } from "../engine/effects.js";
 import type { RunEvent } from "../engine/events.js";
 import type { RunRow } from "../engine/registry.js";
+import { LIST_LIMIT, type ListQuery } from "../engine/rows.js";
 import { commandSchema } from "../explore/server.js";
 import { listRecordings, loadRecording, recordingDir } from "../recorder/store.js";
 import { summarizeRecording } from "../recorder/types.js";
@@ -100,6 +101,24 @@ function serveUnder(root: string, file: string): Response | null {
       "cache-control": "private, max-age=3600",
     },
   });
+}
+
+/** The newest row matching, paging back through the registry: a run waiting for days sits under newer ones. */
+export async function findRow(
+  registry: { list(q: ListQuery): PromiseLike<RunRow[]> },
+  match: (r: RunRow) => boolean,
+  maxPages = 10,
+): Promise<RunRow | undefined> {
+  let before: string | undefined;
+  for (let i = 0; i < maxPages; i++) {
+    const rows = await registry.list(before ? { before } : {});
+    const hit = rows.find(match);
+    if (hit) return hit;
+    const last = rows.at(-1);
+    if (rows.length < LIST_LIMIT || !last) return undefined;
+    before = last.updatedAt;
+  }
+  return undefined;
 }
 
 export function api(deps: ApiDeps): Hono {
@@ -496,12 +515,12 @@ export function api(deps: ApiDeps): Hono {
   async function inbound(text: string): Promise<string> {
     const cmd = parseCommand(text, { workflows: (await workflows()).map((w) => w.name) });
     if (!cmd) return "say yes, no, pause, play, status or reset, optionally with <workflow> <key>";
-    const rows = await deps.ingress.registry().list({});
+    const registry = deps.ingress.registry();
     const target: RunRow | undefined = cmd.run
-      ? rows.find((r) => r.workflow === cmd.run?.workflow && r.key === cmd.run?.key)
+      ? await findRow(registry, (r) => r.workflow === cmd.run?.workflow && r.key === cmd.run?.key)
       : cmd.kind === "approve" || cmd.kind === "reject"
-        ? rows.find((r) => r.status === "waiting")
-        : rows[0];
+        ? await findRow(registry, (r) => r.status === "waiting")
+        : (await registry.list({ limit: 1 }))[0];
     if (!target) return cmd.run ? `no run ${cmd.run.workflow}/${cmd.run.key}` : "no run is waiting";
     const run = runOf(target.workflow, target.key);
     const id = `${target.workflow}/${target.key}`;
