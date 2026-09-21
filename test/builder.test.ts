@@ -18,6 +18,7 @@ function fakeAgent(script: Partial<SessionView>) {
   const calls: string[] = [];
   let view: SessionView | null = null;
   const agent: AgentSessions = {
+    async flush() {},
     async start(req) {
       calls.push(`start ${req.site}: ${req.goal}`);
       view = {

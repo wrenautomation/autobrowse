@@ -7,7 +7,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExploreCommand, Explorer } from "../explore/server.js";
 import type { Llm } from "../llm/types.js";
@@ -82,6 +82,8 @@ export interface AgentSessions {
    */
   exec(id: string, command: ExploreCommand): Promise<unknown>;
   close(id: string): Promise<SessionView>;
+  /** Resolves once every pending disk write has landed (shutdown, tests). */
+  flush(): Promise<void>;
 }
 
 export interface SessionsOptions {
@@ -118,7 +120,7 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
   // The disk copy is a convenience; the live view is the truth. Writes go
   // off the loop, one at a time per session, and a burst of steps lands as
   // the newest view once rather than a queue of stale ones.
-  const writing = new Map<string, { again: boolean }>();
+  const writing = new Map<string, { again: boolean; done: Promise<void> }>();
   const persist = (view: SessionView) => {
     if (!o.dir) return;
     const dir = o.dir;
@@ -127,14 +129,17 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
       w.again = true;
       return;
     }
-    const entry = { again: false };
+    const entry = { again: false, done: Promise.resolve() };
     writing.set(view.id, entry);
-    void (async () => {
+    entry.done = (async () => {
       do {
         entry.again = false;
         try {
           await mkdir(dir, { recursive: true });
-          await writeFile(join(dir, `${view.id}.json`), JSON.stringify(view, null, 2));
+          // Written whole then renamed: a reader never sees half a view.
+          const path = join(dir, `${view.id}.json`);
+          await writeFile(`${path}.tmp`, JSON.stringify(view, null, 2));
+          await rename(`${path}.tmp`, path);
         } catch {
           // see above
         }
@@ -183,6 +188,9 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
   };
 
   return {
+    async flush() {
+      while (writing.size > 0) await Promise.all([...writing.values()].map((w) => w.done));
+    },
     async start(req) {
       const id = randomBytes(6).toString("hex");
       const view: SessionView = {

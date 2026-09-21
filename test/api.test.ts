@@ -548,6 +548,7 @@ describe("api: agent sessions", () => {
     const views = new Map<string, SessionView>();
     const calls: string[] = [];
     const agent: AgentSessions = {
+      async flush() {},
       async start(req) {
         const v: SessionView = {
           id: "abc",

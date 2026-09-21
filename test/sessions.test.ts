@@ -132,11 +132,13 @@ describe("agentSessions", () => {
     const first = agentSessions({ llm, open: async () => fakeExplorer().ex, basePort: 9650, dir });
     const v = await first.start({ site: "a", goal: "persisted" });
     for (let i = 0; i < 20 && first.get(v.id)?.status !== "done"; i++) await tick();
+    await first.flush();
     expect(readdirSync(dir)).toEqual([`${v.id}.json`]);
     // A second session dies mid-run (no done reply scripted): it is "running" on disk.
     const stuck = agentSessions({ llm: fakeLlm([]), open: async () => fakeExplorer().ex, dir });
     const w = await stuck.start({ site: "b", goal: "interrupted" }).catch(() => null);
     await tick();
+    await stuck.flush();
     const again = agentSessions({ llm, open: async () => fakeExplorer().ex, dir });
     const views = again.list();
     expect(views.find((x) => x.id === v.id)).toMatchObject({ status: "done", goal: "persisted" });
