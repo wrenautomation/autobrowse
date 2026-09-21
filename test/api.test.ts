@@ -89,6 +89,7 @@ async function setup(token?: string, extra: Partial<Parameters<typeof api>[0]> =
     workflows: [domainWorkflow],
     ingress,
     bus,
+    screen: { headless: true },
     recordingsDir,
     artifactsDir: join(dir, "art"),
     compile: async (rec) => ({
@@ -330,6 +331,34 @@ describe("api", () => {
     });
     expect(await r.json()).toEqual({ ignored: "not the operator" });
     expect(sent).toHaveLength(1);
+  });
+
+  it("reads and replaces the live settings; status shows the screen as it is now", async () => {
+    const screen = { headless: true };
+    const { app } = await setup(undefined, {
+      screen,
+      status: { llm: "fake", browser: { tier: "local", headless: true }, workflows: [] } as never,
+    });
+    expect(await (await app.request("/api/settings")).json()).toEqual({ headless: true });
+    const put = await app.request(
+      new Request("http://x/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ headless: false }),
+      }),
+    );
+    expect(await put.json()).toEqual({ headless: false });
+    expect(screen.headless).toBe(false);
+    expect((await (await app.request("/api/status")).json()).browser.headless).toBe(false);
+    const bad = await app.request(
+      new Request("http://x/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ headless: "yes" }),
+      }),
+    );
+    expect(bad.status).toBe(400);
+    expect(screen.headless).toBe(false);
   });
 
   it("touches on writes, never on reads", async () => {

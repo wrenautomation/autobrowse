@@ -23,6 +23,7 @@ import {
 } from "../auth/index.js";
 import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
 import type { Settings } from "./config.js";
+import { headed } from "./screen.js";
 import { browserOptions, credentialsFor, devicesFor, gmailFor, loginFor } from "./services.js";
 
 const SITES = SITE_LOGINS.map((s) => s.site);
@@ -116,12 +117,9 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .option("--headed", "show the browser")
     .action(async (site: string, o: { headed?: boolean }) => {
       const login = loginNamed(site);
-      const runner = flowRunner(
-        browserOptions(settings, o.headed ? false : settings.browserHeadless),
-        {
-          login: loginFor(settings, gmailFor(settings)),
-        },
-      );
+      const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
+        login: loginFor(settings, gmailFor(settings)),
+      });
       console.log(await runner.run(rotatePasswordFlow(login, credentialsFor(settings)), undefined));
     });
   creds
@@ -162,7 +160,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .option("--headed", "show the browser")
     .action(async (site: string, o: { headed?: boolean }) => {
       const login = await loginOrVia(settings, site);
-      const opts = browserOptions(settings, o.headed ? false : settings.browserHeadless);
+      const opts = browserOptions(settings, o.headed ? headed : undefined);
       const credName = login.credential ?? site;
       const cred = await credentialsFor(settings).get(credName);
       if (!cred && !o.headed)
@@ -192,12 +190,9 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .option("--headed", "show the browser")
     .action(async (file: string, o: { headed?: boolean }) => {
       const { googleWorkspaceLogo } = await import("../browser/flows/google-workspace-logo.js");
-      const runner = flowRunner(
-        browserOptions(settings, o.headed ? false : settings.browserHeadless),
-        {
-          login: loginFor(settings, gmailFor(settings)),
-        },
-      );
+      const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
+        login: loginFor(settings, gmailFor(settings)),
+      });
       console.log(await runner.run(googleWorkspaceLogo, { file: resolve(file) }));
     });
 
@@ -209,12 +204,9 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .option("--headed", "show the browser")
     .action(async (site: string, o: { headed?: boolean }) => {
       const login = loginNamed(site);
-      const runner = flowRunner(
-        browserOptions(settings, o.headed ? false : settings.browserHeadless),
-        {
-          login: loginFor(settings, gmailFor(settings)),
-        },
-      );
+      const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
+        login: loginFor(settings, gmailFor(settings)),
+      });
       console.log(await runner.run(enrollPasskeyFlow(login, credentialsFor(settings)), undefined));
     });
 
@@ -227,12 +219,9 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .option("--headed", "show the browser")
     .action(async (site: string, o: { url?: string; headed?: boolean }) => {
       const login = resolveLogin(SITE_LOGINS, site) ?? { site };
-      const runner = flowRunner(
-        browserOptions(settings, o.headed ? false : settings.browserHeadless),
-        {
-          login: loginFor(settings, gmailFor(settings)),
-        },
-      );
+      const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
+        login: loginFor(settings, gmailFor(settings)),
+      });
       console.log(
         await runner.run(enrollTotpFlow(login, credentialsFor(settings), o.url), undefined),
       );

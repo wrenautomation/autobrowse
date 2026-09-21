@@ -79,6 +79,7 @@ import { type DomainDeps, domainWorkflow } from "../workflows/domain/index.js";
 import type { Proof } from "../workflows/proof.js";
 import type { Settings } from "./config.js";
 import { holding, type Idle, idleTracker } from "./idle.js";
+import { type Screen, screenOf } from "./screen.js";
 import type { DeviceLink } from "./setup.js";
 
 function required<T>(value: T | undefined, env: string): T {
@@ -104,10 +105,14 @@ function lazy<T extends object>(make: () => T): T {
 
 export function browserOptions(
   settings: Settings,
-  headless = settings.browserHeadless,
+  screen: Screen = screenOf(settings),
 ): BrowserOptions {
   const store = credentialsFor(settings);
   return {
+    // Read when a browser opens, so the switch applies to the next one.
+    get headless() {
+      return screen.headless;
+    },
     // The site's account's passkeys ride along in its session.
     passkeys: async (site) => {
       return (await store.get(credentialFor(SITE_LOGINS, site)))?.passkeys ?? [];
@@ -116,7 +121,6 @@ export function browserOptions(
     profilesDir: settings.profilesDir,
     channel: settings.browserChannel,
     artifactsDir: settings.artifactsDir,
-    headless,
     browserbase:
       settings.browserbaseApiKey && settings.browserbaseProjectId
         ? {
@@ -187,6 +191,8 @@ export interface App {
   sites: SiteFacade;
   /** Busy while a flow or site call runs; touched by every event. The idle stop reads it. */
   idle: Idle;
+  /** Headed or headless for every browser opened from now; the API flips it. */
+  screen: Screen;
   /** Set by the host once the agent exists: every failure record goes here (healing). */
   onFailure: ((record: FailureRecord, file: string) => void) | null;
 }
@@ -422,12 +428,13 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   const channel = channels([...list, bus, memoryChannel(memory)]);
   const idle = idleTracker();
   bus.subscribe(() => idle.touch());
+  const screen = screenOf(settings);
 
   const guards = parseGuards(settings.guards);
   const failures: { hook: App["onFailure"] } = { hook: null };
   const browser = holding(
     idle,
-    flowRunner(browserOptions(settings), {
+    flowRunner(browserOptions(settings, screen), {
       onFailure: (record, file) => failures.hook?.(record, file),
       pace: paceFor(settings),
       repairer: rememberingRepairer(memory, llm ? llmRepairer(llm) : noRepairer),
@@ -548,6 +555,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     sink,
     sites,
     idle,
+    screen,
     get onFailure() {
       return failures.hook;
     },

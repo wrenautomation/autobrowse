@@ -14,11 +14,13 @@ import type { RunStatusView } from "../../src/engine/object.js";
 import type { ListQuery, RunRow } from "../../src/engine/registry.js";
 import type { Recording, RecordingSummary } from "../../src/recorder/types.js";
 import type { SiteRow } from "../../src/sites/facade.js";
+import type { LiveSettings } from "../../src/ui/api.js";
 import type { JobView } from "../../src/ui/jobs.js";
 
 export type {
   Compiled,
   JobView,
+  LiveSettings,
   Proposal,
   Recording,
   RecordingSummary,
@@ -105,6 +107,10 @@ async function finish<T>(job: JobView): Promise<T> {
 
 export const api = {
   status: () => call<Status | null>("/api/status"),
+  /** The live settings (headed/headless for the next browser); `put` replaces them. */
+  settings: () => call<LiveSettings>("/api/settings"),
+  putSettings: (s: LiveSettings) =>
+    call<LiveSettings>("/api/settings", { method: "PUT", body: JSON.stringify(s) }),
   sites: () => call<SiteRow[]>("/api/sites"),
   site: (site: string) => call<SiteRow>(`/api/sites/${site}`),
   /** One official call through the facade; the answer is the API's own shape. */

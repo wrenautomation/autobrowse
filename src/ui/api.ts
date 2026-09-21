@@ -53,6 +53,11 @@ function siteError(c: Context, err: unknown) {
   throw err;
 }
 
+/** What a client may change while the worker runs; each applies to whatever opens next. */
+const liveSettings = z.object({ headless: z.boolean() });
+export type LiveSettings = z.infer<typeof liveSettings>;
+const settingsView = (deps: ApiDeps): LiveSettings => ({ headless: deps.screen.headless });
+
 const agentStart = z.object({
   site: z.string().regex(/^[a-z][a-z0-9-]*(@[a-z0-9][a-z0-9.@_-]*)?$/i),
   goal: z.string().min(1).max(2000),
@@ -116,18 +121,28 @@ export function api(deps: ApiDeps): Hono {
     deps.linq?.secret ? next() : bearerAuth(deps.token)(c, next),
   );
 
-  /** Fixed at boot except the workflow list (compiles) and the model spend (every call). */
+  /** Fixed at boot except the workflow list (compiles), the model spend (every call) and the screen. */
   app.get("/api/status", async (c) =>
     c.json(
       deps.status
         ? {
             ...deps.status,
+            browser: { ...deps.status.browser, headless: deps.screen.headless },
             workflows: (await workflows()).map((w) => w.name),
             ...(deps.budget ? { budget: deps.budget() } : {}),
           }
         : null,
     ),
   );
+
+  /** The live settings: one resource, read and replaced as a whole. Today: `headless`. */
+  app.get("/api/settings", (c) => c.json(settingsView(deps)));
+  app.put("/api/settings", async (c) => {
+    const parsed = liveSettings.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: parsed.error.message }, 400);
+    deps.screen.headless = parsed.data.headless;
+    return c.json(settingsView(deps));
+  });
 
   app.get("/api/workflows", async (c) => {
     const proven = await proofs();

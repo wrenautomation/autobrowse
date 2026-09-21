@@ -145,7 +145,12 @@ Browserbase takes them.
   dry run stops before the first irreversible step.
 - **Watched.** The worker serves a UI on `:9080`: runs, the open gate with
   its screenshot, controls, live events, recordings and compile.
-  `/hooks/inbound` takes what a person typed on any channel.
+  `/hooks/inbound` takes what a person typed on any channel. The header's
+  `headed`/`headless` button is the one live setting (`GET`/`PUT
+  /api/settings {headless}`): every browser opened from then on follows it;
+  `BROWSER_HEADLESS` is only its value at boot. `explore`, `agent`, `repair`
+  and `login` take `--headed` when you want to watch one; `record` is always
+  headed.
 
 ## Flows built
 

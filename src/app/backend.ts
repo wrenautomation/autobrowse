@@ -30,6 +30,7 @@ import type { Proof } from "../workflows/proof.js";
 import { proofLine, proveWorkflow, runCompiled, writeProof } from "../workflows/proof.js";
 import type { Ingress } from "./client.js";
 import type { Settings } from "./config.js";
+import { type Screen, screenOf } from "./screen.js";
 import {
   type App,
   approverFor,
@@ -77,6 +78,8 @@ export interface Backend {
   budget?(): Status["budget"];
   /** Sites served under their official API's shape, with their key/token setup. */
   sites?: SiteFacade;
+  /** The one live setting: headed or headless for the next browser. */
+  screen: Screen;
 }
 
 /** The port allows a value or a loader for these; every face reads them the same way. */
@@ -138,12 +141,13 @@ export function healer(
 export function explorerOpener(
   settings: Settings,
   sink: SecretSink = sinkFor(settings),
+  screen: Screen = screenOf(settings),
 ): (site: string, port: number, extra?: Pick<ExploreOptions, "tokenFile">) => Promise<Explorer> {
   const approver: Approver | null = approverFor(settings, gmailFor(settings));
   return (site, port, extra = {}) =>
     startExplore({
       site,
-      browser: browserOptions(settings, false),
+      browser: browserOptions(settings, screen),
       recordingsDir: expandHome(settings.recordingsDir),
       port,
       login: loginFor(settings, gmailFor(settings)),
@@ -158,9 +162,9 @@ export function explorerOpener(
 export function agentFor(
   settings: Settings,
   llm: Llm,
-  o: { sink?: SecretSink; notify?: (line: string) => Promise<void> } = {},
+  o: { sink?: SecretSink; notify?: (line: string) => Promise<void>; screen?: Screen } = {},
 ): AgentSessions {
-  const open = explorerOpener(settings, o.sink);
+  const open = explorerOpener(settings, o.sink, o.screen);
   return agentSessions({
     llm,
     dir: join(expandHome(settings.recordingsDir), ".sessions"),
@@ -172,7 +176,7 @@ export function agentFor(
 /** What a backend is composed from: the worker's `App` has all of it; the CLI makes a local set. */
 export type BackendParts = Pick<
   App,
-  "catalog" | "browser" | "sink" | "bus" | "workflows" | "proofs" | "sites"
+  "catalog" | "browser" | "sink" | "bus" | "workflows" | "proofs" | "sites" | "screen"
 >;
 
 /**
@@ -183,7 +187,8 @@ export type BackendParts = Pick<
 export function localParts(settings: Settings, o: { headless?: boolean } = {}): BackendParts {
   const catalog = compiledCatalog(COMPILED_DIR);
   const gmail = gmailFor(settings);
-  const browser = flowRunner(browserOptions(settings, o.headless ?? settings.browserHeadless), {
+  const screen = o.headless === undefined ? screenOf(settings) : { headless: o.headless };
+  const browser = flowRunner(browserOptions(settings, screen), {
     login: loginFor(settings, gmail),
     pace: paceFor(settings),
   });
@@ -192,6 +197,7 @@ export function localParts(settings: Settings, o: { headless?: boolean } = {}): 
     catalog,
     browser,
     sink,
+    screen,
     sites: sitesFor({ catalog, browser, sink, oauthPort: settings.oauthPort }),
     bus: eventBus(),
     workflows: async () => [...WORKFLOWS, ...(await catalog.list()).map((c) => c.workflow)],
@@ -219,13 +225,18 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
   const prove = (name: string, plan?: Record<string, unknown>) =>
     proveCompiled(app.catalog, app.browser, name, plan);
   const agent = o.llm
-    ? agentFor(settings, o.llm, { sink: app.sink, ...(o.notify ? { notify: o.notify } : {}) })
+    ? agentFor(settings, o.llm, {
+        sink: app.sink,
+        screen: app.screen,
+        ...(o.notify ? { notify: o.notify } : {}),
+      })
     : undefined;
   return {
     workflows: app.workflows,
     proofs: app.proofs,
     prove,
     sites: app.sites,
+    screen: app.screen,
     ...(agent
       ? { agent, heal: healer(agent, settings, o.proveAfterHeal === false ? undefined : prove) }
       : {}),

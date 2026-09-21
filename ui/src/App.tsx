@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
-import { getToken, type RunEvent, setToken } from "./api.js";
-import { href, useEvents, useRoute } from "./hooks.js";
+import { api, getToken, type RunEvent, setToken } from "./api.js";
+import { href, useEvents, useLoad, useRoute } from "./hooks.js";
 import { AgentPage, ExplorePage } from "./pages/Explore.js";
 import { RecordingPage, RecordingsPage } from "./pages/Recordings.js";
 import { RunPage } from "./pages/Run.js";
@@ -32,6 +32,7 @@ export function App() {
           {nav("status", "Status")}
         </nav>
         <span className="spacer" />
+        <ScreenToggle />
         <TokenBox />
       </header>
       <main>
@@ -61,6 +62,34 @@ export function App() {
 }
 
 /** The bearer, when the worker wants one. Stored per browser, sent as a header only. */
+/** Headed or headless for every browser the worker opens next: one click, no reload. */
+function ScreenToggle() {
+  const live = useLoad(() => api.settings(), []);
+  const [busy, setBusy] = useState(false);
+  const s = live.data;
+  if (!s) return null;
+  const flip = async () => {
+    setBusy(true);
+    try {
+      await api.putSettings({ headless: !s.headless });
+      live.reload();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      type="button"
+      className="mono"
+      onClick={flip}
+      disabled={busy}
+      title="Applies to the next browser that opens; one already open keeps its mode"
+    >
+      {s.headless ? "headless" : "headed"}
+    </button>
+  );
+}
+
 function TokenBox() {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(getToken());

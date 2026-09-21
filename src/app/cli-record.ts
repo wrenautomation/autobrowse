@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { Command } from "commander";
 import { explorerOpener, type LocalBackend } from "./backend.js";
 import type { Settings } from "./config.js";
+import { headed } from "./screen.js";
 import { browserOptions, COMPILED_DIR, llmFor } from "./services.js";
 
 export function registerRecordCommands(
@@ -10,7 +11,9 @@ export function registerRecordCommands(
   settings: Settings,
   local: LocalBackend,
 ): void {
-  const open = explorerOpener(settings);
+  /** Headless as the env says unless the person asks to watch. */
+  const opener = (o: { headed?: boolean }) =>
+    explorerOpener(settings, undefined, o.headed ? headed : undefined);
   program
     .command("explore <site>")
     .description(
@@ -18,10 +21,11 @@ export function registerRecordCommands(
     )
     .option("--url <url>", "start here")
     .option("--port <port>", "loopback port", "9090")
-    .action(async (site: string, o: { url?: string; port: string }) => {
+    .option("--headed", "show the browser (default: BROWSER_HEADLESS)")
+    .action(async (site: string, o: { url?: string; port: string; headed?: boolean }) => {
       const { tokenFileFor } = await import("../explore/server.js");
       const tokenFile = tokenFileFor(Number(o.port));
-      const ex = await open(site, Number(o.port), { tokenFile });
+      const ex = await opener(o)(site, Number(o.port), { tokenFile });
       // The token lives in an owner-only file, not in this output: logs get pasted, files do not.
       console.log(
         `exploring ${site} on http://127.0.0.1:${ex.port}\ntoken file ${tokenFile}\ncurl -s -X POST -H "Authorization: Bearer $(cat ${tokenFile})" http://127.0.0.1:${ex.port}/ -d '{"cmd":"aria"}'`,
@@ -41,7 +45,9 @@ export function registerRecordCommands(
       "Serve autobrowse as MCP tools over stdio for Claude Code: `claude mcp add autobrowse -- pnpm autobrowse mcp`",
     )
     .option("--port <port>", "first loopback port for sessions", "9300")
-    .action(async (o: { port: string }) => {
+    .option("--headed", "show the browser (default: BROWSER_HEADLESS)")
+    .action(async (o: { port: string; headed?: boolean }) => {
+      const open = opener(o);
       const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
       const { buildMcpServer } = await import("../mcp/server.js");
       const { version } = JSON.parse(
@@ -73,7 +79,7 @@ export function registerRecordCommands(
     .option("--terminal", "also record a shell session in this terminal after the browser closes")
     .action(async (name: string, o: { site: string; url?: string; terminal?: boolean }) => {
       const { recordChore } = await import("../recorder/index.js");
-      const opts = browserOptions(settings, false);
+      const opts = browserOptions(settings, headed); // a person records: they need to see it
       if (opts.tier !== "local") throw new Error("record needs BROWSER=local");
       const dir = await recordChore({
         name,
@@ -97,11 +103,19 @@ export function registerRecordCommands(
     .option("--save <name>", "recording name; default = from the goal")
     .option("--max-steps <n>", "step budget", "25")
     .option("--port <port>", "loopback port", "9090")
+    .option("--headed", "show the browser (default: BROWSER_HEADLESS)")
     .action(
       async (
         site: string,
         goal: string,
-        o: { url?: string; input?: string[]; save?: string; maxSteps: string; port: string },
+        o: {
+          url?: string;
+          input?: string[];
+          save?: string;
+          maxSteps: string;
+          port: string;
+          headed?: boolean;
+        },
       ) => {
         await runAgent(settings, {
           site,
@@ -111,6 +125,7 @@ export function registerRecordCommands(
           save: o.save ?? slug(goal),
           maxSteps: Number(o.maxSteps),
           port: Number(o.port),
+          headed: o.headed ?? false,
         });
       },
     );
@@ -123,11 +138,12 @@ export function registerRecordCommands(
     .option("--input <k=v...>", "named values the goal may use")
     .option("--max-steps <n>", "step budget", "25")
     .option("--port <port>", "loopback port", "9090")
+    .option("--headed", "show the browser (default: BROWSER_HEADLESS)")
     .action(
       async (
         failure: string,
         goal: string | undefined,
-        o: { input?: string[]; maxSteps: string; port: string },
+        o: { input?: string[]; maxSteps: string; port: string; headed?: boolean },
       ) => {
         const { readFailure, repairGoal, repairName } = await import("../agent/repair.js");
         const record = readFailure(failure);
@@ -140,6 +156,7 @@ export function registerRecordCommands(
           save: repairName(record),
           maxSteps: Number(o.maxSteps),
           port: Number(o.port),
+          headed: o.headed ?? false,
         });
       },
     );
@@ -197,6 +214,7 @@ interface AgentRun {
   save: string;
   maxSteps: number;
   port: number;
+  headed: boolean;
 }
 
 /** One agent session: explore server up, agent to the goal, journal saved as a recording. */
@@ -204,7 +222,11 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<void> {
   const { exploreWithAgent } = await import("../agent/explorer.js");
   const llm = llmFor(settings);
   if (!llm) throw new Error("the agent needs a model: set LLM_PROVIDER and its key");
-  const ex = await explorerOpener(settings)(r.site, r.port);
+  const ex = await explorerOpener(
+    settings,
+    undefined,
+    r.headed ? headed : undefined,
+  )(r.site, r.port);
   console.log(
     `agent on ${r.site}; pause/resume: curl -s -X POST -H "Authorization: Bearer ${ex.token}" http://127.0.0.1:${ex.port}/ -d '{"cmd":"pause"}'`,
   );
