@@ -118,7 +118,11 @@ describe("meta site", () => {
           body: String(init?.body ?? ""),
         });
         const body =
-          u.pathname === "/v23.0/111" ? { access_token: "page-token" } : { id: "9", ok: true };
+          u.pathname === "/v23.0/111"
+            ? { access_token: "page-token" }
+            : u.searchParams.get("fields") === "page"
+              ? { id: "9", page: { id: "111" } }
+              : { id: "9", ok: true };
         return new Response(JSON.stringify(body), {
           status: 200,
           headers: { "content-type": "application/json" },
@@ -199,6 +203,26 @@ describe("meta site", () => {
       ["POST", "/v23.0/111/feed", "Bearer page-token"],
     ]);
     expect(calls[0]?.url.searchParams.get("fields")).toBe("access_token");
+  });
+
+  it("makes an instant form with the Page token and reads its leads by finding the Page first", async () => {
+    const { sites, calls } = facade(null);
+    await sites.call("meta", "POST", "/111/leadgen_forms", {
+      name: "founders",
+      questions: [{ type: "EMAIL" }, { type: "FULL_NAME" }],
+      privacy_policy: { url: "https://wren.test/privacy" },
+    });
+    expect(calls.at(-1)?.url.pathname).toBe("/v23.0/111/leadgen_forms");
+    expect(calls.at(-1)?.auth).toBe("Bearer page-token");
+    expect(JSON.parse(calls.at(-1)?.body ?? "{}")).toMatchObject({ locale: "EN_US" });
+    calls.length = 0;
+    // The form's Page is looked up, then the Page's token, then the leads with it.
+    await sites.call("meta", "GET", "/9/leads", {});
+    expect(calls.map((c) => [c.url.pathname, c.auth])).toEqual([
+      ["/v23.0/9", "Bearer user-token"],
+      ["/v23.0/111", "Bearer user-token"],
+      ["/v23.0/9/leads", "Bearer page-token"],
+    ]);
   });
 
   it("exchanges the code for a long-lived token naming the client id", async () => {

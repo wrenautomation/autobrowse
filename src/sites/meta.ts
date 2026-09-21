@@ -150,6 +150,28 @@ const video = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
 });
+const leadForm = z.object({
+  pageId: id,
+  name: z.string().min(1),
+  /** Meta's question objects: `{type: "EMAIL"}`, `{type: "FULL_NAME"}`, `{type: "CUSTOM", key, label}` … */
+  questions: z.array(z.record(z.string(), z.unknown())).min(1),
+  privacy_policy: z.object({ url: z.string().url(), link_text: z.string().optional() }),
+  /** Where the thank-you button goes. */
+  follow_up_action_url: z.string().url().optional(),
+  thank_you_page: z.record(z.string(), z.unknown()).optional(),
+  context_card: z.record(z.string(), z.unknown()).optional(),
+  locale: z.string().default("EN_US"),
+});
+const leadForms = z.object({
+  pageId: id,
+  fields: z.string().default("id,name,status,leads_count,created_time"),
+  ...page,
+});
+const leads = z.object({
+  formId: id,
+  fields: z.string().default("id,created_time,ad_id,campaign_id,field_data"),
+  ...page,
+});
 const igContainer = z.object({
   igUserId: id,
   image_url: z.string().url().optional(),
@@ -234,6 +256,7 @@ export const metaOAuth: OAuthSpec = {
     "instagram_content_publish",
     "instagram_manage_insights",
     "read_insights",
+    "leads_retrieval",
   ],
   scopeSeparator: ",",
   clientId: "META_CLIENT_ID",
@@ -396,6 +419,37 @@ export const meta: SiteApi = {
       irreversible: true,
       api: async ({ pageId, ...body }, leg) =>
         post(await pageLeg(leg, pageId), `${pageId}/videos`, body),
+    }),
+    route({
+      method: "POST",
+      path: "/{pageId}/leadgen_forms",
+      summary:
+        "An instant form on the Page (questions + privacy policy); an ad's CTA points at its id",
+      request: leadForm,
+      api: async ({ pageId, ...body }, leg) =>
+        post(await pageLeg(leg, pageId), `${pageId}/leadgen_forms`, body),
+    }),
+    route({
+      method: "GET",
+      path: "/{pageId}/leadgen_forms",
+      summary: "The Page's instant forms with their lead counts",
+      request: leadForms,
+      api: async ({ pageId, ...q }, leg) =>
+        get(await pageLeg(leg, pageId), `${pageId}/leadgen_forms`, q),
+    }),
+    route({
+      method: "GET",
+      path: "/{formId}/leads",
+      summary:
+        "Leads a form collected (`field_data` = the answers); needs leads_retrieval + the Page token",
+      request: leads,
+      api: async ({ formId, ...q }, leg) => {
+        const form = (await get(leg, formId, { fields: "page" })) as { page?: { id?: string } };
+        const pageId = form.page?.id;
+        if (!pageId)
+          throw new HttpError("CALL", `${META_ORIGIN}/${formId}`, 404, "no page on form");
+        return get(await pageLeg(leg, pageId), `${formId}/leads`, q);
+      },
     }),
     route({
       method: "POST",
