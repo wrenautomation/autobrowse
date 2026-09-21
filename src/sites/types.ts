@@ -10,6 +10,7 @@
  */
 import type { z } from "zod";
 import type { HttpClient } from "../clients/http.js";
+import type { Amount } from "../gates/spend.js";
 
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -48,6 +49,12 @@ export interface SiteRoute<I = unknown, O = unknown> {
   browser?: BrowserLeg<I, O>;
   /** Publishes something: said in the route listing so an orchestrator gates it. */
   irreversible?: boolean;
+  /**
+   * Commits money: the facade asks the person (through the spend policy)
+   * before the API leg runs. `false` when this particular request does not
+   * (a paused campaign), `null` when it does but the amount is not on it.
+   */
+  spends?: (input: I) => Amount | null | false;
   summary: string;
 }
 
@@ -88,7 +95,13 @@ export interface OAuthSpec {
    * long one (Instagram: 60 days). GET `url` with `fields`, the client secret, and
    * the short token as `tokenParam`; what it answers is the access token kept.
    */
-  longLived?: { url: string; fields: Record<string, string>; tokenParam: string };
+  longLived?: {
+    url: string;
+    fields: Record<string, string>;
+    tokenParam: string;
+    /** The query name the client id goes as, when the exchange wants it too (Meta). */
+    clientIdParam?: string;
+  };
   /** Env name the refresh token is kept as; the access token is minted from it on demand. */
   refreshToken: string;
   /**

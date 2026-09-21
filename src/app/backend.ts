@@ -230,6 +230,7 @@ export function localParts(settings: Settings, o: { headless?: boolean } = {}): 
       sink,
       oauthPort: settings.oauthPort,
       credentials: credentialsFor(settings),
+      approve: approverFor(settings, gmailFor(settings)),
     }),
     credentials: credentialsFor(settings),
     bus: eventBus(),

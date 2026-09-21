@@ -637,6 +637,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       sink,
       oauthPort: settings.oauthPort,
       credentials: credentialsFor(settings),
+      approve: approverFor(settings, gmailFor(settings)),
     }),
   );
   const late: { doer: Doer | null } = { doer: null };

@@ -44,6 +44,7 @@ describe("setup", () => {
       "", // sentry skipped
       "", // linkedin skipped
       "", // instagram skipped
+      "", // facebook skipped
       "", // tiktok skipped
       "", // microsoft skipped
     ]);
@@ -58,6 +59,7 @@ describe("setup", () => {
       "sentry",
       "linkedin",
       "instagram",
+      "facebook",
       "tiktok",
       "microsoft",
     ]);
@@ -76,12 +78,13 @@ describe("setup", () => {
       sentry: { username: "-", password: "-", via: "google" },
       linkedin: { username: "w@x.com", password: "h" },
       instagram: { username: "wren", password: "i" },
+      facebook: { username: "w@x.com", password: "f" },
       tiktok: { username: "wren", password: "t" },
       microsoft: { username: "w@outlook.com", password: "m" },
     });
     const { io, asked, said } = scripted([]);
     await runSetup(io, store, SITE_LOGINS);
     expect(asked).toEqual([]);
-    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(12);
+    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(13);
   });
 });

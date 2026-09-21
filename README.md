@@ -364,9 +364,18 @@ flow otherwise (gated reads, community posts). The caller has one client.
 Sites: `linkedin`, `youtube`, `instagram` (Graph API, long-lived token),
 `tiktok` (Content Posting API; `client_key`), `outlook` (Microsoft Graph:
 mail and calendar, `/me/messages`, `/me/sendMail`, `/me/events`), `gmail`
-(`/gmail/v1/users/me/...`; proven 2026-09-22). Instagram, TikTok and Outlook
-are written from the public docs and unproven until a credential and a
-developer app exist.
+(`/gmail/v1/users/me/...`; proven 2026-09-22), `meta` (one Facebook Login
+app: Marketing API campaigns/ad sets/creatives/ads/insights under
+`/act_{id}/…`, Page posts/photos/videos with the Page's own token, Instagram
+publishing for the Page's professional account). Instagram, TikTok, Outlook
+and Meta are written from the public docs and unproven until a credential
+and a developer app exist.
+
+A route that can start spending (`spends`: a campaign, ad set or ad set to
+`ACTIVE`, a status update to it) goes through the same payment gate as a
+browser "Buy" button before the API leg runs: the spend policy, then the
+person, with the request's budget as the amount (`daily_budget: 2000` →
+20.00/day). No channel to ask on → refused.
 
 One site, any number of identities: `site setup gmail consent --account
 will@x.dev` runs the consent in the `google@<label>` profile whose credential

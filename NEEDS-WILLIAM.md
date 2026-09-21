@@ -107,12 +107,25 @@ you the window at a captcha. What each needs from you first:
   profile. Either your own profile makes a "Wren Automation" Page (one
   click, I can drive it headed), or a new profile is made for Wren
   (Meta may ask for ID). Say which.
+- **Meta app + ad account** (built 2026-09-22 as the `meta` site: ads,
+  Page posts, Instagram publishing, all one token). Needs, in order: (1)
+  `creds paste facebook` — the Facebook login that admins the Page and
+  the ad account (yours, or Wren's new profile); (2) a Business app on
+  developers.facebook.com with Facebook Login for Business, Marketing API
+  and Instagram products and redirect `http://127.0.0.1:9400/oauth/callback`
+  — `site setup meta developer-app` once `meta-developer-app` is recorded
+  (I can drive it headed with you), or make it by hand and `env set
+  META_CLIENT_ID` / `META_CLIENT_SECRET`; (3) an ad account with a payment
+  method on business.facebook.com — the card is yours to add (the gate
+  would stop me at it anyway); (4) `site setup meta consent`. Ads that go
+  ACTIVE ask you over the channel with the budget; `SPEND_*` in the env
+  store sets what may run without asking.
 - **X**: standalone signup with the inbox + phone; the X API (posting)
   needs a developer account + app at developer.x.com afterwards (Free tier
   posts; reads are paid).
 - After each account exists: `creds push <site>` so the box has it, then
-  the site API setup (`site setup <site> consent`). `facebook` and `x`
-  site APIs are the next build once the accounts exist.
+  the site API setup (`site setup <site> consent`). The `x` site API is
+  the next build; `meta` is built (above).
 
 ## Content channels (YouTube, LinkedIn, Instagram, TikTok; wren `designs/2026-09-21-content-channels.md`)
 

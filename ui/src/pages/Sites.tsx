@@ -52,6 +52,7 @@ function Site({ site: s, refresh }: { site: SiteRow; refresh: () => void }) {
                   {r.method} {r.path}
                 </code>
                 {r.irreversible ? <span className="pill failed"> irreversible</span> : null}
+                {r.spends ? <span className="pill failed"> spends</span> : null}
               </td>
               <td>
                 <span className={`pill ${r.via === "none" ? "waiting" : "done"}`}>{r.via}</span>

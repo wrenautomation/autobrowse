@@ -10,6 +10,7 @@ import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import { type HttpClient, httpClient } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
 import { BROWSER_FLOWS } from "../engine/browser-service.js";
+import type { Approver } from "../gates/payment.js";
 import type { CompiledCatalog } from "../workflows/compiled.js";
 import { runCompiled } from "../workflows/proof.js";
 import { type SiteFacade, siteFacade } from "./facade.js";
@@ -34,6 +35,8 @@ export interface SiteParts {
    * flow's own profile and its account chooser.
    */
   credentials?: CredentialStore;
+  /** Who answers for a route that commits money; absent: such calls are refused. */
+  approve?: Approver | null;
 }
 
 /** The `<site>@<label>` credential name whose username is `account`; the site's own when it matches. */
@@ -75,6 +78,7 @@ export function sitesFor(p: SiteParts): SiteFacade {
         runCompiled(workflow, p.browser, { plan, sink: p.sink, approve: true }),
     },
     oauthPort: p.oauthPort,
+    approve: p.approve ?? null,
     ...(p.credentials
       ? {
           profileFor: (site, account) => profileOf(p.credentials as CredentialStore, site, account),

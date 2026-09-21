@@ -11,8 +11,10 @@ import type { Approval, Approver } from "./payment.js";
 
 export interface Amount {
   value: number;
-  /** ISO code when known (`USD`), else the symbol as seen. */
+  /** ISO code when known (`USD`), else the symbol as seen; "" when the page did not say. */
   currency: string;
+  /** A recurring amount: `day`, `month`. */
+  per?: string;
 }
 
 const SYMBOLS: Record<string, string> = { $: "USD", "€": "EUR", "£": "GBP", "¥": "JPY" };
@@ -33,7 +35,8 @@ export function amountIn(text: string): Amount | null {
   return { value: Number((m[3] ?? "0").replace(/,/g, "")), currency: m[4] ?? "" };
 }
 
-export const amountLine = (a: Amount): string => `${a.value.toFixed(2)} ${a.currency}`;
+export const amountLine = (a: Amount): string =>
+  `${a.value.toFixed(2)}${a.currency ? ` ${a.currency}` : ""}${a.per ? `/${a.per}` : ""}`;
 
 export interface SpendPolicy {
   /** Sites the gate may answer yes for itself (never any other). */

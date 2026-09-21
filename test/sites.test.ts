@@ -92,6 +92,12 @@ describe("site facade", () => {
     expect(matchPath("/youtube/v3/{resource}", "/youtube/v3/videos")).toEqual({
       resource: "videos",
     });
+    // A fixed prefix around the param (Graph's ad accounts).
+    expect(matchPath("/act_{adAccountId}/campaigns", "/act_123/campaigns")).toEqual({
+      adAccountId: "123",
+    });
+    expect(matchPath("/act_{adAccountId}/campaigns", "/123/campaigns")).toBeNull();
+    expect(matchPath("/act_{adAccountId}/campaigns", "/act_/campaigns")).toBeNull();
   });
 
   it("answers through the API with a token, in the official shape", async () => {

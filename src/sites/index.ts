@@ -10,6 +10,7 @@ export {
 export { gmail, gmailOAuth } from "./gmail.js";
 export { instagram } from "./instagram.js";
 export { linkedin } from "./linkedin.js";
+export { meta, metaOAuth } from "./meta.js";
 export { accessTokens, accountEnv, runConsent } from "./oauth.js";
 export { outlook } from "./outlook.js";
 export { SITES_SERVICE, type SitesService, sitesService } from "./service.js";
@@ -21,10 +22,19 @@ export { youtube } from "./youtube.js";
 import { gmail } from "./gmail.js";
 import { instagram } from "./instagram.js";
 import { linkedin } from "./linkedin.js";
+import { meta } from "./meta.js";
 import { outlook } from "./outlook.js";
 import { tiktok } from "./tiktok.js";
 import type { SiteApi } from "./types.js";
 import { youtube } from "./youtube.js";
 
 /** Every site autobrowse serves under its official API's shape. */
-export const SITES: readonly SiteApi[] = [linkedin, youtube, instagram, tiktok, outlook, gmail];
+export const SITES: readonly SiteApi[] = [
+  linkedin,
+  youtube,
+  instagram,
+  tiktok,
+  outlook,
+  gmail,
+  meta,
+];

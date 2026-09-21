@@ -8,6 +8,7 @@ import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import type { HttpClient } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
+import type { Approver } from "../gates/payment.js";
 import type { Proof } from "../workflows/proof.js";
 import { accessTokens, accountEnv, runConsent } from "./oauth.js";
 import {
@@ -43,6 +44,12 @@ export interface SiteFacadeDeps {
    */
   profileFor?: (site: string, account: string) => Promise<string | null>;
   now?: () => number;
+  /**
+   * Who says yes to a route that commits money (the spend policy, then the
+   * person). Absent: every such call is refused, as the browser's gate is
+   * without a channel.
+   */
+  approve?: Approver | null;
 }
 
 export type CompiledRun = Pick<Proof, "status" | "steps" | "output">;
@@ -55,6 +62,8 @@ export interface RouteRow {
   via: "api" | "browser" | "none";
   missing?: string;
   irreversible: boolean;
+  /** Can commit money: gated on the person before the API leg. */
+  spends: boolean;
 }
 
 export interface SetupRow extends Pick<SetupStep, "name" | "makes" | "needs" | "summary"> {
@@ -98,9 +107,15 @@ export function matchPath(pattern: string, path: string): Record<string, string>
   for (let i = 0; i < p.length; i++) {
     const seg = p[i] as string;
     const got = a[i] as string;
-    if (seg.startsWith("{") && seg.endsWith("}"))
-      params[seg.slice(1, -1)] = decodeURIComponent(got);
-    else if (seg !== got) return null;
+    const m = /^([^{}]*)\{([^{}]+)\}([^{}]*)$/.exec(seg);
+    if (m) {
+      // `{urn}`, or a segment with a fixed prefix/suffix around it (`act_{adAccountId}`).
+      const [, before = "", name = "", after = ""] = m;
+      if (!got.startsWith(before) || !got.endsWith(after)) return null;
+      const inner = got.slice(before.length, got.length - after.length);
+      if (!inner) return null;
+      params[name] = decodeURIComponent(inner);
+    } else if (seg !== got) return null;
   }
   return params;
 }
@@ -179,6 +194,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       path: r.path,
       summary: r.summary,
       irreversible: r.irreversible ?? false,
+      spends: Boolean(r.spends),
     };
     if (r.api && hasToken(s)) return { ...base, via: "api" };
     if (r.browser) {
@@ -237,6 +253,22 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       if (!parsed.success)
         throw new SiteError(400, parsed.error.issues.map((i) => i.message).join("; "));
       const token = r.api ? await tokenFor(s, account) : null;
+      const amount = r.spends ? r.spends(parsed.data as never) : false;
+      if (amount !== false) {
+        const what = `${method} ${path} on ${name}, which spends`;
+        if (!deps.approve)
+          throw new SiteError(
+            403,
+            `${what}: no channel to ask on (set PHONE_NUMBER, LINQ_* or NOTIFY_TO)`,
+          );
+        const ok = await deps.approve({
+          what,
+          url: `${s.origin}${path}`,
+          site: name,
+          ...(amount ? { amount } : {}),
+        });
+        if (!ok) throw new SiteError(403, `${what}: refused`);
+      }
       if (r.api && token) return r.api(parsed.data as never, { token, http: deps.http });
       if (r.browser) {
         const run = await legOf(r.browser);

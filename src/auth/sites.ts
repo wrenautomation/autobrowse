@@ -6,6 +6,7 @@
  * live on 2026-09-21 (headless explore): github, microsoft (first page), linkedin.
  */
 
+import { FACEBOOK_LOGIN_URL, signInToFacebook } from "./facebook.js";
 import { INSTAGRAM_LOGIN_URL, signInToInstagram } from "./instagram.js";
 import { LINKEDIN_LOGIN_URL, signInToLinkedin } from "./linkedin.js";
 import {
@@ -397,6 +398,20 @@ const instagram: SiteLogin = {
   signInHere: { at: INSTAGRAM_LOGIN_URL, run: signInToInstagram },
 };
 
+/** Facebook: the person's account behind the Meta app (Pages, ad accounts). Unverified until a credential exists. */
+const facebook: SiteLogin = {
+  site: "facebook",
+  home: "https://www.facebook.com/",
+  origins: ["facebook.com", "meta.com", "fb.com"],
+  ask: "Your Facebook login (email, password, authenticator key if set)",
+  loggedIn: async (fp) => !FACEBOOK_LOGIN_URL.test(fp.url()),
+  signIn: async (ctx) => {
+    await ctx.fp.open("https://www.facebook.com/login/", { allowWall: true });
+    await signInToFacebook(ctx);
+  },
+  signInHere: { at: FACEBOOK_LOGIN_URL, run: signInToFacebook },
+};
+
 /** TikTok: the account's own login (email or username). Unverified until a credential exists. */
 const tiktok: SiteLogin = {
   site: "tiktok",
@@ -444,6 +459,7 @@ export const SITE_LOGINS: readonly SiteLogin[] = [
   sentry,
   linkedin,
   instagram,
+  facebook,
   tiktok,
   outlook,
 ];

@@ -11,6 +11,7 @@ import * as restate from "@restatedev/restate-sdk";
 import { z } from "zod";
 import { type BrowserFlow, FlowFailed, type FlowRunner } from "../browser/flow.js";
 import { cloudflareBuy } from "../browser/flows/cloudflare-buy.js";
+import { facebookOauthConsent } from "../browser/flows/facebook-oauth-consent.js";
 import { googleDkimGenerate, googleDkimStart } from "../browser/flows/google-dkim.js";
 import { googleWorkspaceLogo } from "../browser/flows/google-workspace-logo.js";
 import { instagramOauthConsent } from "../browser/flows/instagram-oauth-consent.js";
@@ -54,6 +55,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     googleOauthConsent,
     linkedinOauthConsent,
     instagramOauthConsent,
+    facebookOauthConsent,
     tiktokOauthConsent,
     outlookOauthConsent,
     youtubeCommunityPost,

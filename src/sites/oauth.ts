@@ -175,7 +175,12 @@ export async function runConsent(
     const long = await tokenCall(
       o.http,
       spec.longLived.url,
-      { ...spec.longLived.fields, client_secret: secret, [spec.longLived.tokenParam]: accessToken },
+      {
+        ...spec.longLived.fields,
+        ...(spec.longLived.clientIdParam ? { [spec.longLived.clientIdParam]: id } : {}),
+        client_secret: secret,
+        [spec.longLived.tokenParam]: accessToken,
+      },
       "GET",
     );
     accessToken = long.access_token as string;
