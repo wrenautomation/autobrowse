@@ -2,6 +2,12 @@
 
 **Goal:** `pnpm autobrowse` works on this Mac; the worker + UI run locally.
 
+## What is still owed
+
+`pnpm autobrowse needs` lists every login, key, consent, phone step, card
+and decision autobrowse is waiting on, each with its command; rows clear
+themselves once the thing is in hand. `needs do <id>` runs the ingestion.
+
 ## Install
 
 ```sh

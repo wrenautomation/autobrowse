@@ -7,8 +7,12 @@
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { Command } from "commander";
+import { SITE_LOGINS } from "../auth/sites.js";
+import { macDesktop } from "../desktop/mac.js";
+import { phoneStatus } from "../devices/phone.js";
 import type { GateName } from "../engine/effects.js";
 import { summarize } from "../engine/run.js";
+import { SITES } from "../sites/index.js";
 import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
 import { localBackend, proofsOf, workflowsOf } from "./backend.js";
 import { registerAccountsCommands } from "./cli-accounts.js";
@@ -17,12 +21,14 @@ import { registerDesktopCommands } from "./cli-desktop.js";
 import { registerDoCommands } from "./cli-do.js";
 import { registerEnvCommands } from "./cli-env.js";
 import { readJson } from "./cli-json.js";
+import { registerNeedsCommands } from "./cli-needs.js";
 import { registerRecordCommands } from "./cli-record.js";
 import { registerSiteCommands } from "./cli-site.js";
 import { registerUnsubscribe } from "./cli-unsubscribe.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
-import { credentialsFor, envStoreFor, identitiesFor, WORKFLOWS } from "./services.js";
+import { fileDone } from "./needs.js";
+import { credentialsFor, envStoreFor, identitiesFor, phoneFor, WORKFLOWS } from "./services.js";
 
 loadEnvFile();
 const settings = loadSettings();
@@ -204,6 +210,24 @@ registerSiteCommands(program, local);
 registerUnsubscribe(program, local);
 registerDoCommands(program, local);
 registerAuthCommands(program, settings);
+registerNeedsCommands(program, () => ({
+  context: async () => ({
+    sites: SITES,
+    logins: SITE_LOGINS,
+    identities: await identitiesFor(settings).list(),
+    credentials: credentialsFor(settings, { armed: false }),
+    env: (n) => process.env[n],
+    workspaceDomain: settings.googleWorkspaceDomain?.toLowerCase() ?? null,
+    phone: (() => {
+      const phone = phoneFor(settings);
+      return phone ? () => phoneStatus(phone.dbPath) : null;
+    })(),
+    desktop: process.platform === "darwin" ? () => macDesktop().permissions() : null,
+  }),
+  done: fileDone("~/.config/autobrowse/needs-done.json"),
+  credentials: () => credentialsFor(settings),
+  sites: () => local().backend.sites ?? null,
+}));
 registerAccountsCommands(program, () => ({
   identities: identitiesFor(settings),
   credentials: credentialsFor(settings, { armed: false }),
