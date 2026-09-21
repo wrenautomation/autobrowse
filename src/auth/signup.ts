@@ -5,6 +5,9 @@
  * model driving the signup never sees a value. Codes the site emails or
  * texts come from the same sources sign-in uses.
  */
+
+import { gmailOAuth } from "../sites/gmail.js";
+import { accountEnv } from "../sites/oauth.js";
 import type { CodeSource } from "./codes.js";
 import type { Credential, CredentialStore } from "./credentials.js";
 import { newPassword } from "./rotate.js";
@@ -65,6 +68,19 @@ export function signupHosts(site: string, url?: string | null): (host: string) =
   const own = url ? new URL(url).host.toLowerCase() : null;
   return (host) =>
     host.toLowerCase().includes(word) || (own !== null && host.toLowerCase() === own);
+}
+
+/**
+ * Whether codes sent to `inbox` can be read: it consented (`GMAIL_REFRESH_TOKEN__<IT>`)
+ * or it is in the Workspace the service account is delegated for.
+ */
+export function signupInbox(
+  inbox: string,
+  o: { env: (name: string) => string | undefined; workspaceDomain: string | null },
+): boolean {
+  if (o.env(accountEnv(gmailOAuth.refreshToken, inbox))) return true;
+  const domain = inbox.split("@")[1]?.toLowerCase();
+  return Boolean(o.workspaceDomain && domain === o.workspaceDomain.toLowerCase());
 }
 
 export interface NewAccount {

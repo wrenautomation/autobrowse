@@ -43,6 +43,12 @@ export interface SiteFacadeDeps {
    * when absent (the chooser then picks).
    */
   profileFor?: (site: string, account: string) => Promise<string | null>;
+  /**
+   * The account a call or setup step is for when the caller names none: the
+   * person's account for the site's (or step's) purpose at the provider the
+   * consent signs in with; null means the site's own token and profile.
+   */
+  accountFor?: (site: SiteApi, step?: SetupStep) => Promise<string | null>;
   now?: () => number;
   /**
    * Who says yes to a route that commits money (the spend policy, then the
@@ -258,7 +264,11 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       const parsed = r.request.safeParse({ ...query, ...input, ...params });
       if (!parsed.success)
         throw new SiteError(400, parsed.error.issues.map((i) => i.message).join("; "));
-      const token = r.api ? await tokenFor(s, account) : null;
+      // Named by the caller, else by the accounts policy; a policy pick still falls back to the site's own token.
+      const chosen = account ?? (await deps.accountFor?.(s)) ?? null;
+      const token = r.api
+        ? ((await tokenFor(s, chosen)) ?? (!account && chosen ? await tokenFor(s, null) : null))
+        : null;
       const amount = r.spends ? r.spends(parsed.data as never) : false;
       if (amount !== false) {
         const what = `${method} ${path} on ${name}, which spends`;
@@ -311,9 +321,11 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         return { made: step.makes };
       }
       const spec = step.how.oauth;
+      const implicit = !account ? ((await deps.accountFor?.(s, step)) ?? null) : null;
+      const as = account ?? implicit;
       const profile =
-        account && "flow" in spec.consent
-          ? await deps.profileFor?.(spec.consent.flow.split("/")[0] ?? name, account)
+        as && "flow" in spec.consent
+          ? await deps.profileFor?.(spec.consent.flow.split("/")[0] ?? name, as)
           : null;
       const open = await legOf(spec.consent, profile);
       if (!open) throw new SiteError(501, `${legName(spec.consent)} not recorded yet; explore it`);
@@ -321,13 +333,14 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         http: deps.http,
         env: deps.env,
         open,
-        account: account ?? null,
+        account: as,
         ...(deps.oauthPort ? { port: deps.oauthPort } : {}),
       });
       const made: string[] = [];
-      // Under the account's name too when the site says who consented (and it is not the one asked for).
+      // Under the account's name too when the site says who consented (and it is not the one asked
+      // for); under the site's own name as well when the policy, not the caller, picked the account.
       const who = spec.identity ? await identityOf(spec.identity, got.accessToken) : null;
-      const names = [account ?? null, ...(who && who !== account ? [who] : [])];
+      const names = [...(implicit ? [null] : []), as, ...(who && who !== as ? [who] : [])];
       for (const as of names) {
         if (got.refreshToken) {
           const at = accountEnv(spec.refreshToken, as);

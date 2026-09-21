@@ -3,6 +3,24 @@
 **Goal:** every site signs in by itself; Wren's own accounts get made by the
 agent with a password it never sees.
 
+## Which account for what
+
+Several Google accounts, one rule: one pays, one is for everything else.
+Tell autobrowse once; every signup, consent and `via` sign-in reads it.
+
+```sh
+pnpm autobrowse accounts add jinwilliam.jin@gmail.com --for pays
+pnpm autobrowse accounts add william@wrenautomation.com --for default,signup
+pnpm autobrowse accounts                 # each account: purposes, credential, inbox readable, tokens
+pnpm autobrowse accounts use signup will@williamjin.dev
+pnpm autobrowse accounts push            # the box follows the same rule
+```
+
+`site setup meta consent` (a paying site) runs as the `pays` account;
+`site setup gmail consent` as the default one; `signup instagram` makes
+the account with the `signup` address and reads its codes there. Name
+`--account` / `--email` to override any of it.
+
 ## Login
 
 ```sh

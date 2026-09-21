@@ -137,10 +137,11 @@ export function registerRecordCommands(
     .description(
       "Make an account: the password is minted and stored sealed under <site> first, then the agent fills the signup placing email/password/code/phone by name (it never sees them); hands off at a captcha",
     )
-    .requiredOption(
+    .option(
       "--email <address>",
-      "the account's address; its codes are read from this inbox",
+      "the account's address; its codes are read from this inbox (default: your `signup` account, autobrowse accounts)",
     )
+    .option("--for <purpose>", "which of your accounts makes it: signup, pays, …", "signup")
     .option("--inbox <address>", "read codes here instead (when --email is an alias of this inbox)")
     .option("--name <name>", "shown name")
     .option("--handle <handle>", "username or handle to ask for")
@@ -153,7 +154,8 @@ export function registerRecordCommands(
       async (
         site: string,
         o: {
-          email: string;
+          email?: string;
+          for: string;
           inbox?: string;
           name?: string;
           handle?: string;
@@ -166,10 +168,32 @@ export function registerRecordCommands(
       ) => {
         const { mintCredential, SIGNUP_SECRETS, signupGoal, signupHosts, signupSecrets } =
           await import("../auth/signup.js");
-        const { codesFor, credentialsFor, gmailFor, ourPhone } = await import("./services.js");
+        const { codesFor, credentialsFor, gmailFor, identitiesFor, ourPhone } = await import(
+          "./services.js"
+        );
+        const { identityFor } = await import("../auth/identities.js");
+        const { signupInbox } = await import("../auth/signup.js");
+        let email = o.email;
+        if (!email) {
+          const id = identityFor(await identitiesFor(settings).list(), o.for);
+          if (!id)
+            throw new Error(
+              `no account for ${o.for}: autobrowse accounts add <address> --for ${o.for}, or give --email`,
+            );
+          email = id.address;
+        }
+        const inbox = o.inbox ?? email;
+        const readable = signupInbox(inbox, {
+          env: (n) => process.env[n],
+          workspaceDomain: settings.googleWorkspaceDomain ?? null,
+        });
+        if (!readable)
+          throw new Error(
+            `${inbox}'s inbox is not readable, so the signup's code would never arrive: site setup gmail consent --account ${inbox} first, or --inbox one that is (autobrowse accounts)`,
+          );
         const account = {
           site,
-          email: o.email,
+          email,
           ...pick(o, ["inbox", "name", "handle", "birthday"]),
         };
         const cred = await mintCredential(credentialsFor(settings), account);

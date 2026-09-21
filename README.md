@@ -259,6 +259,8 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9090/ -d '{"c
 pnpm autobrowse agent google "open Personal info and report the display name" --save google-name   # model explores, journal → recording
 pnpm autobrowse repair ~/.config/autobrowse/artifacts/google-x-2026-….failure.json   # agent picks up where a flow stopped
 pnpm autobrowse creds paste google@ops            # a second account: `email password [key]` on the clipboard (or the UI's Accounts page)
+pnpm autobrowse accounts add ops@x.com --for pays  # which of your accounts is for what (pays, default, signup); consents, signups, `via` read it
+pnpm autobrowse accounts                          # each account's purposes and readiness (credential, inbox, tokens); names only
 pnpm autobrowse creds push linkedin               # that stored credential into SSM as AUTOBROWSE_CRED_LINKEDIN_*: the box signs in too
 pnpm autobrowse creds push --all                  # every stored site (canaries never travel)
 pnpm autobrowse creds pull [sites...]             # the other way, on a second laptop; --overwrite to replace what is here

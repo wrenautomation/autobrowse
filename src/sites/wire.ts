@@ -6,6 +6,12 @@
  * sites and flows) is an option, so a library caller can hand its own.
  */
 import type { CredentialStore } from "../auth/credentials.js";
+import {
+  DEFAULT_PURPOSE,
+  type Identity,
+  type IdentityProvider,
+  identityAt,
+} from "../auth/identities.js";
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import { type HttpClient, httpClient } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
@@ -15,7 +21,7 @@ import type { CompiledCatalog } from "../workflows/compiled.js";
 import { runCompiled } from "../workflows/proof.js";
 import { type SiteFacade, siteFacade } from "./facade.js";
 import { SITES } from "./index.js";
-import type { SiteApi } from "./types.js";
+import type { SetupStep, SiteApi } from "./types.js";
 
 export interface SiteParts {
   catalog: CompiledCatalog;
@@ -37,9 +43,34 @@ export interface SiteParts {
   credentials?: CredentialStore;
   /** Who answers for a route that commits money; absent: such calls are refused. */
   approve?: Approver | null;
+  /** The person's accounts and their purposes; a call or consent that names none is for the site's purpose. */
+  identities?: () => Promise<Identity[]>;
 }
 
-/** The `<site>@<label>` credential name whose username is `account`; the site's own when it matches. */
+/** Which identity provider a site's consent signs in with: the consent flow's own site (`google/oauth-consent`). */
+export function consentProviderOf(s: SiteApi): IdentityProvider | null {
+  const consent = s.setup.find((st) => "oauth" in st.how);
+  const spec = consent && "oauth" in consent.how ? consent.how.oauth : null;
+  const at = spec && "flow" in spec.consent ? spec.consent.flow.split("/")[0] : null;
+  return at === "google" || at === "microsoft" ? at : null;
+}
+
+/**
+ * The account for a site or step from the person's policy: the one for its
+ * purpose at the provider its consent uses; null for a site whose consent is
+ * not an identity provider's (LinkedIn, Meta) or when no account is set up.
+ */
+export async function accountForSite(
+  identities: readonly Identity[],
+  s: SiteApi,
+  step?: SetupStep,
+): Promise<string | null> {
+  const at = consentProviderOf(s);
+  if (!at) return null;
+  return identityAt(identities, at, step?.purpose ?? s.purpose ?? DEFAULT_PURPOSE)?.address ?? null;
+}
+
+/** The `<site>@<label>` (or `<site>-<label>`) credential name whose username is `account`; the site's own when it matches. */
 export async function profileOf(
   credentials: CredentialStore,
   site: string,
@@ -49,7 +80,7 @@ export async function profileOf(
   const own = await credentials.get(site);
   if (own && same(own.username, account)) return site;
   for (const name of await credentials.list()) {
-    if (!name.startsWith(`${site}@`)) continue;
+    if (!name.startsWith(`${site}@`) && !name.startsWith(`${site}-`)) continue;
     const c = await credentials.get(name);
     if (c && same(c.username, account)) return name;
   }
@@ -82,6 +113,12 @@ export function sitesFor(p: SiteParts): SiteFacade {
     ...(p.credentials
       ? {
           profileFor: (site, account) => profileOf(p.credentials as CredentialStore, site, account),
+        }
+      : {}),
+    ...(p.identities
+      ? {
+          accountFor: async (s, step) =>
+            accountForSite(await (p.identities as () => Promise<Identity[]>)(), s, step),
         }
       : {}),
   });

@@ -230,3 +230,29 @@ export function fakeDeps(
 }
 
 export { NeedsHuman };
+
+/** A fetch that records requests and answers from a table by method + path. */
+export function fakeFetch(
+  answer: (req: { method: string; url: URL; headers: Headers; body: string }) => {
+    status?: number;
+    body?: unknown;
+    headers?: Record<string, string>;
+  },
+) {
+  const calls: { method: string; url: URL; headers: Headers; body: string }[] = [];
+  const fetch = async (url: string, init?: RequestInit): Promise<Response> => {
+    const req = {
+      method: init?.method ?? "GET",
+      url: new URL(url),
+      headers: new Headers(init?.headers),
+      body: typeof init?.body === "string" ? init.body : init?.body ? "<bytes>" : "",
+    };
+    calls.push(req);
+    const a = answer(req);
+    return new Response(a.body === undefined ? "" : JSON.stringify(a.body), {
+      status: a.status ?? 200,
+      headers: { "content-type": "application/json", ...(a.headers ?? {}) },
+    });
+  };
+  return { calls, fetch };
+}

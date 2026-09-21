@@ -11,6 +11,7 @@ import type { GateName } from "../engine/effects.js";
 import { summarize } from "../engine/run.js";
 import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
 import { localBackend, proofsOf, workflowsOf } from "./backend.js";
+import { registerAccountsCommands } from "./cli-accounts.js";
 import { registerAuthCommands } from "./cli-auth.js";
 import { registerDesktopCommands } from "./cli-desktop.js";
 import { registerDoCommands } from "./cli-do.js";
@@ -21,7 +22,7 @@ import { registerSiteCommands } from "./cli-site.js";
 import { registerUnsubscribe } from "./cli-unsubscribe.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
-import { envStoreFor, WORKFLOWS } from "./services.js";
+import { credentialsFor, envStoreFor, identitiesFor, WORKFLOWS } from "./services.js";
 
 loadEnvFile();
 const settings = loadSettings();
@@ -203,6 +204,14 @@ registerSiteCommands(program, local);
 registerUnsubscribe(program, local);
 registerDoCommands(program, local);
 registerAuthCommands(program, settings);
+registerAccountsCommands(program, () => ({
+  identities: identitiesFor(settings),
+  credentials: credentialsFor(settings, { armed: false }),
+  env: (n) => process.env[n],
+  envNames: () => Object.keys(process.env),
+  workspaceDomain: settings.googleWorkspaceDomain?.toLowerCase() ?? null,
+  push: (text) => envStoreFor(settings).put("AUTOBROWSE_ACCOUNTS", text),
+}));
 registerEnvCommands(program, settings, { store: () => envStoreFor(settings) });
 registerDesktopCommands(program, tmpdir());
 

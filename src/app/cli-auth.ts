@@ -94,21 +94,46 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       `The site signs in through a provider's button ("Continue with Google"): no password of its own; the provider's stored credential does the work. Providers: ${PROVIDERS.join(", ")}`,
     )
     .option("--url <url>", "the site's login page (needed for a site autobrowse has no spec for)")
-    .option("--account <email>", "which account at the provider, when it is not the stored one")
-    .action(async (site: string, provider: string, o: { url?: string; account?: string }) => {
-      if (!isProvider(provider))
-        throw new Error(`unknown provider ${provider}; ${PROVIDERS.join(", ")}`);
-      const store = credentialsFor(settings);
-      const providerCred = await store.get(provider);
-      if (!providerCred)
-        throw new Error(`store the ${provider} credential first: autobrowse creds set ${provider}`);
-      await store.put(site, {
-        username: o.account ?? providerCred.username,
-        via: provider,
-        ...(o.url ? { url: o.url } : {}),
-      });
-      console.log(`${site} signs in via ${provider}${o.url ? ` at ${o.url}` : ""}`);
-    });
+    .option(
+      "--account <email>",
+      "which account at the provider (default: your account for --for, else the stored one)",
+    )
+    .option(
+      "--for <purpose>",
+      "pick the account by purpose (autobrowse accounts): pays, default, …",
+    )
+    .action(
+      async (
+        site: string,
+        provider: string,
+        o: { url?: string; account?: string; for?: string },
+      ) => {
+        if (!isProvider(provider))
+          throw new Error(`unknown provider ${provider}; ${PROVIDERS.join(", ")}`);
+        const store = credentialsFor(settings);
+        const providerCred = await store.get(provider);
+        if (!providerCred)
+          throw new Error(
+            `store the ${provider} credential first: autobrowse creds set ${provider}`,
+          );
+        let account = o.account;
+        if (!account && (provider === "google" || provider === "microsoft")) {
+          const { identityAt } = await import("../auth/identities.js");
+          const { identitiesFor } = await import("./services.js");
+          const all = await identitiesFor(settings).list();
+          // Only a policy pick when one names the purpose; without --for the stored credential stands.
+          account = o.for ? identityAt(all, provider, o.for)?.address : undefined;
+          if (o.for && !account)
+            throw new Error(`no ${provider} account for ${o.for}: autobrowse accounts`);
+        }
+        await store.put(site, {
+          username: account ?? providerCred.username,
+          via: provider,
+          ...(o.url ? { url: o.url } : {}),
+        });
+        console.log(`${site} signs in via ${provider}${o.url ? ` at ${o.url}` : ""}`);
+      },
+    );
   creds
     .command("rotate <site>")
     .description(

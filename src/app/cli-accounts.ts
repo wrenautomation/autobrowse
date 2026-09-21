@@ -1,0 +1,159 @@
+/**
+ * `autobrowse accounts`: which of the person's accounts is for what, and how
+ * ready each is (a stored credential, a readable inbox, kept tokens). The
+ * policy every signup, consent and `via` sign-in reads when nothing names an
+ * account. Addresses and names only; never a value.
+ */
+import type { Command } from "commander";
+import type { CredentialStore } from "../auth/credentials.js";
+import {
+  assignPurpose,
+  DEFAULT_PURPOSE,
+  IDENTITY_PROVIDERS,
+  type Identity,
+  type IdentityStore,
+  identitySchema,
+  PURPOSES,
+  withIdentity,
+  withoutIdentity,
+} from "../auth/identities.js";
+import { gmailOAuth } from "../sites/gmail.js";
+import { accountEnv } from "../sites/oauth.js";
+import { profileOf } from "../sites/wire.js";
+
+export interface AccountsCliDeps {
+  identities: IdentityStore;
+  /** Unarmed: this listing reads every `<site>@<label>` credential to find the one for an address. */
+  credentials: CredentialStore;
+  env: (name: string) => string | undefined;
+  /** Env names in hand, to find tokens kept under an account's name. */
+  envNames: () => string[];
+  /** The service account's Workspace domain, whose inboxes it reads; null without one. */
+  workspaceDomain: string | null;
+  push: (text: string) => Promise<void>;
+}
+
+export interface AccountReadiness {
+  address: string;
+  at: Identity["at"];
+  for: string[];
+  /** The `<site>@<label>` credential whose username this is; null when none is stored. */
+  credential: string | null;
+  /** How its inbox is read for codes, or null when it cannot be yet. */
+  inbox: "consented" | "service account" | null;
+  /** Base names of tokens kept under this account (`YOUTUBE_REFRESH_TOKEN`). */
+  tokens: string[];
+}
+
+export async function readiness(deps: AccountsCliDeps, id: Identity): Promise<AccountReadiness> {
+  const suffix = accountEnv("", id.address);
+  const domain = id.address.split("@")[1]?.toLowerCase() ?? "";
+  const gmailConsented = Boolean(deps.env(accountEnv(gmailOAuth.refreshToken, id.address)));
+  return {
+    address: id.address,
+    at: id.at,
+    for: id.for,
+    credential: await profileOf(deps.credentials, id.at, id.address),
+    inbox:
+      id.at !== "google"
+        ? null
+        : gmailConsented
+          ? "consented"
+          : deps.workspaceDomain && domain === deps.workspaceDomain
+            ? "service account"
+            : null,
+    tokens: deps
+      .envNames()
+      .filter((n) => n.endsWith(suffix))
+      .map((n) => n.slice(0, -suffix.length))
+      .sort(),
+  };
+}
+
+export function formatReadiness(rows: AccountReadiness[]): string {
+  if (!rows.length)
+    return [
+      "no accounts yet: autobrowse accounts add <address> --for pays|default|signup",
+      ...Object.entries(PURPOSES).map(([k, v]) => `  ${k.padEnd(8)} ${v}`),
+    ].join("\n");
+  const w = Math.max(...rows.map((r) => r.address.length));
+  return rows
+    .map((r) => {
+      const parts = [
+        `for ${r.for.length ? r.for.join(",") : "(nothing)"}`,
+        r.credential ? `credential ${r.credential}` : "no credential (creds paste)",
+        r.inbox
+          ? `inbox via ${r.inbox}${r.inbox === "service account" ? " (needs gmail.readonly delegated)" : ""}`
+          : "inbox not readable (site setup gmail consent --account it)",
+        r.tokens.length ? `tokens ${r.tokens.join(",")}` : "no tokens",
+      ];
+      return `${r.address.padEnd(w)}  ${r.at.padEnd(9)} ${parts.join(" · ")}`;
+    })
+    .join("\n");
+}
+
+export function registerAccountsCommands(program: Command, deps: () => AccountsCliDeps): void {
+  const accounts = program
+    .command("accounts")
+    .description(
+      "Which of your accounts is for what (pays, default, signup, …): the policy every signup, consent and via sign-in reads",
+    );
+  accounts
+    .command("list", { isDefault: true })
+    .description("Each account, its purposes, and how ready it is; nothing secret")
+    .action(async () => {
+      const d = deps();
+      const rows = [];
+      for (const id of await d.identities.list()) rows.push(await readiness(d, id));
+      console.log(formatReadiness(rows));
+    });
+  accounts
+    .command("add <address>")
+    .description("Add or change an account; a purpose another account had moves here")
+    .option("--for <purposes>", "comma-separated: pays, default, signup, or your own word", "")
+    .option("--at <provider>", `where it signs in: ${IDENTITY_PROVIDERS.join("|")}`, "google")
+    .option("--note <text>", "what it is, in your words")
+    .action(async (address: string, o: { for: string; at: string; note?: string }) => {
+      const d = deps();
+      const id = identitySchema.parse({
+        address,
+        at: o.at,
+        for: o.for
+          .split(",")
+          .map((p) => p.trim())
+          .filter(Boolean),
+        ...(o.note ? { note: o.note } : {}),
+      });
+      const all = withIdentity(await d.identities.list(), id);
+      await d.identities.save(all);
+      console.log(`${id.address}: for ${id.for.join(",") || "(nothing yet)"}`);
+      if (!all.some((i) => i.for.includes(DEFAULT_PURPOSE)))
+        console.log(`no account is the default yet: accounts use default <address>`);
+    });
+  accounts
+    .command("use <purpose> <address>")
+    .description("Give a purpose to an account already listed (taking it from whichever had it)")
+    .action(async (purpose: string, address: string) => {
+      const d = deps();
+      await d.identities.save(assignPurpose(await d.identities.list(), purpose, address));
+      console.log(`${purpose} → ${address}`);
+    });
+  accounts
+    .command("remove <address>")
+    .description("Forget an account (its credential and tokens stay where they are)")
+    .action(async (address: string) => {
+      const d = deps();
+      await d.identities.save(withoutIdentity(await d.identities.list(), address));
+      console.log(`removed ${address}`);
+    });
+  accounts
+    .command("push")
+    .description("This policy into the env store as AUTOBROWSE_ACCOUNTS, so the box follows it too")
+    .action(async () => {
+      const d = deps();
+      const { formatIdentities } = await import("../auth/identities.js");
+      const all = await d.identities.list();
+      await d.push(formatIdentities(all));
+      console.log(`pushed ${all.length} account(s); the box reads it on its next deploy`);
+    });
+}

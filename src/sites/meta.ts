@@ -278,6 +278,8 @@ export const meta: SiteApi = {
   site: "meta",
   origin: META_ORIGIN,
   auth: { oauth: metaOAuth },
+  // The app, the ad account and its card live on the paying account.
+  purpose: "pays",
   routes: [
     route({
       method: "GET",

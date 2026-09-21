@@ -15,6 +15,8 @@ const schema = z.object({
   cloudflareAccountId: z.string().min(1).optional(),
   /** The Workspace service account (path or JSON) and the super admin it acts as. */
   googleServiceAccount: z.string().min(1).optional(),
+  /** The Workspace domain that service account is delegated for; its inboxes read without a consent. */
+  googleWorkspaceDomain: z.string().min(1).optional(),
   googleAdminUser: z.string().email().optional(),
   /** Where wren reads its roster. */
   rosterSsmParam: z.string().min(1).default("/wren/prod/senders_config"),
@@ -127,6 +129,10 @@ const schema = z.object({
     .default(process.platform === "darwin" ? "keychain" : "none"),
   /** Inbox that receives email one-time codes when a credential does not name one. */
   codesInbox: z.string().email().optional(),
+  /** The person's accounts and what each is for (`autobrowse accounts`); addresses only. */
+  accountsFile: z.string().min(1).default("~/.config/autobrowse/accounts.json"),
+  /** The same for a box with no file: `a@x.com=pays;b@y.com=default,signup`. */
+  accounts: z.string().optional(),
   /**
    * A personal phone paired with this Mac (E.164): SMS codes are read from
    * Messages' database, notes go back over iMessage. Local, no vendor.
@@ -187,6 +193,7 @@ export const ENV_KEYS = {
   cloudflareApiToken: "CLOUDFLARE_API_TOKEN",
   cloudflareAccountId: "CLOUDFLARE_ACCOUNT_ID",
   googleServiceAccount: "GOOGLE_SERVICE_ACCOUNT",
+  googleWorkspaceDomain: "GOOGLE_WORKSPACE_DOMAIN",
   googleAdminUser: "GOOGLE_ADMIN_USER",
   rosterSsmParam: "ROSTER_SSM_PARAM",
   awsRegion: "AWS_REGION",
@@ -239,6 +246,8 @@ export const ENV_KEYS = {
   credentialsFile: "CREDENTIALS_FILE",
   credentialsCipher: "CREDENTIALS_CIPHER",
   codesInbox: "CODES_INBOX",
+  accountsFile: "ACCOUNTS_FILE",
+  accounts: "AUTOBROWSE_ACCOUNTS",
   phoneNumber: "PHONE_NUMBER",
   phoneMessagesDb: "PHONE_MESSAGES_DB",
   linqApiKey: "LINQ_API_KEY",

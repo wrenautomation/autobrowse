@@ -4,6 +4,12 @@ import { dirname, join } from "node:path";
 import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Logger } from "pino";
 import {
+  envIdentities,
+  fileIdentities,
+  type IdentityStore,
+  layeredIdentities,
+} from "../auth/identities.js";
+import {
   aesGcmCipher,
   type CanaryOptions,
   type CodeSource,
@@ -233,6 +239,11 @@ export interface App {
  * written to the ledger and, with `notify`, told to a person. `armed:
  * false` is for the operator's own listing; nothing that signs in gets it.
  */
+/** The person's accounts and what each is for: the file, else `AUTOBROWSE_ACCOUNTS` (the box). */
+export function identitiesFor(settings: Settings): IdentityStore {
+  return layeredIdentities(fileIdentities(settings.accountsFile), envIdentities(settings.accounts));
+}
+
 export function credentialsFor(
   settings: Settings,
   o: { armed?: boolean; notify?: CanaryOptions["notify"]; by?: string } = {},
@@ -660,6 +671,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       oauthPort: settings.oauthPort,
       credentials: credentialsFor(settings),
       approve: approverFor(settings, gmailFor(settings)),
+      identities: () => identitiesFor(settings).list(),
     }),
   );
   const late: { doer: Doer | null } = { doer: null };

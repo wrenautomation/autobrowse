@@ -75,6 +75,8 @@ export interface SetupStep {
    */
   how: (Leg & { input?: Record<string, SetupInput> }) | { oauth: OAuthSpec };
   summary: string;
+  /** This step's account purpose, over the site's (`pays` for the console that bills). */
+  purpose?: string;
 }
 
 export interface OAuthSpec {
@@ -131,6 +133,12 @@ export interface SiteApi {
   auth: { token: string } | { oauth: OAuthSpec };
   routes: readonly SiteRoute<never, unknown>[];
   setup: readonly SetupStep[];
+  /**
+   * Which of the person's accounts this site is for when a call or consent
+   * names none (`autobrowse accounts`): `pays` for a site behind a card,
+   * `default` otherwise. A step can say its own.
+   */
+  purpose?: string;
 }
 
 export class SiteError extends Error {
