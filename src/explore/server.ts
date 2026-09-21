@@ -453,7 +453,13 @@ async function serve(
         if (!allowed) throw new SecretLeak(`${opts.site} (${c.secret})`, host);
         await gate("fill", c, wait);
         await find(c).fill(value, { timeout: 10_000 });
-        journalAct(c, (target) => ({ kind: "input", target, value: REDACTED, redacted: true }));
+        journalAct(c, (target) => ({
+          kind: "input",
+          target,
+          value: REDACTED,
+          redacted: true,
+          secret: c.secret,
+        }));
         return { ok: true, secret: c.secret };
       }
       case "select": {

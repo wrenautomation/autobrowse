@@ -1,0 +1,248 @@
+{
+  "name": "signup-instagram",
+  "site": "instagram",
+  "description": "Sign up for a new Instagram account with name, username, email, password, birthday, and email confirmation code.",
+  "fields": [
+    {
+      "key": "fullName",
+      "label": "Name Full name",
+      "example": "Wren Automation"
+    },
+    {
+      "key": "username",
+      "label": "Username",
+      "example": "wrenautomation"
+    }
+  ],
+  "secrets": [
+    {
+      "key": "email",
+      "label": "Mobile number or email Mobile number or email"
+    },
+    {
+      "key": "password",
+      "label": "Password Password"
+    },
+    {
+      "key": "code",
+      "label": "Confirmation code"
+    }
+  ],
+  "steps": [
+    {
+      "kind": "browser",
+      "name": "submit-signup-form",
+      "description": "Fill birthday, name, username, email, and password, then submit the signup form, accept terms, and enter the email confirmation code to create the account.",
+      "irreversible": true,
+      "proof": null,
+      "url": "https://www.instagram.com/accounts/emailsignup/",
+      "ops": [
+        {
+          "kind": "select",
+          "goal": "select June in Select Month",
+          "hints": {
+            "tag": "",
+            "role": "combobox",
+            "name": "Select Month",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": "June"
+        },
+        {
+          "kind": "select",
+          "goal": "select 15 in Select Day",
+          "hints": {
+            "tag": "",
+            "role": "combobox",
+            "name": "Select Day",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": "15"
+        },
+        {
+          "kind": "select",
+          "goal": "select 1998 in Select Year",
+          "hints": {
+            "tag": "",
+            "role": "combobox",
+            "name": "Select Year",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": "1998"
+        },
+        {
+          "kind": "fill",
+          "goal": "fill Name Full name",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Name Full name",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "fullName"
+          }
+        },
+        {
+          "kind": "fill",
+          "goal": "fill Username",
+          "hints": {
+            "tag": "",
+            "role": "combobox",
+            "name": "Username",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "username"
+          }
+        },
+        {
+          "kind": "fill",
+          "goal": "fill Mobile number or email Mobile number or email",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Mobile number or email Mobile number or email",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "secret",
+            "key": "email"
+          }
+        },
+        {
+          "kind": "fill",
+          "goal": "fill Password Password Show password",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Password Password Show password",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "secret",
+            "key": "password"
+          }
+        },
+        {
+          "kind": "click",
+          "goal": "click Submit",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Submit",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": true
+        },
+        {
+          "kind": "click",
+          "goal": "click I agree",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "I agree",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "fill",
+          "goal": "fill Confirmation code",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Confirmation code",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "secret",
+            "key": "code"
+          }
+        },
+        {
+          "kind": "click",
+          "goal": "click Continue",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Continue",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        }
+      ]
+    },
+    {
+      "kind": "browser",
+      "name": "dismiss-notifications-prompt",
+      "description": "Dismiss the post-signup notifications dialog by clicking Not Now.",
+      "irreversible": false,
+      "proof": null,
+      "url": "https://www.instagram.com/accounts/emailsignup/",
+      "ops": [
+        {
+          "kind": "click",
+          "goal": "click Not Now",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Not Now",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        }
+      ]
+    }
+  ]
+}

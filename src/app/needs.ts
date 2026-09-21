@@ -291,8 +291,50 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
   return out;
 }
 
+/** The accounts Wren makes itself, and what stopped the agent when it tried. */
+export const WREN_SIGNUPS: readonly {
+  site: string;
+  /** Why the agent's own run handed off, when it did. */
+  handoff: string | null;
+}[] = [
+  { site: "instagram", handoff: null },
+  {
+    site: "x",
+    handoff:
+      "email signup is refused (X pushes phone or the app); the phone dialog loops on the number, so a headed run past its check is yours",
+  },
+  { site: "tiktok", handoff: null },
+];
+
+/** Needs for Wren's own accounts: one per signup not yet stored, plus the profile steps after. */
+export function signupNeeds(ctx: NeedsContext): Need[] {
+  const out: Need[] = [];
+  for (const w of WREN_SIGNUPS) {
+    out.push({
+      id: `signup-${w.site}`,
+      kind: "credential",
+      what: `Wren's ${w.site} account${w.handoff ? ` (${w.handoff})` : ""}`,
+      unlocks: `posting as Wren on ${w.site}`,
+      how: [
+        `autobrowse signup ${w.site} --name "Wren Automation" --handle wrenautomation --headed`,
+        `autobrowse creds push ${w.site}`,
+      ],
+      check: async () => Boolean((await ctx.credentials.get(w.site))?.madeAt),
+    });
+  }
+  out.push({
+    id: "instagram-professional",
+    kind: "decision",
+    what: "Make Wren's Instagram a professional (business) account",
+    unlocks: "Instagram publishing through the Meta app",
+    how: ["Instagram → Settings → Account type and tools → Switch to professional account"],
+    after: "signup-instagram",
+  });
+  return out;
+}
+
 export function allNeeds(ctx: NeedsContext): Need[] {
-  return [...siteNeeds(ctx), ...accountNeeds(ctx), ...fixedNeeds(ctx)];
+  return [...siteNeeds(ctx), ...accountNeeds(ctx), ...signupNeeds(ctx), ...fixedNeeds(ctx)];
 }
 
 /** Decisions and manual steps the person marked done, with a note each. */

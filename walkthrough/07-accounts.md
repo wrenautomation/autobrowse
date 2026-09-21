@@ -80,6 +80,17 @@ placed field redacted, so the compiled flow reads it as a secret by key.
 **you:** a phone number for the codes (Twilio number, or `PHONE_NUMBER` =
 your iPhone paired with this Mac). Instagram, X and TikTok insist.
 
+When the run ends with `achieved` the credential is stamped `madeAt` and
+`needs` drops the `signup-<site>` row. Finished it by hand after a
+handoff? `pnpm autobrowse creds made <site>` stamps it. Then
+`creds push <site>`.
+
+Status 2026-09-22: Instagram made headless end to end (email code, no
+captcha). X refuses email signup and loops on the phone dialog: yours
+headed. `compile signup-instagram` gives a deterministic two-step flow
+(secrets keyed `email`/`password`/`code`; a field retyped in the same step
+keeps one key, the last value).
+
 ## Where credentials go on the box
 
 `pnpm autobrowse creds push <site>` copies one sealed credential into SSM as

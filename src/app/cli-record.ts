@@ -204,7 +204,7 @@ export function registerRecordCommands(
           since: new Date(),
           phone: ourPhone(settings),
         });
-        await runAgent(settings, {
+        const { achieved } = await runAgent(settings, {
           site,
           goal: signupGoal(account),
           url: o.url ?? null,
@@ -219,6 +219,13 @@ export function registerRecordCommands(
           port: Number(o.port),
           headed: o.headed ?? false,
         });
+        if (achieved) {
+          // The account exists now: `needs` stops asking for it.
+          const store = credentialsFor(settings);
+          const made = await store.get(site);
+          if (made) await store.put(site, { ...made, madeAt: new Date().toISOString() });
+          console.log(`${site}: account made; creds push ${site} sends it to the box`);
+        }
       },
     );
 
@@ -312,7 +319,7 @@ interface AgentRun {
 }
 
 /** One agent session: explore server up, agent to the goal, journal saved as a recording. */
-async function runAgent(settings: Settings, r: AgentRun): Promise<void> {
+async function runAgent(settings: Settings, r: AgentRun): Promise<{ achieved: boolean }> {
   const { exploreWithAgent } = await import("../agent/explorer.js");
   const llm = llmFor(settings);
   if (!llm) throw new Error("the agent needs a model: set LLM_PROVIDER and its key");
@@ -354,6 +361,7 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<void> {
     console.log(`tokens in ${result.usage.inputTokens} out ${result.usage.outputTokens}`);
     const saved = (await ex.exec({ cmd: "save", name: r.save })) as { dir: string };
     console.log(`recording: ${saved.dir}  →  pnpm autobrowse compile ${r.save}`);
+    return { achieved: result.achieved };
   } finally {
     await ex.exec({ cmd: "close" });
   }

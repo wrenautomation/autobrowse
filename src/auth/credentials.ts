@@ -58,6 +58,8 @@ export const credentialSchema = z
     canary: z.boolean().optional(),
     /** Where the sign-in page is, for a site autobrowse has no login spec of its own for. */
     url: z.string().url().optional(),
+    /** When `signup` finished making the account; a minted credential without it is a signup still owed. */
+    madeAt: z.string().datetime().optional(),
   })
   .refine((c) => c.password || c.via, { message: "a credential has a password or a via provider" });
 

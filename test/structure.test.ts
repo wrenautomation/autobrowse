@@ -70,3 +70,77 @@ describe("structure names", () => {
     ]);
   });
 });
+
+describe("structure fields", () => {
+  const base = {
+    site: "s",
+    startedAt: "2026-09-22T00:00:00Z",
+    finishedAt: "",
+    trace: null,
+    terminal: null,
+    commands: [],
+  };
+  const input = (name: string, label = name) => ({
+    tag: "input",
+    role: "textbox",
+    name: label,
+    text: null,
+    placeholder: null,
+    id: null,
+    testId: null,
+    href: null,
+    inputType: null,
+    _n: name,
+  });
+  const at = (t: number, kind: string, target: unknown, extra: object) => ({
+    t,
+    kind,
+    url: "https://example.com/",
+    target,
+    ...extra,
+  });
+
+  it("keys a placed secret by its name, and keeps field keys identifiers when they repeat", () => {
+    const rec = {
+      ...base,
+      name: "r",
+      actions: [
+        { t: 0, kind: "navigate", url: "https://example.com/" },
+        at(1, "input", input("Email"), { value: "•••", redacted: true, secret: "email" }),
+        at(2, "input", input("Password"), { value: "•••", redacted: true, secret: "password" }),
+        at(3, "input", input("Full name"), { value: "Wren", redacted: false }),
+        at(4, "click", { ...input("Next"), tag: "button", role: "button" }, {}),
+        at(5, "note", undefined, { text: "Second page" }),
+        at(6, "input", input("Full name", "Full name"), {
+          value: "Wren Automation",
+          redacted: false,
+        }),
+      ],
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: fixture
+    const o = structure(rec as any);
+    expect(o.secrets.map((s) => s.key)).toEqual(["email", "password"]);
+    expect(o.fields.map((f) => f.key)).toEqual(["fullName", "fullName2"]);
+  });
+
+  it("keeps only the last fill of a control within a step and prunes the fields it dropped", () => {
+    const rec = {
+      ...base,
+      name: "r",
+      actions: [
+        { t: 0, kind: "navigate", url: "https://example.com/" },
+        at(1, "input", input("Username"), { value: "wren", redacted: false }),
+        at(2, "select", input("Month"), { value: "May" }),
+        at(3, "input", input("Username"), { value: "wrenautomation", redacted: false }),
+        at(4, "select", input("Month"), { value: "June" }),
+      ],
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: fixture
+    const o = structure(rec as any);
+    const ops = o.steps[0].ops;
+    expect(ops.filter((op) => op.kind === "fill")).toHaveLength(1);
+    expect(ops.filter((op) => op.kind === "select")).toHaveLength(1);
+    expect(ops.find((op) => op.kind === "select")).toMatchObject({ value: "June" });
+    expect(o.fields).toEqual([{ key: "username", label: "Username", example: "wrenautomation" }]);
+  });
+});

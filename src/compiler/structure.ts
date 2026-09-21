@@ -59,12 +59,13 @@ function pathOf(url: string): string {
 const isSentence = (s: string): boolean => s.trim().split(/\s+/).length > 5 || /[.!?]\s+\S/.test(s);
 
 /** Unique names: `name`, `name-2`, `name-3`. */
-function uniquer() {
+/** Unique names: `base`, then `base-2`; with `sep` "" a field key stays an identifier (`base2`). */
+function uniquer(sep = "-") {
   const seen = new Map<string, number>();
   return (base: string): string => {
     const n = (seen.get(base) ?? 0) + 1;
     seen.set(base, n);
-    return n === 1 ? base : `${base}-${n}`;
+    return n === 1 ? base : `${base}${sep}${n}`;
   };
 }
 
@@ -77,7 +78,7 @@ function stripHints(h: LocatorHints): Hints {
 export function structure(rec: Recording): Outline {
   const fields: OutlineField[] = [];
   const secrets: Outline["secrets"] = [];
-  const fieldKey = uniquer();
+  const fieldKey = uniquer("");
   const stepName = uniquer();
   const steps: OutlineStep[] = [];
 
@@ -118,7 +119,31 @@ export function structure(rec: Recording): Outline {
     pendingName = pendingDescription = null;
     return current;
   };
-  const add = (op: OutlineOp) => open().ops.push(op);
+  /**
+   * Add an op; a fill or select on a control already filled or selected in
+   * this step replaces that earlier op (the last value entered is the one
+   * that counts: a retyped field, a form re-entered after a reload).
+   */
+  const add = (op: OutlineOp) => {
+    const ops = open().ops;
+    if (op.kind === "fill" || op.kind === "select") {
+      const same = JSON.stringify(op.hints);
+      const i = ops.findIndex(
+        (o) =>
+          o.kind === op.kind &&
+          (JSON.stringify(o.hints) === same ||
+            (o.kind === "fill" &&
+              op.kind === "fill" &&
+              o.value.from === "secret" &&
+              op.value.from === "secret" &&
+              o.value.key === op.value.key)),
+      );
+      if (i >= 0) {
+        ops.splice(i, 1);
+      }
+    }
+    ops.push(op);
+  };
 
   // Desktop acts in a row make one desktop step; a browser act after closes it.
   let desktop: DesktopStep | null = null;
@@ -233,23 +258,31 @@ export function structure(rec: Recording): Outline {
         break;
       case "input": {
         const label = describe(a.target);
-        const key = fieldKey(camel(label));
+        const hints = stripHints(a.target);
+        // A retyped field keeps its key and takes the new value as its example;
+        // a secret placed again in this step (the control renamed itself) is the same fill.
+        const prior = open().ops.find(
+          (o) =>
+            o.kind === "fill" &&
+            (JSON.stringify(o.hints) === JSON.stringify(hints) ||
+              (a.secret !== undefined && o.value.from === "secret" && o.value.key === a.secret)),
+        );
+        const priorKey =
+          prior?.kind === "fill" && prior.value.from !== "literal"
+            ? prior.value.from === "plan"
+              ? prior.value.field
+              : prior.value.key
+            : null;
+        // A placed secret keeps its own name (email, password, code); a typed value is named by its label.
+        const key = priorKey ?? fieldKey(a.secret ?? camel(label));
         if (a.redacted) {
-          secrets.push({ key, label });
-          add({
-            kind: "fill",
-            goal: `fill ${label}`,
-            hints: stripHints(a.target),
-            value: { from: "secret", key },
-          });
+          if (!secrets.some((s) => s.key === key)) secrets.push({ key, label });
+          add({ kind: "fill", goal: `fill ${label}`, hints, value: { from: "secret", key } });
         } else {
-          fields.push({ key, label, example: a.value });
-          add({
-            kind: "fill",
-            goal: `fill ${label}`,
-            hints: stripHints(a.target),
-            value: { from: "plan", field: key },
-          });
+          const f = fields.find((f) => f.key === key);
+          if (f) f.example = a.value;
+          else fields.push({ key, label, example: a.value });
+          add({ kind: "fill", goal: `fill ${label}`, hints, value: { from: "plan", field: key } });
         }
         break;
       }
@@ -320,12 +353,25 @@ export function structure(rec: Recording): Outline {
     });
   }
 
+  // Only what an op still reads (a browser fill or a desktop type), after replaced fills dropped theirs;
+  // a step URL's `{field}` counts too.
+  const used = new Set<string>();
+  for (const s of steps) {
+    if (s.kind === "terminal") continue;
+    if (s.kind === "browser" && s.url)
+      for (const m of s.url.matchAll(/\{([a-z][a-zA-Z0-9]*)\}/g)) used.add(m[1] as string);
+    for (const op of s.ops) {
+      if (!("value" in op) || typeof op.value !== "object") continue;
+      if (op.value.from === "secret") used.add(op.value.key);
+      if (op.value.from === "plan") used.add(op.value.field);
+    }
+  }
   return {
     name: rec.name,
     site: rec.site,
     description: `Recorded ${rec.startedAt.slice(0, 10)} on ${rec.site}`,
-    fields,
-    secrets,
+    fields: fields.filter((f) => used.has(f.key)),
+    secrets: secrets.filter((f) => used.has(f.key)),
     steps,
   };
 }

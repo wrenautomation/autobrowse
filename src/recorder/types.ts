@@ -39,7 +39,14 @@ export type Action =
   /** An act outside the browser (an app, a menu, a root command); typed text is redacted like input. */
   | (Base & { kind: "desktop"; op: DesktopOp; redacted: boolean })
   | (Base & { kind: "click"; target: LocatorHints })
-  | (Base & { kind: "input"; target: LocatorHints; value: string; redacted: boolean })
+  | (Base & {
+      kind: "input";
+      target: LocatorHints;
+      value: string;
+      redacted: boolean;
+      /** The secret placed by name (`email`, `password`, `code`), when the value was one. */
+      secret?: string;
+    })
   | (Base & { kind: "select"; target: LocatorHints; value: string })
   | (Base & { kind: "press"; target: LocatorHints; key: string })
   | (Base & { kind: "upload"; target: LocatorHints; files: string[] })

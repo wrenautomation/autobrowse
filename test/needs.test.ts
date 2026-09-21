@@ -11,6 +11,7 @@ import {
   formatNeeds,
   type NeedsContext,
   resolveNeeds,
+  signupNeeds,
   siteNeeds,
 } from "../src/app/needs.js";
 import { memoryCredentials } from "../src/auth/credentials.js";
@@ -109,5 +110,24 @@ describe("needs", () => {
       account: null,
     });
     expect(setupArgs("autobrowse creds paste x")).toBeNull();
+  });
+});
+
+describe("signup needs", () => {
+  it("asks for each Wren account until signup finished it, not just minted its credential", async () => {
+    const c = ctx(
+      {},
+      {
+        credentials: memoryCredentials({
+          instagram: { username: "w@wren.com", password: "p", madeAt: "2026-09-22T00:00:00Z" },
+          x: { username: "w@wren.com", password: "p" },
+        }),
+      },
+    );
+    const rows = await resolveNeeds(signupNeeds(c), {});
+    const open = rows.filter((r) => !r.done).map((r) => r.id);
+    expect(open).toEqual(["signup-x", "signup-tiktok", "instagram-professional"]);
+    expect(rows.find((r) => r.id === "signup-instagram")?.by).toBe("check");
+    expect(rows.find((r) => r.id === "signup-x")?.what).toMatch(/phone dialog loops/);
   });
 });

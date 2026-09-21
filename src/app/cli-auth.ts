@@ -135,6 +135,19 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       },
     );
   creds
+    .command("made <site>")
+    .description(
+      "The account behind a minted signup credential exists now (you finished the signup by hand): `needs` stops asking for it",
+    )
+    .action(async (site: string) => {
+      const store = credentialsFor(settings);
+      const cred = await store.get(site);
+      if (!cred)
+        throw new Error(`no credential stored for ${site}: autobrowse signup ${site} first`);
+      await store.put(site, { ...cred, madeAt: new Date().toISOString() });
+      console.log(`${site}: marked made; creds push ${site} sends it to the box`);
+    });
+  creds
     .command("rotate <site>")
     .description(
       "Change the site's password to a new random one, stored sealed; nothing is printed",

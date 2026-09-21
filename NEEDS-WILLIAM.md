@@ -69,12 +69,16 @@ late, after the 90 s code wait; a retry passes). Twilio's own number
 
 ## Wren accounts (`autobrowse signup <site>`)
 
-`signup instagram|x|tiktok --name "Wren Automation" --handle wrenautomation
---headed` mints the password sealed first, fills the form placing
-email/password/code/phone by name, and hands you the window at a captcha.
-Instagram: make it professional after (Settings → Account type). X: then
-`needs do keys-x` (developer.x.com, OAuth 2.0 confidential, read+write,
-the redirect above). After each: `creds push <site>` so the box has it.
+Instagram `wrenautomation` exists (made headless 2026-09-22, credential
+sealed + pushed). Left: `instagram-professional` (Settings → Account type).
+
+`signup x|tiktok --name "Wren Automation" --handle wrenautomation --headed`
+mints the password sealed first, fills the form placing
+email/password/code/phone by name, and hands you the window at a check.
+X: email signup is refused and the phone dialog loops headless, so run it
+headed and pass the check yourself; then `needs do keys-x` (developer.x.com,
+OAuth 2.0 confidential, read+write, the redirect above). After each:
+`creds push <site>`; finished one by hand → `creds made <site>`.
 
 ## This Mac (once)
 
