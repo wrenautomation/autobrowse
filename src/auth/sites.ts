@@ -10,6 +10,7 @@ import {
   oauthLogin,
   type PasskeySetupSpec,
   type PasswordChangeSpec,
+  passwordOf,
   type SignInContext,
   type SiteLogin,
   signInToGoogle,
@@ -236,7 +237,7 @@ const aws: SiteLogin = {
       );
     }
     await fp.act(
-      { kind: "fill", value: cred.password },
+      { kind: "fill", value: passwordOf("aws", cred) },
       { role: "textbox", name: "Password" },
       { goal: "type password" },
     );

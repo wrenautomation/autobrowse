@@ -1,0 +1,88 @@
+{
+  "name": "google-cloud-project",
+  "site": "google",
+  "description": "A Google Cloud project to hold OAuth clients and API enablements; its id is kept as GOOGLE_CLOUD_PROJECT",
+  "fields": [
+    {
+      "key": "name",
+      "label": "Project name",
+      "example": "wren"
+    }
+  ],
+  "secrets": [],
+  "steps": [
+    {
+      "name": "create-project",
+      "description": "Create the project and keep its id (the console adds a suffix when the name is taken)",
+      "irreversible": true,
+      "proof": "the project id is in the env store",
+      "kind": "browser",
+      "url": "https://console.cloud.google.com/projectcreate",
+      "ops": [
+        {
+          "kind": "fill",
+          "goal": "fill Project name",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Project name",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "name"
+          }
+        },
+        {
+          "kind": "click",
+          "goal": "click Edit the project id.",
+          "hints": {
+            "tag": "button",
+            "role": "button",
+            "name": "Edit the project id.",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "keep",
+          "goal": "keep Project ID as GOOGLE_CLOUD_PROJECT",
+          "hints": {
+            "tag": "input",
+            "role": "textbox",
+            "name": "Project ID",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "env": "GOOGLE_CLOUD_PROJECT"
+        },
+        {
+          "kind": "click",
+          "goal": "click Create",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Create",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": true
+        }
+      ]
+    }
+  ]
+}

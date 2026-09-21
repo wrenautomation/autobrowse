@@ -1,0 +1,512 @@
+{
+  "name": "google-cloud-oauth-client",
+  "site": "google",
+  "description": "In a Google Cloud project: enable an API, configure the OAuth consent screen (external, testing), create a Web OAuth client with a loopback redirect and keep its id and secret, add the account as a test user",
+  "fields": [
+    {
+      "key": "project",
+      "label": "Google Cloud project id",
+      "example": "wren-509223"
+    },
+    {
+      "key": "api",
+      "label": "API to enable (service name)",
+      "example": "youtube.googleapis.com"
+    },
+    {
+      "key": "appName",
+      "label": "App name on the consent screen",
+      "example": "Wren Automation"
+    },
+    {
+      "key": "email",
+      "label": "The account's email (support contact and test user)",
+      "example": "jinwilliam.jin@gmail.com"
+    },
+    {
+      "key": "clientName",
+      "label": "OAuth client name",
+      "example": "autobrowse"
+    },
+    {
+      "key": "redirectUri",
+      "label": "Authorized redirect URI",
+      "example": "http://127.0.0.1:9400/oauth/callback"
+    }
+  ],
+  "secrets": [],
+  "steps": [
+    {
+      "name": "enable-api",
+      "description": "Enable the API in the project",
+      "irreversible": false,
+      "proof": "the API page says Enabled",
+      "kind": "browser",
+      "url": "https://console.cloud.google.com/apis/library/{api}?project={project}",
+      "ops": [
+        {
+          "kind": "click",
+          "goal": "click enable this API",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "enable this API",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        }
+      ]
+    },
+    {
+      "name": "consent-and-client",
+      "description": "Configure the consent screen (external, testing) and create the Web OAuth client; id and secret kept",
+      "irreversible": false,
+      "proof": "GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are in the env store",
+      "kind": "browser",
+      "url": "https://console.cloud.google.com/auth/overview?project={project}",
+      "ops": [
+        {
+          "kind": "click",
+          "goal": "click Get started",
+          "hints": {
+            "tag": "",
+            "role": "link",
+            "name": "Get started",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "fill",
+          "goal": "fill App name",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "App name",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "appName"
+          }
+        },
+        {
+          "kind": "click",
+          "goal": "click User support email",
+          "hints": {
+            "tag": "",
+            "role": "combobox",
+            "name": "User support email",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "pick the account itself as the support email",
+          "hints": {
+            "tag": null,
+            "role": "option",
+            "name": null,
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "href": null,
+            "inputType": null,
+            "css": null,
+            "nth": 0
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click Next",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Next",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click External",
+          "hints": {
+            "tag": "",
+            "role": "radio",
+            "name": "External",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click Next",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Next",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "fill",
+          "goal": "fill Text field for emails",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Text field for emails",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "email"
+          }
+        },
+        {
+          "kind": "press",
+          "goal": "press Enter in Text field for emails",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Text field for emails",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "key": "Enter"
+        },
+        {
+          "kind": "click",
+          "goal": "click Next",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Next",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click I agree to the Google API Services: User Data Policy",
+          "hints": {
+            "tag": "",
+            "role": "checkbox",
+            "name": "I agree to the Google API Services: User Data Policy",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click Continue",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Continue",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click Create",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Create",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": true
+        },
+        {
+          "kind": "click",
+          "goal": "click Create OAuth client",
+          "hints": {
+            "tag": "",
+            "role": "link",
+            "name": "Create OAuth client",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": true
+        },
+        {
+          "kind": "click",
+          "goal": "click Application type",
+          "hints": {
+            "tag": "",
+            "role": "combobox",
+            "name": "Application type",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click Web application",
+          "hints": {
+            "tag": "",
+            "role": "option",
+            "name": "Web application",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "fill",
+          "goal": "fill Name",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Name",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "clientName"
+          }
+        },
+        {
+          "kind": "click",
+          "goal": "click Add URI",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Add URI",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null,
+            "nth": 1
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "fill",
+          "goal": "fill URIs 1",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "URIs 1",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "redirectUri"
+          }
+        },
+        {
+          "kind": "press",
+          "goal": "press Enter in Create",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Create",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "key": "Enter"
+        },
+        {
+          "kind": "keep",
+          "goal": "keep  as GOOGLE_OAUTH_CLIENT_ID",
+          "hints": {
+            "tag": "",
+            "role": null,
+            "name": null,
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null,
+            "css": "mat-dialog-container dd"
+          },
+          "env": "GOOGLE_OAUTH_CLIENT_ID"
+        },
+        {
+          "kind": "keep",
+          "goal": "keep  as GOOGLE_OAUTH_CLIENT_SECRET",
+          "hints": {
+            "tag": "",
+            "role": null,
+            "name": null,
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null,
+            "css": "mat-dialog-container dd",
+            "nth": 1
+          },
+          "env": "GOOGLE_OAUTH_CLIENT_SECRET"
+        },
+        {
+          "kind": "click",
+          "goal": "click OK",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "OK",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        }
+      ]
+    },
+    {
+      "name": "test-user",
+      "description": "Add the account as a test user so it can consent while the app is in testing",
+      "irreversible": false,
+      "proof": "the audience page counts 1 test user",
+      "kind": "browser",
+      "url": "https://console.cloud.google.com/auth/audience?project={project}",
+      "ops": [
+        {
+          "kind": "click",
+          "goal": "click Add users",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Add users",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "fill",
+          "goal": "fill Text field for emails",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Text field for emails",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "email"
+          }
+        },
+        {
+          "kind": "press",
+          "goal": "press Enter in Text field for emails",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Text field for emails",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "key": "Enter"
+        },
+        {
+          "kind": "press",
+          "goal": "press Enter in Save",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Save",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "key": "Enter"
+        }
+      ]
+    }
+  ]
+}

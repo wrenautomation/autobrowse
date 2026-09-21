@@ -110,14 +110,30 @@ export const stepSchema = z.discriminatedUnion("kind", [
   z.object({ ...stepBase, kind: z.literal("desktop"), ops: z.array(desktopOpSchema) }),
 ]);
 
-export const outlineSchema = z.object({
-  name: z.string().regex(/^[a-z][a-z0-9-]*$/),
-  site: z.string(),
-  description: z.string(),
-  fields: z.array(fieldSchema),
-  secrets: z.array(secretSchema),
-  steps: z.array(stepSchema),
-});
+export const outlineSchema = z
+  .object({
+    name: z.string().regex(/^[a-z][a-z0-9-]*$/),
+    site: z.string(),
+    description: z.string(),
+    fields: z.array(fieldSchema),
+    secrets: z.array(secretSchema),
+    steps: z.array(stepSchema),
+  })
+  .superRefine((o, ctx) => {
+    // `{project}` in a step URL is a plan field, so it has to be one the plan declares.
+    const declared = new Set(o.fields.map((f) => f.key));
+    o.steps.forEach((step, i) => {
+      if (step.kind !== "browser" || !step.url) return;
+      for (const m of step.url.matchAll(/\{([a-z][a-zA-Z0-9]*)\}/g)) {
+        if (!declared.has(m[1] as string))
+          ctx.addIssue({
+            code: "custom",
+            path: ["steps", i, "url"],
+            message: `url names plan field {${m[1]}} which fields does not declare`,
+          });
+      }
+    });
+  });
 
 export type Outline = z.infer<typeof outlineSchema>;
 export type OutlineStep = Outline["steps"][number];

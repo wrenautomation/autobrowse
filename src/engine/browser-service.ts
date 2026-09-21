@@ -14,6 +14,7 @@ import { cloudflareBuy } from "../browser/flows/cloudflare-buy.js";
 import { googleDkimGenerate, googleDkimStart } from "../browser/flows/google-dkim.js";
 import { googleWorkspaceLogo } from "../browser/flows/google-workspace-logo.js";
 import { instantlyWarmup } from "../browser/flows/instantly-warmup.js";
+import { googleOauthConsent } from "../browser/flows/oauth-consent.js";
 import { NeedsHuman } from "../browser/session.js";
 
 export const BROWSER_SERVICE = "browser";
@@ -39,9 +40,14 @@ export type FlowCatalog = Record<string, BrowserFlow<never, unknown>>;
 
 /** The hand-written legs by `site/name`; more join through `catalog`. */
 export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
-  [cloudflareBuy, googleDkimGenerate, googleDkimStart, instantlyWarmup, googleWorkspaceLogo].map(
-    (f) => [`${f.site}/${f.name}`, f as BrowserFlow<never, unknown>],
-  ),
+  [
+    cloudflareBuy,
+    googleDkimGenerate,
+    googleDkimStart,
+    instantlyWarmup,
+    googleWorkspaceLogo,
+    googleOauthConsent,
+  ].map((f) => [`${f.site}/${f.name}`, f as BrowserFlow<never, unknown>]),
 );
 
 export interface BrowserServiceDeps {

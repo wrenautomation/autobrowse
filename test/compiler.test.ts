@@ -3,6 +3,7 @@ import { join } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { compile, writeRendered } from "../src/compiler/index.js";
+import { outlineSchema } from "../src/compiler/outline.js";
 import { polish } from "../src/compiler/polish.js";
 import { render } from "../src/compiler/render.js";
 import { structure } from "../src/compiler/structure.js";
@@ -169,6 +170,37 @@ describe("keep", () => {
     expect(src).toContain("sink: SecretSink;");
     expect(src).toContain("{ sink: deps.sink }");
     expect(src).not.toContain("JSON.stringify(out)");
+  });
+});
+
+describe("url fields", () => {
+  it("a {field} in a step url is a plan field: templated, declared, and refused when it is not", () => {
+    const o = structure({
+      ...recording,
+      name: "open-project",
+      commands: [],
+      terminal: null,
+      actions: [
+        { t: 0, kind: "navigate", url: "https://x.test/apis?project=p1" },
+        {
+          t: 1,
+          kind: "click",
+          url: "https://x.test/apis?project=p1",
+          target: h({ role: "button", name: "Enable" }),
+        },
+      ],
+    });
+    const step = o.steps[0];
+    if (step?.kind !== "browser") throw new Error("browser step expected");
+    step.url = "https://x.test/apis?project={project}";
+    o.fields.push({ key: "project", label: "Project id", example: "p1" });
+    const src = render(o).files["index.ts"] ?? "";
+    expect(src).toContain(
+      "await fp.open(`https://x.test/apis?project=${encodeURIComponent(input.project)}`);",
+    );
+    expect(src).toContain("project: plan.project");
+    expect(src).toContain("  project: string;");
+    expect(() => outlineSchema.parse({ ...o, fields: [] })).toThrow(/\{project\}/);
   });
 });
 

@@ -97,6 +97,17 @@ export function matchPath(pattern: string, path: string): Record<string, string>
   return params;
 }
 
+/** `{ env: "X" }` → the env store's value of X (its absence was caught by `needs`); anything else is itself. */
+function resolveInput(v: unknown, env: SiteFacadeDeps["env"]): unknown {
+  if (v && typeof v === "object" && "env" in v && typeof (v as { env: unknown }).env === "string") {
+    const name = (v as { env: string }).env;
+    const got = env(name);
+    if (got === undefined) throw new SiteError(409, `setup needs ${name} first`);
+    return got;
+  }
+  return v;
+}
+
 export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): SiteFacade {
   const byName = new Map(sites.map((s) => [s.site, s]));
   const minted = accessTokens(deps.http, deps.env, deps.now);
@@ -194,7 +205,9 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       }
       if (!hit) throw new SiteError(404, `${method} ${path} is not a ${name} route`);
       const { r, params } = hit;
-      const parsed = r.request.safeParse({ ...input, ...params });
+      // The path's own query is part of the request, as the official API reads it.
+      const query = Object.fromEntries(new URLSearchParams(path.split("?")[1] ?? ""));
+      const parsed = r.request.safeParse({ ...query, ...input, ...params });
       if (!parsed.success)
         throw new SiteError(400, parsed.error.issues.map((i) => i.message).join("; "));
       const token = r.api ? await tokenFor(s) : null;
@@ -225,7 +238,9 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         if (!run) throw new SiteError(501, `${legName(leg)} not recorded yet; explore it`);
         // A hand-written flow keeps what it made through the sink it is handed; a compiled one has the worker's.
         const input: Record<string, unknown> = {
-          ...(step.how.input ?? {}),
+          ...Object.fromEntries(
+            Object.entries(step.how.input ?? {}).map(([k, v]) => [k, resolveInput(v, deps.env)]),
+          ),
           ...("flow" in step.how ? { sink: deps.sink } : {}),
         };
         await run(input);

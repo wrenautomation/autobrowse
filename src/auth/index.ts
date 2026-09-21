@@ -42,12 +42,22 @@ export {
   landAfterOauth,
   loginProvider,
   oauthLogin,
+  passwordOf,
   resolveLogin,
   type SignInContext,
   type SiteLogin,
   signInToGoogle,
+  viaLogin,
 } from "./login.js";
 export { enrollPasskeyFlow } from "./passkey.js";
+export {
+  type IdentityProvider,
+  isProvider,
+  PROVIDERS,
+  type Provider,
+  providerOf,
+  registerProvider,
+} from "./providers.js";
 export { newPassword, rotatePasswordFlow } from "./rotate.js";
 export { SITE_LOGINS } from "./sites.js";
 export { base32Decode, findTotpSecret, parseOtpauth, totp, totpRemainingMs } from "./totp.js";

@@ -98,7 +98,7 @@ export const youtubeOAuth: OAuthSpec = {
   clientSecret: "GOOGLE_OAUTH_CLIENT_SECRET",
   refreshToken: "YOUTUBE_REFRESH_TOKEN",
   params: { access_type: "offline", prompt: "consent", include_granted_scopes: "true" },
-  consent: { workflow: "google-oauth-consent" },
+  consent: { flow: "google/oauth-consent" },
 };
 
 export const youtube: SiteApi = {
@@ -231,17 +231,28 @@ export const youtube: SiteApi = {
   ],
   setup: [
     {
+      name: "project",
+      makes: ["GOOGLE_CLOUD_PROJECT"],
+      how: { workflow: "google-cloud-project", input: { name: "wren" } },
+      summary: "In Google Cloud Console: a project to hold the OAuth client; its id is kept",
+    },
+    {
       name: "oauth-client",
       makes: ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+      needs: ["GOOGLE_CLOUD_PROJECT"],
       how: {
         workflow: "google-cloud-oauth-client",
         input: {
+          project: { env: "GOOGLE_CLOUD_PROJECT" },
           api: "youtube.googleapis.com",
+          appName: "Wren Automation",
+          email: "jinwilliam.jin@gmail.com",
+          clientName: "autobrowse",
           redirectUri: "http://127.0.0.1:9400/oauth/callback",
         },
       },
       summary:
-        "In Google Cloud Console: enable the YouTube Data API v3, create a Web OAuth client with the loopback redirect, keep its id and secret",
+        "In Google Cloud Console: enable the YouTube Data API v3, configure the consent screen (external, testing, one test user), create a Web OAuth client with the loopback redirect, keep its id and secret",
     },
     {
       name: "consent",

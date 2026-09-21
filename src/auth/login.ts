@@ -9,8 +9,10 @@
  */
 import type { FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
+import { wallOf } from "../browser/session.js";
 import type { CodeKind, CodeSource } from "./codes.js";
 import type { Credential, CredentialStore } from "./credentials.js";
+import { type IdentityProvider, type Provider, providerOf, registerProvider } from "./providers.js";
 
 export interface SignInContext {
   fp: FlowPage;
@@ -47,7 +49,7 @@ export interface SiteLogin {
    */
   ask?: string;
   /** Identity providers whose button this site's `signIn` can use instead of a password. */
-  via?: readonly ["google"];
+  via?: readonly Provider[];
   /** True when the page shows a signed-in state (avatar, dashboard, no sign-in form). */
   loggedIn(fp: FlowPage): Promise<boolean>;
   signIn(ctx: SignInContext): Promise<void>;
@@ -137,12 +139,23 @@ const RENDER_MS = 8_000;
 /** How long a person gets to tap Yes on their phone. */
 const PROMPT_MS = 180_000;
 
+/** The credential's password, or a clear failure: a `via` credential has none and belongs on the provider path. */
+export function passwordOf(site: string, cred: Credential): string {
+  if (!cred.password)
+    throw new LoginFailed(
+      site,
+      `the ${site} credential has no password (it signs in via ${cred.via})`,
+    );
+  return cred.password;
+}
+
 export function formLogin(site: string, spec: FormLoginSpec): SiteLogin["signIn"] {
   return async ({ fp, cred, code }) => {
+    const password = passwordOf(site, cred);
     await fp.open(spec.start, { allowWall: true });
     await fp.act({ kind: "fill", value: cred.username }, spec.username, { goal: "type username" });
     if (spec.next) await fp.act({ kind: "click" }, spec.next, { goal: "continue past username" });
-    await fp.act({ kind: "fill", value: cred.password }, spec.password, { goal: "type password" });
+    await fp.act({ kind: "fill", value: password }, spec.password, { goal: "type password" });
     await fp.act({ kind: "click" }, spec.submit, { goal: "submit login form" });
     await fp.wait(SETTLE_MS);
     let text = await fp.text();
@@ -249,7 +262,7 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
   }
   if (await fp.has({ role: "textbox", name: "/password/i" }, RENDER_MS)) {
     await fp.act(
-      { kind: "fill", value: cred.password },
+      { kind: "fill", value: passwordOf(site, cred) },
       { role: "textbox", name: "/password/i" },
       { goal: "type the Google password" },
     );
@@ -390,12 +403,12 @@ async function googleSecondStep(ctx: SignInContext): Promise<void> {
 
 export interface OauthLoginSpec {
   start: string;
-  /** The "Sign in with Google" button on the site's login page. */
-  button: Hints;
-  /** Which stored credential the provider takes; `google` by default. */
-  provider?: "google";
-  /** The site's page after the round trip. */
-  success: RegExp;
+  /** The provider's button on the site's login page; the provider's own readings when absent. */
+  button?: Hints;
+  /** Which identity provider (and stored credential) signs in; `google` by default. */
+  provider?: Provider;
+  /** The site's page after the round trip: a URL pattern, or a check on the page. */
+  success: RegExp | ((fp: FlowPage) => Promise<boolean>);
   /**
    * The site's own second step after the provider (Twilio texts a code even
    * to a Google sign-in): answered with the site's credential and inboxes.
@@ -403,26 +416,54 @@ export interface OauthLoginSpec {
   challenge?: { at: RegExp; run(ctx: SignInContext): Promise<void> };
 }
 
+/** The provider's button as this site shows it: the spec's hint, else the first of the provider's readings on the page. */
+async function providerButton(fp: FlowPage, p: IdentityProvider, hint?: Hints): Promise<Hints> {
+  if (hint) return hint;
+  for (const h of p.buttons) if (await fp.has(h, 1_500)) return h;
+  throw new LoginFailed(fp.url(), `no "${p.site}" button on this page`);
+}
+
 /** Sign in through an identity provider's button: popup or redirect, then back to the site. */
 export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signIn"] {
-  const provider = spec.provider ?? "google";
+  const provider = providerOf(spec.provider ?? "google");
   return async (ctx) => {
     const { fp } = ctx;
     const main = fp.page;
     await fp.open(spec.start, { allowWall: true });
+    const button = await providerButton(fp, provider, spec.button);
     const popup = fp.nextPage(8_000);
-    await fp.act({ kind: "click" }, spec.button, { goal: `sign in with ${provider}` });
+    await fp.act({ kind: "click" }, button, { goal: `sign in with ${provider.site}` });
     const page = await popup;
     if (page) fp.switchTo(page);
-    else if (
-      !(await fp.waitForUrl(/accounts\.google\.com/, 15_000)) &&
-      !/accounts\.google\.com/.test(fp.url())
-    )
-      throw new LoginFailed(site, `no ${provider} sign-in page after pressing the button`);
-    const cred = await ctx.credFor(provider);
-    await signInToGoogle(ctx.as(cred));
+    else if (!(await fp.waitForUrl(provider.host, 15_000)) && !provider.host.test(fp.url()))
+      throw new LoginFailed(site, `no ${provider.site} sign-in page after pressing the button`);
+    const cred = await ctx.credFor(provider.site);
+    await provider.signIn(ctx.as(cred));
     fp.switchTo(main);
     await landAfterOauth(site, spec, ctx);
+  };
+}
+
+/**
+ * Any site whose credential says `via`: its login page is where the wall
+ * was met (or the credential's `url`), the provider's button is found by
+ * its readings, and "signed in" means the page is no longer a wall. This
+ * is what makes a provider sign-in work on a site nobody wrote a spec for.
+ */
+export function viaLogin(site: string, cred: Credential): SiteLogin {
+  const provider = providerOf(cred.via as Provider);
+  const signedIn = async (fp: FlowPage) =>
+    !provider.host.test(fp.url()) && wallOf(fp.url(), (await fp.text()).slice(0, 4000)) === null;
+  return {
+    site,
+    home: cred.url ?? "",
+    loggedIn: signedIn,
+    signIn: async (ctx) => {
+      const start = cred.url ?? ctx.fp.url();
+      if (!/^https?:/.test(start))
+        throw new LoginFailed(site, "no sign-in page known: store the credential with a url");
+      await oauthLogin(site, { start, provider: provider.site, success: signedIn })(ctx);
+    },
   };
 }
 
@@ -436,12 +477,23 @@ export async function landAfterOauth(
   const provider = spec.provider ?? "google";
   const fail = () => new LoginFailed(site, `still on ${fp.url()} after the ${provider} round trip`);
   const challenge = spec.challenge;
+  const success = spec.success;
   if (challenge) {
-    const at = (u: string) => spec.success.test(u) || challenge.at.test(u);
+    const at = (u: string) =>
+      (success instanceof RegExp && success.test(u)) || challenge.at.test(u);
     if (!(await fp.waitForUrl(at, 30_000)) && !at(fp.url())) throw fail();
     if (challenge.at.test(fp.url())) await challenge.run(ctx);
   }
-  if (!(await fp.waitForUrl(spec.success, 30_000)) && !spec.success.test(fp.url())) throw fail();
+  if (success instanceof RegExp) {
+    if (!(await fp.waitForUrl(success, 30_000)) && !success.test(fp.url())) throw fail();
+    return;
+  }
+  // A check on the page rather than a URL: give the round trip a moment to land, then ask.
+  for (let i = 0; i < 10; i++) {
+    if (await success(fp)) return;
+    await fp.wait(SETTLE_MS);
+  }
+  throw fail();
 }
 
 export interface LoginOptions {
@@ -479,10 +531,13 @@ export function credentialFor(sites: readonly SiteLogin[], name: string): string
 export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
   const now = opts.now ?? (() => new Date());
   return async (fp: FlowPage, site: string): Promise<LoginOutcome> => {
-    const login = resolveLogin(sites, site);
+    const known = resolveLogin(sites, site);
+    const cred = await opts.credentials.get(known?.credential ?? site);
+    if (!cred) return known ? "no-credential" : "unknown-site";
+    // A credential that signs in via a provider takes the generic provider path when the
+    // site's own spec does not know that provider (or there is no spec at all).
+    const login = cred.via && !known?.via?.includes(cred.via) ? viaLogin(site, cred) : known;
     if (!login) return "unknown-site";
-    const cred = await opts.credentials.get(login.credential ?? site);
-    if (!cred) return "no-credential";
     const since = now();
     // Codes belong to the credential: an OAuth sign-in continues as the
     // provider's (`ctx.as(cred)`), and its TOTP must answer, not the site's.
@@ -521,3 +576,14 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
 }
 
 export type LoginProvider = ReturnType<typeof loginProvider>;
+
+registerProvider({
+  site: "google",
+  host: /accounts\.google\.com/,
+  buttons: [
+    { role: "button", name: "/google/i" },
+    { role: "link", name: "/google/i" },
+    { text: "/(continue|sign ?in|log ?in|sign ?up) with google/i" },
+  ],
+  signIn: signInToGoogle,
+});

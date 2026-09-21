@@ -7,7 +7,7 @@
 import { randomInt } from "node:crypto";
 import { defineFlow } from "../browser/flow.js";
 import type { CredentialStore } from "./credentials.js";
-import { LoginFailed, type SiteLogin } from "./login.js";
+import { LoginFailed, passwordOf, type SiteLogin } from "./login.js";
 
 const LOWER = "abcdefghijkmnopqrstuvwxyz";
 const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -42,10 +42,11 @@ export function rotatePasswordFlow(
     async run(fp) {
       const cred = await store.get(credName);
       if (!cred) throw new LoginFailed(login.site, `rotate: no credential stored for ${credName}`);
+      const current = passwordOf(login.site, cred);
       const next = draw();
       await fp.open(typeof spec.url === "string" ? spec.url : spec.url(cred));
       if (spec.current && (await fp.has(spec.current, 3_000)))
-        await fp.act({ kind: "fill", value: cred.password }, spec.current, {
+        await fp.act({ kind: "fill", value: current }, spec.current, {
           goal: "type the current password",
         });
       await fp.act({ kind: "fill", value: next }, spec.next, { goal: "type the new password" });
@@ -54,7 +55,7 @@ export function rotatePasswordFlow(
           goal: "confirm the new password",
         });
       // Stored before the click: if the site takes it and we crash right after, the store is right.
-      await store.put(credName, { ...cred, password: next, previousPassword: cred.password });
+      await store.put(credName, { ...cred, password: next, previousPassword: current });
       await fp.act({ kind: "click" }, spec.submit, {
         goal: "change the password",
         irreversible: true,

@@ -52,14 +52,21 @@ export interface SiteRoute<I = unknown, O = unknown> {
 }
 
 /** One key or token the site needs, and what makes it. */
+/** A literal, or the value of an env name (one an earlier setup step made, or the person set). */
+export type SetupInput = unknown | { env: string };
+
 export interface SetupStep {
   name: string;
   /** Env names this step produces. */
   makes: readonly string[];
   /** Env names it needs first. */
   needs?: readonly string[];
-  /** A browser leg on the developer console (its input is the flow's input or the workflow's plan), or an OAuth consent autobrowse drives. */
-  how: (Leg & { input?: Record<string, unknown> }) | { oauth: OAuthSpec };
+  /**
+   * A browser leg on the developer console (its input is the flow's input or the
+   * workflow's plan; a `{ env }` value is read from the env store at run time, so a
+   * step can take what an earlier step made), or an OAuth consent autobrowse drives.
+   */
+  how: (Leg & { input?: Record<string, SetupInput> }) | { oauth: OAuthSpec };
   summary: string;
 }
 

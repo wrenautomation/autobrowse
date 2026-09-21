@@ -9,45 +9,51 @@ import { dirname } from "node:path";
 import { z } from "zod";
 import { expandHome } from "../google-auth.js";
 import { type Cipher, isSealed, plainCipher } from "./cipher.js";
+import { PROVIDERS } from "./providers.js";
 
-export const credentialSchema = z.object({
-  username: z.string().min(1),
-  password: z.string().min(1),
-  /** The password before the last rotation: tried once when the site rejects the current one. */
-  previousPassword: z.string().min(1).optional(),
-  /** Base32 TOTP seed (the site's "manual entry key", spaces and dashes allowed); never a 6-digit code. */
-  totpSecret: z
-    .string()
-    .transform((s) => s.replace(/[\s=-]/g, "").toUpperCase())
-    .pipe(
-      z
-        .string()
-        .regex(
-          /^[A-Z2-7]{16,}$/,
-          "totpSecret must be the base32 seed (16+ letters/digits), not a 6-digit code",
-        ),
-    )
-    .optional(),
-  /** One-time recovery codes the site handed out; used, then dropped. */
-  recoveryCodes: z.array(z.string().min(1)).default([]),
-  /** Where the site sends email codes; defaults to `username` when that is an address. */
-  codesInbox: z.string().email().optional(),
-  /** Passkeys enrolled by us (the virtual authenticator's export); loaded into the site's browser session. */
-  passkeys: z
-    .array(
-      z.object({
-        rpId: z.string(),
-        credentialId: z.string(),
-        privateKey: z.string(),
-        userHandle: z.string().optional(),
-        signCount: z.number(),
-        isResidentCredential: z.boolean(),
-      }),
-    )
-    .default([]),
-  /** Sign in through this identity provider's button instead of the password; the provider's own credential is used. */
-  via: z.enum(["google"]).optional(),
-});
+export const credentialSchema = z
+  .object({
+    username: z.string().min(1),
+    /** Absent when the account has none: it signs in through a provider (`via`). */
+    password: z.string().min(1).optional(),
+    /** The password before the last rotation: tried once when the site rejects the current one. */
+    previousPassword: z.string().min(1).optional(),
+    /** Base32 TOTP seed (the site's "manual entry key", spaces and dashes allowed); never a 6-digit code. */
+    totpSecret: z
+      .string()
+      .transform((s) => s.replace(/[\s=-]/g, "").toUpperCase())
+      .pipe(
+        z
+          .string()
+          .regex(
+            /^[A-Z2-7]{16,}$/,
+            "totpSecret must be the base32 seed (16+ letters/digits), not a 6-digit code",
+          ),
+      )
+      .optional(),
+    /** One-time recovery codes the site handed out; used, then dropped. */
+    recoveryCodes: z.array(z.string().min(1)).default([]),
+    /** Where the site sends email codes; defaults to `username` when that is an address. */
+    codesInbox: z.string().email().optional(),
+    /** Passkeys enrolled by us (the virtual authenticator's export); loaded into the site's browser session. */
+    passkeys: z
+      .array(
+        z.object({
+          rpId: z.string(),
+          credentialId: z.string(),
+          privateKey: z.string(),
+          userHandle: z.string().optional(),
+          signCount: z.number(),
+          isResidentCredential: z.boolean(),
+        }),
+      )
+      .default([]),
+    /** Sign in through this identity provider's button instead of a password; the provider's own credential does the work. */
+    via: z.enum(PROVIDERS).optional(),
+    /** Where the sign-in page is, for a site autobrowse has no login spec of its own for. */
+    url: z.string().url().optional(),
+  })
+  .refine((c) => c.password || c.via, { message: "a credential has a password or a via provider" });
 
 export type Credential = z.infer<typeof credentialSchema>;
 export type CredentialInput = z.input<typeof credentialSchema>;

@@ -11,12 +11,15 @@ import {
   enrollPasskeyFlow,
   enrollTotpFlow,
   ingest,
+  isProvider,
+  PROVIDERS,
   parseCredentialLines,
   resolveLogin,
   rotatePasswordFlow,
   SITE_LOGINS,
   takeClipboard,
   takeFile,
+  viaLogin,
 } from "../auth/index.js";
 import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
 import type { Settings } from "./config.js";
@@ -30,6 +33,17 @@ function loginNamed(site: string) {
   const login = resolveLogin(SITE_LOGINS, site);
   if (!login) throw new Error(`unknown site ${site}; ${KNOWN}`);
   return login;
+}
+
+/** A known site's login, or the provider path for any site whose stored credential says `via`. */
+async function loginOrVia(settings: Settings, site: string) {
+  const known = resolveLogin(SITE_LOGINS, site);
+  if (known) return known;
+  const cred = await credentialsFor(settings).get(site);
+  if (cred?.via) return viaLogin(site, cred);
+  throw new Error(
+    `unknown site ${site}; ${KNOWN}, or store a provider sign-in first: \`autobrowse creds via ${site} google --url <its login page>\``,
+  );
 }
 
 export function registerAuthCommands(program: Command, settings: Settings): void {
@@ -74,6 +88,27 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       console.log(`stored credential for ${site}`);
     });
   creds
+    .command("via <site> <provider>")
+    .description(
+      `The site signs in through a provider's button ("Continue with Google"): no password of its own; the provider's stored credential does the work. Providers: ${PROVIDERS.join(", ")}`,
+    )
+    .option("--url <url>", "the site's login page (needed for a site autobrowse has no spec for)")
+    .option("--account <email>", "which account at the provider, when it is not the stored one")
+    .action(async (site: string, provider: string, o: { url?: string; account?: string }) => {
+      if (!isProvider(provider))
+        throw new Error(`unknown provider ${provider}; ${PROVIDERS.join(", ")}`);
+      const store = credentialsFor(settings);
+      const providerCred = await store.get(provider);
+      if (!providerCred)
+        throw new Error(`store the ${provider} credential first: autobrowse creds set ${provider}`);
+      await store.put(site, {
+        username: o.account ?? providerCred.username,
+        via: provider,
+        ...(o.url ? { url: o.url } : {}),
+      });
+      console.log(`${site} signs in via ${provider}${o.url ? ` at ${o.url}` : ""}`);
+    });
+  creds
     .command("rotate <site>")
     .description(
       "Change the site's password to a new random one, stored sealed; nothing is printed",
@@ -115,18 +150,18 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       const store = credentialsFor(settings);
       for (const site of await store.list()) {
         const c = await store.get(site);
-        console.log(`${site}\t${c?.totpSecret ? "totp" : "no totp"}`);
+        console.log(`${site}\t${c?.via ? `via ${c.via}` : c?.totpSecret ? "totp" : "no totp"}`);
       }
     });
 
   program
     .command("login <site>")
     .description(
-      `Sign in to a site with the stored credential (headless). With --headed and no credential, a person logs in and closes the window. Sites: ${KNOWN}`,
+      `Sign in to a site with the stored credential (headless). With --headed and no credential, a person logs in and closes the window. Sites: ${KNOWN}, or any site stored with \`creds via\``,
     )
     .option("--headed", "show the browser")
     .action(async (site: string, o: { headed?: boolean }) => {
-      const login = loginNamed(site);
+      const login = await loginOrVia(settings, site);
       const opts = browserOptions(settings, o.headed ? false : settings.browserHeadless);
       const credName = login.credential ?? site;
       const cred = await credentialsFor(settings).get(credName);
@@ -139,6 +174,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
         site,
         name: "login",
         async run(fp: FlowPage) {
+          if (!login.home) fp.human(`no home page known for ${site}: creds via ${site} ... --url`);
           await fp.open(login.home); // a wall here triggers the sign-in
           if (await login.loggedIn(fp)) return "signed in";
           if (!o.headed) fp.human("not signed in after opening the home page");

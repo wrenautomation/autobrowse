@@ -25,6 +25,7 @@ import {
   totp,
   totpRemainingMs,
   totpSource,
+  viaLogin,
 } from "../src/auth/index.js";
 import type { FlowPage, Op } from "../src/browser/flow.js";
 import type { Hints } from "../src/browser/locate.js";
@@ -299,6 +300,7 @@ describe("loginProvider", () => {
     const viaGoogle: SiteLogin = {
       site: "s",
       home: "https://site.test/",
+      via: ["google"],
       loggedIn: async () => true,
       async signIn(ctx) {
         const sub = ctx.as(await ctx.credFor("google"));
@@ -329,6 +331,84 @@ describe("loginProvider", () => {
     await expect(withCred(fakePage({ text: [], present: () => true }).fp, "s")).rejects.toThrow(
       /no totp code/,
     );
+  });
+});
+
+describe("sign in via a provider on a site nobody wrote a spec for", () => {
+  /** A site login page, then the provider's page, then the site signed in; `present` answers the button and the consent. */
+  function viaPage(urls: string[]) {
+    let at = 0;
+    const acts: Hints[] = [];
+    const fp: FlowPage = {
+      page: {} as FlowPage["page"],
+      async open() {},
+      url: () => urls[Math.min(at, urls.length - 1)] as string,
+      text: async () => "",
+      html: async () => "",
+      has: async (h) => h.name === "/google/i" || h.name === "/^continue$/i",
+      // Time passes: the page moves on one step per wait, as a real round trip would.
+      wait: async () => {
+        at++;
+      },
+      waitForUrl: async () => {
+        at++;
+        return true;
+      },
+      nextPage: async () => null,
+      switchTo() {},
+      async act(_op, hints) {
+        acts.push(hints);
+      },
+      human(reason) {
+        throw new NeedsHuman(reason);
+      },
+    };
+    return { fp, acts };
+  }
+
+  it("takes the provider path when the credential says via, presses its button, signs in there, lands", async () => {
+    const { fp, acts } = viaPage([
+      "https://new.test/login",
+      "https://accounts.google.com/o/oauth2/auth",
+      "https://new.test/app",
+    ]);
+    const login = loginProvider([], {
+      credentials: memoryCredentials({
+        "new.test": { username: "me@x.test", via: "google" },
+        google: { username: "me@x.test", password: "p", totpSecret: RFC_SECRET },
+      }),
+      codes: totpSource(),
+    });
+    expect(await login(fp, "new.test")).toBe("signed-in");
+    expect(acts[0]).toEqual({ role: "button", name: "/google/i" });
+  });
+
+  it("a via credential without a url on a page that is not a login is told what to store", async () => {
+    const login = viaLogin("x", { username: "u", via: "google", recoveryCodes: [], passkeys: [] });
+    expect(login.home).toBe("");
+    expect(login.site).toBe("x");
+  });
+
+  it("a password-less credential is refused by a form login, in words", async () => {
+    const { fp } = fakePage({ text: [], present: () => true });
+    await expect(
+      formLogin(
+        "s",
+        spec,
+      )({
+        fp,
+        cred: { username: "u", via: "google", recoveryCodes: [], passkeys: [] },
+        code: async () => "1",
+        offers: () => false,
+        inbox: () => null,
+        credFor: async () => {
+          throw new Error("x");
+        },
+        as: () => {
+          throw new Error("x");
+        },
+      }),
+    ).rejects.toThrow(/no password .*via google/);
   });
 });
 
@@ -492,6 +572,12 @@ describe("signInToGoogle second step", () => {
 });
 
 describe("credential schema", () => {
+  it("takes a via credential without a password, and nothing without either", async () => {
+    const store = memoryCredentials();
+    await store.put("s", { username: "u", via: "google", url: "https://s.test/login" });
+    expect((await store.get("s"))?.password).toBeUndefined();
+    await expect(store.put("t", { username: "u" })).rejects.toThrow(/password or a via/);
+  });
   it("normalizes a spaced seed and rejects a 6-digit code", async () => {
     const store = memoryCredentials();
     await store.put("s", { username: "u", password: "p", totpSecret: "jbsw y3dp-ehpk 3pxp" });

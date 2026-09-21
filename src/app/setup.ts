@@ -4,9 +4,11 @@
  * provider, the sites that use their own password), types hidden, stores
  * sealed, and says what runs next. Everything after this is the tool's.
  */
+
 import type { Interface } from "node:readline/promises";
 import type { CredentialStore } from "../auth/credentials.js";
 import type { SiteLogin } from "../auth/login.js";
+import type { Provider } from "../auth/providers.js";
 
 export interface Prompter {
   ask(question: string): Promise<string>;
@@ -23,7 +25,7 @@ export interface Need {
   /** What setup says, in the site's own words. */
   ask: string;
   /** Offered when a site behind this credential can also go through a provider's button. */
-  viaChoices: Array<"google">;
+  viaChoices: Provider[];
 }
 
 /** Credential names the site list needs, grouped: `google` covers every site that names it. */
@@ -78,7 +80,7 @@ export async function runSetup(
     }
     io.say(`\n${need.name}: ${need.ask}`);
     if (need.viaChoices.length) {
-      const provider = need.viaChoices[0] as "google";
+      const provider = need.viaChoices[0] as Provider;
       const via = (
         await io.ask(`  do you log in there with the "Sign in with ${provider}" button? [y/N] `)
       )
@@ -87,7 +89,7 @@ export async function runSetup(
       if (via === "y" || via === "yes") {
         const username = (await io.ask(`  which ${provider} account (email): `)).trim();
         // A via credential carries no password of its own; the provider's does the work.
-        await store.put(need.name, { username: username || "-", password: "-", via: provider });
+        await store.put(need.name, { username: username || "-", via: provider });
         stored.push(need.name);
         continue;
       }

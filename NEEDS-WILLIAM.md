@@ -47,9 +47,10 @@ it. Dated 2026-09-21.
   LinkedIn" + "Sign In with LinkedIn using OpenID Connect"): needs a
   LinkedIn Page to attach to. Say which Page, or that I should create
   one for Wren Automation.
-- **YouTube**: which Google account owns the channel? If it is
-  jinwilliam.jin@gmail.com the stored `google` cred covers the login;
-  the OAuth client + consent I can drive from there.
+- ~~YouTube~~ done 2026-09-20 with jinwilliam.jin@gmail.com (channel
+  JinstersJournal): Cloud project `wren-509223`, OAuth client, consent,
+  refresh token kept; the Data API answers. Say if another Google account
+  owns the channel you want to post to.
 
 ## Keys not yet obtained
 

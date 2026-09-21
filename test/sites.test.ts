@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { defineFlow } from "../src/browser/flow.js";
+import { googleOauthConsent } from "../src/browser/flows/oauth-consent.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import {
@@ -261,33 +262,34 @@ describe("site facade", () => {
       GOOGLE_OAUTH_CLIENT_SECRET: "cs",
     };
     const sink = memorySink();
+    // The consent walk is the hand-written google/oauth-consent flow; here a fake stands in for the browser.
+    const browser = fakeBrowser([]);
+    browser.on(googleOauthConsent, async ({ url }) => {
+      const u = new URL(url);
+      expect(u.searchParams.get("client_id")).toBe("cid");
+      expect(u.searchParams.get("access_type")).toBe("offline");
+      expect(u.searchParams.get("redirect_uri")).toBe(`http://127.0.0.1:${port}/oauth/callback`);
+      // The consent page redirects to loopback with the code and our state.
+      await fetch(
+        `http://127.0.0.1:${port}/oauth/callback?code=the-code&state=${u.searchParams.get("state")}`,
+      );
+      return { landed: "" };
+    });
     const sites = siteFacade([youtube], {
       http: httpClient({ fetch: api.fetch }),
       env: (n) => env[n],
       sink,
-      runner: fakeBrowser([]),
-      flow: () => null,
-      compiled: compiledOf({
-        "google-oauth-consent": async ({ url }) => {
-          const u = new URL(url as string);
-          expect(u.searchParams.get("client_id")).toBe("cid");
-          expect(u.searchParams.get("access_type")).toBe("offline");
-          expect(u.searchParams.get("redirect_uri")).toBe(
-            `http://127.0.0.1:${port}/oauth/callback`,
-          );
-          // The consent page redirects to loopback with the code and our state.
-          await fetch(
-            `http://127.0.0.1:${port}/oauth/callback?code=the-code&state=${u.searchParams.get("state")}`,
-          );
-          return null;
-        },
-      }),
+      runner: browser,
+      flow: (name) => (name === "google/oauth-consent" ? googleOauthConsent : null),
       oauthPort: port,
     });
     await expect(sites.setup("youtube", "consent")).resolves.toEqual({
       made: ["YOUTUBE_REFRESH_TOKEN"],
     });
     expect(sink.values).toEqual({ YOUTUBE_REFRESH_TOKEN: "rt" });
+    // The client step needs the project first (409); with it, its workflow is not compiled here (501).
+    await expect(sites.setup("youtube", "oauth-client")).rejects.toMatchObject({ status: 409 });
+    env.GOOGLE_CLOUD_PROJECT = "p1";
     await expect(sites.setup("youtube", "oauth-client")).rejects.toMatchObject({ status: 501 });
     env.GOOGLE_OAUTH_CLIENT_ID = "";
     await expect(sites.setup("youtube", "consent")).rejects.toMatchObject({ status: 409 });

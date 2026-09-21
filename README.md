@@ -260,6 +260,21 @@ Sentry issues tagged workflow/key/step.
 Thin: writes the roster to SSM, dispatches wren's deploy, calls its ingress
 to start loops. No imports in either direction.
 
+## OAuth sign-in
+
+A site behind "Continue with Google" needs no password of its own:
+
+```sh
+pnpm autobrowse creds via new-tool google --url https://new-tool.test/login
+pnpm autobrowse login new-tool          # presses the button, signs in as the stored google account
+```
+
+Providers live in `src/auth/providers.ts` (google today); a `via`
+credential on any site takes that path, spec or not. API consent
+(`site setup youtube consent`) is the hand-written `google/oauth-consent`
+flow: chooser, unverified-app warning, scope boxes, Continue, until the
+loopback redirect. Design: `designs/2026-09-20-oauth-sign-in.md`.
+
 ## Site APIs
 
 A service under its own API's shape: `POST /api/sites/linkedin/rest/posts`

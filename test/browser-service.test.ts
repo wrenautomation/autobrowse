@@ -49,6 +49,7 @@ describe("browser service", () => {
       "google-admin/dkim-generate",
       "google-admin/dkim-start",
       "google-admin/workspace-logo",
+      "google/oauth-consent",
       "instantly/warmup",
     ]);
     const svc = browserService({ runner: { run: async () => "ok" as never } });

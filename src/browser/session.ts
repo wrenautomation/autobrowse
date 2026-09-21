@@ -207,6 +207,13 @@ export async function looksLikeWall(page: Page): Promise<Wall | null> {
       .innerText()
       .catch(() => "")
   ).slice(0, 4000);
+  return wallOf(url, text);
+}
+
+/** The wall a URL and page text show, if any; `looksLikeWall` over a page, this over what a flow already read. */
+export function wallOf(url: string, text: string): Wall | null {
+  if (/accounts\.google\.com\/|\/(login|sign-?in)(\/|\?|#|$)/i.test(url))
+    return { kind: "login", detail: `login page: ${url}` };
   // "protected by reCAPTCHA" is the legal footer on every sign-up form, not a wall.
   if (
     /verify you are human|(?<!protected by re)captcha|i'm not a robot|unusual traffic|performing security verification|verifies you are not a bot/i.test(

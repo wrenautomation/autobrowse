@@ -69,10 +69,28 @@ function renderOp(op: OutlineOp): string {
   return `    await fp.act(${opSrc}, ${hints}, ${opts});${locatorNote}`;
 }
 
+/** `{project}` in a step URL is the plan field `project`. */
+export const URL_FIELD = /\{([a-z][a-zA-Z0-9]*)\}/g;
+
+/** A step URL as source: a plain string, or a template when it names plan fields. */
+function renderUrl(url: string): string {
+  if (!URL_FIELD.test(url)) return q(url);
+  URL_FIELD.lastIndex = 0;
+  const body = url
+    .replace(/[`\\]/g, "\\$&")
+    .replace(/\$\{/g, "\\${")
+    .replace(URL_FIELD, (_m, f: string) => `\${encodeURIComponent(input.${f})}`);
+  return `\`${body}\``;
+}
+
 /** Plan fields and secrets one flow needs, in order of first use. */
 function flowInputs(step: Extract<OutlineStep, { kind: "browser" }>) {
   const fields: string[] = [];
   const secrets: string[] = [];
+  for (const m of (step.url ?? "").matchAll(URL_FIELD)) {
+    const f = m[1] as string;
+    if (!fields.includes(f)) fields.push(f);
+  }
   for (const op of step.ops) {
     const value = op.kind === "fill" ? op.value : op.kind === "upload" ? op.file : null;
     if (!value) continue;
@@ -96,7 +114,7 @@ function renderBrowserStep(o: Outline, step: Extract<OutlineStep, { kind: "brows
     : `export type ${Input} = Record<string, never>;`;
   const reads = step.ops.filter((op) => op.kind === "read");
   const flowLines = [
-    ...(step.url ? [`    await fp.open(${q(step.url)});`] : []),
+    ...(step.url ? [`    await fp.open(${renderUrl(step.url)});`] : []),
     ...(reads.length ? ["    const out: Record<string, string> = {};"] : []),
     ...step.ops.map(renderOp),
     ...(reads.length ? ["    return out;"] : []),
