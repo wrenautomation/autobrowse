@@ -73,10 +73,24 @@ makes one: the password is minted and sealed under `<site>` first, the
 agent fills the form placing email/password/code/phone by name, and hands
 you the window at a captcha. What each needs from you first:
 
-- **An inbox the codes land in**: a Google Workspace address on
-  wrenautomation.com (say which, e.g. hello@) — the Gmail reader uses the
-  service account (`GOOGLE_SERVICE_ACCOUNT`) with domain-wide delegation,
-  so it reads that inbox without another login. Every signup below uses it.
+- ~~An inbox the codes land in~~ done 2026-09-22: `jinwilliam.jin@gmail.com`
+  is readable now (the `gmail` site consented as it; Gmail API enabled on
+  the Cloud project by the agent; 10 messages read back). Signups default
+  to it (`--email jinwilliam.jin@gmail.com`), developer apps and paid things
+  too, as you said.
+- **will@williamjin.dev** as a signup inbox: `pnpm autobrowse creds paste
+  google@will` (that address, its password, its authenticator key), then
+  `pnpm autobrowse site setup gmail consent --account will@williamjin.dev`.
+  Nothing else; any Google account works this way.
+- **william@wrenautomation.com** through the service account needs the
+  `gmail.readonly` scope added to its domain-wide delegation on
+  admin.google.com. Google asks your passkey for the admin console (the
+  virtual one we enrolled is not the one Google wants; it offers no other
+  way), so: Admin console → Security → API controls → Domain-wide
+  delegation → client `107356403027866983613` → Edit → add
+  `https://www.googleapis.com/auth/gmail.readonly` → Authorize. Or consent
+  it like any other account (`creds paste google@wren`, `site setup gmail
+  consent --account william@wrenautomation.com`).
 - **A phone number** for Instagram/X/Facebook verification: the paired
   phone, Linq, or the Twilio number (Twilio is your spend call). Without
   one the agent hands off at the phone step.

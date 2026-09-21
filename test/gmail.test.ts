@@ -1,0 +1,200 @@
+import { describe, expect, it } from "vitest";
+import { loadSettings } from "../src/app/config.js";
+import { googleTokens } from "../src/app/services.js";
+import { memoryCredentials } from "../src/auth/credentials.js";
+import type { FlowRunner } from "../src/browser/flow.js";
+import { googleOauthConsent } from "../src/browser/flows/oauth-consent.js";
+import { httpClient } from "../src/clients/http.js";
+import { memorySink } from "../src/deps/sink.js";
+import { siteFacade } from "../src/sites/facade.js";
+import { gmail } from "../src/sites/gmail.js";
+import { accessTokens, accountEnv } from "../src/sites/oauth.js";
+import { profileOf } from "../src/sites/wire.js";
+
+function fakeFetch(
+  answer: (req: { method: string; url: URL; headers: Headers; body: string }) => {
+    status?: number;
+    body?: unknown;
+  },
+) {
+  const calls: { method: string; url: URL; headers: Headers; body: string }[] = [];
+  const fetch = async (url: string, init?: RequestInit): Promise<Response> => {
+    const req = {
+      method: init?.method ?? "GET",
+      url: new URL(url),
+      headers: new Headers(init?.headers),
+      body: typeof init?.body === "string" ? init.body : "",
+    };
+    calls.push(req);
+    const a = answer(req);
+    return new Response(JSON.stringify(a.body ?? {}), {
+      status: a.status ?? 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  return { calls, fetch };
+}
+
+describe("gmail site: one consent per account", () => {
+  it("names an account's token after the address", () => {
+    expect(accountEnv("GMAIL_REFRESH_TOKEN")).toBe("GMAIL_REFRESH_TOKEN");
+    expect(accountEnv("GMAIL_REFRESH_TOKEN", "will@williamjin.dev")).toBe(
+      "GMAIL_REFRESH_TOKEN__WILL_WILLIAMJIN_DEV",
+    );
+  });
+
+  it("mints the account's token from its own refresh token, cached apart from the site's", async () => {
+    const api = fakeFetch(({ body }) => ({
+      body: {
+        access_token: `at-for-${new URLSearchParams(body).get("refresh_token")}`,
+        expires_in: 3600,
+      },
+    }));
+    const env: Record<string, string> = {
+      GOOGLE_OAUTH_CLIENT_ID: "cid",
+      GOOGLE_OAUTH_CLIENT_SECRET: "cs",
+      GMAIL_REFRESH_TOKEN: "rt-own",
+      GMAIL_REFRESH_TOKEN__WILL_WILLIAMJIN_DEV: "rt-will",
+    };
+    const spec = "oauth" in gmail.auth ? gmail.auth.oauth : (null as never);
+    const tokens = accessTokens(httpClient({ fetch: api.fetch }), (n) => env[n]);
+    expect(await tokens(spec)).toBe("at-for-rt-own");
+    expect(await tokens(spec, "will@williamjin.dev")).toBe("at-for-rt-will");
+    expect(await tokens(spec, "will@williamjin.dev")).toBe("at-for-rt-will");
+    expect(api.calls.length).toBe(2);
+    expect(await tokens(spec, "nobody@x.dev")).toBeNull();
+  });
+
+  it("googleTokens acts as a consented account through its token, never the service account", async () => {
+    const api = fakeFetch(() => ({ body: { access_token: "at-will", expires_in: 3600 } }));
+    const env: Record<string, string> = {
+      GOOGLE_OAUTH_CLIENT_ID: "cid",
+      GOOGLE_OAUTH_CLIENT_SECRET: "cs",
+      GMAIL_REFRESH_TOKEN__WILL_WILLIAMJIN_DEV: "rt-will",
+    };
+    const tokenFor = googleTokens(
+      loadSettings({ RESTATE_INGRESS_URL: "http://127.0.0.1:8080" }),
+      (n) => env[n],
+      httpClient({ fetch: api.fetch }),
+    );
+    expect(await tokenFor("will@williamjin.dev", ["s"])()).toBe("at-will");
+    // No key set: a Workspace subject still goes to the service account, which is not there.
+    expect(() => tokenFor("william@wrenautomation.com", ["s"])).toThrow(/GOOGLE_SERVICE_ACCOUNT/);
+  });
+
+  it("the profile for an account is the <site>@<label> credential with that username", async () => {
+    const creds = memoryCredentials({
+      google: { username: "jin@gmail.com", password: "p" },
+      "google@will": { username: "Will@WilliamJin.dev", password: "p" },
+    });
+    expect(await profileOf(creds, "google", "jin@gmail.com")).toBe("google");
+    expect(await profileOf(creds, "google", "will@williamjin.dev")).toBe("google@will");
+    expect(await profileOf(creds, "google", "other@x.dev")).toBeNull();
+  });
+
+  it("a consent without --account is kept under whoever consented, too", async () => {
+    const port = 9414;
+    const api = fakeFetch(({ url }) =>
+      url.pathname.endsWith("/profile")
+        ? { body: { emailAddress: "jin@gmail.com" } }
+        : { body: { access_token: "at", refresh_token: "rt", expires_in: 3600 } },
+    );
+    const env: Record<string, string> = {
+      GOOGLE_OAUTH_CLIENT_ID: "cid",
+      GOOGLE_OAUTH_CLIENT_SECRET: "cs",
+    };
+    const sink = memorySink();
+    const runner: FlowRunner = {
+      async run(_flow, input) {
+        const u = new URL((input as { url: string }).url);
+        await fetch(
+          `http://127.0.0.1:${port}/oauth/callback?code=c&state=${u.searchParams.get("state")}`,
+        );
+        return { landed: "" } as never;
+      },
+    };
+    const sites = siteFacade([gmail], {
+      http: httpClient({ fetch: api.fetch }),
+      env: (n) => env[n],
+      sink,
+      runner,
+      flow: (name) => (name === "google/oauth-consent" ? googleOauthConsent : null),
+      oauthPort: port,
+    });
+    await expect(sites.setup("gmail", "consent")).resolves.toEqual({
+      made: ["GMAIL_REFRESH_TOKEN", "GMAIL_REFRESH_TOKEN__JIN_GMAIL_COM"],
+    });
+    expect(Object.keys(sink.values)).toEqual([
+      "GMAIL_REFRESH_TOKEN",
+      "GMAIL_REFRESH_TOKEN__JIN_GMAIL_COM",
+    ]);
+  });
+
+  it("consent --account runs the walk in that profile and keeps the token under the account's name", async () => {
+    const port = 9413;
+    const api = fakeFetch(({ url }) =>
+      url.pathname.endsWith("/profile")
+        ? { body: { emailAddress: "Will@williamjin.dev" } }
+        : { body: { access_token: "at", refresh_token: "rt-will", expires_in: 3600 } },
+    );
+    const env: Record<string, string> = {
+      GOOGLE_OAUTH_CLIENT_ID: "cid",
+      GOOGLE_OAUTH_CLIENT_SECRET: "cs",
+    };
+    const sink = memorySink();
+    const ran: { site: string; account?: string }[] = [];
+    const runner: FlowRunner = {
+      async run(flow, input) {
+        const { url, account } = input as { url: string; account?: string };
+        ran.push({ site: flow.site, ...(account ? { account } : {}) });
+        const u = new URL(url);
+        await fetch(
+          `http://127.0.0.1:${port}/oauth/callback?code=c&state=${u.searchParams.get("state")}`,
+        );
+        return { landed: "" } as never;
+      },
+    };
+    const sites = siteFacade([gmail], {
+      http: httpClient({ fetch: api.fetch }),
+      env: (n) => env[n],
+      sink,
+      runner,
+      flow: (name) => (name === "google/oauth-consent" ? googleOauthConsent : null),
+      oauthPort: port,
+      profileFor: async (site, account) =>
+        account === "will@williamjin.dev" ? `${site}@will` : null,
+    });
+    await expect(sites.setup("gmail", "consent", "will@williamjin.dev")).resolves.toEqual({
+      made: ["GMAIL_REFRESH_TOKEN__WILL_WILLIAMJIN_DEV"],
+    });
+    expect(ran).toEqual([{ site: "google@will", account: "will@williamjin.dev" }]);
+    expect(sink.values).toEqual({ GMAIL_REFRESH_TOKEN__WILL_WILLIAMJIN_DEV: "rt-will" });
+    // A call as that account carries its token; the site's own has none yet.
+    env.GMAIL_REFRESH_TOKEN__WILL_WILLIAMJIN_DEV = "rt-will";
+    const seen: string[] = [];
+    const reads = fakeFetch(({ url, headers, body }) => {
+      if (url.host === "oauth2.googleapis.com")
+        return { body: { access_token: "at-will", expires_in: 3600 } };
+      seen.push(`${url.pathname} ${headers.get("authorization")}`);
+      return { body: { messages: [], _: body } };
+    });
+    const sites2 = siteFacade([gmail], {
+      http: httpClient({ fetch: reads.fetch }),
+      env: (n) => env[n],
+      sink,
+      runner,
+      flow: () => null,
+    });
+    await sites2.call(
+      "gmail",
+      "GET",
+      "/gmail/v1/users/me/messages",
+      { q: "after:1" },
+      "will@williamjin.dev",
+    );
+    expect(seen).toEqual(["/gmail/v1/users/me/messages Bearer at-will"]);
+    await expect(
+      sites2.call("gmail", "GET", "/gmail/v1/users/me/messages", {}),
+    ).rejects.toMatchObject({ status: 501 });
+  });
+});

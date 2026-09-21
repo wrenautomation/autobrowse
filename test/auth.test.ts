@@ -596,6 +596,36 @@ describe("signInToGoogle second step", () => {
     ]);
     expect(notes[0]).toMatch(/tap Yes/);
   });
+  it("a passkey prompt after the password goes to the other steps, then the authenticator", async () => {
+    let n = 0;
+    const { fp, acts } = fakePage({
+      text: [
+        "Hi u@gmail.com Enter your password",
+        "Use your passkey to confirm it's really you More ways to verify",
+        "2-Step Verification Choose how you want to sign in",
+        "welcome",
+      ],
+      present: (h) => !/email|switch account/i.test(String(h.name)),
+      url: () =>
+        n < 2
+          ? "https://accounts.google.com/v3/signin/challenge/pwd?x"
+          : n === 2
+            ? "https://accounts.google.com/v3/signin/challenge/pk/presend?x"
+            : "https://accounts.google.com/v3/signin/challenge/selection?x",
+      onAct: (count) => {
+        n = count;
+      },
+    });
+    await signInToGoogle(ctx(fp, ["totp"]));
+    expect(acts.map((a) => `${a.op.kind} ${a.hints.name ?? a.hints.text ?? a.hints.css}`)).toEqual([
+      "fill /password/i",
+      "click /^next$/i",
+      "click /try another way|more ways to verify/i",
+      'click :is(a,button,[role=link],[role=button]):not([aria-disabled="true"]):has-text("authenticator app")',
+      "fill /code/i",
+      "click /^next$/i",
+    ]);
+  });
   it("says what to set up when nothing can answer", async () => {
     const { fp } = page((h) => !/email|password/i.test(String(h.name)));
     await expect(signInToGoogle(ctx(fp, []))).rejects.toThrow(/enroll TOTP, link a phone/);

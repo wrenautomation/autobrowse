@@ -141,6 +141,7 @@ export function registerRecordCommands(
       "--email <address>",
       "the account's address; its codes are read from this inbox",
     )
+    .option("--inbox <address>", "read codes here instead (when --email is an alias of this inbox)")
     .option("--name <name>", "shown name")
     .option("--handle <handle>", "username or handle to ask for")
     .option("--birthday <date>", "when the form insists")
@@ -153,6 +154,7 @@ export function registerRecordCommands(
         site: string,
         o: {
           email: string;
+          inbox?: string;
           name?: string;
           handle?: string;
           birthday?: string;
@@ -166,7 +168,11 @@ export function registerRecordCommands(
           "../auth/signup.js"
         );
         const { codesFor, credentialsFor, gmailFor, ourPhone } = await import("./services.js");
-        const account = { site, email: o.email, ...pick(o, ["name", "handle", "birthday"]) };
+        const account = {
+          site,
+          email: o.email,
+          ...pick(o, ["inbox", "name", "handle", "birthday"]),
+        };
         const cred = await mintCredential(credentialsFor(settings), account);
         console.log(`stored a new credential for ${site} (creds list); now the signup`);
         const secrets = signupSecrets({

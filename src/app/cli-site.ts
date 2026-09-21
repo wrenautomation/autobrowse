@@ -46,22 +46,43 @@ export function registerSiteCommands(program: Command, local: LocalBackend): voi
       "One call as the official API takes it; `--body` is inline JSON, a file, or - for stdin",
     )
     .option("--body <json|file>", "the request body (writes) or query (reads)")
-    .action(async (name: string, method: string, path: string, o: { body?: string }) => {
-      const sites = local().backend.sites;
-      if (!sites) throw new Error("no site apis here");
-      const input = o.body ? ((await readJson(o.body)) as Record<string, unknown>) : {};
-      const out = await sites.call(name, method.toUpperCase() as Method, path, input);
-      console.log(JSON.stringify(out, null, 2));
-    });
+    .option(
+      "--account <address>",
+      "as that consented account (its own token); the site's own by default",
+    )
+    .action(
+      async (
+        name: string,
+        method: string,
+        path: string,
+        o: { body?: string; account?: string },
+      ) => {
+        const sites = local().backend.sites;
+        if (!sites) throw new Error("no site apis here");
+        const input = o.body ? ((await readJson(o.body)) as Record<string, unknown>) : {};
+        const out = await sites.call(
+          name,
+          method.toUpperCase() as Method,
+          path,
+          input,
+          o.account ?? null,
+        );
+        console.log(JSON.stringify(out, null, 2));
+      },
+    );
   site
     .command("setup <site> <step>")
     .description(
       "Make a key or token: a browser flow on the developer console, or an OAuth consent",
     )
-    .action(async (name: string, step: string) => {
+    .option(
+      "--account <address>",
+      "consent as that account (a `<site>@<label>` credential with that username signs in); its token is kept under its own name",
+    )
+    .action(async (name: string, step: string, o: { account?: string }) => {
       const sites = local().backend.sites;
       if (!sites) throw new Error("no site apis here");
-      const { made } = await sites.setup(name, step);
+      const { made } = await sites.setup(name, step, o.account ?? null);
       console.log(`kept ${made.join(", ")}`);
     });
 }

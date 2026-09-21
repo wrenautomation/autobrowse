@@ -294,9 +294,14 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
   if (/browser or app may not be secure/i.test(text))
     throw new LoginFailed(site, "Google refused this browser");
   // Only while still on a challenge: the destination itself may talk about codes (the 2SV settings).
+  // After the password an account with a passkey is asked for it again ("Use your
+  // passkey to confirm it's really you", challenge/pk; mapped 2026-09-22 on admin.google.com):
+  // "More ways to verify" leads to the same selection page.
   if (
     /accounts\.google\.com/.test(fp.url()) &&
-    /2-step verification|authenticator|enter the code|verification code/i.test(text)
+    (/2-step verification|authenticator|enter the code|verification code/i.test(text) ||
+      /use your passkey|using your passkey/i.test(text) ||
+      /challenge\/pk/.test(fp.url()))
   ) {
     await googleSecondStep(ctx);
     await fp.wait(SETTLE_MS);
@@ -331,12 +336,9 @@ async function submitCode(fp: FlowPage, code: string): Promise<void> {
 /** Google's "Choose how you want to sign in" list, or the step it landed on by itself. */
 async function toSelection(fp: FlowPage): Promise<void> {
   if (/challenge\/selection/.test(fp.url())) return;
-  if (await fp.has({ text: "/try another way/i" })) {
-    await fp.act(
-      { kind: "click" },
-      { text: "/try another way/i" },
-      { goal: "see the other second steps" },
-    );
+  const other = { text: "/try another way|more ways to verify/i" } as const;
+  if (await fp.has(other)) {
+    await fp.act({ kind: "click" }, other, { goal: "see the other second steps" });
     await fp.waitForUrl(/challenge\/selection/, 10_000);
     await fp.wait(SETTLE_MS);
   }

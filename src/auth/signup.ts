@@ -31,7 +31,7 @@ export function signupSecrets(o: SignupSecretsOptions): SecretValues {
   return async (name) => {
     switch (name) {
       case "email":
-        return o.cred.codesInbox ?? o.cred.username;
+        return o.cred.username;
       case "username":
         return o.cred.username;
       case "password":
@@ -58,8 +58,10 @@ export function signupSecrets(o: SignupSecretsOptions): SecretValues {
 
 export interface NewAccount {
   site: string;
-  /** The address the account is made with; where its codes land. */
+  /** The address the account is made with. */
   email: string;
+  /** Where its codes are read from, when `email` is an alias of another inbox. */
+  inbox?: string;
   /** Shown name, handle, birthday: what the form asks beside the secrets. */
   name?: string;
   handle?: string;
@@ -72,14 +74,14 @@ export interface NewAccount {
  */
 export async function mintCredential(
   store: CredentialStore,
-  a: Pick<NewAccount, "site" | "email">,
+  a: Pick<NewAccount, "site" | "email" | "inbox">,
   password: string = newPassword(),
 ): Promise<Credential> {
   if (await store.get(a.site))
     throw new Error(
       `${a.site} already has a stored credential; sign in with it, or store the new account under another name`,
     );
-  await store.put(a.site, { username: a.email, password, codesInbox: a.email });
+  await store.put(a.site, { username: a.email, password, codesInbox: a.inbox ?? a.email });
   const cred = await store.get(a.site);
   if (!cred) throw new Error(`${a.site}: the credential did not store`);
   return cred;

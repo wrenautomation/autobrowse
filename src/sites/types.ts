@@ -92,6 +92,12 @@ export interface OAuthSpec {
   /** Env name the refresh token is kept as; the access token is minted from it on demand. */
   refreshToken: string;
   /**
+   * Who consented: GET `url` with the new token, read `field` (an address, a
+   * handle). The tokens are then also kept under that account's name, so a
+   * consent without `--account` still serves calls made as that identity.
+   */
+  identity?: { url: string; field: string };
+  /**
    * Env name the access token itself is kept as, for a site that hands no refresh
    * token (LinkedIn without programmatic refresh: 60-day tokens; consent again).
    */

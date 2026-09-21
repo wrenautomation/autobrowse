@@ -70,7 +70,15 @@ import {
 import { type BudgetExceeded, type BudgetedLlm, budgetedLlm, fileLedger } from "../llm/budget.js";
 import { type Llm, makeLlm } from "../llm/index.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
-import { type SiteFacade, type SitesService, sitesFor, sitesService } from "../sites/index.js";
+import {
+  accessTokens,
+  accountEnv,
+  gmailOAuth,
+  type SiteFacade,
+  type SitesService,
+  sitesFor,
+  sitesService,
+} from "../sites/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import { type BootstrapDeps, bootstrapWorkflow } from "../workflows/bootstrap/index.js";
 import {
@@ -351,13 +359,32 @@ export function memoryFor(settings: Settings, http = httpClient()): Memory {
   return memoryStore();
 }
 
-/** Google: one service-account key, one token supplier per (subject, scopes), each caching its bearer. */
-export function googleTokens(settings: Settings) {
+/**
+ * Google, one token supplier per (subject, scopes), each caching its bearer:
+ * an account that consented (`site setup gmail consent --account <it>`,
+ * `GMAIL_REFRESH_TOKEN__<IT>`) is acted as through its own refresh token;
+ * every other subject through the service account (domain-wide delegation,
+ * our Workspace only).
+ */
+export function googleTokens(
+  settings: Settings,
+  env: (name: string) => string | undefined = (n) => process.env[n],
+  http = httpClient(),
+) {
   const tokens = new Map<string, TokenSupplier>();
   let key: ReturnType<typeof loadServiceAccountKey> | null = null;
+  const consented = accessTokens(http, env);
   const tokenFor = (subject: string, scopes: readonly string[]): TokenSupplier => {
     const k = `${subject} ${scopes.join(" ")}`;
     let t = tokens.get(k);
+    if (!t && env(accountEnv(gmailOAuth.refreshToken, subject))) {
+      t = async () => {
+        const token = await consented(gmailOAuth, subject);
+        if (!token) throw new Error(`no Gmail token for ${subject}`);
+        return token;
+      };
+      tokens.set(k, t);
+    }
     if (!t) {
       key ??= loadServiceAccountKey(
         required(settings.googleServiceAccount, "GOOGLE_SERVICE_ACCOUNT"),
@@ -559,7 +586,16 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     });
   const extra = await compiledNow();
   if (extra.length) log.info({ compiled: extra.map((c) => c.workflow.name) }, "compiled workflows");
-  const sites = holding(idle, sitesFor({ catalog, browser, sink, oauthPort: settings.oauthPort }));
+  const sites = holding(
+    idle,
+    sitesFor({
+      catalog,
+      browser,
+      sink,
+      oauthPort: settings.oauthPort,
+      credentials: credentialsFor(settings),
+    }),
+  );
   const late: { doer: Doer | null } = { doer: null };
   return {
     services: [

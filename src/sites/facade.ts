@@ -9,11 +9,12 @@ import type { HttpClient } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import type { Proof } from "../workflows/proof.js";
-import { accessTokens, runConsent } from "./oauth.js";
+import { accessTokens, accountEnv, runConsent } from "./oauth.js";
 import {
   type Leg,
   legName,
   type Method,
+  type OAuthSpec,
   type SetupStep,
   type SiteApi,
   SiteError,
@@ -35,6 +36,12 @@ export interface SiteFacadeDeps {
   };
   /** Loopback port for OAuth redirects. */
   oauthPort?: number;
+  /**
+   * The browser profile that holds an account of a site (`google@will` for
+   * will@x.dev), so its consent runs signed in as it; the flow's own site
+   * when absent (the chooser then picks).
+   */
+  profileFor?: (site: string, account: string) => Promise<string | null>;
   now?: () => number;
 }
 
@@ -76,9 +83,10 @@ export interface SiteFacade {
     method: Method,
     path: string,
     input: Record<string, unknown>,
+    account?: string | null,
   ): Promise<unknown>;
-  /** Run one setup step; what it makes lands in the sink. */
-  setup(site: string, step: string): Promise<{ made: readonly string[] }>;
+  /** Run one setup step; what it makes lands in the sink (under the account's name, with one). */
+  setup(site: string, step: string, account?: string | null): Promise<{ made: readonly string[] }>;
 }
 
 /** `/rest/socialActions/{urn}/comments` against `/rest/socialActions/urn:li:share:1/comments`. */
@@ -111,13 +119,25 @@ function resolveInput(v: unknown, env: SiteFacadeDeps["env"]): unknown {
 export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): SiteFacade {
   const byName = new Map(sites.map((s) => [s.site, s]));
   const minted = accessTokens(deps.http, deps.env, deps.now);
+  const identityOf = async (
+    id: NonNullable<OAuthSpec["identity"]>,
+    token: string,
+  ): Promise<string | null> => {
+    const res = await deps.http
+      .json<Record<string, unknown>>(id.url, { headers: { authorization: `Bearer ${token}` } })
+      .catch(() => null);
+    const v = res?.ok ? res.body?.[id.field] : null;
+    return typeof v === "string" && v ? v.toLowerCase() : null;
+  };
   const site = (name: string) => {
     const s = byName.get(name);
     if (!s) throw new SiteError(404, `no site api named ${name}`);
     return s;
   };
-  const tokenFor = async (s: SiteApi): Promise<string | null> =>
-    "token" in s.auth ? (deps.env(s.auth.token) ?? null) : minted(s.auth.oauth);
+  const tokenFor = async (s: SiteApi, account?: string | null): Promise<string | null> =>
+    "token" in s.auth
+      ? (deps.env(accountEnv(s.auth.token, account)) ?? null)
+      : minted(s.auth.oauth, account);
   const hasToken = (s: SiteApi) => {
     if ("token" in s.auth) return Boolean(deps.env(s.auth.token));
     const o = s.auth.oauth;
@@ -127,10 +147,16 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     );
   };
   /** The browser leg's runnable, or null when nobody has recorded it yet. */
-  const legOf = async (leg: Leg): Promise<((input: unknown) => Promise<unknown>) | null> => {
+  const legOf = async (
+    leg: Leg,
+    profile?: string | null,
+  ): Promise<((input: unknown) => Promise<unknown>) | null> => {
     if ("flow" in leg) {
-      const flow = deps.flow(leg.flow);
-      return flow ? (input) => deps.runner.run(flow as BrowserFlow<unknown, unknown>, input) : null;
+      const flow = deps.flow(leg.flow) as BrowserFlow<unknown, unknown> | null;
+      if (!flow) return null;
+      // Under another profile the same flow signs in as that account.
+      const sited = profile && profile !== flow.site ? { ...flow, site: profile } : flow;
+      return (input) => deps.runner.run(sited, input);
     }
     const workflow = await deps.compiled?.get(leg.workflow);
     if (!workflow || !deps.compiled) return null;
@@ -193,7 +219,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
   return {
     list: () => Promise.all(sites.map(status)),
     status: (name) => status(site(name)),
-    async call(name, method, path, input) {
+    async call(name, method, path, input, account) {
       const s = site(name);
       let hit: { r: SiteRoute<never, unknown>; params: Record<string, string> } | null = null;
       for (const r of s.routes) {
@@ -210,7 +236,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       const parsed = r.request.safeParse({ ...query, ...input, ...params });
       if (!parsed.success)
         throw new SiteError(400, parsed.error.issues.map((i) => i.message).join("; "));
-      const token = r.api ? await tokenFor(s) : null;
+      const token = r.api ? await tokenFor(s, account) : null;
       if (r.api && token) return r.api(parsed.data as never, { token, http: deps.http });
       if (r.browser) {
         const run = await legOf(r.browser);
@@ -225,7 +251,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       }
       throw new SiteError(501, `${method} ${r.path}: no token for ${name} and no browser leg`);
     },
-    async setup(name, stepName) {
+    async setup(name, stepName, account) {
       const s = site(name);
       const step = s.setup.find((x) => x.name === stepName);
       if (!step) throw new SiteError(404, `no setup step ${stepName} on ${name}`);
@@ -247,22 +273,34 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         return { made: step.makes };
       }
       const spec = step.how.oauth;
-      const open = await legOf(spec.consent);
+      const profile =
+        account && "flow" in spec.consent
+          ? await deps.profileFor?.(spec.consent.flow.split("/")[0] ?? name, account)
+          : null;
+      const open = await legOf(spec.consent, profile);
       if (!open) throw new SiteError(501, `${legName(spec.consent)} not recorded yet; explore it`);
       const got = await runConsent(spec, {
         http: deps.http,
         env: deps.env,
         open,
+        account: account ?? null,
         ...(deps.oauthPort ? { port: deps.oauthPort } : {}),
       });
       const made: string[] = [];
-      if (got.refreshToken) {
-        await deps.sink.put(spec.refreshToken, got.refreshToken);
-        made.push(spec.refreshToken);
-      }
-      if (spec.accessToken) {
-        await deps.sink.put(spec.accessToken, got.accessToken);
-        made.push(spec.accessToken);
+      // Under the account's name too when the site says who consented (and it is not the one asked for).
+      const who = spec.identity ? await identityOf(spec.identity, got.accessToken) : null;
+      const names = [account ?? null, ...(who && who !== account ? [who] : [])];
+      for (const as of names) {
+        if (got.refreshToken) {
+          const at = accountEnv(spec.refreshToken, as);
+          await deps.sink.put(at, got.refreshToken);
+          made.push(at);
+        }
+        if (spec.accessToken) {
+          const at = accountEnv(spec.accessToken, as);
+          await deps.sink.put(at, got.accessToken);
+          made.push(at);
+        }
       }
       if (!made.length)
         throw new SiteError(

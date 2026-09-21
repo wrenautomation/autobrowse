@@ -43,21 +43,37 @@ async function tokenCall(
 }
 
 /**
+ * The env name a token is kept under for one account of a site:
+ * `GMAIL_REFRESH_TOKEN` for the site's own, `GMAIL_REFRESH_TOKEN__WILL_X_DEV`
+ * for will@x.dev. One site, any number of identities.
+ */
+export function accountEnv(name: string, account?: string | null): string {
+  if (!account) return name;
+  return `${name}__${account
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_|_$/g, "")
+    .toUpperCase()}`;
+}
+
+/**
  * An access token: minted from the refresh token when there is one (cached
  * until a minute before it expires), else the kept access token itself.
+ * With `account`, that account's tokens (see `accountEnv`).
  */
 export function accessTokens(
   http: HttpClient,
   env: (name: string) => string | undefined,
   now: () => number = Date.now,
-): (spec: OAuthSpec) => Promise<string | null> {
+): (spec: OAuthSpec, account?: string | null) => Promise<string | null> {
   const cache = new Map<string, { token: string; until: number }>();
-  return async (spec) => {
-    const refresh = env(spec.refreshToken);
+  return async (spec, account) => {
+    const refreshName = accountEnv(spec.refreshToken, account);
+    const refresh = env(refreshName);
     const id = env(spec.clientId);
     const secret = env(spec.clientSecret);
-    if (!refresh || !id || !secret) return (spec.accessToken && env(spec.accessToken)) || null;
-    const hit = cache.get(spec.refreshToken);
+    if (!refresh || !id || !secret)
+      return (spec.accessToken && env(accountEnv(spec.accessToken, account))) || null;
+    const hit = cache.get(refreshName);
     if (hit && hit.until > now()) return hit.token;
     const body = await tokenCall(http, spec.tokenUrl, {
       grant_type: "refresh_token",
@@ -66,7 +82,7 @@ export function accessTokens(
       client_secret: secret,
     });
     const token = body.access_token as string;
-    cache.set(spec.refreshToken, { token, until: now() + ((body.expires_in ?? 3600) - 60) * 1000 });
+    cache.set(refreshName, { token, until: now() + ((body.expires_in ?? 3600) - 60) * 1000 });
     return token;
   };
 }
@@ -74,6 +90,8 @@ export function accessTokens(
 export interface ConsentInput {
   /** The authorize URL to open; the flow logs in and clicks allow. */
   url: string;
+  /** Which account consents, when the site's chooser lists several. */
+  account?: string;
 }
 
 /**
@@ -88,6 +106,8 @@ export async function runConsent(
     env: (name: string) => string | undefined;
     /** Opens the authorize URL in the site's logged-in profile and clicks through to the redirect. */
     open: (input: ConsentInput) => Promise<unknown>;
+    /** Which account consents (the chooser's pick; the token is kept under its own name). */
+    account?: string | null;
     /** Loopback port for the redirect; must match the client's registered redirect URI. */
     port?: number;
     timeoutMs?: number;
@@ -139,7 +159,10 @@ export async function runConsent(
     ...(spec.params ?? {}),
   }))
     url.searchParams.set(k, v);
-  await Promise.all([o.open({ url: url.toString() }), code]);
+  await Promise.all([
+    o.open({ url: url.toString(), ...(o.account ? { account: o.account } : {}) }),
+    code,
+  ]);
   const body = await tokenCall(o.http, spec.tokenUrl, {
     grant_type: "authorization_code",
     code: await code,

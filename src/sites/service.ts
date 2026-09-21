@@ -22,7 +22,8 @@ const READ_RETRY = {
 };
 const WRITE_RETRY = { maxRetryAttempts: 1 };
 
-const site = z.object({ site: z.string().min(1) });
+/** `account`: which identity's token (a consented address); the site's own when absent. */
+const site = z.object({ site: z.string().min(1), account: z.string().min(1).optional() });
 const call = site.extend({
   method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
   path: z.string().startsWith("/"),
@@ -65,7 +66,10 @@ export function sitesService(facade: SiteFacade) {
         const retry = req.method === "GET" ? READ_RETRY : WRITE_RETRY;
         return ctx.run(
           `sites ${req.site} ${req.method} ${req.path}`,
-          () => terminalOnSiteError(() => facade.call(req.site, req.method, req.path, req.input)),
+          () =>
+            terminalOnSiteError(() =>
+              facade.call(req.site, req.method, req.path, req.input, req.account),
+            ),
           retry,
         );
       },
@@ -73,7 +77,7 @@ export function sitesService(facade: SiteFacade) {
         const req = parse(setup, raw);
         return ctx.run(
           `sites setup ${req.site} ${req.step}`,
-          () => terminalOnSiteError(() => facade.setup(req.site, req.step)),
+          () => terminalOnSiteError(() => facade.setup(req.site, req.step, req.account)),
           WRITE_RETRY,
         );
       },

@@ -5,6 +5,7 @@
  * Everything it reads from the process (env, the HTTP client, the catalog of
  * sites and flows) is an option, so a library caller can hand its own.
  */
+import type { CredentialStore } from "../auth/credentials.js";
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import { type HttpClient, httpClient } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
@@ -27,6 +28,29 @@ export interface SiteParts {
   http?: HttpClient;
   /** Hand-written legs by `site/name`; the built-in catalog unless said. */
   flows?: Record<string, BrowserFlow<never, unknown>>;
+  /**
+   * The stored credentials, so a consent for `--account will@x.dev` runs in
+   * the `<site>@<label>` profile whose username that is; without them the
+   * flow's own profile and its account chooser.
+   */
+  credentials?: CredentialStore;
+}
+
+/** The `<site>@<label>` credential name whose username is `account`; the site's own when it matches. */
+export async function profileOf(
+  credentials: CredentialStore,
+  site: string,
+  account: string,
+): Promise<string | null> {
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const own = await credentials.get(site);
+  if (own && same(own.username, account)) return site;
+  for (const name of await credentials.list()) {
+    if (!name.startsWith(`${site}@`)) continue;
+    const c = await credentials.get(name);
+    if (c && same(c.username, account)) return name;
+  }
+  return null;
 }
 
 export function sitesFor(p: SiteParts): SiteFacade {
@@ -51,5 +75,10 @@ export function sitesFor(p: SiteParts): SiteFacade {
         runCompiled(workflow, p.browser, { plan, sink: p.sink, approve: true }),
     },
     oauthPort: p.oauthPort,
+    ...(p.credentials
+      ? {
+          profileFor: (site, account) => profileOf(p.credentials as CredentialStore, site, account),
+        }
+      : {}),
   });
 }

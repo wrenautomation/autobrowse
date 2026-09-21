@@ -124,6 +124,7 @@ Browserbase takes them.
   `instagram` before the browser opens, and lets the agent make the account
   placing `email`, `password`, `code` (read from that inbox or the phone)
   and `phone`; a captcha hands off to you in the window (enter to go on).
+  `--inbox will@…` reads the codes there when the address is an alias.
   The journal keeps every placed field redacted, so the compiled flow reads
   it as a secret by key.
 - **Env store.** Secrets travel through SSM Parameter Store, one
@@ -348,15 +349,26 @@ Behind one route the official API answers when a token is in hand, a browser
 flow otherwise (gated reads, community posts). The caller has one client.
 Sites: `linkedin`, `youtube`, `instagram` (Graph API, long-lived token),
 `tiktok` (Content Posting API; `client_key`), `outlook` (Microsoft Graph:
-mail and calendar, `/me/messages`, `/me/sendMail`, `/me/events`). Instagram,
-TikTok and Outlook are written from the public docs and unproven until a
-credential and a developer app exist.
+mail and calendar, `/me/messages`, `/me/sendMail`, `/me/events`), `gmail`
+(`/gmail/v1/users/me/...`; proven 2026-09-22). Instagram, TikTok and Outlook
+are written from the public docs and unproven until a credential and a
+developer app exist.
+
+One site, any number of identities: `site setup gmail consent --account
+will@x.dev` runs the consent in the `google@<label>` profile whose credential
+has that username and keeps the token as `GMAIL_REFRESH_TOKEN__WILL_X_DEV`;
+`site call … --account will@x.dev` uses it. A consent without `--account` is
+kept under whoever consented too (the site's `identity` call says who). Code
+reading and mail sending act as a consented address through its own token,
+so any Google inbox works, not only our Workspace (the service account's
+domain-wide delegation stays the path for those).
 
 ```sh
 pnpm autobrowse site                        # sites, token state, setup left
 pnpm autobrowse site status linkedin        # every route: api | browser | none (why)
 pnpm autobrowse site setup youtube oauth-client   # a browser flow on Cloud Console keeps the client id/secret
 pnpm autobrowse site setup youtube consent        # OAuth consent in the logged-in profile; refresh token kept
+pnpm autobrowse site setup gmail consent --account will@x.dev   # another account's inbox: token under its own name
 pnpm autobrowse site call linkedin POST /rest/posts --body '{"author":"urn:li:person:…","commentary":"hi"}'
 ```
 

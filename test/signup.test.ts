@@ -38,6 +38,12 @@ describe("signup", () => {
       /already has a stored credential/,
     );
     expect((await store.get("x"))?.username).toBe("hello@wren.test");
+    const aliased = await mintCredential(store, {
+      site: "y",
+      email: "hello@wren.test",
+      inbox: "will@wren.test",
+    });
+    expect(aliased.codesInbox).toBe("will@wren.test");
   });
 
   it("secrets by name: email, password, phone, and a fresh code each time", async () => {

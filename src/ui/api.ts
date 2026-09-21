@@ -285,7 +285,9 @@ export function api(deps: ApiDeps): Hono {
       if (row.blockedOn.length)
         return c.json({ error: `needs ${row.blockedOn.join(", ")} first` }, 409);
       return c.json(
-        jobs.start("setup", `${site}/${step}`, () => sites.setup(site, step)),
+        jobs.start("setup", `${site}/${step}`, () =>
+          sites.setup(site, step, c.req.query("account") ?? null),
+        ),
         202,
       );
     } catch (err) {
@@ -304,7 +306,9 @@ export function api(deps: ApiDeps): Hono {
         : ((await c.req.json().catch(() => null)) as Record<string, unknown> | null);
     if (body === null) return c.json({ error: "body must be JSON" }, 400);
     try {
-      return c.json(await sites.call(site, method, path, { ...c.req.query(), ...body }));
+      // `account` picks the identity; it is not part of the site's own query.
+      const { account, ...query } = c.req.query();
+      return c.json(await sites.call(site, method, path, { ...query, ...body }, account ?? null));
     } catch (err) {
       return siteError(c, err);
     }
