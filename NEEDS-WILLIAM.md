@@ -4,6 +4,25 @@ What autobrowse cannot do for itself. Kept current by the agent; strike a
 line when it is done. Each says why it is stuck and what one action clears
 it. Dated 2026-09-21.
 
+## The MVP, and the five things only you can do (2026-09-22)
+
+Everything in the MVP goal is built and green on both repos; what is left
+is a credential, a card or a phone. In order of payoff:
+
+1. **Meta app + ad account card** → ads run, Page and Instagram post
+   (`walkthrough/03-meta-app.md`; ~20 min on developers.facebook.com and
+   business.facebook.com, then `site setup meta consent`).
+2. **`creds paste linkedin`** → `site setup linkedin developer-app` is
+   recorded with you once, then LinkedIn posts go out from the content loop.
+3. **A phone number** (Twilio upgrade, or your iPhone's texts forwarded to
+   this Mac) → `autobrowse signup instagram|x|tiktok` makes Wren's accounts.
+4. **Anthropic credits** ($5) → the agent explores with the good model;
+   `LLM_PROVIDER=claude-code` works meanwhile.
+5. **`autobrowse unsubscribe --yes --only …`** (the list below) → the inbox
+   is quiet.
+
+Everything else below is detail on those.
+
 ## Done without you tonight (2026-09-22, autobrowse main)
 
 Page outline digest, Outlook site + login + consent, library layers
