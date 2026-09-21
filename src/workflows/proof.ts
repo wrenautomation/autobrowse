@@ -31,16 +31,31 @@ export interface Proof {
  * answer as told: declined for a proof, approved for a call an orchestrator
  * has already gated.
  */
+/** Run the workflow's flows at `site` under `profile` instead (a second account at the provider). */
+export interface RunAs {
+  site: string;
+  profile: string;
+}
+
+/** The runner with every flow at `as.site` re-sited to `as.profile`; other sites run as themselves. */
+export function runnerAs(browser: FlowRunner, as: RunAs | undefined): FlowRunner {
+  if (!as || as.site === as.profile) return browser;
+  return {
+    run: (flow, input) =>
+      browser.run(flow.site === as.site ? { ...flow, site: as.profile } : flow, input),
+  };
+}
+
 export async function runCompiled(
   workflow: AnyWorkflow,
   browser: FlowRunner,
-  o: { plan?: Record<string, unknown>; sink?: SecretSink; approve?: boolean } = {},
+  o: { plan?: Record<string, unknown>; sink?: SecretSink; approve?: boolean; as?: RunAs } = {},
 ): Promise<Pick<Proof, "status" | "steps" | "output">> {
   const plan = workflow.plan.parse({ ...(o.plan ?? {}), dryRun: false });
   const out = await runFlow(
     memoryEffects().fx,
     workflow as never,
-    compiledDeps(browser, o.sink ? { sink: o.sink } : {}) as never,
+    compiledDeps(runnerAs(browser, o.as), o.sink ? { sink: o.sink } : {}) as never,
     plan,
     () =>
       o.approve

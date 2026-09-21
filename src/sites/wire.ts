@@ -105,14 +105,20 @@ export function sitesFor(p: SiteParts): SiteFacade {
     flow: (name) => flows[name] ?? null,
     compiled: {
       get: async (name) => (await p.catalog.get(name))?.workflow ?? null,
-      run: (workflow, plan) =>
-        runCompiled(workflow, p.browser, { plan, sink: p.sink, approve: true }),
+      run: (workflow, plan, as) =>
+        runCompiled(workflow, p.browser, {
+          plan,
+          sink: p.sink,
+          approve: true,
+          ...(as ? { as } : {}),
+        }),
     },
     oauthPort: p.oauthPort,
     approve: p.approve ?? null,
     ...(p.credentials
       ? {
           profileFor: (site, account) => profileOf(p.credentials as CredentialStore, site, account),
+          providerOf: consentProviderOf,
         }
       : {}),
     ...(p.identities

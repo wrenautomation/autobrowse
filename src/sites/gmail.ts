@@ -125,13 +125,14 @@ export const gmail: SiteApi = {
           project: { env: "GOOGLE_CLOUD_PROJECT" },
           api: "gmail.googleapis.com",
           appName: "Wren Automation",
-          email: "jinwilliam.jin@gmail.com",
+          email: { account: true },
           clientName: "autobrowse",
           redirectUri: "http://127.0.0.1:9400/oauth/callback",
         },
       },
       summary:
         "In Google Cloud Console: enable the Gmail API on the project, the same Web OAuth client YouTube uses (its id and secret are shared)",
+      purpose: "pays",
     },
     {
       name: "consent",

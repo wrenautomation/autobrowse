@@ -59,8 +59,12 @@ export interface SiteRoute<I = unknown, O = unknown> {
 }
 
 /** One key or token the site needs, and what makes it. */
-/** A literal, or the value of an env name (one an earlier setup step made, or the person set). */
-export type SetupInput = unknown | { env: string };
+/**
+ * A literal, the value of an env name (one an earlier setup step made, or the
+ * person set), or the account the step runs as (`{ account: true }`: the one
+ * the policy picked for its purpose, or the one the caller named).
+ */
+export type SetupInput = unknown | { env: string } | { account: true };
 
 export interface SetupStep {
   name: string;

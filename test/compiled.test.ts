@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { WORKFLOWS } from "../src/app/services.js";
+import type { BrowserFlow, FlowRunner } from "../src/browser/flow.js";
 import {
   compiledCatalog,
   compiledDeps,
@@ -11,6 +12,7 @@ import {
   loadCompiledWorkflows,
   splitCompiledKey,
 } from "../src/workflows/compiled.js";
+import { runnerAs } from "../src/workflows/proof.js";
 
 describe("loadCompiledWorkflows", () => {
   it("loads every dir exporting a workflow, skips hand-written names and broken modules", async () => {
@@ -92,5 +94,27 @@ describe("HAND_WRITTEN", () => {
   it("names exactly the workflows the worker serves under their own objects", () => {
     // The ingress routes by this set; a hand-written flow missing from it would be sent to Compiled.
     expect(new Set(WORKFLOWS.map((w) => w.name))).toEqual(HAND_WRITTEN);
+  });
+});
+
+describe("runnerAs", () => {
+  const sites: string[] = [];
+  const browser: FlowRunner = {
+    run: async (flow) => {
+      sites.push(flow.site);
+      return undefined as never;
+    },
+  };
+  const flow = (site: string) =>
+    ({ site, name: "f", run: async () => {} }) as BrowserFlow<void, void>;
+  it("re-sites only the provider's flows; nothing without an `as` or when the profile is the site", async () => {
+    await runnerAs(browser, { site: "google", profile: "google@pays" }).run(
+      flow("google"),
+      undefined,
+    );
+    await runnerAs(browser, { site: "google", profile: "google@pays" }).run(flow("x"), undefined);
+    await runnerAs(browser, { site: "google", profile: "google" }).run(flow("google"), undefined);
+    await runnerAs(browser, undefined).run(flow("google"), undefined);
+    expect(sites).toEqual(["google@pays", "x", "google", "google"]);
   });
 });

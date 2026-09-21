@@ -235,6 +235,7 @@ export const youtube: SiteApi = {
       makes: ["GOOGLE_CLOUD_PROJECT"],
       how: { workflow: "google-cloud-project", input: { name: "wren" } },
       summary: "In Google Cloud Console: a project to hold the OAuth client; its id is kept",
+      purpose: "pays",
     },
     {
       name: "oauth-client",
@@ -246,13 +247,14 @@ export const youtube: SiteApi = {
           project: { env: "GOOGLE_CLOUD_PROJECT" },
           api: "youtube.googleapis.com",
           appName: "Wren Automation",
-          email: "jinwilliam.jin@gmail.com",
+          email: { account: true },
           clientName: "autobrowse",
           redirectUri: "http://127.0.0.1:9400/oauth/callback",
         },
       },
       summary:
         "In Google Cloud Console: enable the YouTube Data API v3, configure the consent screen (external, testing, one test user), create a Web OAuth client with the loopback redirect, keep its id and secret",
+      purpose: "pays",
     },
     {
       name: "consent",

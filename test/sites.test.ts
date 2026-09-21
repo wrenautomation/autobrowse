@@ -333,6 +333,62 @@ describe("site facade", () => {
     expect((await sites.status("linkedin")).setup[1]?.blockedOn).toEqual([]);
   });
 
+  it("a compiled setup step runs as the policy's account for its purpose: `{ account: true }` is its address, its provider flows re-sited to that profile", async () => {
+    const seen: unknown[] = [];
+    const site: SiteApi = {
+      ...youtube,
+      setup: [
+        {
+          name: "oauth-client",
+          makes: ["GOOGLE_OAUTH_CLIENT_ID"],
+          needs: [],
+          how: { workflow: "google-cloud-oauth-client", input: { email: { account: true } } },
+          summary: "the console that bills",
+          purpose: "pays",
+        },
+        ...youtube.setup.filter((st) => "oauth" in st.how),
+      ],
+    };
+    const workflow = { name: "google-cloud-oauth-client" } as never;
+    const sites = siteFacade([site], {
+      http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+      env: () => undefined,
+      sink: memorySink(),
+      runner: fakeBrowser([]),
+      flow: () => null,
+      compiled: {
+        get: async (name) => (name === "google-cloud-oauth-client" ? workflow : null),
+        run: async (_w, plan, as) => {
+          seen.push([plan, as]);
+          return { status: "done", steps: [], output: null };
+        },
+      },
+      providerOf: () => "google",
+      accountFor: async (_s, step) => (step?.purpose === "pays" ? "pays@x.dev" : "will@x.dev"),
+      profileFor: async (at, account) => (account === "pays@x.dev" ? `${at}@pays` : at),
+    });
+    await sites.setup("youtube", "oauth-client");
+    // The caller's account wins over the policy; the provider's own profile means no re-siting.
+    await sites.setup("youtube", "oauth-client", "will@x.dev");
+    expect(seen).toEqual([
+      [{ email: "pays@x.dev" }, { site: "google", profile: "google@pays" }],
+      [{ email: "will@x.dev" }, undefined],
+    ]);
+    // No account anywhere: the step cannot fill `{ account: true }`.
+    const bare = siteFacade([site], {
+      http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+      env: () => undefined,
+      sink: memorySink(),
+      runner: fakeBrowser([]),
+      flow: () => null,
+      compiled: {
+        get: async () => workflow,
+        run: async () => ({ status: "done", steps: [], output: null }),
+      },
+    });
+    await expect(bare.setup("youtube", "oauth-client")).rejects.toMatchObject({ status: 409 });
+  });
+
   it("a custom site with a browser output mapping answers in the official shape", async () => {
     const stats = defineFlow<{ urn: string }, { likes: number; comments: number }>({
       site: "x",

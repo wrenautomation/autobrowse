@@ -126,5 +126,9 @@ site (canaries stay home). The box reads those first. On a second laptop,
 already there is kept unless `--overwrite`). Passkeys cannot ride in env
 (see `../deploy/README.md`).
 
+A site setup step that bills (`purpose: "pays"`, the Google Cloud console)
+runs as the paying account: its profile signs the step's flows in, and the
+step's `email` is that address. Name another with `--account`.
+
 In the UI: **Accounts** starts with "Which account for what" (change a
 purpose there), **Needs** is `autobrowse needs` with a done button.

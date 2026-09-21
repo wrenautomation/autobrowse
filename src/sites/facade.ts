@@ -9,7 +9,7 @@ import type { HttpClient } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import type { Approver } from "../gates/payment.js";
-import type { Proof } from "../workflows/proof.js";
+import type { Proof, RunAs } from "../workflows/proof.js";
 import { accessTokens, accountEnv, runConsent } from "./oauth.js";
 import {
   type Leg,
@@ -33,7 +33,7 @@ export interface SiteFacadeDeps {
   /** Compiled workflows by name, run in-process with gates approved (the caller gated the route). */
   compiled?: {
     get(name: string): Promise<AnyWorkflow | null>;
-    run(workflow: AnyWorkflow, plan: Record<string, unknown>): Promise<CompiledRun>;
+    run(workflow: AnyWorkflow, plan: Record<string, unknown>, as?: RunAs): Promise<CompiledRun>;
   };
   /** Loopback port for OAuth redirects. */
   oauthPort?: number;
@@ -43,6 +43,11 @@ export interface SiteFacadeDeps {
    * when absent (the chooser then picks).
    */
   profileFor?: (site: string, account: string) => Promise<string | null>;
+  /**
+   * The identity provider a site's accounts sign in at (`google` for a site
+   * whose consent is Google's); null when its accounts are its own (LinkedIn).
+   */
+  providerOf?: (site: SiteApi) => string | null;
   /**
    * The account a call or setup step is for when the caller names none: the
    * person's account for the site's (or step's) purpose at the provider the
@@ -127,7 +132,20 @@ export function matchPath(pattern: string, path: string): Record<string, string>
 }
 
 /** `{ env: "X" }` → the env store's value of X (its absence was caught by `needs`); anything else is itself. */
-function resolveInput(v: unknown, env: SiteFacadeDeps["env"]): unknown {
+function resolveInput(v: unknown, env: SiteFacadeDeps["env"], account: string | null): unknown {
+  if (
+    v &&
+    typeof v === "object" &&
+    "account" in v &&
+    (v as { account: unknown }).account === true
+  ) {
+    if (!account)
+      throw new SiteError(
+        409,
+        "setup needs an account: --account <address>, or autobrowse accounts",
+      );
+    return account;
+  }
   if (v && typeof v === "object" && "env" in v && typeof (v as { env: unknown }).env === "string") {
     const name = (v as { env: string }).env;
     const got = env(name);
@@ -177,6 +195,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
   const legOf = async (
     leg: Leg,
     profile?: string | null,
+    at?: string | null,
   ): Promise<((input: unknown) => Promise<unknown>) | null> => {
     if ("flow" in leg) {
       const flow = deps.flow(leg.flow) as BrowserFlow<unknown, unknown> | null;
@@ -188,8 +207,10 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     const workflow = await deps.compiled?.get(leg.workflow);
     if (!workflow || !deps.compiled) return null;
     const { run } = deps.compiled;
+    // Under another profile the workflow's flows at that provider sign in as that account.
+    const as = profile && at && profile !== at ? { site: at, profile } : undefined;
     return async (input) => {
-      const out = await run(workflow, (input ?? {}) as Record<string, unknown>);
+      const out = await run(workflow, (input ?? {}) as Record<string, unknown>, as);
       if (out.status !== "done") {
         const failed = out.steps.find((x) => x.status !== "done" && x.status !== "skipped");
         throw new SiteError(
@@ -308,12 +329,20 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       if (!("oauth" in step.how)) {
         const leg: Leg =
           "flow" in step.how ? { flow: step.how.flow } : { workflow: step.how.workflow };
-        const run = await legOf(leg);
+        // The account the step runs as: the caller's, else the policy's for its purpose; its
+        // profile re-sites the leg's flows at the provider so they sign in as it.
+        const as = account ?? (await deps.accountFor?.(s, step)) ?? null;
+        const at = deps.providerOf?.(s) ?? null;
+        const profile = as && at ? await deps.profileFor?.(at, as) : null;
+        const run = await legOf(leg, profile, at);
         if (!run) throw new SiteError(501, `${legName(leg)} not recorded yet; explore it`);
         // A hand-written flow keeps what it made through the sink it is handed; a compiled one has the worker's.
         const input: Record<string, unknown> = {
           ...Object.fromEntries(
-            Object.entries(step.how.input ?? {}).map(([k, v]) => [k, resolveInput(v, deps.env)]),
+            Object.entries(step.how.input ?? {}).map(([k, v]) => [
+              k,
+              resolveInput(v, deps.env, as),
+            ]),
           ),
           ...("flow" in step.how ? { sink: deps.sink } : {}),
         };
