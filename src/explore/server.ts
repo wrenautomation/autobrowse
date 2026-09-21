@@ -34,6 +34,7 @@ import {
 } from "../desktop/types.js";
 import {
   type Approver,
+  amountNear,
   PaymentGate,
   PendingApprovals,
   paymentAmount,
@@ -354,7 +355,11 @@ async function serve(
     if (!what) return;
     // A miss is a miss, not a question: the element must be there before anyone is asked.
     await find(t).first().waitFor({ state: "visible", timeout: 10_000 });
-    const amount = act === "click" ? paymentAmount(t.hints as Hints) : null;
+    // The button's own amount, else the order total next to it, else a question with no amount.
+    const amount =
+      act === "click"
+        ? (paymentAmount(t.hints as Hints) ?? (await amountNear(find(t).first())))
+        : null;
     await decide(`${act} ${JSON.stringify(t.hints)}`, what, page.url(), wait, amount);
   };
   /** A desktop click that spends (an App Store "Buy") waits for the person the same way; "url" is the app. */

@@ -80,8 +80,9 @@ opposite. There, the model holds the keys and runs shell it wrote. Here:
 
 ## Where to attack
 
-1. Amount from the page when the button has none: the order total nearest
-   the button, so more purchases fall under the auto line.
+1. ✅ Amount from the page when the button has none: `amountNear` reads the closest
+   block around the button that says "total" and takes its last total line
+   (`totalIn`; subtotals ignored). Nothing found = a question with no amount, as before.
 2. Virtual cards (4) once the vendor is chosen.
 3. ✅ The box sends its ledger summary (`src/auth/ledger.ts`) over the channel right
    before its idle stop, and serves `GET /api/ledger?since=`. Still local-only:

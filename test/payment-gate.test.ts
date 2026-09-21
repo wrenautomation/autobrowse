@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { askLine, askOverChannel } from "../src/gates/ask.js";
-import { paymentGate } from "../src/gates/payment.js";
+import { amountNear, paymentGate, totalIn } from "../src/gates/payment.js";
 
 describe("paymentGate", () => {
   it("gates billing fields and spending buttons, nothing else", () => {
@@ -17,6 +17,37 @@ describe("paymentGate", () => {
     expect(paymentGate("click", { role: "link", name: "Upgrade" })).toBeNull(); // a page, not a charge
     expect(paymentGate("fill", { role: "textbox", name: "Name" })).toBeNull();
     expect(paymentGate("fill", { role: "textbox", name: "Project name" })).toBeNull();
+  });
+});
+
+describe("amount from the page", () => {
+  it("takes the last total line, never a subtotal, null without one", () => {
+    const cart = [
+      "Domain registration  $12.98",
+      "Subtotal $12.98",
+      "Tax $1.02",
+      "Order total $14.00",
+      "Pay now",
+    ].join("\n");
+    expect(totalIn(cart)).toEqual({ value: 14, currency: "USD" });
+    expect(totalIn("Subtotal $12.98\nPay now")).toBeNull();
+    expect(totalIn("Amount due today: €30\nTotal $99 later")).toEqual({
+      value: 99,
+      currency: "USD",
+    });
+    expect(totalIn("total items: 3")).toBeNull();
+  });
+
+  it("reads the block around the button and survives an evaluate that fails", async () => {
+    const el = { evaluate: async <R>() => "Subtotal $5\nTotal $6.50\nBuy" as R };
+    expect(await amountNear(el)).toEqual({ value: 6.5, currency: "USD" });
+    const dead = {
+      evaluate: async <R>(): Promise<R> => {
+        throw new Error("detached");
+      },
+    };
+    expect(await amountNear(dead)).toBeNull();
+    expect(await amountNear({ evaluate: async <R>() => "" as R })).toBeNull();
   });
 });
 

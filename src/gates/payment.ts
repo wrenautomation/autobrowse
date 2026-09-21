@@ -37,6 +37,52 @@ export function paymentAmount(hints: Hints): Amount | null {
   return amountIn(words(hints));
 }
 
+const TOTAL_LINE =
+  /\b(grand |order |amount |cart )?total\b|\bamount due\b|\bdue (today|now)\b|\byou(’|')?ll pay\b/i;
+const NOT_TOTAL = /\bsub-?total\b/i;
+
+/**
+ * The order total in a block of page text: the amount on the last line that
+ * says "total" / "amount due" (not "subtotal"). Null when no such line has
+ * one, so a button with no amount stays a question with no amount.
+ */
+export function totalIn(text: string): Amount | null {
+  let found: Amount | null = null;
+  for (const line of text.split(/\r?\n/)) {
+    if (!TOTAL_LINE.test(line) || NOT_TOTAL.test(line)) continue;
+    const a = amountIn(line);
+    if (a) found = a;
+  }
+  return found;
+}
+
+/** The smallest ancestor around an element whose text names a total, capped; "" when none within 8 levels. */
+const TOTAL_BLOCK = `(el) => {
+  let n = el;
+  for (let i = 0; i < 8 && n; i++) {
+    const t = (n.innerText || "").trim();
+    if (t.length > 4000) return "";
+    if (/total|amount due|due (today|now)/i.test(t)) return t;
+    n = n.parentElement;
+  }
+  return "";
+}`;
+
+/** Something with Playwright's `evaluate`: a Locator or ElementHandle. */
+export interface Evaluable {
+  evaluate<R>(fn: string): Promise<R>;
+}
+
+/**
+ * The amount the page shows for a spending button that names none: the
+ * order total nearest the button (its closest ancestor that says "total").
+ * Read once, at the ask; the gate still asks when nothing is found.
+ */
+export async function amountNear(el: Evaluable): Promise<Amount | null> {
+  const block = await el.evaluate<string>(TOTAL_BLOCK).catch(() => "");
+  return block ? totalIn(block) : null;
+}
+
 export function paymentGate(act: GatedAct, hints: Hints): string | null {
   const w = words(hints);
   if ((act === "fill" || act === "select") && PAYMENT_FIELD.test(w))

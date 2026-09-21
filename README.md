@@ -164,7 +164,8 @@ Browserbase takes them.
   outright when no such channel is set. Compiled steps that touch billing
   are gated the same way as irreversible ones; the agent stops on a no.
   The ask carries the amount on the button ("Buy $20 of credits" → 20.00
-  USD). `SPEND_ALLOW=anthropic SPEND_AUTO_YES_UNDER=25 SPEND_DAILY_CAP=50
+  USD), else the order total next to it (the last "total"/"amount due"
+  line in the block around the button; never a subtotal). `SPEND_ALLOW=anthropic SPEND_AUTO_YES_UNDER=25 SPEND_DAILY_CAP=50
   SPEND_HARD_CAP=500` lets the gate say yes alone to a small purchase on a
   named site while the day's total is under the cap, and refuse anything
   over the ceiling before anyone is asked; a button with no amount is
