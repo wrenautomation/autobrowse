@@ -45,7 +45,12 @@ not proof-run candidates.
 
 1. Providers `github` and `microsoft`: a form sign-in each (username,
    password, TOTP) and their button readings; then any site behind
-   "Continue with GitHub" is a `creds via` away.
+   "Continue with GitHub" is a `creds via` away. `github` built 2026-09-20
+   (`src/auth/github.ts`: password → authenticator code → device
+   verification email → authorize page; acts on the page the button landed
+   on, never re-opens /login, so `return_to` survives); unit-tested, not
+   yet proven live (needs `creds set github`, NEEDS-WILLIAM). `microsoft`
+   open.
 2. Popup vs redirect: `oauthLogin` handles both, but a provider that opens
    in a popup and closes it on consent leaves `main` to land; verify on
    a site that does that (Twilio did on 2026-09-21).

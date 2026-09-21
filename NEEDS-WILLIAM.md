@@ -52,6 +52,13 @@ it. Dated 2026-09-21.
   refresh token kept; the Data API answers. Say if another Google account
   owns the channel you want to post to.
 
+## Sign-in providers
+
+- **GitHub**: `pnpm autobrowse creds set github` (stdin JSON
+  `{"username","password","totpSecret"?}`) to prove the new `github`
+  provider live; then any "Continue with GitHub" site is
+  `creds via <site> github --url …`. Built and unit-tested 2026-09-20.
+
 ## Keys not yet obtained
 
 - `BROWSERBASE_*`: skipped on purpose (no Browserbase).

@@ -278,7 +278,7 @@ pnpm autobrowse creds set google@ops    # a second Google account, then:
 pnpm autobrowse creds via other-tool google --account ops@x.com --url https://other-tool.test/login
 ```
 
-Providers live in `src/auth/providers.ts` (google today); a `via`
+Providers live in `src/auth/providers.ts` (google, github); a `via`
 credential on any site takes that path, spec or not. API consent
 (`site setup youtube consent`) is the hand-written `google/oauth-consent`
 flow: chooser, unverified-app warning, scope boxes, Continue, until the

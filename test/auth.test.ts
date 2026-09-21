@@ -30,6 +30,7 @@ import {
 import type { FlowPage, Op } from "../src/browser/flow.js";
 import type { Hints } from "../src/browser/locate.js";
 import { NeedsHuman } from "../src/browser/session.js";
+import { fakePage } from "./auth-fakes.js";
 
 // RFC 6238 test vector: secret "12345678901234567890" (base32 GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ).
 const RFC_SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
@@ -196,31 +197,6 @@ describe("code sources", () => {
 });
 
 /** A page as a script: what `text()` says after each act, and which hints exist. */
-function fakePage(script: { text: string[]; present: (h: Hints) => boolean; url?: string }) {
-  const acts: Array<{ op: Op; hints: Hints }> = [];
-  let i = 0;
-  const fp: FlowPage = {
-    page: {} as FlowPage["page"],
-    async open() {},
-    url: () => script.url ?? "https://site.test/login",
-    text: async () => script.text[Math.min(i, script.text.length - 1)] ?? "",
-    html: async () => "",
-    has: async (h) => script.present(h),
-    wait: async () => {},
-    waitForUrl: async () => true,
-    nextPage: async () => null,
-    switchTo() {},
-    async act(op, hints) {
-      acts.push({ op, hints });
-      if (op.kind === "click") i++;
-    },
-    human(reason) {
-      throw new NeedsHuman(reason);
-    },
-  };
-  return { fp, acts };
-}
-
 const spec = {
   start: "https://site.test/login",
   username: { role: "textbox", name: "Email" },
