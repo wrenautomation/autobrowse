@@ -8,7 +8,14 @@ import { gmailClient } from "../src/clients/gmail.js";
 import { httpClient } from "../src/clients/http.js";
 import { tailJson, tailLines } from "../src/deps/tail.js";
 import type { RunEvent } from "../src/engine/events.js";
-import { type RunRow, trimRows } from "../src/engine/rows.js";
+import {
+  cursorOf,
+  orderedRows,
+  pageOf,
+  pageOfOrdered,
+  type RunRow,
+  trimRows,
+} from "../src/engine/rows.js";
 import { eventBus } from "../src/ui/bus.js";
 
 const row = (key: string, status: RunRow["status"], updatedAt: string): RunRow => ({
@@ -23,16 +30,30 @@ const row = (key: string, status: RunRow["status"], updatedAt: string): RunRow =
 
 describe("bounded state", () => {
   it("trimRows keeps every live run and the newest settled ones up to the cap", () => {
-    const rows = Object.fromEntries([
-      ["w/a", row("a", "done", "2026-09-01")],
-      ["w/b", row("b", "running", "2026-09-02")],
-      ["w/c", row("c", "failed", "2026-09-03")],
-      ["w/d", row("d", "waiting", "2026-09-04")],
-      ["w/e", row("e", "done", "2026-09-05")],
-    ]);
-    expect(Object.keys(trimRows(rows, 3))).toEqual(["w/b", "w/d", "w/e"]);
-    expect(Object.keys(trimRows(rows, 2))).toEqual(["w/b", "w/d"]);
+    const rows = [
+      row("e", "done", "2026-09-05"),
+      row("d", "waiting", "2026-09-04"),
+      row("c", "failed", "2026-09-03"),
+      row("b", "running", "2026-09-02"),
+      row("a", "done", "2026-09-01"),
+    ];
+    expect(trimRows(rows, 3).map((r) => r.key)).toEqual(["e", "d", "b"]);
+    expect(trimRows(rows, 2).map((r) => r.key)).toEqual(["d", "b"]);
     expect(trimRows(rows, 5)).toBe(rows);
+  });
+
+  it("an ordered list pages by bisecting to the cursor; the old map shape still reads", () => {
+    const rows = ["e", "d", "c", "b", "a"].map((k, i) => row(k, "done", `2026-09-0${5 - i}`));
+    expect(pageOfOrdered(rows, { limit: 2 }).map((r) => r.key)).toEqual(["e", "d"]);
+    expect(
+      pageOfOrdered(rows, { limit: 2, before: cursorOf(rows[1] as RunRow) }).map((r) => r.key),
+    ).toEqual(["c", "b"]);
+    expect(pageOfOrdered(rows, { before: "2026-09-02" }).map((r) => r.key)).toEqual(["a"]);
+    expect(pageOfOrdered(rows, { before: "2026-09-00" })).toEqual([]);
+    expect(pageOfOrdered(rows, {})).toEqual(pageOf([...rows].reverse(), {}));
+    const asMap = Object.fromEntries(rows.map((r) => [`w/${r.key}`, r]));
+    expect(orderedRows(asMap).map((r) => r.key)).toEqual(["e", "d", "c", "b", "a"]);
+    expect(orderedRows(null)).toEqual([]);
   });
 
   it("the event bus ring drops the oldest at capacity and bisects `recent(after)`", async () => {

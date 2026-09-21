@@ -62,22 +62,17 @@ export function applyRunEvent(row: RunRow | null, event: RunEvent): RunRow {
   return next;
 }
 
-/** Rows the registry keeps; past it the oldest finished ones go (a running or waiting run never does). */
+/** Rows the registry keeps; past it the oldest settled ones go (a running or waiting run never does). */
 export const KEEP_ROWS = 2_000;
 
 const SETTLED = new Set<RunRow["status"]>(["done", "failed", "rejected", "reset"]);
 
-/** The rows to keep once over `keep`: every live one, and the newest settled ones up to the cap. */
-export function trimRows(rows: Record<string, RunRow>, keep = KEEP_ROWS): Record<string, RunRow> {
-  const all = Object.entries(rows);
-  if (all.length <= keep) return rows;
-  const settled = all
-    .filter(([, r]) => SETTLED.has(r.status))
-    .sort(([, a], [, b]) => compareRows(a, b));
-  const drop = new Set(
-    settled.slice(Math.max(0, keep - (all.length - settled.length))).map(([id]) => id),
-  );
-  return Object.fromEntries(all.filter(([id]) => !drop.has(id)));
+/** A list in order once over `keep`: every live row stays, settled ones only while under the cap. */
+export function trimRows(rows: readonly RunRow[], keep = KEEP_ROWS): RunRow[] {
+  if (rows.length <= keep) return rows as RunRow[];
+  const live = rows.reduce((n, r) => n + (SETTLED.has(r.status) ? 0 : 1), 0);
+  let room = Math.max(0, keep - live);
+  return rows.filter((r) => !SETTLED.has(r.status) || room-- > 0);
 }
 
 /** A page of the list: newest first, `limit` rows (100 unless asked), those before `before`. */
@@ -119,10 +114,32 @@ function isBefore(r: RunRow, cursor: string): boolean {
   return r.updatedAt < at || (r.updatedAt === at && idOf(r) < cursor.slice(i + 1));
 }
 
+/** A page of rows in any order: sorted here, then cut. */
 export function pageOf(rows: RunRow[], q: ListQuery = {}): RunRow[] {
+  return pageOfOrdered([...rows].sort(compareRows), q);
+}
+
+/** A page of a list already newest first: the cursor's edge is bisected to, no sort. */
+export function pageOfOrdered(rows: readonly RunRow[], q: ListQuery = {}): RunRow[] {
   const limit = Math.max(1, Math.min(q.limit ?? LIST_LIMIT, 1_000));
-  return rows
-    .filter((r) => !q.before || isBefore(r, q.before))
-    .sort(compareRows)
-    .slice(0, limit);
+  let lo = 0;
+  if (q.before) {
+    // Rows before the cursor are a suffix of the list.
+    const before = q.before;
+    let hi = rows.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (isBefore(rows[mid] as RunRow, before)) hi = mid;
+      else lo = mid + 1;
+    }
+  }
+  return rows.slice(lo, lo + limit);
+}
+
+/** The registry's stored shape, or the older map of rows: a list in order either way. */
+export function orderedRows(
+  stored: RunRow[] | Record<string, RunRow> | null | undefined,
+): RunRow[] {
+  if (!stored) return [];
+  return Array.isArray(stored) ? stored : Object.values(stored).sort(compareRows);
 }

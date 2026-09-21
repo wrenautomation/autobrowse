@@ -63,5 +63,7 @@ every store that grows.
 2. `digest` depth tagging (above) if a page ever makes a step slow.
 3. `listRecordingSummaries` reads one summary per recording; a single
    index file would be one read, invalidated per save.
-4. `pageOf` in the registry sorts on every list; a list kept in order
-   (placeRow on record) would make a page O(page).
+4. ✅ (2026-09-22) The registry keeps its list newest first: `record` is a
+   `placeRow` (one pass), `list` bisects to the cursor and slices
+   (`pageOfOrdered`), `trimRows` walks once. A map stored before this
+   reads once more (`orderedRows`) and is written back as a list.
