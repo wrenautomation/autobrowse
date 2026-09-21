@@ -318,6 +318,37 @@ describe("loginProvider", () => {
     });
     expect(await login(fakePage({ text: [], present: () => true }).fp, "s")).toBe("signed-in");
   });
+  it("hands the provider credential for the account the site names: the stored one, a second `google@ops`, or a clear miss", async () => {
+    const seen: string[] = [];
+    const viaGoogle: SiteLogin = {
+      site: "s",
+      home: "https://site.test/",
+      via: ["google"],
+      loggedIn: async () => true,
+      async signIn(ctx) {
+        seen.push((await ctx.credFor("google", ctx.cred.username)).password ?? "");
+      },
+    };
+    const store = memoryCredentials({
+      s: { username: "Ops@x.com ", via: "google" },
+      t: { username: "g@x.com", via: "google" },
+      u: { username: "nobody@x.com", via: "google" },
+      google: { username: "g@x.com", password: "main" },
+      "google@ops": { username: "ops@x.com", password: "second" },
+    });
+    const login = loginProvider(
+      [viaGoogle, { ...viaGoogle, site: "t" }, { ...viaGoogle, site: "u" }],
+      {
+        credentials: store,
+        codes: totpSource(),
+      },
+    );
+    const page = () => fakePage({ text: [], present: () => true }).fp;
+    expect(await login(page(), "s")).toBe("signed-in");
+    expect(await login(page(), "t")).toBe("signed-in");
+    expect(seen).toEqual(["second", "main"]);
+    await expect(login(page(), "u")).rejects.toThrow(/no google credential for nobody@x.com/);
+  });
   it("reports a missing credential and a missing code", async () => {
     const login = loginProvider([site], {
       credentials: memoryCredentials(),

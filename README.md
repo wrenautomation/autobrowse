@@ -274,6 +274,8 @@ A site behind "Continue with Google" needs no password of its own:
 ```sh
 pnpm autobrowse creds via new-tool google --url https://new-tool.test/login
 pnpm autobrowse login new-tool          # presses the button, signs in as the stored google account
+pnpm autobrowse creds set google@ops    # a second Google account, then:
+pnpm autobrowse creds via other-tool google --account ops@x.com --url https://other-tool.test/login
 ```
 
 Providers live in `src/auth/providers.ts` (google today); a `via`

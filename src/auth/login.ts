@@ -28,8 +28,12 @@ export interface SignInContext {
    * ("Tap Yes on your phone"). Absent when no phone is linked.
    */
   notify?: (text: string) => Promise<void>;
-  /** Another site's credential (the identity provider behind an OAuth button), or throws. */
-  credFor(site: string): Promise<Credential>;
+  /**
+   * Another site's credential (the identity provider behind an OAuth button),
+   * or throws. With `account`, the one for that username: the site's own when
+   * it matches, else a `<site>@<label>` credential whose username is it.
+   */
+  credFor(site: string, account?: string): Promise<Credential>;
   /** This context signing in as another credential: its codes come from that one. */
   as(cred: Credential): SignInContext;
 }
@@ -414,6 +418,8 @@ export interface OauthLoginSpec {
    * to a Google sign-in): answered with the site's credential and inboxes.
    */
   challenge?: { at: RegExp; run(ctx: SignInContext): Promise<void> };
+  /** Which account at the provider, when the site's is not the provider's stored one. */
+  account?: string;
 }
 
 /** The provider's button as this site shows it: the spec's hint, else the first of the provider's readings on the page. */
@@ -437,7 +443,7 @@ export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signI
     if (page) fp.switchTo(page);
     else if (!(await fp.waitForUrl(provider.host, 15_000)) && !provider.host.test(fp.url()))
       throw new LoginFailed(site, `no ${provider.site} sign-in page after pressing the button`);
-    const cred = await ctx.credFor(provider.site);
+    const cred = await ctx.credFor(provider.site, spec.account);
     await provider.signIn(ctx.as(cred));
     fp.switchTo(main);
     await landAfterOauth(site, spec, ctx);
@@ -462,7 +468,12 @@ export function viaLogin(site: string, cred: Credential): SiteLogin {
       const start = cred.url ?? ctx.fp.url();
       if (!/^https?:/.test(start))
         throw new LoginFailed(site, "no sign-in page known: store the credential with a url");
-      await oauthLogin(site, { start, provider: provider.site, success: signedIn })(ctx);
+      await oauthLogin(site, {
+        start,
+        provider: provider.site,
+        success: signedIn,
+        account: cred.username,
+      })(ctx);
     },
   };
 }
@@ -495,6 +506,8 @@ export async function landAfterOauth(
   }
   throw fail();
 }
+
+const sameUser = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 export interface LoginOptions {
   credentials: CredentialStore;
@@ -553,10 +566,20 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
       offers: (kind) => opts.codes.offers(kind, cred),
       inbox: (kind) => opts.codes.inbox(kind, cred),
       ...(opts.notify ? { notify: opts.notify } : {}),
-      async credFor(other) {
+      async credFor(other, account) {
         const c = await opts.credentials.get(other);
         if (!c) throw new LoginFailed(site, `no credential stored for ${other}`);
-        return c;
+        if (!account || sameUser(c.username, account)) return c;
+        // A second account at the provider lives as `<provider>@<label>`.
+        for (const name of await opts.credentials.list()) {
+          if (!name.startsWith(`${other}@`)) continue;
+          const alt = await opts.credentials.get(name);
+          if (alt && sameUser(alt.username, account)) return alt;
+        }
+        throw new LoginFailed(
+          site,
+          `no ${other} credential for ${account}: autobrowse creds set ${other}@<label> with that username`,
+        );
       },
       as: contextAs,
     });

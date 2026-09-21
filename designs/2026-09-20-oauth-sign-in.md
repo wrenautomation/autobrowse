@@ -51,6 +51,8 @@ not proof-run candidates.
    a site that does that (Twilio did on 2026-09-21).
 3. The consent walker for LinkedIn (`linkedin/oauth-consent`): same shape,
    LinkedIn's pages, once a LinkedIn credential exists.
-4. `creds via` for a site with two accounts at the provider: `--account`
-   is stored; the chooser pick by that email is in the consent walker but
-   not yet in `signInToGoogle`'s chooser when the profile holds both.
+4. ✅ (2026-09-20) `creds via --account ops@x.com`: `credFor(provider, account)`
+   hands the provider credential for that username — the stored one when it
+   matches, else `google@<label>` whose username is it (`creds set google@ops`),
+   else a clear LoginFailed. `signInToGoogle` then picks that email in the
+   chooser and types it on a fresh sign-in.
