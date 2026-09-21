@@ -17,7 +17,18 @@ export const SCOPES = {
   gmailSettings: "https://www.googleapis.com/auth/gmail.settings.basic",
   gmailSend: "https://www.googleapis.com/auth/gmail.send",
   gmailRead: "https://www.googleapis.com/auth/gmail.readonly",
+  gmailModify: "https://www.googleapis.com/auth/gmail.modify",
 } as const;
+
+/**
+ * Domain-wide delegation grants exact scopes, not supersets: the sender
+ * service account is delegated `gmail.modify` (send + read + label), not
+ * `gmail.readonly`, so a read through it asks for modify. Consent tokens
+ * are untouched (they were granted readonly).
+ */
+export function delegatedScopes(scopes: readonly string[]): string[] {
+  return scopes.map((s) => (s === SCOPES.gmailRead ? SCOPES.gmailModify : s));
+}
 
 const DEFAULT_TOKEN_URI = "https://oauth2.googleapis.com/token";
 const TOKEN_LIFETIME_S = 3600;

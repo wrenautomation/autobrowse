@@ -21,6 +21,11 @@ pnpm autobrowse accounts push            # the box follows the same rule
 the account with the `signup` address and reads its codes there. Name
 `--account` / `--email` to override any of it.
 
+A Workspace inbox needs no consent: with `GOOGLE_WORKSPACE_DOMAIN` set and
+the sender service account delegated `gmail.modify` (the exact scope
+matters; readonly is not a subset), every address on the domain reads
+through it. A Gmail address consents once (`site setup gmail consent`).
+
 ## Login
 
 ```sh
@@ -73,12 +78,25 @@ site's name. It also refuses up front when the inbox cannot be read
 Order: a 24-char password is minted and stored sealed under `instagram`
 **before** the browser opens; the agent fills the form placing `email`,
 `password`, `code` (read from that inbox, or `--inbox` when the address is
-an alias, or the phone) and `phone` by name — it never sees them. A captcha
+an alias, or the phone) and `phone` (or `phoneLocal`, the number without
+its country code, for a field with a country picker) by name — it never
+sees them. A captcha
 hands off to you in the window (enter to go on). The journal keeps every
 placed field redacted, so the compiled flow reads it as a secret by key.
 
 **you:** a phone number for the codes (Twilio number, or `PHONE_NUMBER` =
 your iPhone paired with this Mac). Instagram, X and TikTok insist.
+
+An account that exists but moved to another address (Wren's Instagram, made
+on a Gmail alias, now on william@wrenautomation.com):
+
+```sh
+pnpm autobrowse agent instagram 'Change the account email to william@wrenautomation.com; fill the confirmation code with place{secret:"code"}' --url https://www.instagram.com/accounts/edit/ --codes william@wrenautomation.com
+pnpm autobrowse creds address instagram william@wrenautomation.com   # the stored login follows
+```
+
+`--codes <inbox>` gives any agent run one secret, `code`, read from an
+inbox this system reads; nothing else is placed.
 
 When the run ends with `achieved` the credential is stamped `madeAt` and
 `needs` drops the `signup-<site>` row. Finished it by hand after a

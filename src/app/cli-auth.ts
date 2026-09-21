@@ -148,6 +148,18 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       console.log(`${site}: marked made; creds push ${site} sends it to the box`);
     });
   creds
+    .command("address <site> <address>")
+    .description(
+      "The account's sign-in address changed on the site: the stored username follows it, and its codes are read from that inbox",
+    )
+    .action(async (site: string, address: string) => {
+      const store = credentialsFor(settings);
+      const cred = await store.get(site);
+      if (!cred) throw new Error(`no credential stored for ${site}`);
+      await store.put(site, { ...cred, username: address, codesInbox: address });
+      console.log(`${site}: username and codes inbox set; creds push ${site} sends it to the box`);
+    });
+  creds
     .command("rotate <site>")
     .description(
       "Change the site's password to a new random one, stored sealed; nothing is printed",

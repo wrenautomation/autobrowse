@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { exploreWithAgent } from "../src/agent/explorer.js";
 import type { CodeSource } from "../src/auth/codes.js";
 import { memoryCredentials } from "../src/auth/credentials.js";
-import { mintCredential, signupGoal, signupHosts, signupSecrets } from "../src/auth/signup.js";
+import {
+  codeSecrets,
+  localPhone,
+  mintCredential,
+  signupGoal,
+  signupHosts,
+  signupSecrets,
+} from "../src/auth/signup.js";
 import type { ExploreCommand, Explorer } from "../src/explore/server.js";
 import { fakeLlm } from "../src/llm/fake.js";
 
@@ -57,6 +64,7 @@ describe("signup", () => {
     expect(await s("email")).toBe("hello@wren.test");
     expect(await s("password")).toBe("Minted-1!");
     expect(await s("phone")).toBe("+15550001111");
+    expect(await s("phoneLocal")).toBe("5550001111");
     expect(await s("nothing")).toBeNull();
     now = new Date("2026-09-21T10:01:00Z");
     expect(await s("code")).toBe("111111");
@@ -77,6 +85,12 @@ describe("signup", () => {
     expect(g).toContain('place{secret:"password"}');
     expect(g).toContain('handle "wrenautomation"');
     expect(g).not.toContain("hello@wren.test");
+    const withPhone = signupGoal({ site: "tiktok", email: "hello@wren.test" }, "+15875550100");
+    expect(withPhone).toContain('place{secret:"phoneLocal"}');
+    expect(withPhone).toContain("+1 (Canada or United States)");
+    expect(withPhone).not.toContain("5875550100");
+    expect(localPhone("+15875550100")).toBe("5875550100");
+    expect(localPhone("+447700900123")).toBe("447700900123");
   });
 
   it("the agent places a secret by name; the value never enters its prompt", async () => {
@@ -128,5 +142,16 @@ describe("signupHosts", () => {
     expect(hosts("evil.net")).toBe(false);
     expect(signupHosts("x")("x.com")).toBe(true);
     expect(signupHosts("x")("google.com")).toBe(false);
+  });
+});
+
+describe("codeSecrets", () => {
+  it("places only `code`, read from the inbox, each newer than the last", async () => {
+    const src = codes(["111111", "222222"]);
+    const s = codeSecrets(src, "hello@wren.test", new Date("2026-09-21T10:00:00Z"));
+    expect(await s("email")).toBeNull();
+    expect(await s("code")).toBe("111111");
+    expect(await s("code")).toBe("222222");
+    expect(src.asked[1]?.getTime()).toBeGreaterThan(src.asked[0]?.getTime() ?? 0);
   });
 });

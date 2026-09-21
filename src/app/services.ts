@@ -77,6 +77,7 @@ import {
   type SpendPolicy,
 } from "../gates/spend.js";
 import {
+  delegatedScopes,
   expandHome,
   loadServiceAccountKey,
   SCOPES,
@@ -436,7 +437,7 @@ export function googleTokens(
       key ??= loadServiceAccountKey(
         required(settings.googleServiceAccount, "GOOGLE_SERVICE_ACCOUNT"),
       );
-      t = serviceAccountToken(key, { scopes, subject });
+      t = serviceAccountToken(key, { scopes: delegatedScopes(scopes), subject });
       tokens.set(k, t);
     }
     return t;

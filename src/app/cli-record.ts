@@ -103,6 +103,10 @@ export function registerRecordCommands(
     .option("--url <url>", "start here")
     .option("--input <k=v...>", "named values the goal may use (a file path, a domain)")
     .option("--save <name>", "recording name; default = from the goal")
+    .option(
+      "--codes <inbox>",
+      'an inbox this system reads (autobrowse accounts): the agent may place{secret:"code"} with the code the site emails there',
+    )
     .option("--max-steps <n>", "step budget", "25")
     .option("--port <port>", "loopback port", "9090")
     .option("--headed", "show the browser (default: BROWSER_HEADLESS)")
@@ -114,16 +118,35 @@ export function registerRecordCommands(
           url?: string;
           input?: string[];
           save?: string;
+          codes?: string;
           maxSteps: string;
           port: string;
           headed?: boolean;
         },
       ) => {
+        let secrets: AgentRun["secrets"] = null;
+        if (o.codes) {
+          const { codeSecrets, signupHosts, signupInbox } = await import("../auth/signup.js");
+          const { codesFor, gmailFor } = await import("./services.js");
+          if (
+            !signupInbox(o.codes, {
+              env: (n) => process.env[n],
+              workspaceDomain: settings.googleWorkspaceDomain ?? null,
+            })
+          )
+            throw new Error(`${o.codes}'s inbox is not readable (autobrowse accounts)`);
+          secrets = {
+            names: ["code"],
+            values: codeSecrets(codesFor(settings, gmailFor(settings)), o.codes, new Date()),
+            hosts: signupHosts(site, o.url ?? null),
+          };
+        }
         await runAgent(settings, {
           site,
           goal,
           url: o.url ?? null,
           inputs: parseInputs(o.input),
+          secrets,
           save: o.save ?? slug(goal),
           maxSteps: Number(o.maxSteps),
           port: Number(o.port),
@@ -198,15 +221,16 @@ export function registerRecordCommands(
         };
         const cred = await mintCredential(credentialsFor(settings), account);
         console.log(`stored a new credential for ${site} (creds list); now the signup`);
+        const phone = ourPhone(settings);
         const secrets = signupSecrets({
           cred,
           codes: codesFor(settings, gmailFor(settings)),
           since: new Date(),
-          phone: ourPhone(settings),
+          phone,
         });
         const { achieved } = await runAgent(settings, {
           site,
-          goal: signupGoal(account),
+          goal: signupGoal(account, phone),
           url: o.url ?? null,
           inputs: {},
           secrets: {
@@ -315,7 +339,11 @@ interface AgentRun {
   port: number;
   headed: boolean;
   /** Named values the agent may `place` and never sees; `hosts` says where they may land. */
-  secrets?: { names: readonly string[]; values: SecretValues; hosts: (host: string) => boolean };
+  secrets?: {
+    names: readonly string[];
+    values: SecretValues;
+    hosts: (host: string) => boolean;
+  } | null;
 }
 
 /** One agent session: explore server up, agent to the goal, journal saved as a recording. */

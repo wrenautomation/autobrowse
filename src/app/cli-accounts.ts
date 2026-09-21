@@ -83,7 +83,7 @@ export function formatReadiness(rows: AccountReadiness[]): string {
         `for ${r.for.length ? r.for.join(",") : "(nothing)"}`,
         r.credential ? `credential ${r.credential}` : "no credential (creds paste)",
         r.inbox
-          ? `inbox via ${r.inbox}${r.inbox === "service account" ? " (needs gmail.readonly delegated)" : ""}`
+          ? `inbox via ${r.inbox}${r.inbox === "service account" ? " (gmail.modify delegated to it)" : ""}`
           : "inbox not readable (site setup gmail consent --account it)",
         r.tokens.length ? `tokens ${r.tokens.join(",")}` : "no tokens",
       ];

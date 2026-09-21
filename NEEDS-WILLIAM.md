@@ -25,27 +25,20 @@ carry. Dated 2026-09-22.
 2. **`needs do login-linkedin`** → `site setup linkedin developer-app` is
    recorded with you once (needs a Page: `needs done linkedin-page`), then
    LinkedIn posts go out from the content loop.
-3. **A readable inbox for Wren's signups** (`signup-inbox`). The policy says
-   `william@wrenautomation.com`; its consent hits Google's passkey challenge
-   (the virtual authenticator we enrolled is not the passkey Google wants;
-   same wall as admin.google.com), so either you pass that passkey prompt
-   once (UI header → headed, then `site setup gmail consent --account
-   william@wrenautomation.com`), or add `gmail.readonly` to the domain-wide delegation
-   (admin console → Security → API controls → Domain-wide delegation →
-   client `107356403027866983613` → add
-   `https://www.googleapis.com/auth/gmail.readonly`, then
-   `GOOGLE_WORKSPACE_DOMAIN=wrenautomation.com` in .env), or `creds paste
-   google@will` for will@williamjin.dev and `accounts use signup` it.
-   Meanwhile `signup <site> --email jinwilliam.jin+wren@gmail.com --inbox
-   jinwilliam.jin@gmail.com` works today.
+3. ~~A readable inbox for Wren's signups~~ done 2026-09-22: the sender
+   service account is delegated `gmail.modify`, which reads too, so
+   `GOOGLE_WORKSPACE_DOMAIN=wrenautomation.com` makes every wrenautomation.com
+   inbox readable (no consent, no passkey). Wren's socials live on
+   `william@wrenautomation.com`; your own stay on jinwilliam.jin@gmail.com.
 4. **Anthropic credits** ($5) → the agent explores with the good model.
 5. **`unsubscribe`** — the list below, ready to paste.
 
 ## Accounts (policy, seeded 2026-09-22)
 
 `jinwilliam.jin@gmail.com` = pays (Cloud project `wren-509223`, YouTube
-JinstersJournal, developer apps that bill). `william@wrenautomation.com` =
-default, signup. `will@williamjin.dev` = personal. Change it with
+JinstersJournal, developer apps that bill; your own Instagram/X/LinkedIn
+are on it). `william@wrenautomation.com` = default, signup: Wren's
+Instagram, X, TikTok, YouTube, LinkedIn. `will@williamjin.dev` = personal. Change it with
 `accounts use <purpose> <address>`; `accounts push` sends it to the box.
 
 ## Phone

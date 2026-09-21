@@ -15,8 +15,27 @@ import { newPassword } from "./rotate.js";
 /** Values a page gets by name and the model never sees; null when there is no such secret. */
 export type SecretValues = (name: string) => Promise<string | null>;
 
-/** What a signup can place: the address, the minted password, a code from the inbox, our phone number. */
-export const SIGNUP_SECRETS = ["email", "password", "code", "phone"] as const;
+/**
+ * What a signup can place: the address, the minted password, a code from
+ * the inbox, our phone number (`phone` as stored, `phoneLocal` without the
+ * country code for a field with its own country picker).
+ */
+export const SIGNUP_SECRETS = ["email", "password", "code", "phone", "phoneLocal"] as const;
+
+/** `+15875550100` → `5875550100`: the national part, for a field whose country code is a picker (only +1 is split; other codes stay as digits). */
+export function localPhone(e164: string): string {
+  const digits = e164.replace(/[^\d]/g, "");
+  if (e164.startsWith("+1") || (digits.length === 11 && digits.startsWith("1")))
+    return digits.slice(1);
+  return digits;
+}
+
+/** "+1 (US/Canada)" or the code alone: what to pick in a country selector. */
+export function phoneCountry(e164: string): string {
+  if (e164.startsWith("+1")) return "+1 (Canada or United States)";
+  const m = e164.match(/^\+(\d{1,3})/);
+  return m ? `+${m[1]}` : "the number's own";
+}
 
 export interface SignupSecretsOptions {
   cred: Credential;
@@ -26,6 +45,36 @@ export interface SignupSecretsOptions {
   /** The number the site may text; the paired phone or Twilio. */
   phone?: string | null;
   now?: () => Date;
+}
+
+/** The newest code sent to the credential's inbox or phone after `since`, email first. */
+export async function nextCode(
+  codes: CodeSource,
+  cred: Credential,
+  since: Date,
+): Promise<string | null> {
+  for (const kind of ["email", "sms"] as const) {
+    if (!codes.offers(kind, cred)) continue;
+    const code = await codes.get({ site: "signup", kind, since }, cred);
+    if (code) return code;
+  }
+  return null;
+}
+
+/**
+ * Just `code`, from an inbox this system can read: what an agent run on an
+ * existing account places when the site emails a code (a changed address,
+ * a new device). The inbox stands in for a credential; nothing else is read.
+ */
+export function codeSecrets(codes: CodeSource, inbox: string, since: Date): SecretValues {
+  const cred: Credential = { username: inbox, codesInbox: inbox, recoveryCodes: [], passkeys: [] };
+  let from = since;
+  return async (name) => {
+    if (name !== "code") return null;
+    const code = await nextCode(codes, cred, from);
+    if (code) from = new Date();
+    return code;
+  };
 }
 
 /** The secrets a signup places, backed by the stored credential and the code sources. */
@@ -41,17 +90,13 @@ export function signupSecrets(o: SignupSecretsOptions): SecretValues {
         return o.cred.password ?? null;
       case "phone":
         return o.phone ?? null;
+      case "phoneLocal":
+        return o.phone ? localPhone(o.phone) : null;
       case "code": {
-        for (const kind of ["email", "sms"] as const) {
-          if (!o.codes.offers(kind, o.cred)) continue;
-          const code = await o.codes.get({ site: "signup", kind, since }, o.cred);
-          if (code) {
-            // The next code the site sends is a new one: a resend, a second step.
-            since = (o.now ?? (() => new Date()))();
-            return code;
-          }
-        }
-        return null;
+        const code = await nextCode(o.codes, o.cred, since);
+        // The next code the site sends is a new one: a resend, a second step.
+        if (code) since = (o.now ?? (() => new Date()))();
+        return code;
       }
       default:
         return null;
@@ -118,7 +163,7 @@ export async function mintCredential(
 }
 
 /** The agent's goal text for a signup; the secrets are named, never valued. */
-export function signupGoal(a: NewAccount): string {
+export function signupGoal(a: NewAccount, phone?: string | null): string {
   const facts = [
     a.name ? `name "${a.name}"` : null,
     a.handle ? `username/handle "${a.handle}" (or the closest free one)` : null,
@@ -126,7 +171,10 @@ export function signupGoal(a: NewAccount): string {
   ].filter(Boolean);
   return [
     `Create a new ${a.site} account and end signed in to it.`,
-    `Fill the email address with place{secret:"email"}, every password field with place{secret:"password"}, a code the site emailed or texted with place{secret:"code"}, and a phone number field with place{secret:"phone"}.`,
+    `Sign up with the email address when the site offers it. Fill the email address with place{secret:"email"}, every password field with place{secret:"password"}, a code the site emailed or texted with place{secret:"code"}, and a phone number field with place{secret:"phone"}.`,
+    phone
+      ? `When the phone field has its own country-code picker, pick ${phoneCountry(phone)} and place{secret:"phoneLocal"} (the number without the country code) instead.`
+      : null,
     facts.length ? `Other details: ${facts.join(", ")}.` : null,
     `Decline optional extras (contacts, ads, trials). At a captcha or a step you cannot fill, return human{reason}.`,
   ]
