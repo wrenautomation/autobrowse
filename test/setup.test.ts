@@ -41,6 +41,7 @@ describe("setup", () => {
       "", // aws skipped
       "", // anthropic skipped
       "", // twilio skipped
+      "", // sentry skipped
     ]);
     const out = await runSetup(io, store, SITE_LOGINS);
     expect(out.stored).toEqual(["google", "cloudflare"]);
@@ -51,6 +52,7 @@ describe("setup", () => {
       "anthropic",
       "twilio",
       "sentry",
+      "linkedin",
     ]);
     expect((await store.get("cloudflare"))?.via).toBe("google");
     expect(asked.filter((q) => q.startsWith("hidden")).length).toBe(2);
@@ -65,10 +67,11 @@ describe("setup", () => {
       anthropic: { username: "-", password: "-", via: "google" },
       twilio: { username: "-", password: "-", via: "google" },
       sentry: { username: "-", password: "-", via: "google" },
+      linkedin: { username: "w@x.com", password: "h" },
     });
     const { io, asked, said } = scripted([]);
     await runSetup(io, store, SITE_LOGINS);
     expect(asked).toEqual([]);
-    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(8);
+    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(9);
   });
 });

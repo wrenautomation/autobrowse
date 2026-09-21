@@ -83,7 +83,7 @@ export const linkedinOAuth: OAuthSpec = {
   clientSecret: "LINKEDIN_CLIENT_SECRET",
   refreshToken: "LINKEDIN_REFRESH_TOKEN",
   accessToken: "LINKEDIN_ACCESS_TOKEN",
-  consent: { workflow: "linkedin-oauth-consent" },
+  consent: { flow: "linkedin/oauth-consent" },
 };
 
 export const linkedin: SiteApi = {

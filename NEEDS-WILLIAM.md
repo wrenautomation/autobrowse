@@ -41,8 +41,9 @@ it. Dated 2026-09-21.
 ## Content channels (YouTube + LinkedIn; wren `designs/2026-09-21-content-channels.md`)
 
 - **LinkedIn login**: `pnpm autobrowse creds paste linkedin` with
-  `email password [authenticator key]` on the clipboard. No LinkedIn
-  credential is stored, so no LinkedIn flow can be explored yet.
+  `email password [authenticator key]` on the clipboard. The `linkedin`
+  login and `linkedin/oauth-consent` are written (2026-09-21) but unproven:
+  the credential proves them and unlocks the developer-app recording.
 - **LinkedIn developer app** (Client ID/secret; products "Share on
   LinkedIn" + "Sign In with LinkedIn using OpenID Connect"): needs a
   LinkedIn Page to attach to. Say which Page, or that I should create

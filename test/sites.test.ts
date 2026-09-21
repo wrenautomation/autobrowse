@@ -193,7 +193,7 @@ describe("site facade", () => {
         "consent",
         false,
         ["LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"],
-        "workflow linkedin-oauth-consent",
+        "flow linkedin/oauth-consent",
       ],
     ]);
   });

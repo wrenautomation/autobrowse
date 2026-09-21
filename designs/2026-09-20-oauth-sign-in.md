@@ -58,8 +58,13 @@ not proof-run candidates.
 2. Popup vs redirect: `oauthLogin` handles both, but a provider that opens
    in a popup and closes it on consent leaves `main` to land; verify on
    a site that does that (Twilio did on 2026-09-21).
-3. The consent walker for LinkedIn (`linkedin/oauth-consent`): same shape,
-   LinkedIn's pages, once a LinkedIn credential exists.
+3. ✅ (2026-09-21, unproven) `linkedin/oauth-consent`: feed first, then the
+   authorize URL; a login shown under it (`/uas/login?session_redirect=…`)
+   goes to the runner, whose `linkedin` `signInHere` signs in on that page
+   and keeps the redirect; then Allow → landed. `signInToLinkedin` handles
+   email/password, the checkpoint code (authenticator when a seed is
+   stored, else email), and hands puzzles to a person. Needs a LinkedIn
+   credential and app to prove.
 4. ✅ (2026-09-20) `creds via --account ops@x.com`: `credFor(provider, account)`
    hands the provider credential for that username — the stored one when it
    matches, else `google@<label>` whose username is it (`creds set google@ops`),

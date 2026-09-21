@@ -14,6 +14,7 @@ import { cloudflareBuy } from "../browser/flows/cloudflare-buy.js";
 import { googleDkimGenerate, googleDkimStart } from "../browser/flows/google-dkim.js";
 import { googleWorkspaceLogo } from "../browser/flows/google-workspace-logo.js";
 import { instantlyWarmup } from "../browser/flows/instantly-warmup.js";
+import { linkedinOauthConsent } from "../browser/flows/linkedin-oauth-consent.js";
 import { googleOauthConsent } from "../browser/flows/oauth-consent.js";
 import { NeedsHuman } from "../browser/session.js";
 
@@ -47,6 +48,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     instantlyWarmup,
     googleWorkspaceLogo,
     googleOauthConsent,
+    linkedinOauthConsent,
   ].map((f) => [`${f.site}/${f.name}`, f as BrowserFlow<never, unknown>]),
 );
 

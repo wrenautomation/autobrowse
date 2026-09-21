@@ -4,6 +4,8 @@
  * the live page until its first run; the memory layer keeps what worked.
  * Verified: cloudflare via Google (2026-09-19).
  */
+
+import { LINKEDIN_LOGIN_URL, signInToLinkedin } from "./linkedin.js";
 import {
   formLogin,
   LoginFailed,
@@ -356,6 +358,27 @@ const sentry: SiteLogin = {
   }),
 };
 
+/**
+ * LinkedIn: the member's own login (`creds paste linkedin`: email, password,
+ * optional authenticator key). `signInHere` covers the login page an OAuth
+ * authorize URL shows a signed-out profile, keeping its session_redirect.
+ * Unverified until a LinkedIn credential exists.
+ */
+const LINKEDIN_FEED = "https://www.linkedin.com/feed/";
+const linkedin: SiteLogin = {
+  site: "linkedin",
+  home: LINKEDIN_FEED,
+  ask: "Your LinkedIn login (email, password, authenticator key if set)",
+  loggedIn: async (fp) => /linkedin\.com\/feed/.test(fp.url()),
+  signIn: async (ctx) => {
+    await ctx.fp.open("https://www.linkedin.com/login", { allowWall: true });
+    await signInToLinkedin(ctx);
+    if (!(await ctx.fp.waitForUrl(/linkedin\.com\/feed/, 30_000)))
+      throw new LoginFailed("linkedin", `still on ${ctx.fp.url()} after LinkedIn sign-in`);
+  },
+  signInHere: { at: LINKEDIN_LOGIN_URL, run: signInToLinkedin },
+};
+
 export const SITE_LOGINS: readonly SiteLogin[] = [
   cloudflare,
   google,
@@ -365,4 +388,5 @@ export const SITE_LOGINS: readonly SiteLogin[] = [
   anthropic,
   twilio,
   sentry,
+  linkedin,
 ];
