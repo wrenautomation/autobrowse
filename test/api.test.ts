@@ -7,7 +7,7 @@ import type { Ingress } from "../src/app/client.js";
 import { signLinqWebhook } from "../src/clients/linq.js";
 import type { Outline } from "../src/compiler/index.js";
 import type { OpenGate, RunStatusView } from "../src/engine/object.js";
-import { cursorOf, type ListQuery, pageOf, type RunRow } from "../src/engine/registry.js";
+import { cursorOf, type ListQuery, pageOf, placeRow, type RunRow } from "../src/engine/registry.js";
 import { saveRecording } from "../src/recorder/store.js";
 import { SiteError, type SiteFacade } from "../src/sites/index.js";
 import { api, findRow } from "../src/ui/api.js";
@@ -380,6 +380,25 @@ describe("api", () => {
       "k2",
       "k1",
     ]);
+    // An event's row lands in place: moved to the front when it is the newest, replaced when unchanged in order.
+    const sorted = pageOf(many, { limit: 5 });
+    expect(placeRow(sorted, { ...many[1], updatedAt: "2026-09-29" }).map((r) => r.key)).toEqual([
+      "k1",
+      "k4",
+      "k3",
+      "k2",
+      "k0",
+    ]);
+    expect(placeRow(sorted, { ...many[4], status: "done" }).map((r) => r.key)).toEqual([
+      "k4",
+      "k3",
+      "k2",
+      "k1",
+      "k0",
+    ]);
+    expect(
+      placeRow(sorted, { ...many[0], key: "new", updatedAt: "2026-09-01" }).map((r) => r.key),
+    ).toEqual(["k4", "k3", "k2", "k1", "k0", "new"]);
     // Rows updated in the same instant: the cursor carries the id, so the page edge loses none.
     const same = ["a", "b", "c"].map((key) => ({ ...rows[0], key, updatedAt: "2026-09-25" }));
     const first = pageOf(same, { limit: 2 });

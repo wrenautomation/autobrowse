@@ -83,6 +83,17 @@ export function compareRows(a: RunRow, b: RunRow): number {
   return b.updatedAt.localeCompare(a.updatedAt) || idOf(b).localeCompare(idOf(a));
 }
 
+/**
+ * One changed row into a list already in `compareRows` order: its old place
+ * goes, it lands where it now belongs. One pass, no re-sort; an event that
+ * only bumps a run's `updatedAt` is the common case.
+ */
+export function placeRow(rows: readonly RunRow[], row: RunRow): RunRow[] {
+  const rest = rows.filter((r) => idOf(r) !== idOf(row));
+  const at = rest.findIndex((r) => compareRows(row, r) <= 0);
+  return at < 0 ? [...rest, row] : [...rest.slice(0, at), row, ...rest.slice(at)];
+}
+
 function isBefore(r: RunRow, cursor: string): boolean {
   const i = cursor.indexOf("~");
   if (i < 0) return r.updatedAt < cursor;

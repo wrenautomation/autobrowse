@@ -47,10 +47,11 @@ trips", "options first class, not inconvenient".
 
 ## Where to attack (ranked)
 
-1. `Jobs.wait` races a settled promise against a timer per call; many
-   tabs waiting on one job hold many timers. Fine at one operator.
-2. The Runs page merge re-sorts the whole list per event; fine under
-   1k rows, the page size caps it anyway.
+1. ✅ (2026-09-22, by reading) `Jobs.wait` races a settled promise against
+   a timer per call and clears the timer as soon as either wins; a waiter
+   holds one timer for at most its own `ms`. Nothing to change.
+2. ✅ (2026-09-22) An event's row lands in place (`placeRow`, one pass over
+   a list already in order); a full `merge` + sort is only for a loaded page.
 3. ✅ (2026-09-22) `summary.json` beside each manifest; `listRecordingSummaries`
    reads those (and writes one for an older recording on first sight). Lists
    and the evaluator use it; `listRecordings` stays for whole loads.

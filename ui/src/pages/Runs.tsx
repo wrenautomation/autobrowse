@@ -5,6 +5,7 @@ import {
   compareRows,
   cursorOf,
   LIST_LIMIT,
+  placeRow,
   type RunRow,
 } from "../../../src/engine/rows.js";
 import { api, type RunEvent, type WorkflowInfo } from "../api.js";
@@ -38,7 +39,7 @@ function useRuns(event: RunEvent | null) {
       if (!prev) return prev;
       const id = (r: RunRow) => `${r.workflow}/${r.key}`;
       const have = prev.find((r) => id(r) === `${event.run.workflow}/${event.run.key}`) ?? null;
-      return merge(prev, [applyRunEvent(have, event)]);
+      return placeRow(prev, applyRunEvent(have, event));
     });
   }, [event]);
   const last = rows?.[rows.length - 1];
