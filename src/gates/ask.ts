@@ -6,6 +6,7 @@
 import type { MessageReader } from "../auth/codes.js";
 import { parseCommand } from "../channels/commands.js";
 import type { Approval, Approver } from "./payment.js";
+import { amountLine } from "./spend.js";
 
 export interface AskOptions {
   note(text: string): Promise<void>;
@@ -21,7 +22,7 @@ export interface AskOptions {
 }
 
 export const askLine = (ask: Approval): string =>
-  `autobrowse on ${ask.site} wants to ${ask.what} at ${ask.url}. Reply yes or no.`;
+  `autobrowse on ${ask.site} wants to ${ask.what}${ask.amount ? ` (${amountLine(ask.amount)})` : ""} at ${ask.url}. Reply yes or no.`;
 
 export function askOverChannel(opts: AskOptions): Approver {
   const now = opts.now ?? Date.now;

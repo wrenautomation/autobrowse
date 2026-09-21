@@ -88,6 +88,25 @@ const schema = z.object({
   idleStopMinutes: z.coerce.number().min(0).default(0),
   /** This machine's EC2 instance id; read from IMDS when unset. */
   instanceId: z.string().min(1).optional(),
+  /**
+   * Spend policy on the payment gate. Sites the gate may say yes for by
+   * itself (comma list); one purchase at or under AUTO_YES_UNDER on one of
+   * them is a yes without asking while today's total stays under DAILY_CAP;
+   * over HARD_CAP is refused before anyone is asked. Defaults: ask always,
+   * no ceiling.
+   */
+  spendAllow: z
+    .string()
+    .default("")
+    .transform((v) =>
+      v
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
+  spendAutoYesUnder: z.coerce.number().min(0).default(0),
+  spendDailyCap: z.coerce.number().min(0).default(0),
+  spendHardCap: z.coerce.number().min(0).optional(),
   /** Run the evaluator every N hours and tell the person what deserves a workflow; 0 = off. */
   evaluateEveryHours: z.coerce.number().min(0).default(0),
   /** Let the evaluator's proposals be explored, saved and compiled with nobody clicking. */
@@ -211,6 +230,10 @@ export const ENV_KEYS = {
   evaluateEveryHours: "EVALUATE_EVERY_HOURS",
   idleStopMinutes: "IDLE_STOP_MINUTES",
   instanceId: "AUTOBROWSE_INSTANCE_ID",
+  spendAllow: "SPEND_ALLOW",
+  spendAutoYesUnder: "SPEND_AUTO_YES_UNDER",
+  spendDailyCap: "SPEND_DAILY_CAP",
+  spendHardCap: "SPEND_HARD_CAP",
   autoBuild: "AUTO_BUILD",
   autoHeal: "AUTO_HEAL",
   credentialsFile: "CREDENTIALS_FILE",

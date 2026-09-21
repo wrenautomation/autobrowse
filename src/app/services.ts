@@ -38,7 +38,7 @@ import {
 import { cloudflare, verifyCloudflareToken } from "../clients/cloudflare.js";
 import { type GmailUserClient, gmailClient } from "../clients/gmail.js";
 import { googleAdmin } from "../clients/google-admin.js";
-import { httpClient } from "../clients/http.js";
+import { type HttpClient, httpClient } from "../clients/http.js";
 import { type LinqClient, linqClient } from "../clients/linq.js";
 import { domainAvailability } from "../clients/rdap.js";
 import { ssmRosterStore } from "../clients/roster.js";
@@ -62,6 +62,12 @@ import { runsRegistry } from "../engine/registry.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import { askOverChannel } from "../gates/ask.js";
 import type { Approver } from "../gates/payment.js";
+import {
+  fileSpendLedger,
+  policedApprover,
+  type SpendLedger,
+  type SpendPolicy,
+} from "../gates/spend.js";
 import {
   expandHome,
   loadServiceAccountKey,
@@ -423,6 +429,35 @@ export function approverFor(
   settings: Settings,
   gmail: GmailUserClient,
   http = httpClient(),
+): Approver | null {
+  const person = personApprover(settings, gmail, http);
+  if (!person) return null;
+  return policedApprover(person, {
+    policy: spendPolicyFor(settings),
+    ledger: spendLedgerFor(settings),
+  });
+}
+
+/** What the gate decides alone (`SPEND_*`); default: nothing, the person answers every ask. */
+export function spendPolicyFor(settings: Settings): SpendPolicy {
+  return {
+    allow: settings.spendAllow,
+    autoYesUnder: settings.spendAutoYesUnder,
+    dailyCap: settings.spendDailyCap,
+    hardCap: settings.spendHardCap ?? null,
+  };
+}
+
+/** Every gate decision, next to the credential file and the secret audit. */
+export function spendLedgerFor(settings: Settings): SpendLedger {
+  return fileSpendLedger(join(dirname(expandHome(settings.credentialsFile)), "spend.jsonl"));
+}
+
+/** The channel a person answers on: phone, then Linq, then email. */
+function personApprover(
+  settings: Settings,
+  gmail: GmailUserClient,
+  http: HttpClient,
 ): Approver | null {
   const phone = phoneFor(settings);
   if (phone) {

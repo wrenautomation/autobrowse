@@ -160,6 +160,13 @@ Browserbase takes them.
   over a channel they answer on (phone, Linq, email), and is refused
   outright when no such channel is set. Compiled steps that touch billing
   are gated the same way as irreversible ones; the agent stops on a no.
+  The ask carries the amount on the button ("Buy $20 of credits" → 20.00
+  USD). `SPEND_ALLOW=anthropic SPEND_AUTO_YES_UNDER=25 SPEND_DAILY_CAP=50
+  SPEND_HARD_CAP=500` lets the gate say yes alone to a small purchase on a
+  named site while the day's total is under the cap, and refuse anything
+  over the ceiling before anyone is asked; a button with no amount is
+  always a question. Every decision is a line in
+  `~/.config/autobrowse/spend.jsonl`; `pnpm autobrowse spend` reads it.
 - **Desktop.** The same session takes `{"cmd":"os","act":{…}}`: apps,
   the front app's controls as a tree (`tree`, like `aria`), `click` by role
   and name, `type`, `key` ("cmd+shift+4", "return"), `shot`, and `shell`

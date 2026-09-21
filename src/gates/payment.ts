@@ -6,6 +6,8 @@
  * still stops. False positives cost one question; a miss costs money.
  */
 import type { Hints } from "../browser/locate.js";
+import type { Amount } from "./spend.js";
+import { amountIn } from "./spend.js";
 
 /** A field that takes billing details: card, bank, tax, billing address. */
 export const PAYMENT_FIELD =
@@ -30,6 +32,11 @@ function words(h: Hints): string {
  * field; a click on a button that spends. Typing into a plain field on a
  * checkout page is not gated: the button after it is.
  */
+/** The amount the element names, if any: what the gate's ask and the spend policy read. */
+export function paymentAmount(hints: Hints): Amount | null {
+  return amountIn(words(hints));
+}
+
 export function paymentGate(act: GatedAct, hints: Hints): string | null {
   const w = words(hints);
   if ((act === "fill" || act === "select") && PAYMENT_FIELD.test(w))
@@ -46,6 +53,8 @@ export interface Approval {
   /** Where: the page's URL, the site profile. */
   url: string;
   site: string;
+  /** The amount on the element, when it shows one ("Buy $20 of credits"). */
+  amount?: Amount;
 }
 
 /** Asks a person; true only on an explicit yes. Absent → the act is refused. */

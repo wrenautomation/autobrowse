@@ -32,7 +32,14 @@ import {
   noDesktop,
   treeText,
 } from "../desktop/types.js";
-import { type Approver, PaymentGate, PendingApprovals, paymentGate } from "../gates/payment.js";
+import {
+  type Approver,
+  PaymentGate,
+  PendingApprovals,
+  paymentAmount,
+  paymentGate,
+} from "../gates/payment.js";
+import type { Amount } from "../gates/spend.js";
 import { type RawAction, redactRaw } from "../recorder/browser.js";
 import { BINDING, OBSERVER_SCRIPT } from "../recorder/observer.js";
 import {
@@ -328,16 +335,27 @@ async function serve(
    * process the caller waits.
    */
   const approvals = opts.approve ? new PendingApprovals(opts.approve) : null;
-  const decide = async (key: string, what: string, url: string, wait: boolean) => {
+  const decide = async (
+    key: string,
+    what: string,
+    url: string,
+    wait: boolean,
+    amount: Amount | null = null,
+  ) => {
     if (!approvals) throw new PaymentGate(what, "no-approver");
-    await approvals.decide(key, { what, url, site: opts.site }, wait);
+    await approvals.decide(
+      key,
+      { what, url, site: opts.site, ...(amount ? { amount } : {}) },
+      wait,
+    );
   };
   const gate = async (act: "fill" | "select" | "click", t: Target, wait: boolean) => {
     const what = paymentGate(act, t.hints as Hints);
     if (!what) return;
     // A miss is a miss, not a question: the element must be there before anyone is asked.
     await find(t).first().waitFor({ state: "visible", timeout: 10_000 });
-    await decide(`${act} ${JSON.stringify(t.hints)}`, what, page.url(), wait);
+    const amount = act === "click" ? paymentAmount(t.hints as Hints) : null;
+    await decide(`${act} ${JSON.stringify(t.hints)}`, what, page.url(), wait, amount);
   };
   /** A desktop click that spends (an App Store "Buy") waits for the person the same way; "url" is the app. */
   const gateDesktop = async (a: DesktopOp, wait: boolean) => {

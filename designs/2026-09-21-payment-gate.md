@@ -34,6 +34,10 @@ Money is a person's decision; the machine detects the surface and stops.
   already secrets by field name.
 - Skill: told not to work around the gate.
 
+- 2026-09-22: spend policy in front of the person (`src/gates/spend.ts`;
+  `designs/2026-09-22-secrets-and-money-sandbox.md` #3): amount in the ask,
+  auto-yes under a cap on allowed sites, hard ceiling, spend ledger.
+
 ## Where to attack
 
 - Phone replies: notes to the person go to their own number; whether a

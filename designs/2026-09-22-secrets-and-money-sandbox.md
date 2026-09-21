@@ -37,11 +37,16 @@ opposite. There, the model holds the keys and runs shell it wrote. Here:
    <name>`), allowed or refused. Never the value. `autobrowse creds audit
    --last 50` reads it. Every login provider and explore session writes to
    it (`auditFor(settings)`).
-3. **Spend policy** (next). The payment gate asks; policy decides what it
-   may say yes to on its own and what it must refuse outright: a per-site
-   and per-day cap, a merchant allowlist, the amount in the ask when the
-   page shows one, auto-yes under a small cap, hard refuse over a ceiling.
-   Purchases land in the same ledger.
+3. **Spend policy** (`src/gates/spend.ts`, done). The gate still asks;
+   policy decides what it may say yes to alone and what it refuses before
+   anyone is asked. `amountIn` reads the money on the element that spends
+   ("Buy $20 of credits" → 20 USD) into the ask; `SPEND_ALLOW` (sites),
+   `SPEND_AUTO_YES_UNDER`, `SPEND_DAILY_CAP`, `SPEND_HARD_CAP`. Default:
+   every ask goes to the person, no ceiling. A button with no amount on it
+   is always a question. Every decision (auto, person, denied, cap) is a
+   line in `spend.jsonl` beside the audit; `autobrowse spend` reads it.
+   The amount is read from the element, not the page: a "$20" input next
+   to a plain "Buy" button is an unknown amount, so the person is asked.
 4. **Virtual cards** (William's vendor choice). One card per site with its
    own limit, so the blast radius of any one session is that card's cap.
    Card numbers are secrets like passwords: placed, never seen, origin
@@ -54,8 +59,8 @@ opposite. There, the model holds the keys and runs shell it wrote. Here:
 
 ## Where to attack
 
-1. Spend policy (3): caps and allowlist on `paymentGate` + the amount read
-   from the page into the ask.
+1. Amount from the page when the button has none: the order total nearest
+   the button, so more purchases fall under the auto line.
 2. Bind the compiled runs too: `flowRunner` fills through `guardedPage`
    for every `{from:"secret"}` op, not only sign-in.
 3. Canaries (6): one fake credential in the store, an alert in the ledger.

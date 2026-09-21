@@ -186,6 +186,26 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     });
 
   program
+    .command("spend")
+    .description("Every payment-gate decision: auto, person, denied, over the cap (SPEND_* policy)")
+    .option("--last <n>", "how many lines", "50")
+    .action(async (o: { last: string }) => {
+      const { spendLedgerFor, spendPolicyFor } = await import("./services.js");
+      const { amountLine } = await import("../gates/spend.js");
+      const p = spendPolicyFor(settings);
+      console.log(
+        `policy: allow=${p.allow.join(",") || "-"} auto-yes-under=${p.autoYesUnder} daily-cap=${p.dailyCap} hard-cap=${p.hardCap ?? "-"}`,
+      );
+      const rows = await spendLedgerFor(settings).recent(Number(o.last));
+      if (!rows.length) console.log("no gate decisions recorded yet");
+      for (const r of rows) {
+        console.log(
+          `${r.at}\t${r.allowed ? "yes" : "no "}\t${r.decided}\t${r.site}\t${r.amount ? amountLine(r.amount) : "?"}\t${r.what}`,
+        );
+      }
+    });
+
+  program
     .command("login <site>")
     .description(
       `Sign in to a site with the stored credential (headless). With --headed and no credential, a person logs in and closes the window. Sites: ${KNOWN}, or any site stored with \`creds via\``,
