@@ -1,4 +1,11 @@
 export {
+  type CanaryOptions,
+  CanaryTripped,
+  canaryCredential,
+  canaryStore,
+  isCanary,
+} from "./canary.js";
+export {
   aesGcmCipher,
   type Cipher,
   isSealed,

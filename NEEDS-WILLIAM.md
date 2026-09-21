@@ -16,7 +16,11 @@ or a real account to prove against. 2026-09-22 later: `creds push <site>`
 (laptop credential → SSM, so the box signs in too), `place{secret}` +
 `autobrowse signup <site>` (accounts made by the agent, password minted
 and sealed first; see "Wren accounts" below), origin binding + secret
-audit ledger (`creds audit`; `designs/2026-09-22-secrets-and-money-sandbox.md`).
+audit ledger (`creds audit`; `designs/2026-09-22-secrets-and-money-sandbox.md`),
+spend policy (`SPEND_*`, `autobrowse spend`), compiled runs' secrets bound
+to their site, canaries (`creds canary stripe` — worth planting one now).
+On the wren side the content loop is up: `wren content add|drafts|approve|
+redraft|queue start` (posts wait on the platform credentials below).
 
 ## Money (your decision)
 

@@ -31,6 +31,16 @@ opposite. There, the model holds the keys and runs shell it wrote. Here:
    compiled from, its secrets are bound at run time. `boundPage` is the one
    primitive; `guardedPage` (sign-in) is now built on it.
 
+6a. **Canaries** (2026-09-22, `src/auth/canary.ts`). `creds canary stripe`
+   stores a real-looking credential (random password, `canary: true`)
+   under a name a thief or a confused model reaches for. Nothing in the
+   product asks for it, so a `get` IS the incident: `canaryStore` (which
+   `credentialsFor` always returns, except the operator's own `creds
+   list`) writes a `… (canary)` refused line to the ledger, tells a person
+   over the channels when sign-in is the caller, and throws
+   `CanaryTripped`. Its password is also refused on every host by
+   `guardedPage`, so a copy that leaked some other way types nowhere.
+
 1. **Origin binding** (`src/auth/guard.ts`, done). A password only types on
    a host under its site's domains: the site's `home` registrable domain,
    `SiteLogin.origins` (google → `google.com`; microsoft → `live.com`,
@@ -72,7 +82,6 @@ opposite. There, the model holds the keys and runs shell it wrote. Here:
 
 1. Amount from the page when the button has none: the order total nearest
    the button, so more purchases fall under the auto line.
-2. Canaries (6): one fake credential in the store, an alert in the ledger.
-3. Virtual cards (4) once the vendor is chosen.
-4. `creds audit` on the box: the ledger lives on its disk; ship it to the
+2. Virtual cards (4) once the vendor is chosen.
+3. `creds audit` on the box: the ledger lives on its disk; ship it to the
    channel daily or read it over `sites`.

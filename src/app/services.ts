@@ -5,8 +5,10 @@ import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Logger } from "pino";
 import {
   aesGcmCipher,
+  type CanaryOptions,
   type CodeSource,
   type CredentialStore,
+  canaryStore,
   codeSources,
   credentialFor,
   envCredentials,
@@ -226,10 +228,27 @@ export interface App {
 }
 
 /** Env credentials first (a Secret in k8s), then the sealed 0600 file; writes go to the file. */
-export function credentialsFor(settings: Settings): CredentialStore {
+/**
+ * The credential store, armed: a read of a canary credential is refused,
+ * written to the ledger and, with `notify`, told to a person. `armed:
+ * false` is for the operator's own listing; nothing that signs in gets it.
+ */
+export function credentialsFor(
+  settings: Settings,
+  o: { armed?: boolean; notify?: CanaryOptions["notify"]; by?: string } = {},
+): CredentialStore {
   const cipher =
     settings.credentialsCipher === "keychain" ? aesGcmCipher(keychainKey()) : plainCipher;
-  return layeredCredentials([envCredentials(), fileCredentials(settings.credentialsFile, cipher)]);
+  const store = layeredCredentials([
+    envCredentials(),
+    fileCredentials(settings.credentialsFile, cipher),
+  ]);
+  if (o.armed === false) return store;
+  return canaryStore(store, {
+    audit: auditFor(settings),
+    ...(o.notify ? { notify: o.notify } : {}),
+    ...(o.by ? { by: o.by } : {}),
+  });
 }
 
 /** Where every secret use is written: next to the credential file, 0600, one JSON line each. */
@@ -321,7 +340,10 @@ export function loginFor(
   const all = channels(people);
   const notify = people.length && all.note ? all.note.bind(all) : undefined;
   return loginProvider(SITE_LOGINS, {
-    credentials: credentialsFor(settings),
+    credentials: credentialsFor(settings, {
+      by: "login",
+      ...(notify ? { notify: (title: string, body: string) => notify(`${title}\n${body}`) } : {}),
+    }),
     codes: codesFor(settings, gmail, http),
     audit: auditFor(settings),
     ...(notify ? { notify } : {}),

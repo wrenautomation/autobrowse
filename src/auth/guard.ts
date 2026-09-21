@@ -191,9 +191,10 @@ export function guardedPage(fp: FlowPage, g: GuardOptions): FlowPage {
       return field ? { credential: g.name, field } : null;
     },
     allow: (host) =>
-      g.domains.length
+      g.cred.canary !== true &&
+      (g.domains.length
         ? g.domains.some((d) => hostUnder(host, d))
-        : Boolean(g.fallback && host.toLowerCase().includes(g.fallback.toLowerCase())),
+        : Boolean(g.fallback && host.toLowerCase().includes(g.fallback.toLowerCase()))),
     site: g.site,
     by: g.by,
     audit: g.audit,

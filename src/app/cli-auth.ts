@@ -161,11 +161,26 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .command("list")
     .description("Sites with a stored credential (names only)")
     .action(async () => {
-      const store = credentialsFor(settings);
+      const store = credentialsFor(settings, { armed: false });
       for (const site of await store.list()) {
         const c = await store.get(site);
-        console.log(`${site}\t${c?.via ? `via ${c.via}` : c?.totpSecret ? "totp" : "no totp"}`);
+        console.log(
+          `${site}\t${c?.canary ? "CANARY" : c?.via ? `via ${c.via}` : c?.totpSecret ? "totp" : "no totp"}`,
+        );
       }
+    });
+  creds
+    .command("canary <name>")
+    .description(
+      "Store a tripwire credential under a name a thief would reach for (stripe, bank); any read of it is an alarm in the ledger",
+    )
+    .option("--username <u>", "what it looks like", "billing@wrenautomation.com")
+    .action(async (name: string, o: { username: string }) => {
+      const { canaryCredential } = await import("../auth/canary.js");
+      await credentialsFor(settings, { armed: false }).put(name, canaryCredential(o.username));
+      console.log(
+        `canary ${name} armed: nothing legitimate reads it; \`creds audit\` shows a read`,
+      );
     });
 
   creds

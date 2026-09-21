@@ -50,6 +50,12 @@ export const credentialSchema = z
       .default([]),
     /** Sign in through this identity provider's button instead of a password; the provider's own credential does the work. */
     via: z.enum(PROVIDERS).optional(),
+    /**
+     * A tripwire, not an account: nothing legitimate ever reads it. A `get`
+     * of a canary is an alarm (see auth/canary), and its password is refused
+     * on every host.
+     */
+    canary: z.boolean().optional(),
     /** Where the sign-in page is, for a site autobrowse has no login spec of its own for. */
     url: z.string().url().optional(),
   })

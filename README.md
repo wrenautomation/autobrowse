@@ -156,6 +156,8 @@ Browserbase takes them.
   bound the same way to the flow's own site at run time. Every use,
   allowed or refused, is one line in `~/.config/autobrowse/audit.jsonl`
   (never the value); `pnpm autobrowse creds audit --last 50` reads it.
+  `creds canary stripe` plants a tripwire credential: any read of it is a
+  refused line in that ledger and a note to you.
 - **Payment gate.** A billing field or a button that spends (`src/gates/`)
   is never the session's own call: the act waits on a yes from the person
   over a channel they answer on (phone, Linq, email), and is refused

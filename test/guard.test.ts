@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CanaryTripped, canaryCredential, canaryStore } from "../src/auth/canary.js";
 import { noCodes } from "../src/auth/codes.js";
 import { memoryCredentials } from "../src/auth/credentials.js";
 import {
@@ -149,5 +150,49 @@ describe("passwords bound to their origins", () => {
     expect(siteAllowsHost(SITE_LOGINS, "instantly", "instantly.evil.example")).toBe(false);
     expect(siteAllowsHost(SITE_LOGINS, "cloudflare", "accounts.google.com")).toBe(false);
     expect(siteAllowsHost(SITE_LOGINS, "nobody", "example.com")).toBe(false);
+  });
+
+  it("a canary: reading it is the alarm, and its password types nowhere", async () => {
+    const audit = memoryAudit();
+    const told: string[] = [];
+    const inner = memoryCredentials({ google: { username: "g", password: "real" } });
+    const canary = canaryCredential("billing@wrenautomation.com");
+    await inner.put("stripe", canary);
+    const store = canaryStore(inner, {
+      audit,
+      by: "login",
+      notify: async (title) => {
+        told.push(title);
+      },
+    });
+    expect((await store.get("google"))?.username).toBe("g");
+    expect((await store.list()).sort()).toEqual(["google", "stripe"]);
+    await expect(store.get("stripe")).rejects.toBeInstanceOf(CanaryTripped);
+    expect(told).toEqual(["canary tripped: stripe"]);
+    expect(audit.uses.map((u) => `${u.credential} ${u.by} ${u.allowed}`)).toEqual([
+      "stripe login (canary) false",
+    ]);
+    expect(JSON.stringify(audit.uses)).not.toContain(canary.password as string);
+    // Even a copy that reached a page is refused on the canary's own host.
+    const { fp, acts } = fakePage({
+      text: [""],
+      present: () => true,
+      url: () => "https://dashboard.stripe.com/login",
+    });
+    const page = guardedPage(fp, {
+      name: "stripe",
+      cred: (await inner.get("stripe")) as never,
+      domains: ["stripe.com"],
+      site: "stripe",
+      by: "login",
+    });
+    await expect(
+      page.act(
+        { kind: "fill", value: canary.password as string },
+        { role: "textbox" },
+        { goal: "pw" },
+      ),
+    ).rejects.toBeInstanceOf(SecretLeak);
+    expect(acts.length).toBe(0);
   });
 });
