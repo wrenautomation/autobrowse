@@ -37,6 +37,26 @@ const api = ingress({
 
 const local = localBackend(settings, api);
 
+/**
+ * A Restate call with a stopped worker behind it waits, silently, until the
+ * box is back: say so after a while instead of looking hung. The call itself
+ * is left to finish (Restate holds it; the box's idle stop is by design).
+ */
+async function patient<T>(call: PromiseLike<T>, afterMs = 10_000): Promise<T> {
+  const note = setTimeout(
+    () =>
+      console.error(
+        `still waiting after ${afterMs / 1000} s: Restate at ${settings.restateIngressUrl} has the call, but no worker is answering (a local one: pnpm worker; the box: deploy/scripts/box.sh status, box.sh start)`,
+      ),
+    afterMs,
+  );
+  try {
+    return await call;
+  } finally {
+    clearTimeout(note);
+  }
+}
+
 const program = new Command("autobrowse").showHelpAfterError();
 
 program
@@ -62,7 +82,7 @@ program
   .option("--dry-run", "plan only; stop before the first irreversible step")
   .action(async (workflow: string, key: string, o: { plan?: string; dryRun?: boolean }) => {
     const plan = o.plan ? ((await readJson(o.plan)) as Record<string, unknown>) : null;
-    await api.run(workflow, key).run(plan ? { ...plan, dryRun: o.dryRun ?? false } : null);
+    await patient(api.run(workflow, key).run(plan ? { ...plan, dryRun: o.dryRun ?? false } : null));
     console.log(
       `${plan ? "started" : "resumed"} ${workflow}/${key}; watch: autobrowse status ${workflow} ${key}`,
     );
@@ -155,7 +175,7 @@ program
         handoff: o.handoff,
         dryRun: o.dryRun ?? false,
       };
-      await api.run("domain", domain).run(plan);
+      await patient(api.run("domain", domain).run(plan));
       console.log(`started domain/${domain}; watch: autobrowse status domain ${domain}`);
     },
   );
@@ -165,22 +185,22 @@ for (const verb of ["approve", "reject"] as const) {
     .command(`${verb} <workflow> <key> <gate>`)
     .option("--note <text>")
     .action(async (workflow: string, key: string, gate: GateName, o: { note?: string }) => {
-      const g = await api
-        .run(workflow, key)
-        [verb]({ name: gate, ...(o.note ? { note: o.note } : {}) });
+      const g = await patient(
+        api.run(workflow, key)[verb]({ name: gate, ...(o.note ? { note: o.note } : {}) }),
+      );
       console.log(`${verb}d ${g.name} at ${g.step} (opened ${g.openedAt})`);
     });
 }
 
 for (const verb of ["pause", "play", "reset"] as const) {
   program.command(`${verb} <workflow> <key>`).action(async (workflow: string, key: string) => {
-    await api.run(workflow, key)[verb]();
+    await patient(api.run(workflow, key)[verb]());
     console.log(`${verb} ${workflow}/${key}`);
   });
 }
 
 program.command("status <workflow> <key>").action(async (workflow: string, key: string) => {
-  const s = await api.run(workflow, key).status();
+  const s = await patient(api.run(workflow, key).status());
   if (s.paused) console.log("PAUSED");
   if (s.gate) {
     console.log(`GATE ${s.gate.name} at ${s.gate.step} since ${s.gate.openedAt}: ${s.gate.prompt}`);
@@ -200,7 +220,7 @@ program
   )
   .action(async (opts: { limit: string; before?: string }) => {
     const q = { limit: Number(opts.limit) || 100, ...(opts.before ? { before: opts.before } : {}) };
-    const rows = await api.registry().list(q);
+    const rows = await patient(api.registry().list(q));
     for (const r of rows)
       console.log(
         `${r.status.padEnd(9)} ${`${r.workflow}/${r.key}`.padEnd(40)} ${r.gate ? `gate:${r.gate}` : (r.lastStep ?? "")}  ${r.updatedAt}`,
