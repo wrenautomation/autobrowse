@@ -1,6 +1,12 @@
 /** Every run the registry knows, and a form to start one from a workflow's plan schema. */
 import { useCallback, useEffect, useState } from "react";
-import { applyRunEvent, LIST_LIMIT, type RunRow } from "../../../src/engine/rows.js";
+import {
+  applyRunEvent,
+  compareRows,
+  cursorOf,
+  LIST_LIMIT,
+  type RunRow,
+} from "../../../src/engine/rows.js";
 import { api, type RunEvent, type WorkflowInfo } from "../api.js";
 import { href, useLoad } from "../hooks.js";
 
@@ -36,14 +42,14 @@ function useRuns(event: RunEvent | null) {
     });
   }, [event]);
   const last = rows?.[rows.length - 1];
-  return { rows, error, busy, more, loadMore: () => last && load(last.updatedAt) };
+  return { rows, error, busy, more, loadMore: () => last && load(cursorOf(last)) };
 }
 
 /** Newer rows replace older ones with the same id; newest first. */
 function merge(prev: RunRow[], next: RunRow[]): RunRow[] {
   const byId = new Map(prev.map((r) => [`${r.workflow}/${r.key}`, r]));
   for (const r of next) byId.set(`${r.workflow}/${r.key}`, r);
-  return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return [...byId.values()].sort(compareRows);
 }
 
 export function RunsPage({ event }: { event: RunEvent | null }) {

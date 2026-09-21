@@ -14,7 +14,7 @@ export const REGISTRY_KEY = "all";
 const ROWS = "rows";
 
 export type { ListQuery, RunRow } from "./rows.js";
-export { applyRunEvent, LIST_LIMIT, pageOf } from "./rows.js";
+export { applyRunEvent, compareRows, cursorOf, LIST_LIMIT, pageOf } from "./rows.js";
 
 export const runsRegistry = restate.object({
   name: REGISTRY.name,

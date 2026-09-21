@@ -7,7 +7,7 @@ import type { Ingress } from "../src/app/client.js";
 import { signLinqWebhook } from "../src/clients/linq.js";
 import type { Outline } from "../src/compiler/index.js";
 import type { OpenGate, RunStatusView } from "../src/engine/object.js";
-import { type ListQuery, pageOf, type RunRow } from "../src/engine/registry.js";
+import { cursorOf, type ListQuery, pageOf, type RunRow } from "../src/engine/registry.js";
 import { saveRecording } from "../src/recorder/store.js";
 import { SiteError, type SiteFacade } from "../src/sites/index.js";
 import { api, findRow } from "../src/ui/api.js";
@@ -243,6 +243,12 @@ describe("api", () => {
       "k2",
       "k1",
     ]);
+    // Rows updated in the same instant: the cursor carries the id, so the page edge loses none.
+    const same = ["a", "b", "c"].map((key) => ({ ...rows[0], key, updatedAt: "2026-09-25" }));
+    const first = pageOf(same, { limit: 2 });
+    expect(first.map((r) => r.key)).toEqual(["c", "b"]);
+    const second = pageOf(same, { limit: 2, before: cursorOf(first[1] as RunRow) });
+    expect(second.map((r) => r.key)).toEqual(["a"]);
   });
 
   it("starts, answers and controls runs through the ingress", async () => {

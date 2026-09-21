@@ -55,8 +55,8 @@ trips", "options first class, not inconvenient".
    index would save that once recordings number in the hundreds.
 4. ✅ (2026-09-20) `inbound` pages back through the registry (`findRow`, up
    to 10 pages) for the named or the waiting run.
-5. `before` is a plain `updatedAt` cursor: two runs updated in the same
-   millisecond at a page edge could hide one. A (time, id) cursor fixes it
-   if it ever shows.
+5. ✅ (2026-09-21) `before` is `cursorOf(row)` = `<updatedAt>~<workflow/key>`;
+   rows order by (updatedAt, id) so a page edge hides nothing. A bare
+   `updatedAt` still pages.
 6. Step `clip` keeps 6 KB per string; a desktop tree cut mid-line is
    still readable, the model only ever saw 6 KB anyway.

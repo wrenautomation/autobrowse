@@ -30,7 +30,7 @@ import { outlineSchema } from "../compiler/index.js";
 import type { GateName } from "../engine/effects.js";
 import type { RunEvent } from "../engine/events.js";
 import type { RunRow } from "../engine/registry.js";
-import { LIST_LIMIT, type ListQuery } from "../engine/rows.js";
+import { cursorOf, LIST_LIMIT, type ListQuery } from "../engine/rows.js";
 import { commandSchema } from "../explore/server.js";
 import { listRecordings, loadRecording, recordingDir } from "../recorder/store.js";
 import { summarizeRecording } from "../recorder/types.js";
@@ -116,7 +116,7 @@ export async function findRow(
     if (hit) return hit;
     const last = rows.at(-1);
     if (rows.length < LIST_LIMIT || !last) return undefined;
-    before = last.updatedAt;
+    before = cursorOf(last);
   }
   return undefined;
 }
@@ -270,7 +270,7 @@ export function api(deps: ApiDeps): Hono {
     return job ? c.json(job) : c.json({ error: "no such job" }, 404);
   });
 
-  /** Newest first; `?limit=` (100) and `?before=<updatedAt of the last row>` page through. */
+  /** Newest first; `?limit=` (100) and `?before=<the last row's cursor>` page through. */
   app.get("/api/runs", async (c) => {
     const limit = Number(c.req.query("limit")) || undefined;
     const before = c.req.query("before");

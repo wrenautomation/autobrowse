@@ -126,7 +126,6 @@ export const api = {
   workflows: () => call<WorkflowInfo[]>("/api/workflows"),
   prove: (workflow: string) =>
     (post(`/api/workflows/${workflow}/prove`) as Promise<JobView>).then((j) => finish<Proof>(j)),
-  /** Newest first; `before` = the last row's updatedAt for the next page. */
   /** A compiled workflow's outline; 404 for a hand-written one. Saving re-renders the module. */
   outline: (workflow: string) => call<Outline>(`/api/workflows/${workflow}/outline`),
   saveOutline: (workflow: string, outline: Outline) =>
@@ -134,6 +133,7 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(outline),
     }),
+  /** Newest first; `before` = `cursorOf(last row)` for the next page. */
   runs: (q: ListQuery = {}) => call<RunRow[]>(`/api/runs${query({ ...q })}`),
   job: (id: string, wait = 0) => call<JobView>(`/api/jobs/${id}${query({ wait })}`),
   run: (workflow: string, key: string) =>

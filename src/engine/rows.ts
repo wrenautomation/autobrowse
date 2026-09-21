@@ -62,19 +62,38 @@ export function applyRunEvent(row: RunRow | null, event: RunEvent): RunRow {
   return next;
 }
 
-/** A page of the list: newest first, `limit` rows (100 unless asked), those updated before `before`. */
+/** A page of the list: newest first, `limit` rows (100 unless asked), those before `before`. */
 export interface ListQuery {
   limit?: number;
-  /** An `updatedAt` from the previous page: the next page starts after it. */
+  /** The previous page's last row as `cursorOf` gives it: the next page starts after it. A bare `updatedAt` still works. */
   before?: string;
 }
 
 export const LIST_LIMIT = 100;
 
+const idOf = (r: Pick<RunRow, "workflow" | "key">) => `${r.workflow}/${r.key}`;
+
+/** Where a page ends: the row's place in the order, for the next page's `before`. */
+export function cursorOf(r: Pick<RunRow, "updatedAt" | "workflow" | "key">): string {
+  return `${r.updatedAt}~${idOf(r)}`;
+}
+
+/** Newest first; two rows updated in the same instant order by id, so a page edge cannot hide one. */
+export function compareRows(a: RunRow, b: RunRow): number {
+  return b.updatedAt.localeCompare(a.updatedAt) || idOf(b).localeCompare(idOf(a));
+}
+
+function isBefore(r: RunRow, cursor: string): boolean {
+  const i = cursor.indexOf("~");
+  if (i < 0) return r.updatedAt < cursor;
+  const at = cursor.slice(0, i);
+  return r.updatedAt < at || (r.updatedAt === at && idOf(r) < cursor.slice(i + 1));
+}
+
 export function pageOf(rows: RunRow[], q: ListQuery = {}): RunRow[] {
   const limit = Math.max(1, Math.min(q.limit ?? LIST_LIMIT, 1_000));
   return rows
-    .filter((r) => !q.before || r.updatedAt < q.before)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .filter((r) => !q.before || isBefore(r, q.before))
+    .sort(compareRows)
     .slice(0, limit);
 }
