@@ -13,12 +13,12 @@ import { type Accounts, accountsOf } from "../auth/accounts.js";
 import { SITE_LOGINS } from "../auth/sites.js";
 import { type FlowRunner, flowRunner } from "../browser/flow.js";
 import type { FailureRecord } from "../browser/session.js";
-import { httpClient } from "../clients/http.js";
 import type { Compiled, Outline } from "../compiler/index.js";
 import { compile, loadOutline, rerender, saveOutline, writeRendered } from "../compiler/index.js";
 import type { SecretSink } from "../deps/sink.js";
 import type { Ability } from "../do/catalog.js";
 import type { Doer } from "../do/doer.js";
+import { filePicks } from "../do/memory.js";
 import { doerFor } from "../do/wire.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import { type ExploreOptions, type Explorer, startExplore } from "../explore/server.js";
@@ -32,7 +32,7 @@ import { type EventBus, eventBus } from "../ui/bus.js";
 import type { Jobs } from "../ui/jobs.js";
 import { type CompiledCatalog, compiledCatalog } from "../workflows/compiled.js";
 import type { Proof } from "../workflows/proof.js";
-import { proofLine, proveWorkflow, runCompiled, writeProof } from "../workflows/proof.js";
+import { proofLine, proveWorkflow, writeProof } from "../workflows/proof.js";
 import type { Ingress } from "./client.js";
 import type { Settings } from "./config.js";
 import { type Screen, screenOf } from "./screen.js";
@@ -260,6 +260,7 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
     sink: app.sink,
     ...(app.sites ? { sites: app.sites } : {}),
     ...(agent ? { agent } : {}),
+    memory: filePicks(join(recordingsDir, ".do-picks.json")),
     compile: async (name) => ({
       workflow: (await compileRecording(await loadRecording(recordingsDir, name), o.llm)).outline
         .name,

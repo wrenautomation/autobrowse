@@ -63,11 +63,12 @@ consent); `status(site).setup` says what is done, blocked or unrecorded;
    Open: a `FlowPage` over a caller's Playwright page is still built inline
    in `flowRunner`; lift it to `flowPageOf(page, {login, pace})` when someone
    needs it.
-3. Publish flow: `pnpm build` is not in gates and `dist/` is not proven by
-   a consumer; add a smoke test that imports `dist/sites/index.js` after a
-   build (CI only).
+3. ✅ (2026-09-21) `pnpm build:check` (`scripts/build-check.mjs`) builds and
+   imports every subpath in `exports`, naming what each must export; CI runs
+   it after typecheck. Not in `gates` (a full emit per commit is not worth
+   the wait).
 4. `llmFor(settings)` reads the budget file path and the provider from
    settings; a caller passing an `Llm` of their own already works
    (`DoerDeps.llm`), but the budget ledger is not reusable on its own.
-5. Docs per subpath: a short header comment in each entry module says what
-   it is for; a generated API listing is not worth it yet.
+5. ✅ Each entry module opens with a line saying what it is for; a generated
+   API listing is not worth it yet.

@@ -13,11 +13,16 @@ different release pace.
 pnpm autobrowse do "upload this to youtube" --input file=talk.mp4 --input title="Talk"
 pnpm autobrowse do "list my linkedin posts"
 pnpm autobrowse do "rename my google account" --input name=Wren --site google --dry-run
+pnpm autobrowse do "deploy this on cloudflare workers" --input dir=./worker
 pnpm autobrowse abilities                        # what `do` can pick from, and what is not recorded yet
 ```
 
 `do` routes a goal to what does it: a site route under its official API
-shape, a compiled workflow, a hand-written flow. With nothing ready, the
+shape, a compiled workflow, a hand-written flow, a command-line tool
+(`wrangler-deploy`, `gh-pr-create`, `ffmpeg-convert`; ready when the binary
+is on the PATH, `src/do/tools.ts`). What the model picked for earlier goals
+is kept (`recordings/.do-picks.json`) and shown to it, so the same ask in
+other words lands on the same ability. With nothing ready, the
 agent explores the site once; what it achieved is saved and compiled,
 under the missing leg's name when a route was waiting on one, so the second
 same ask runs deterministically. Gates hold inside every leg. The same verb

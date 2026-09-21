@@ -19,6 +19,16 @@ export {
   missingWorkflowName,
   recordingNameOf,
 } from "./doer.js";
+export { filePicks, memoryPicks, type PickMemory, type PickPair } from "./memory.js";
 export { type Pick as AbilityPick, pickAbility } from "./pick.js";
 export { DO_SERVICE, doService } from "./service.js";
+export {
+  binPresence,
+  runTool,
+  shellQuote,
+  TOOLS,
+  type Tool,
+  ToolInputError,
+  toolAbilities,
+} from "./tools.js";
 export { type DoerParts, doerFor, type Verb } from "./wire.js";

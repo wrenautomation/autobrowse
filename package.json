@@ -44,6 +44,7 @@
     "lint:fix": "biome check --write .",
     "typecheck": "tsc --noEmit && tsc -p ui --noEmit",
     "build": "tsc",
+    "build:check": "tsc && node scripts/build-check.mjs",
     "test": "vitest run",
     "worker": "tsx src/app/main.ts",
     "autobrowse": "tsx src/app/cli.ts",

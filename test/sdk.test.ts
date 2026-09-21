@@ -150,6 +150,7 @@ describe("use as a library", () => {
       sink: memorySink(),
       flows: { "example/ping": ping as never },
       logins: [],
+      tools: [],
     });
     const list = await verb.abilities();
     expect(list.map((a) => `${a.kind} ${a.name}`)).toEqual(["flow example/ping"]);

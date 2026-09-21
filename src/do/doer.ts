@@ -13,6 +13,7 @@ import type { Llm, LlmUsage } from "../llm/index.js";
 import type { CompiledRun } from "../sites/facade.js";
 import type { Method } from "../sites/types.js";
 import { type Ability, parseSiteAbility } from "./catalog.js";
+import type { PickMemory } from "./memory.js";
 import { pickAbility } from "./pick.js";
 
 export interface DoRequest {
@@ -27,7 +28,7 @@ export interface DoRequest {
   dryRun?: boolean;
 }
 
-export type DoVia = "site" | "workflow" | "flow" | "agent" | "none";
+export type DoVia = "site" | "workflow" | "flow" | "tool" | "agent" | "none";
 
 export interface DoOutcome {
   via: DoVia;
@@ -68,6 +69,13 @@ export interface DoerDeps {
   ): Promise<unknown>;
   runWorkflow(name: string, plan: Record<string, unknown>): Promise<CompiledRun>;
   runFlow(name: string, input: unknown): Promise<unknown>;
+  /** A command-line tool by name; absent = no tool abilities are listed. */
+  runTool?(
+    name: string,
+    input: Record<string, unknown>,
+  ): Promise<{ command: string; result: { code: number; stdout: string; stderr: string } }>;
+  /** Earlier picks, shown to the model and added to after each of its picks. */
+  memory?: PickMemory;
   agent?: AgentSessions;
   /** Compile the recording saved under `name`; returns the workflow's name. */
   compile?(name: string): Promise<{ workflow: string }>;
@@ -125,6 +133,28 @@ export function doer(d: DoerDeps): Doer {
           run.status === "done" ? "done" : run.status === "waiting" ? "needs-human" : "failed",
         summary: `${a.name} ${run.status}${last ? `: ${last.name} ${last.status}` : ""}`,
       };
+    }
+    if (a.kind === "tool") {
+      if (!d.runTool) throw new DoError(501, "no tools here");
+      const { command, result } = await d.runTool(a.name, input);
+      const tail = (s: string) => s.trim().split("\n").slice(-20).join("\n");
+      const output = {
+        command,
+        code: result.code,
+        stdout: tail(result.stdout),
+        stderr: tail(result.stderr),
+      };
+      return result.code === 0
+        ? { output, status: "done", summary: `${a.name} exited 0` }
+        : {
+            output,
+            status: "failed",
+            summary:
+              `${a.name} exited ${result.code}: ${tail(result.stderr) || tail(result.stdout)}`.slice(
+                0,
+                400,
+              ),
+          };
     }
     const output = await d.runFlow(a.name, input);
     return { output, status: "done", summary: `${a.name} ran` };
@@ -200,14 +230,20 @@ export function doer(d: DoerDeps): Doer {
   return {
     async do(req) {
       if (!req.goal.trim()) throw new DoError(400, "an empty goal");
-      const [abilities, sites] = await Promise.all([d.abilities(), d.sites()]);
+      const [abilities, sites, earlier] = await Promise.all([
+        d.abilities(),
+        d.sites(),
+        d.memory?.recall() ?? [],
+      ]);
       const pick = await pickAbility(
         d.llm,
-        { goal: req.goal, inputs: req.inputs ?? {}, site: req.site ?? null },
+        { goal: req.goal, inputs: req.inputs ?? {}, site: req.site ?? null, earlier },
         abilities,
         sites,
       );
       const a = pick.ability;
+      if (a && d.memory && pick.usage.inputTokens > 0)
+        await d.memory.remember(req.goal, a.name).catch(() => undefined);
       if (req.dryRun)
         return {
           via: a ? (a.ready ? a.kind : "agent") : "agent",

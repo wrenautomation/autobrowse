@@ -9,11 +9,11 @@ import type { AnyWorkflow } from "../engine/workflow.js";
 import type { SiteRow } from "../sites/facade.js";
 import type { SiteApi } from "../sites/types.js";
 
-export type AbilityKind = "site" | "workflow" | "flow";
+export type AbilityKind = "site" | "workflow" | "flow" | "tool";
 
 export interface Ability {
   kind: AbilityKind;
-  /** `youtube POST /youtube/v3/videos` | a workflow's name | `google/oauth-consent`. */
+  /** `youtube POST /youtube/v3/videos` | a workflow's name | `google/oauth-consent` | `wrangler-deploy`. */
   name: string;
   site: string | null;
   summary: string;
