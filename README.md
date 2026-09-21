@@ -115,6 +115,17 @@ Browserbase takes them.
   SSM in prod) under that name. The journal keeps the element and the env
   name, never the value; a compiled `keep` op does the same through
   `deps.sink`, outside the run's journal. The agent has `keep{ref,env}`.
+- **Placed secrets.** `{"cmd":"place","hints":…,"secret":"password"}`
+  fills a field with a value the session holds by name and the socket
+  never carries: the agent has `place{ref,secret}` and is told which names
+  exist, never their values. `pnpm autobrowse signup instagram --email
+  hello@wrenautomation.com --name "Wren Automation" --handle wrenautomation
+  --headed` mints a 24-char password, stores the credential sealed under
+  `instagram` before the browser opens, and lets the agent make the account
+  placing `email`, `password`, `code` (read from that inbox or the phone)
+  and `phone`; a captcha hands off to you in the window (enter to go on).
+  The journal keeps every placed field redacted, so the compiled flow reads
+  it as a secret by key.
 - **Env store.** Secrets travel through SSM Parameter Store, one
   SecureString per name under `/autobrowse/config` (KMS at rest, IAM at
   the door, every read in CloudTrail; no extra vendor). `autobrowse env
@@ -220,6 +231,8 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9090/ -d '{"c
 pnpm autobrowse agent google "open Personal info and report the display name" --save google-name   # model explores, journal → recording
 pnpm autobrowse repair ~/.config/autobrowse/artifacts/google-x-2026-….failure.json   # agent picks up where a flow stopped
 pnpm autobrowse creds paste google@ops            # a second account: `email password [key]` on the clipboard (or the UI's Accounts page)
+pnpm autobrowse creds push linkedin               # that stored credential into SSM as AUTOBROWSE_CRED_LINKEDIN_*: the box signs in too
+pnpm autobrowse signup instagram --email hello@wrenautomation.com --name "Wren Automation" --handle wrenautomation --headed
 pnpm autobrowse record buy-domain --site cloudflare --url https://dash.cloudflare.com/ --terminal
 pnpm autobrowse compile buy-domain             # → src/workflows/buy-domain/ with its outline.json (on the Runs page at once; no restart)
 pnpm autobrowse try google-name                # run a compiled workflow here, no Restate: the proof it is deterministic

@@ -2,7 +2,12 @@ import { mkdtempSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { envCredentials, fileCredentials, layeredCredentials } from "../src/auth/credentials.js";
+import {
+  credentialEnv,
+  envCredentials,
+  fileCredentials,
+  layeredCredentials,
+} from "../src/auth/credentials.js";
 import {
   base32Decode,
   type CodeKind,
@@ -101,6 +106,25 @@ describe("credentials", () => {
     expect(await store.list()).toEqual(["google-admin"]);
     expect((await store.get("google-admin"))?.username).toBe("a@b.co");
     await expect(store.put("x", { username: "u", password: "p" })).rejects.toThrow(/read-only/);
+  });
+  it("a credential round-trips through env entries, via-only included", async () => {
+    const entries = credentialEnv("my-site", {
+      username: "w@wren.co",
+      via: "google",
+      codesInbox: "codes@wren.co",
+      recoveryCodes: [],
+      passkeys: [],
+    });
+    expect(entries.map((e) => e.name)).toEqual([
+      "AUTOBROWSE_CRED_MY_SITE_USERNAME",
+      "AUTOBROWSE_CRED_MY_SITE_VIA",
+      "AUTOBROWSE_CRED_MY_SITE_CODES_INBOX",
+    ]);
+    const env = Object.fromEntries(entries.map((e) => [e.name, e.value]));
+    const back = await envCredentials(env).get("my-site");
+    expect(back?.via).toBe("google");
+    expect(back?.codesInbox).toBe("codes@wren.co");
+    expect(back?.password).toBeUndefined();
   });
   it("layered: first hit wins, writes go to the first store", async () => {
     const a = memoryCredentials({ s: { username: "a", password: "1" } });

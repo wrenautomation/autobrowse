@@ -142,6 +142,22 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       console.log(`stored: ${(await ingest(credentialsFor(settings), lines)).join(", ")}`);
     });
   creds
+    .command("push <site>")
+    .description(
+      "This machine's stored credential into the env store (SSM) as AUTOBROWSE_CRED_<SITE>_*, so the box signs in too; nothing printed",
+    )
+    .action(async (site: string) => {
+      const { credentialEnv } = await import("../auth/credentials.js");
+      const { envStoreFor } = await import("./services.js");
+      const cred = await credentialsFor(settings).get(site);
+      if (!cred) throw new Error(`no credential stored for ${site}: creds paste ${site} first`);
+      const store = envStoreFor(settings);
+      const entries = credentialEnv(site, cred);
+      for (const e of entries) await store.put(e.name, e.value);
+      console.log(`pushed ${site}: ${entries.map((e) => e.name).join(", ")}`);
+      console.log("the box reads the store on its next deploy (push to main)");
+    });
+  creds
     .command("list")
     .description("Sites with a stored credential (names only)")
     .action(async () => {

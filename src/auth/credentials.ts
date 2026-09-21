@@ -112,25 +112,49 @@ export function memoryCredentials(init: Record<string, CredentialInput> = {}): C
   };
 }
 
+/** `AUTOBROWSE_CRED_<SITE>_<FIELD>`: the env name a credential field travels under. */
+export function credentialEnvName(site: string, field: string): string {
+  return `AUTOBROWSE_CRED_${site.replace(/[^a-zA-Z0-9]+/g, "_").toUpperCase()}_${field}`;
+}
+
 /**
- * `AUTOBROWSE_CRED_<SITE>_USERNAME` / `_PASSWORD` / `_TOTP_SECRET`: the
- * container form, where a Secret becomes env. Read-only.
+ * A credential as env entries, for the store the box reads: username,
+ * password, TOTP seed, via provider, codes inbox. Recovery codes and
+ * passkeys stay on the machine that holds the file.
+ */
+export function credentialEnv(site: string, cred: Credential): { name: string; value: string }[] {
+  const fields: [string, string | undefined][] = [
+    ["USERNAME", cred.username],
+    ["PASSWORD", cred.password],
+    ["TOTP_SECRET", cred.totpSecret],
+    ["VIA", cred.via],
+    ["CODES_INBOX", cred.codesInbox],
+  ];
+  return fields
+    .filter((f): f is [string, string] => Boolean(f[1]))
+    .map(([field, value]) => ({ name: credentialEnvName(site, field), value }));
+}
+
+/**
+ * `AUTOBROWSE_CRED_<SITE>_USERNAME` / `_PASSWORD` / `_TOTP_SECRET` / `_VIA`
+ * / `_CODES_INBOX`: the container form, where a Secret becomes env. Read-only.
  */
 export function envCredentials(env: NodeJS.ProcessEnv = process.env): CredentialStore {
-  const key = (site: string, field: string) =>
-    `AUTOBROWSE_CRED_${site.replace(/[^a-zA-Z0-9]+/g, "_").toUpperCase()}_${field}`;
+  const key = credentialEnvName;
   return {
     async get(site) {
       const username = env[key(site, "USERNAME")];
       const password = env[key(site, "PASSWORD")];
-      if (!username || !password) return null;
-      const totpSecret = env[key(site, "TOTP_SECRET")];
       const via = env[key(site, "VIA")];
+      if (!username || !(password || via)) return null;
+      const totpSecret = env[key(site, "TOTP_SECRET")];
+      const codesInbox = env[key(site, "CODES_INBOX")];
       return credentialSchema.parse({
         username,
-        password,
+        ...(password ? { password } : {}),
         ...(totpSecret ? { totpSecret } : {}),
         ...(via ? { via } : {}),
+        ...(codesInbox ? { codesInbox } : {}),
       });
     },
     async put(site) {

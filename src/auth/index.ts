@@ -63,5 +63,14 @@ export {
   registerProvider,
 } from "./providers.js";
 export { newPassword, rotatePasswordFlow } from "./rotate.js";
+export {
+  mintCredential,
+  type NewAccount,
+  type SecretValues,
+  SIGNUP_SECRETS,
+  type SignupSecretsOptions,
+  signupGoal,
+  signupSecrets,
+} from "./signup.js";
 export { SITE_LOGINS } from "./sites.js";
 export { base32Decode, findTotpSecret, parseOtpauth, totp, totpRemainingMs } from "./totp.js";

@@ -1,0 +1,111 @@
+import { describe, expect, it } from "vitest";
+import { exploreWithAgent } from "../src/agent/explorer.js";
+import type { CodeSource } from "../src/auth/codes.js";
+import { memoryCredentials } from "../src/auth/credentials.js";
+import { mintCredential, signupGoal, signupSecrets } from "../src/auth/signup.js";
+import type { ExploreCommand, Explorer } from "../src/explore/server.js";
+import { fakeLlm } from "../src/llm/fake.js";
+
+const cred = {
+  username: "hello@wren.test",
+  password: "Minted-1!",
+  recoveryCodes: [],
+  passkeys: [],
+};
+
+/** A code source that answers email codes, one per call, with its `since`. */
+function codes(answers: string[]): CodeSource & { asked: Date[] } {
+  const asked: Date[] = [];
+  return {
+    asked,
+    offers: (kind) => kind === "email",
+    inbox: () => "hello@wren.test",
+    async get(req) {
+      asked.push(req.since);
+      return answers.shift() ?? null;
+    },
+  };
+}
+
+describe("signup", () => {
+  it("mints the password and stores the credential first; never over an existing one", async () => {
+    const store = memoryCredentials();
+    const c = await mintCredential(store, { site: "x", email: "hello@wren.test" });
+    expect(c.username).toBe("hello@wren.test");
+    expect(c.password?.length).toBe(24);
+    expect(c.codesInbox).toBe("hello@wren.test");
+    await expect(mintCredential(store, { site: "x", email: "other@wren.test" })).rejects.toThrow(
+      /already has a stored credential/,
+    );
+    expect((await store.get("x"))?.username).toBe("hello@wren.test");
+  });
+
+  it("secrets by name: email, password, phone, and a fresh code each time", async () => {
+    const src = codes(["111111", "222222"]);
+    const t0 = new Date("2026-09-21T10:00:00Z");
+    let now = t0;
+    const s = signupSecrets({ cred, codes: src, since: t0, phone: "+15550001111", now: () => now });
+    expect(await s("email")).toBe("hello@wren.test");
+    expect(await s("password")).toBe("Minted-1!");
+    expect(await s("phone")).toBe("+15550001111");
+    expect(await s("nothing")).toBeNull();
+    now = new Date("2026-09-21T10:01:00Z");
+    expect(await s("code")).toBe("111111");
+    expect(await s("code")).toBe("222222");
+    // The second ask only wants codes newer than the first answer.
+    expect(src.asked[0]).toEqual(t0);
+    expect(src.asked[1]).toEqual(now);
+    expect(await s("code")).toBeNull();
+  });
+
+  it("the goal names the secrets and the details, never a value", () => {
+    const g = signupGoal({
+      site: "instagram",
+      email: "hello@wren.test",
+      name: "Wren Automation",
+      handle: "wrenautomation",
+    });
+    expect(g).toContain('place{secret:"password"}');
+    expect(g).toContain('handle "wrenautomation"');
+    expect(g).not.toContain("hello@wren.test");
+  });
+
+  it("the agent places a secret by name; the value never enters its prompt", async () => {
+    const calls: ExploreCommand[] = [];
+    const ex: Explorer = {
+      port: 0,
+      token: "t",
+      paused: () => false,
+      resumed: async () => {},
+      done: Promise.resolve(),
+      async exec(c) {
+        calls.push(c);
+        if (c.cmd === "url") return { url: "https://site.test/join" };
+        if (c.cmd === "aria") return { aria: '- textbox "Password"\n- button "Next"' };
+        if (c.cmd === "place") return { ok: true, secret: c.secret };
+        return { ok: true };
+      },
+    };
+    const llm = fakeLlm([
+      {
+        thought: "password field",
+        action: { cmd: "place", ref: 1, secret: "password", goal: "set the password" },
+      },
+      { thought: "done", action: { cmd: "done", summary: "placed", achieved: true } },
+    ]);
+    const r = await exploreWithAgent({
+      explorer: ex,
+      llm,
+      goal: "sign up",
+      secrets: ["email", "password", "code"],
+    });
+    expect(r.achieved).toBe(true);
+    expect(calls.find((c) => c.cmd === "place")).toMatchObject({
+      secret: "password",
+      hints: { role: "textbox", name: "Password" },
+    });
+    expect(llm.requests[0]?.prompt).toContain("SECRETS (use place): email, password, code");
+    expect(llm.requests[1]?.prompt).toContain("1. place [1] secret password");
+    expect(JSON.stringify(llm.requests)).not.toContain("Minted");
+  });
+});

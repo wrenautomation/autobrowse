@@ -25,6 +25,8 @@ export const stepSchema = z.object({
     z.object({ cmd: z.literal("open"), url: z.string().url() }),
     z.object({ cmd: z.literal("click"), ref, goal: z.string() }),
     z.object({ cmd: z.literal("fill"), ref, value: z.string(), goal: z.string() }),
+    /** A named secret into a field: the code fills it, the model never sees it. */
+    z.object({ cmd: z.literal("place"), ref, secret: z.string().min(1), goal: z.string() }),
     z.object({ cmd: z.literal("select"), ref, value: z.string(), goal: z.string() }),
     z.object({ cmd: z.literal("press"), ref, key: z.string(), goal: z.string() }),
     z.object({
@@ -63,6 +65,8 @@ export interface AgentOptions {
   goal: string;
   /** Values the goal refers to by name (a file path, a domain); the model never invents them. */
   inputs?: Record<string, string>;
+  /** Names the model may `place` into fields (a password, a code); the values stay in the explorer. */
+  secrets?: readonly string[];
   maxSteps?: number;
   /** A person said stop: the loop ends before its next step. */
   stopped?: () => boolean;
@@ -93,6 +97,7 @@ Reply with ONE JSON object: {"thought": "...", "action": {...}}.
 Actions, with "cmd" set to exactly one of these words:
   {"cmd":"click","ref":n,"goal":"why"}
   {"cmd":"fill","ref":n,"value":"...","goal":"why"}
+  {"cmd":"place","ref":n,"secret":"name","goal":"why"}   (a SECRET by its name goes into the field; you never see or type its value)
   {"cmd":"select","ref":n,"value":"...","goal":"why"}
   {"cmd":"press","ref":n,"key":"Enter","goal":"why"}
   {"cmd":"upload","ref":n,"files":["path"],"goal":"why"}
@@ -125,9 +130,10 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
   let notedOn: string | null = null;
   /** What the model saw last turn, to send only the change when the page is the same. */
   let seen: { url: string; page: Digest } | null = null;
-  const inputs = Object.entries(o.inputs ?? {})
-    .map(([k, v]) => `${k}: ${v}`)
-    .join("\n");
+  const inputs = [
+    ...Object.entries(o.inputs ?? {}).map(([k, v]) => `${k}: ${v}`),
+    ...(o.secrets?.length ? [`SECRETS (use place): ${o.secrets.join(", ")}`] : []),
+  ].join("\n");
   for (let n = 1; n <= max; n++) {
     await o.explorer.resumed();
     if (o.stopped?.()) return { achieved: false, summary: "stopped by a person", steps, usage };
@@ -228,6 +234,8 @@ function toCommand(a: Act, page: Digest): ExploreCommand {
       return { cmd: "click", hints, goal: a.goal };
     case "fill":
       return { cmd: "fill", hints, value: a.value, goal: a.goal };
+    case "place":
+      return { cmd: "place", hints, secret: a.secret, goal: a.goal };
     case "select":
       return { cmd: "select", hints, value: a.value, goal: a.goal };
     case "press":
@@ -282,10 +290,12 @@ function describe(s: StepRecord): string {
         ? ` ${a.url}`
         : a.cmd === "fill" || a.cmd === "select"
           ? ` "${a.value}"`
-          : a.cmd === "read"
-            ? ` as ${a.as}`
-            : a.cmd === "keep"
-              ? ` as ${a.env}`
-              : "";
+          : a.cmd === "place"
+            ? ` secret ${a.secret}`
+            : a.cmd === "read"
+              ? ` as ${a.as}`
+              : a.cmd === "keep"
+                ? ` as ${a.env}`
+                : "";
   return `${a.cmd}${at}${what}`;
 }

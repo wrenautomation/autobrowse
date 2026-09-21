@@ -154,7 +154,11 @@ export function explorerOpener(
   settings: Settings,
   sink: SecretSink = sinkFor(settings),
   screen: Screen = screenOf(settings),
-): (site: string, port: number, extra?: Pick<ExploreOptions, "tokenFile">) => Promise<Explorer> {
+): (
+  site: string,
+  port: number,
+  extra?: Pick<ExploreOptions, "tokenFile" | "secrets">,
+) => Promise<Explorer> {
   const approver: Approver | null = approverFor(settings, gmailFor(settings));
   return (site, port, extra = {}) =>
     startExplore({

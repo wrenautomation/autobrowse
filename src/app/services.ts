@@ -5,6 +5,7 @@ import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Logger } from "pino";
 import {
   aesGcmCipher,
+  type CodeSource,
   type CredentialStore,
   codeSources,
   credentialFor,
@@ -243,16 +244,15 @@ export function devicesFor(settings: Settings): DeviceLink[] {
 }
 
 /**
- * Sign-in for every known site: TOTP from the stored seed, email codes
- * through Gmail, SMS from the paired phone and/or Twilio (both first
- * class; the phone is asked first), device prompts by a note over every
- * channel that reaches a person (phone, email).
+ * Every way a code reaches us: TOTP from the stored seed, email through
+ * Gmail, SMS from the paired phone and/or Linq and/or Twilio (all first
+ * class; the phone is asked first).
  */
-export function loginFor(
+export function codesFor(
   settings: Settings,
   gmail: GmailUserClient,
   http = httpClient(),
-): LoginProvider {
+): CodeSource {
   const sources = [
     totpSource(),
     messageSource({
@@ -279,12 +279,29 @@ export function loginFor(
         }),
       }),
     );
+  return codeSources(...sources);
+}
+
+/** The number a site may text us on: the paired phone, else Linq, else Twilio. */
+export function ourPhone(settings: Settings, http = httpClient()): string | null {
+  return phoneFor(settings)?.number ?? linqFor(settings, http)?.to ?? settings.twilioNumber ?? null;
+}
+
+/**
+ * Sign-in for every known site: codes from `codesFor`, device prompts by
+ * a note over every channel that reaches a person (phone, email).
+ */
+export function loginFor(
+  settings: Settings,
+  gmail: GmailUserClient,
+  http = httpClient(),
+): LoginProvider {
   const people = channelsFor(settings, gmail, http).filter((c) => c.note);
   const all = channels(people);
   const notify = people.length && all.note ? all.note.bind(all) : undefined;
   return loginProvider(SITE_LOGINS, {
     credentials: credentialsFor(settings),
-    codes: codeSources(...sources),
+    codes: codesFor(settings, gmail, http),
     ...(notify ? { notify } : {}),
   });
 }

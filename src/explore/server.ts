@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import type { Page } from "playwright";
 import { z } from "zod";
+import type { SecretValues } from "../auth/signup.js";
 import { defineFlow, type FlowPage, flowRunner, type RunnerOptions } from "../browser/flow.js";
 import { type Hints, locate, locateAll, textOf } from "../browser/locate.js";
 import { snapshotPage } from "../browser/repair.js";
@@ -64,6 +65,12 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("open"), url: z.string().url() }),
   targetSchema.extend({ cmd: z.literal("click"), goal: z.string().optional() }),
   targetSchema.extend({ cmd: z.literal("fill"), value: z.string(), goal: z.string().optional() }),
+  /** Fill a field with a named secret the caller holds (a minted password, a code from the inbox); the value never crosses the socket. */
+  targetSchema.extend({
+    cmd: z.literal("place"),
+    secret: z.string().min(1),
+    goal: z.string().optional(),
+  }),
   targetSchema.extend({ cmd: z.literal("select"), value: z.string(), goal: z.string().optional() }),
   targetSchema.extend({ cmd: z.literal("press"), key: z.string(), goal: z.string().optional() }),
   targetSchema.extend({
@@ -133,6 +140,8 @@ export interface ExploreOptions {
   desktop?: Desktop;
   /** Where `keep` puts a secret read off the page (.env locally, SSM in prod). */
   sink?: SecretSink;
+  /** What `place` may fill by name; without it `place` is refused. */
+  secrets?: SecretValues;
   /**
    * Who says yes to a billing field or a button that spends. Without one
    * such acts are refused: money is never a session's own call.
@@ -391,6 +400,15 @@ async function serve(
           redacted: secret,
         }));
         return { ok: true };
+      }
+      case "place": {
+        if (!opts.secrets) throw new Error("place needs secrets (a signup or a login gives them)");
+        const value = await opts.secrets(c.secret);
+        if (!value) throw new Error(`place: no secret named ${c.secret}`);
+        await gate("fill", c, wait);
+        await find(c).fill(value, { timeout: 10_000 });
+        journalAct(c, (target) => ({ kind: "input", target, value: REDACTED, redacted: true }));
+        return { ok: true, secret: c.secret };
       }
       case "select": {
         await gate("select", c, wait);

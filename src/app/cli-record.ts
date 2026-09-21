@@ -1,6 +1,7 @@
 /** `autobrowse login <site>` and `autobrowse record <name>`: the recorder's command line. */
 import { join } from "node:path";
 import type { Command } from "commander";
+import type { SecretValues } from "../auth/signup.js";
 import { explorerOpener, type LocalBackend } from "./backend.js";
 import type { Settings } from "./config.js";
 import { headed } from "./screen.js";
@@ -132,6 +133,63 @@ export function registerRecordCommands(
     );
 
   program
+    .command("signup <site>")
+    .description(
+      "Make an account: the password is minted and stored sealed under <site> first, then the agent fills the signup placing email/password/code/phone by name (it never sees them); hands off at a captcha",
+    )
+    .requiredOption(
+      "--email <address>",
+      "the account's address; its codes are read from this inbox",
+    )
+    .option("--name <name>", "shown name")
+    .option("--handle <handle>", "username or handle to ask for")
+    .option("--birthday <date>", "when the form insists")
+    .option("--url <url>", "the signup page (default: the site's home)")
+    .option("--max-steps <n>", "step budget", "40")
+    .option("--port <port>", "loopback port", "9090")
+    .option("--headed", "show the browser (default: BROWSER_HEADLESS)")
+    .action(
+      async (
+        site: string,
+        o: {
+          email: string;
+          name?: string;
+          handle?: string;
+          birthday?: string;
+          url?: string;
+          maxSteps: string;
+          port: string;
+          headed?: boolean;
+        },
+      ) => {
+        const { mintCredential, SIGNUP_SECRETS, signupGoal, signupSecrets } = await import(
+          "../auth/signup.js"
+        );
+        const { codesFor, credentialsFor, gmailFor, ourPhone } = await import("./services.js");
+        const account = { site, email: o.email, ...pick(o, ["name", "handle", "birthday"]) };
+        const cred = await mintCredential(credentialsFor(settings), account);
+        console.log(`stored a new credential for ${site} (creds list); now the signup`);
+        const secrets = signupSecrets({
+          cred,
+          codes: codesFor(settings, gmailFor(settings)),
+          since: new Date(),
+          phone: ourPhone(settings),
+        });
+        await runAgent(settings, {
+          site,
+          goal: signupGoal(account),
+          url: o.url ?? null,
+          inputs: {},
+          secrets: { names: SIGNUP_SECRETS, values: secrets },
+          save: `signup-${site}`,
+          maxSteps: Number(o.maxSteps),
+          port: Number(o.port),
+          headed: o.headed ?? false,
+        });
+      },
+    );
+
+  program
     .command("repair <failure> [goal]")
     .description(
       "A flow stopped (its <stamp>.failure.json is under the artifacts dir): the agent picks up on that page toward the flow's goal, or the goal you give, and records the way through",
@@ -216,6 +274,8 @@ interface AgentRun {
   maxSteps: number;
   port: number;
   headed: boolean;
+  /** Named values the agent may `place` and never sees. */
+  secrets?: { names: readonly string[]; values: SecretValues };
 }
 
 /** One agent session: explore server up, agent to the goal, journal saved as a recording. */
@@ -223,11 +283,11 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<void> {
   const { exploreWithAgent } = await import("../agent/explorer.js");
   const llm = llmFor(settings);
   if (!llm) throw new Error("the agent needs a model: set LLM_PROVIDER and its key");
-  const ex = await explorerOpener(
-    settings,
-    undefined,
-    r.headed ? headed : undefined,
-  )(r.site, r.port);
+  const ex = await explorerOpener(settings, undefined, r.headed ? headed : undefined)(
+    r.site,
+    r.port,
+    r.secrets ? { secrets: r.secrets.values } : {},
+  );
   console.log(
     `agent on ${r.site}; pause/resume: curl -s -X POST -H "Authorization: Bearer ${ex.token}" http://127.0.0.1:${ex.port}/ -d '{"cmd":"pause"}'`,
   );
@@ -238,7 +298,20 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<void> {
       llm,
       goal: r.goal,
       inputs: r.inputs,
+      ...(r.secrets ? { secrets: r.secrets.names } : {}),
       maxSteps: r.maxSteps,
+      // Headed, the person does the captcha in the window and presses enter here.
+      onHuman: async (reason) => {
+        if (!r.headed) return false;
+        const { createInterface } = await import("node:readline/promises");
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+        try {
+          const a = await rl.question(`needs you: ${reason}\nwhen done press enter (q to stop) `);
+          return a.trim().toLowerCase() !== "q";
+        } finally {
+          rl.close();
+        }
+      },
       onStep: (s) =>
         console.log(
           `${s.n}. ${s.step?.thought ?? "(unparsable reply)"}\n   ${s.step?.action.cmd ?? "-"} ${s.error ? `✗ ${s.error}` : "✓"}`,
@@ -251,6 +324,13 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<void> {
   } finally {
     await ex.exec({ cmd: "close" });
   }
+}
+
+/** The keys of `o` that are set, as an object: options into a record without the undefined ones. */
+function pick<T extends object, K extends keyof T>(o: T, keys: K[]): Partial<Pick<T, K>> {
+  const out: Partial<Pick<T, K>> = {};
+  for (const k of keys) if (o[k] !== undefined) out[k] = o[k];
+  return out;
 }
 
 function parseInputs(kvs: string[] | undefined): Record<string, string> {

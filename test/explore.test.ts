@@ -46,6 +46,7 @@ describe("explore mode", () => {
       desktop,
       sink,
       tokenFile: join(dir, "explore.token"),
+      secrets: async (name) => (name === "minted" ? "Placed-Value-77" : null),
       approve: async (ask) => {
         asks.push(ask.what);
         return answer;
@@ -109,6 +110,19 @@ describe("explore mode", () => {
       hints: { role: "textbox", name: "Password" },
       value: "hunter2hunter2",
     });
+    // A secret by name: the page gets the value, the socket and the journal never do.
+    const placed = await send({
+      cmd: "place",
+      hints: { role: "textbox", name: "Domain" },
+      secret: "minted",
+    });
+    expect(placed.body).toEqual({ ok: true, secret: "minted" });
+    expect(
+      (await send({ cmd: "eval", js: "document.querySelector('#d').value" })).body.result,
+    ).toBe("Placed-Value-77");
+    const unknown = await send({ cmd: "place", hints: { css: "#d" }, secret: "nope" });
+    expect(unknown.status).toBe(500);
+    expect(unknown.body.error).toMatch(/no secret named nope/);
     // "Buy now" spends: over the socket the person is asked once (202) and the same
     // command comes back after the reply; a no leaves the page untouched.
     const buy = { cmd: "click", hints: { role: "button", name: "Buy now" } };
@@ -179,7 +193,7 @@ describe("explore mode", () => {
     expect(asks.at(-1)).toMatch(/^press "Buy", which spends in \w+$/);
 
     const saved = await send({ cmd: "save", name: "buy" });
-    expect(saved.body.actions).toBe(10); // the ordering test's open is journaled too
+    expect(saved.body.actions).toBe(11); // the ordering test's open is journaled too
     const rec = await loadRecording(join(dir, "recordings"), "buy");
     // (the page's own data: URL holds the fixture; the acts must not)
     expect(JSON.stringify(rec.actions.map(({ url: _u, ...a }) => a))).not.toContain(
@@ -190,6 +204,7 @@ describe("explore mode", () => {
       "navigate",
       "input",
       "input",
+      "input",
       "click",
       "keep",
       "desktop",
@@ -197,12 +212,15 @@ describe("explore mode", () => {
       "desktop",
       "desktop",
     ]);
-    const typed = rec.actions[7];
+    const typed = rec.actions[8];
     expect(
       typed.kind === "desktop" && typed.redacted && typed.op.op === "type" && typed.op.text,
     ).toBe("<redacted>");
     const pw = rec.actions[3];
     expect(pw.kind === "input" && pw.value).toBe("<redacted>");
+    const placedAct = rec.actions[4];
+    expect(placedAct.kind === "input" && placedAct.redacted && placedAct.value).toBe("<redacted>");
+    expect(JSON.stringify(rec.actions)).not.toContain("Placed-Value");
     const compiled = await compile(rec);
     expect(compiled.outline.steps.length).toBeGreaterThan(0);
   }, 60_000);

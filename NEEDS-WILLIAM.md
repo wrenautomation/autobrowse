@@ -12,7 +12,10 @@ Page outline digest, Outlook site + login + consent, library layers
 `gh-pr-create`, `ffmpeg-convert`) with pick memory, plan-field naming in
 the polish pass, `BROWSER=cdp` for Electron apps. Everything still open in
 `designs/` waits on a credential, a developer app, funded model credits,
-or `aws login` (below).
+or a real account to prove against. 2026-09-22 later: `creds push <site>`
+(laptop credential → SSM, so the box signs in too), `place{secret}` +
+`autobrowse signup <site>` (accounts made by the agent, password minted
+and sealed first; see "Wren accounts" below).
 
 ## Money (your decision)
 
@@ -48,8 +51,50 @@ or `aws login` (below).
   `pnpm autobrowse desktop setup` prints (needs your sudo password;
   the agent never sees it).
 
-- **AWS session expired** (2026-09-22 ~07:45 UTC): `aws login` on this Mac;
-  until then the box state, SSM env and Terraform cannot be checked from here.
+- ~~AWS session expired~~ `aws login` done 2026-09-22; the box's idle
+  stop was then seen live in CloudTrail (31 min after the deploy).
+
+## Credentials: laptop and box
+
+- Laptop: `pnpm autobrowse creds paste <site>` with `email password
+  [authenticator key]` on the clipboard (cleared after), or the UI's
+  Accounts page, or `creds set <site>` with JSON on stdin. Sites:
+  `linkedin`, `instagram`, `tiktok`, `microsoft` (Outlook).
+- Box: `pnpm autobrowse creds push <site>` copies that sealed credential
+  into SSM (`AUTOBROWSE_CRED_<SITE>_*`); the box reads it on its next
+  deploy (push to main). Nothing is printed either way.
+- Anthropic: say yes again to the credits purchase gate when it asks.
+
+## Wren accounts (Instagram, YouTube, Facebook/Meta, X)
+
+Wren has none of these yet (2026-09-22). `pnpm autobrowse signup <site>
+--email <addr> --name "Wren Automation" --handle wrenautomation --headed`
+makes one: the password is minted and sealed under `<site>` first, the
+agent fills the form placing email/password/code/phone by name, and hands
+you the window at a captcha. What each needs from you first:
+
+- **An inbox the codes land in**: a Google Workspace address on
+  wrenautomation.com (say which, e.g. hello@) — the Gmail reader uses the
+  service account (`GOOGLE_SERVICE_ACCOUNT`) with domain-wide delegation,
+  so it reads that inbox without another login. Every signup below uses it.
+- **A phone number** for Instagram/X/Facebook verification: the paired
+  phone, Linq, or the Twilio number (Twilio is your spend call). Without
+  one the agent hands off at the phone step.
+- **Instagram**: standalone signup works; make it a professional account
+  after (Settings → Account type). Then the Meta app (above).
+- **YouTube**: a channel on a wrenautomation.com Google account, not a
+  new signup — say which account owns it; `google/youtube-channel-create`
+  is the next flow to record (Studio → Create a channel).
+- **Facebook Page** (posts via the Graph API): Pages hang off a personal
+  profile. Either your own profile makes a "Wren Automation" Page (one
+  click, I can drive it headed), or a new profile is made for Wren
+  (Meta may ask for ID). Say which.
+- **X**: standalone signup with the inbox + phone; the X API (posting)
+  needs a developer account + app at developer.x.com afterwards (Free tier
+  posts; reads are paid).
+- After each account exists: `creds push <site>` so the box has it, then
+  the site API setup (`site setup <site> consent`). `facebook` and `x`
+  site APIs are the next build once the accounts exist.
 
 ## Content channels (YouTube, LinkedIn, Instagram, TikTok; wren `designs/2026-09-21-content-channels.md`)
 

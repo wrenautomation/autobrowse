@@ -20,8 +20,9 @@ under a call that queued while the box booted. `box.sh start` by hand sets
    `deploy/scripts/identity-key.py --env >> deploy/prod.env` (or copy it from
    Developers > Security).
 3. `cp deploy/prod.env.example deploy/prod.env`, fill it, `pnpm autobrowse env push --from deploy/prod.env`.
-   `UI_TOKEN` is required. Site credentials go in as `AUTOBROWSE_CRED_<SITE>_*`
-   (`CREDENTIALS_CIPHER=none`: no Keychain on Linux).
+   `UI_TOKEN` is required. Site credentials go in as `AUTOBROWSE_CRED_<SITE>_*`:
+   `pnpm autobrowse creds push <site>` copies one from this Mac's sealed store
+   (`CREDENTIALS_CIPHER=none` on the box: no Keychain on Linux).
 4. GitHub, repo settings: secrets `AWS_DEPLOY_ROLE_ARN`, `ECR_REPOSITORY`,
    `INSTANCE_ID` from `tofu output`; an environment named `production`;
    variable `DEPLOY_ENABLED=true`. Until the variable is set, the deploy
