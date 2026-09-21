@@ -53,17 +53,24 @@ late, after the 90 s code wait; a retry passes). Twilio's own number
 - `facebook-page-owner`: Pages hang off a personal profile. Your profile
   makes a "Wren Automation" Page (one click, I drive it headed), or a new
   profile for Wren (Meta may ask for ID).
-- `youtube-channel-owner`: a channel on a wrenautomation.com Google
-  account, not a signup; `google/youtube-channel-create` is the flow to
-  record once you say which account. JinstersJournal is jin's.
+- `youtube-channel-owner`: a channel on william@wrenautomation.com, not
+  a signup. Google offers only "Use your passkey" for that account on a
+  new browser (2026-09-22; TOTP is not offered). The login now clicks it
+  and our enrolled passkey answers, but Google says "Something went
+  wrong… Bluetooth" (pk/error): the passkey Google holds is not the one
+  we hold. So `login google-admin --headed` once with your passkey, then
+  `creds enroll-passkey google-admin` from that signed-in profile so it
+  never recurs; `google/youtube-channel-create` is recorded from there.
+  JinstersJournal is jin's.
 - `linkedin-page`: the developer app needs a Page; yours, or one for Wren.
 - `virtual-cards-vendor`: Privacy.com or your bank; the rest is built like
   passwords (placed, origin-bound to the merchant).
 
 ## Wren accounts (`autobrowse signup <site>`)
 
-Instagram `wrenautomation` exists (made headless 2026-09-22, credential
-sealed + pushed). Left: `instagram-professional` (Settings → Account type).
+Instagram `wrenautomation` exists on william@wrenautomation.com (made
+2026-09-22, Business account, category Marketing Agency; credential sealed
++ pushed). Nothing left on it until the Meta app (`keys-meta`).
 
 `signup x|tiktok --name "Wren Automation" --handle wrenautomation --headed`
 mints the password sealed first, fills the form placing

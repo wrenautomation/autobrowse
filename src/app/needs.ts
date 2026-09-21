@@ -254,9 +254,13 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
     {
       id: "youtube-channel-owner",
       kind: "decision",
-      what: "Which Google account owns Wren's YouTube channel",
+      what: "Wren's YouTube channel on william@wrenautomation.com (Google takes only that account's passkey on a new browser, and refuses the one we enrolled: yours, once)",
       unlocks: "the channel-create flow and posting there",
-      how: ["autobrowse needs done youtube-channel-owner --note <address>"],
+      how: [
+        "autobrowse login google-admin --headed   # pass the passkey prompt; the profile stays signed in",
+        "autobrowse creds enroll-passkey google-admin   # a fresh passkey of ours, so this never recurs",
+        "autobrowse needs done youtube-channel-owner --note william@wrenautomation.com",
+      ],
     },
     {
       id: "linkedin-page",

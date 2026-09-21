@@ -75,3 +75,15 @@ not proof-run candidates.
    matches, else `google@<label>` whose username is it (`creds set google@ops`),
    else a clear LoginFailed. `signInToGoogle` then picks that email in the
    chooser and types it on a fresh sign-in.
+5. **Google's passkey-only wall** (2026-09-22, william@wrenautomation.com →
+   admin.google.com): on a new browser the selection page offers only "Use
+   your passkey"; no TOTP, no SMS. `googleSecondStep` now takes that path
+   first when we hold a passkey (selection → `pk/presend` Continue →
+   ceremony) and falls through to the other steps, naming the refusal in
+   the error. Google refused ours with `pk/error` ("Bluetooth"): the
+   enrolled record is not a passkey Google has for the account (the
+   enrollment of 2026-09-19 may have ended before Google stored it, or the
+   record lacks the user handle Google needs for a discoverable request).
+   Next: after William's headed login, enroll again and diff the export
+   (`userHandle` present?) against what the passkeys page lists; then a
+   fresh headless login proves the path.

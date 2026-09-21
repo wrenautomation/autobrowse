@@ -367,12 +367,36 @@ async function googleSecondStep(ctx: SignInContext): Promise<void> {
   const { fp } = ctx;
   const site = "google";
   const codeBox = { role: "textbox", name: "/code/i" } as const;
+  // A passkey we enrolled answers first: for admin.google.com Google offers
+  // nothing else on a new browser (mapped 2026-09-22, "Verify it's you →
+  // Use your passkey"); our authenticator completes the ceremony on a click.
+  let refused: string | null = null;
+  if (ctx.cred.passkeys.length) {
+    await toSelection(fp);
+    const passkey = choice("Use your passkey");
+    if (await fp.has(passkey, RENDER_MS)) {
+      await fp.act({ kind: "click" }, passkey, { goal: "verify with our passkey" });
+      // A "presend" page first ("Your device will ask for your fingerprint… Continue"); then the ceremony.
+      const go = { role: "button", name: "/^continue$/i" } as const;
+      if (await fp.has(go, RENDER_MS))
+        await fp.act({ kind: "click" }, go, { goal: "start the passkey ceremony" });
+      const moved = await fp.waitForUrl((u) => !/challenge\/(selection|pk)/.test(u), 20_000);
+      if (moved) return;
+      // "Something went wrong… Bluetooth" (pk/error): Google does not hold the
+      // passkey we hold; the other second steps get their turn, and the
+      // error names this when none of them is offered.
+      refused = `our passkey was refused (${fp.url().replace(/\?.*/, "")})`;
+      await toSelection(fp);
+    }
+  }
+  const only = (what: string) => (refused ? `${what}; ${refused}` : what);
   if (ctx.offers("totp")) {
     if (!/challenge\/totp/.test(fp.url())) {
       await toSelection(fp);
-      await fp.act({ kind: "click" }, choice("authenticator app"), {
-        goal: "choose the authenticator app",
-      });
+      const totp = choice("authenticator app");
+      if (!(await fp.has(totp, RENDER_MS)))
+        throw new LoginFailed(site, only("Google does not offer the authenticator app here"));
+      await fp.act({ kind: "click" }, totp, { goal: "choose the authenticator app" });
       await fp.wait(SETTLE_MS);
     }
     return submitCode(fp, await ctx.code("totp"));
@@ -410,7 +434,9 @@ async function googleSecondStep(ctx: SignInContext): Promise<void> {
   }
   throw new LoginFailed(
     site,
-    "Google wants a second step and none is set up: enroll TOTP, link a phone, or configure Twilio",
+    only(
+      "Google wants a second step and none is set up: enroll TOTP, link a phone, or configure Twilio",
+    ),
   );
 }
 

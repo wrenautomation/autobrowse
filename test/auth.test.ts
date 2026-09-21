@@ -689,6 +689,33 @@ describe("signInToGoogle second step", () => {
     const { fp } = page((h) => !/email|password/i.test(String(h.name)));
     await expect(signInToGoogle(ctx(fp, []))).rejects.toThrow(/enroll TOTP, link a phone/);
   });
+  it("a passkey we hold answers first; when Google refuses it the error says so", async () => {
+    const pk = {
+      rpId: "google.com",
+      credentialId: "c",
+      privateKey: "k",
+      signCount: 1,
+      isResidentCredential: true,
+    };
+    const { fp, acts } = fakePage({
+      text: [
+        "u@gmail.com Verify it's you Choose a way to verify Use your passkey",
+        "u@gmail.com Something went wrong",
+      ],
+      present: (h) => !/email|password|authenticator|switch account/i.test(String(h.css ?? h.name)),
+      url: "https://accounts.google.com/v3/signin/challenge/selection?x",
+    });
+    // The ceremony never leaves the challenge: Google did not recognise the passkey.
+    fp.waitForUrl = async (p) =>
+      typeof p === "function"
+        ? p("https://accounts.google.com/v3/signin/challenge/pk/error?x")
+        : true;
+    const c = ctx(fp, ["totp"]);
+    await expect(signInToGoogle({ ...c, cred: { ...base, passkeys: [pk] } })).rejects.toThrow(
+      /does not offer the authenticator app here; our passkey was refused/,
+    );
+    expect(acts[0]?.hints.css).toMatch(/Use your passkey/);
+  });
 });
 
 describe("credential schema", () => {
