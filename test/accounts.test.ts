@@ -1,4 +1,4 @@
-import { memoryCredentials } from "credkeep";
+import { memoryCredentials } from "credvault";
 import { describe, expect, it } from "vitest";
 import { accountsOf, merged, rowOf } from "../src/auth/accounts.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";

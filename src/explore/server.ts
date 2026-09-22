@@ -16,7 +16,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
-import type { SecretAudit } from "credkeep";
+import type { SecretAudit } from "credvault";
 import type { Page } from "playwright";
 import { z } from "zod";
 import { SecretLeak, urlWithoutQuery } from "../auth/guard.js";

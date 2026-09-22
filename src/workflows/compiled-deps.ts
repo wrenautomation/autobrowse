@@ -3,7 +3,7 @@
  * (which runs one) and `compiled` (which lists them) both import it
  * without importing each other.
  */
-import { envSecrets, type SecretAudit, type SecretSource, trackingSecrets } from "credkeep";
+import { envSecrets, type SecretAudit, type SecretSource, trackingSecrets } from "credvault";
 import { boundRunner } from "../auth/guard.js";
 import { SECRET_ENV_PREFIX } from "../auth/keep.js";
 import { siteAllowsHost } from "../auth/login.js";

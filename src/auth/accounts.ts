@@ -5,7 +5,7 @@
  * Accounts page are the same code.
  */
 
-import { type Credential, type CredentialStore, credentialSchema } from "credkeep";
+import { type Credential, type CredentialStore, credentialSchema } from "credvault";
 import { z } from "zod";
 import { defineFlow, type FlowPage, type FlowRunner } from "../browser/flow.js";
 import { resolveLogin, type SiteLogin, viaLogin } from "./login.js";

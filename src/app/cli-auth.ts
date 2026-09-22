@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
-import { credentialSchema } from "credkeep";
+import { credentialSchema } from "credvault";
 import {
   enrollPasskeyFlow,
   enrollTotpFlow,
@@ -161,7 +161,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       if (!cred)
         throw new Error(`no credential stored for ${site}: autobrowse signup ${site} first`);
       await store.put(site, { ...cred, madeAt: new Date().toISOString() });
-      console.log(`${site}: marked made; creds push ${site} sends it to the box`);
+      console.log(`${site}: marked made; copied to the store`);
     });
   creds
     .command("username <site> <name>")
@@ -177,9 +177,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
         username: name,
         codesInbox: cred.codesInbox ?? cred.username,
       });
-      console.log(
-        `${site}: signs in as ${name}; codes still from its inbox; creds push ${site} sends it to the box`,
-      );
+      console.log(`${site}: signs in as ${name}; codes still from its inbox; copied to the store`);
     });
   creds
     .command("address <site> <address>")
@@ -191,7 +189,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       const cred = await store.get(site);
       if (!cred) throw new Error(`no credential stored for ${site}`);
       await store.put(site, { ...cred, username: address, codesInbox: address });
-      console.log(`${site}: username and codes inbox set; creds push ${site} sends it to the box`);
+      console.log(`${site}: username and codes inbox set; copied to the store`);
     });
   creds
     .command("rotate <site>")
@@ -230,7 +228,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
         password: next,
         ...(cred.password ? { previousPassword: cred.password } : {}),
       });
-      console.log(`${site}: stored; creds push ${site} sends it to the box`);
+      console.log(`${site}: stored; copied to the store`);
     });
   creds
     .command("copy <site>")
@@ -277,12 +275,12 @@ export function registerAuthCommands(program: Command, settings: Settings): void
   creds
     .command("push [sites...]")
     .description(
-      "This machine's stored credentials into the env store (SSM) as AUTOBROWSE_CRED_<SITE>_*, so the box signs in too; --all for every site; nothing printed",
+      "This machine's stored credentials into the env store (SSM) as AUTOBROWSE_CRED_<SITE>_*, every field; writes already copy themselves, so this repairs a missed copy; --all for every site; nothing printed",
     )
     .option("--all", "every stored site (canaries never travel)")
     .action(async (sites: string[], o: { all?: boolean }) => {
       if (sites.length === 0 && !o.all) throw new Error("name sites, or --all");
-      const { pushCredentials } = await import("credkeep");
+      const { pushCredentials } = await import("credvault");
       const { envStoreFor } = await import("./services.js");
       // Unarmed: the push reads every site to skip the canaries; an armed read of one would trip it.
       const pushed = await pushCredentials(
@@ -297,15 +295,15 @@ export function registerAuthCommands(program: Command, settings: Settings): void
   creds
     .command("pull [sites...]")
     .description(
-      "Credentials from the env store into this machine's sealed file (a second laptop); a site already here is kept unless --overwrite; passkeys and recovery codes here always stay",
+      "Credentials from the env store into this machine's sealed file (a new laptop rebuilds everything this way); a site already here is kept unless --overwrite; passkeys here are never dropped",
     )
-    .option("--overwrite", "replace what is here with the store's username/password/TOTP/via")
+    .option("--overwrite", "replace what is here with the store's copy")
     .action(async (sites: string[], o: { overwrite?: boolean }) => {
-      const { pullCredentials } = await import("credkeep");
+      const { pullCredentials } = await import("credvault");
       const { envStoreFor } = await import("./services.js");
       const r = await pullCredentials(
         envStoreFor(settings),
-        credentialsFor(settings, { armed: false }),
+        credentialsFor(settings, { armed: false, mirror: false }),
         sites,
         { ...CRED_ENV, ...(o.overwrite ? { overwrite: true } : {}) },
       );
@@ -333,7 +331,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     )
     .option("--username <u>", "what it looks like", "billing@wrenautomation.com")
     .action(async (name: string, o: { username: string }) => {
-      const { canaryCredential } = await import("credkeep");
+      const { canaryCredential } = await import("credvault");
       await credentialsFor(settings, { armed: false }).put(name, canaryCredential(o.username));
       console.log(
         `canary ${name} armed: nothing legitimate reads it; \`creds audit\` shows a read`,
@@ -366,7 +364,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .action(async (verb: string) => {
       if (verb !== "verify") throw new Error(`ledger: unknown verb ${verb}; verify`);
       const { ledgerPath } = await import("./services.js");
-      const { verifyChain } = await import("credkeep");
+      const { verifyChain } = await import("credvault");
       let bad = 0;
       for (const name of ["audit", "spend", "steps"] as const) {
         const v = await verifyChain(ledgerPath(settings, name));

@@ -8,7 +8,7 @@
  */
 
 /** Compiled workflows ask for their redacted values through this. */
-export { envSecrets, memorySecrets, type SecretSource } from "credkeep";
+export { envSecrets, memorySecrets, type SecretSource } from "credvault";
 export type {
   ActOptions,
   BrowserFlow,

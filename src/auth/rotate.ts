@@ -5,8 +5,8 @@
  * case the page accepted the change without saying so.
  */
 
-import type { CredentialStore } from "credkeep";
-import { newPassword } from "credkeep";
+import type { CredentialStore } from "credvault";
+import { newPassword } from "credvault";
 import { defineFlow } from "../browser/flow.js";
 import { LoginFailed, passwordOf, type SiteLogin } from "./login.js";
 

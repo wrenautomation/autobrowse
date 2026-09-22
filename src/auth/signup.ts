@@ -6,8 +6,8 @@
  * texts come from the same sources sign-in uses.
  */
 
-import type { Credential, CredentialStore } from "credkeep";
-import { newPassword } from "credkeep";
+import type { Credential, CredentialStore } from "credvault";
+import { newPassword } from "credvault";
 import type { HttpClient } from "../clients/http.js";
 import { gmailOAuth } from "../sites/gmail.js";
 import { createRegistryUser, NPM_TOKEN } from "../sites/npm.js";

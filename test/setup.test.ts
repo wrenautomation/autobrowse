@@ -1,4 +1,4 @@
-import { memoryCredentials } from "credkeep";
+import { memoryCredentials } from "credvault";
 import { describe, expect, it } from "vitest";
 import { needsFor, type Prompter, runSetup } from "../src/app/setup.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";

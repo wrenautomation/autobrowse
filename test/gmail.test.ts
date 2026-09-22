@@ -1,4 +1,4 @@
-import { memoryCredentials } from "credkeep";
+import { memoryCredentials } from "credvault";
 import { describe, expect, it } from "vitest";
 import { loadSettings } from "../src/app/config.js";
 import { googleTokens } from "../src/app/services.js";

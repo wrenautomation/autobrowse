@@ -1,6 +1,7 @@
-# The vault leaves autobrowse (credkeep)
+# The vault leaves autobrowse (credvault)
 
-2026-09-22. Status: step 1 done (credkeep on npm, autobrowse on it); expiry kept since 0.2.0.
+2026-09-22. Status: step 1 done (credvault on npm, autobrowse on it); expiry kept since 0.2.0;
+every credential mirrored to SSM since 0.3.0. Named credkeep until 0.3.0 (deprecated on npm).
 
 ## Why
 
@@ -11,7 +12,7 @@ is its own package, and autobrowse is one client of it.
 
 ## The line
 
-**credkeep** (public, `wrenautomation/credkeep`, npm `credkeep`). Owns what
+**credvault** (public, `wrenautomation/credvault`, npm `credvault`). Owns what
 is true of a secret with no page in sight:
 - the sealed credential file (AES-256-GCM, key in the Keychain), plus env,
   memory and layered stores; push/pull through SSM
@@ -25,9 +26,9 @@ is true of a secret with no page in sight:
 
 `src/auth/keep.ts` holds autobrowse's names in the vault: Keychain item,
 env prefix, SSM path, secret prefix. The values are the old ones, so
-nothing already stored moves. The seal marker is now `credkeep-sealed-v1`.
-Files sealed under `autobrowse-sealed-v1` still open, and are resealed on
-the next write.
+nothing already stored moves. The seal marker is now `credvault-sealed-v1`.
+Files sealed under `credkeep-sealed-v1` or `autobrowse-sealed-v1` still
+open, and are resealed on the next write.
 
 ## Free APIs: who owns a route
 
@@ -45,6 +46,26 @@ vault prefix, browser profiles and ledger. Onboarding is one page: every
 account we need, each marked ready or not, and one button per missing one.
 No scripts to run.
 
+## Durability
+
+Until 0.3.0, 12 of 16 logins and every passkey and recovery code lived only
+in the sealed file on one Mac, under a Keychain key on that Mac. Time
+Machine was not mounting. A lost Mac lost them.
+
+Now SSM (`/autobrowse/config/AUTOBROWSE_CRED_*`, SecureString, KMS) holds
+the full copy:
+- every field travels: strings as they are, passkeys and recovery codes as
+  JSON
+- `mirroredCredentials` copies each write to SSM after the local write;
+  a failed copy is printed with the `creds push <site>` that repairs it
+- a push clears fields a credential no longer has (used codes)
+- canaries never leave the machine
+- `creds pull` on a new Mac rebuilds the file; passkeys merge by id
+- `CREDENTIALS_MIRROR=off` turns it off
+
+Checked 2026-09-22: `creds push --all`, then a rebuild from SSM alone
+matched the file for all 16 sites.
+
 ## Expiry
 
 `put(name, value, { expiresAt })` writes `expires <ISO>` into the SSM
@@ -53,7 +74,7 @@ anything. `expiring(list, ms)` returns what lapses within `ms`.
 
 ## Where to attack (ranked)
 
-1. **Renewal is not scheduled.** Expiry is now kept, in credkeep 0.2
+1. **Renewal is not scheduled.** Expiry is now kept, in credvault 0.2
    (`envFileStore` stores it as a comment; SSM keeps it in the description):
    - the npm token flow records its 90 days
    - `env expires <name> <date>` backfills a token minted by hand
@@ -84,9 +105,14 @@ anything. `expiring(list, ms)` returns what lapses within `ms`.
 4. **One vault for everyone.** Client isolation is the `KEYCHAIN` /
    `CRED_ENV` / `ENV_STORE_PREFIX` triple in `keep.ts`. Today it is a
    constant. It needs to be per client before a second client exists.
-5. **The legacy seal marker** stays readable forever unless we drop it.
-   Once every file has been rewritten, remove it in credkeep 0.3.
+5. **The AWS account is the last single point.** SSM holds every
+   credential, including the AWS login itself. Losing the AWS root login
+   (or the account) loses the lot. Its password and 2FA need a copy
+   outside AWS: William's password manager or paper.
+6. **Legacy seal markers** (`credkeep-sealed-v1`, `autobrowse-sealed-v1`)
+   stay readable forever unless dropped. Once every file has been
+   rewritten, remove them.
 
-Checked and dropped: `via` is a plain string in credkeep, and autobrowse
+Checked and dropped: `via` is a plain string in credvault, and autobrowse
 casts it. That is fine: `providerOf` throws "no identity provider named X"
 on a typo.

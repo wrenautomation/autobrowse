@@ -1,4 +1,4 @@
-import { memoryEnvStore } from "credkeep";
+import { memoryEnvStore } from "credvault";
 import { describe, expect, it } from "vitest";
 import {
   checkTracing,

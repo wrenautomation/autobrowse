@@ -6,7 +6,7 @@
  * Values are never written anywhere here.
  */
 
-import type { Credential, SecretAudit, SecretUse, TrackingSecrets } from "credkeep";
+import type { Credential, SecretAudit, SecretUse, TrackingSecrets } from "credvault";
 import type { BrowserFlow, FlowPage, FlowRunner } from "../browser/flow.js";
 
 export class SecretLeak extends Error {

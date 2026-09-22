@@ -5,7 +5,7 @@
  * counted in what we print.
  */
 
-import type { Credential, CredentialStore } from "credkeep";
+import type { Credential, CredentialStore } from "credvault";
 import { defineFlow, type FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
 import { LoginFailed, type RecoveryCodesSpec, type SiteLogin } from "./login.js";

@@ -4,7 +4,7 @@
  * SSM in production. The counterpart of `SecretSource`. A minted token
  * that lapses says when (`expiresAt`), so `needs` reopens its row in time.
  */
-import { envFileStore, type PutOptions } from "credkeep";
+import { envFileStore, type PutOptions } from "credvault";
 
 export interface SecretSink {
   put(name: string, value: string, o?: PutOptions): Promise<void>;

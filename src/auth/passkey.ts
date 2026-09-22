@@ -5,7 +5,7 @@
  * "use your passkey" step completes by itself: no password, no code.
  */
 
-import type { CredentialStore } from "credkeep";
+import type { CredentialStore } from "credvault";
 import { defineFlow } from "../browser/flow.js";
 import { redactText } from "../recorder/redact.js";
 import { LoginFailed, type SiteLogin } from "./login.js";

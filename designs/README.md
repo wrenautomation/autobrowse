@@ -23,4 +23,4 @@ decided. Each ends with a ranked "where to attack"; ✅ marks what landed.
 | [observability](2026-09-22-observability.md) | chained ledgers, agent sessions as runs, step ledger, OTLP traces |
 | [self-finishing-compile](2026-09-22-self-finishing-compile.md) | a model does the last mile on a compiled workflow under tsc + its test; heal uses it |
 | [secrets-and-money-sandbox](2026-09-22-secrets-and-money-sandbox.md) | credentials, spend policy, virtual cards |
-| [vault-split](2026-09-22-vault-split.md) | vault moves to credkeep; autobrowse owns a route only if part of it needs a browser; client shape |
+| [vault-split](2026-09-22-vault-split.md) | vault moves to credvault; every credential mirrored to SSM; autobrowse owns a route only if part of it needs a browser; client shape |

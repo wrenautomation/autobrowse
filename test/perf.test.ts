@@ -2,7 +2,7 @@
 import { mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileCredentials } from "credkeep";
+import { fileCredentials } from "credvault";
 import { describe, expect, it } from "vitest";
 import { gmailClient } from "../src/clients/gmail.js";
 import { httpClient } from "../src/clients/http.js";

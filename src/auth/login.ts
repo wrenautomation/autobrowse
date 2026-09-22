@@ -8,7 +8,7 @@
  * submit, maybe a code). Sites that differ write `signIn` by hand.
  */
 
-import type { Credential, CredentialStore, SecretAudit } from "credkeep";
+import type { Credential, CredentialStore, SecretAudit } from "credvault";
 import type { FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
 import { wallOf } from "../browser/session.js";

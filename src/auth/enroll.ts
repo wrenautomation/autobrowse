@@ -5,8 +5,8 @@
  * site-agnostic half; the page walk is per site.
  */
 
-import type { CredentialStore } from "credkeep";
-import { findTotpSecret, totp } from "credkeep";
+import type { CredentialStore } from "credvault";
+import { findTotpSecret, totp } from "credvault";
 import { defineFlow, type FlowPage } from "../browser/flow.js";
 import { LoginFailed, type SiteLogin, type TotpSetupSpec } from "./login.js";
 

@@ -1,4 +1,4 @@
-import { memoryCredentials } from "credkeep";
+import { memoryCredentials } from "credvault";
 import { describe, expect, it } from "vitest";
 import { rotatePasswordFlow } from "../src/auth/rotate.js";
 import type { FlowPage, Op } from "../src/browser/flow.js";

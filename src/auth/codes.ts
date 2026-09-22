@@ -4,8 +4,8 @@
  * A login asks `codes.get(...)` and gets a string or null; it never sees
  * how the code was obtained.
  */
-import type { Credential } from "credkeep";
-import { totp, totpRemainingMs } from "credkeep";
+import type { Credential } from "credvault";
+import { totp, totpRemainingMs } from "credvault";
 
 export type CodeKind = "totp" | "email" | "sms";
 

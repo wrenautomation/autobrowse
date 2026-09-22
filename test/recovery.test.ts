@@ -1,4 +1,4 @@
-import type { Credential, CredentialStore } from "credkeep";
+import type { Credential, CredentialStore } from "credvault";
 import { describe, expect, it } from "vitest";
 import { codesOn, sealRecoveryCodesFlow } from "../src/auth/recovery.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";

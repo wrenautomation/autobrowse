@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { memoryCredentials, totp } from "credkeep";
+import { memoryCredentials, totp } from "credvault";
 import { describe, expect, it } from "vitest";
 import type { Settings } from "../src/app/config.js";
 import { credentialsFor } from "../src/app/services.js";

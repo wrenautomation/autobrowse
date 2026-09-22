@@ -164,7 +164,7 @@ describe("use as a library", () => {
 describe("one login on a page the caller drives", () => {
   it("signInContext answers codes and provider credentials from the caller's stores", async () => {
     const { signInContext, LoginFailed } = await import("../src/auth/login.js");
-    const { memoryCredentials } = await import("credkeep");
+    const { memoryCredentials } = await import("credvault");
     const { noCodes } = await import("../src/auth/codes.js");
     const { fakePage } = await import("./auth-fakes.js");
     const { fp } = fakePage({ text: [""], present: () => false });

@@ -132,6 +132,8 @@ const schema = z.object({
   credentialsCipher: z
     .enum(["keychain", "none"])
     .default(process.platform === "darwin" ? "keychain" : "none"),
+  /** Where every credential write is copied (SSM, the env store): the file here is then a cache a new machine rebuilds with `creds pull`. */
+  credentialsMirror: z.enum(["ssm", "off"]).default("ssm"),
   /** Inbox that receives email one-time codes when a credential does not name one. */
   codesInbox: z.string().email().optional(),
   /** The person's accounts and what each is for (`autobrowse accounts`); addresses only. */
@@ -254,6 +256,7 @@ export const ENV_KEYS = {
   autoHeal: "AUTO_HEAL",
   credentialsFile: "CREDENTIALS_FILE",
   credentialsCipher: "CREDENTIALS_CIPHER",
+  credentialsMirror: "CREDENTIALS_MIRROR",
   codesInbox: "CODES_INBOX",
   accountsFile: "ACCOUNTS_FILE",
   accounts: "AUTOBROWSE_ACCOUNTS",

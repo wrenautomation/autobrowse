@@ -3,7 +3,7 @@
  * together over a window, and the one-paragraph summary a person gets when
  * the box stops itself: what happened while it was up, never a value.
  */
-import type { SecretAudit, SecretUse } from "credkeep";
+import type { SecretAudit, SecretUse } from "credvault";
 import { type Amount, amountLine, type SpendLedger, type SpendRecord } from "../gates/spend.js";
 
 export interface LedgerWindow {

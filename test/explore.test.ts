@@ -2,7 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { memoryAudit } from "credkeep";
+import { memoryAudit } from "credvault";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { compile } from "../src/compiler/index.js";

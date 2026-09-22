@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileAudit } from "credkeep";
+import { fileAudit } from "credvault";
 import { describe, expect, it } from "vitest";
 
 import { ledgerSince, ledgerSummary } from "../src/auth/ledger.js";

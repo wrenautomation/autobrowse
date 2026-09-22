@@ -11,7 +11,7 @@ last mile of a compile be done by a model too.
   that the audit row does not already say. Two-party calls are already
   signed (Restate request identity). What was missing was tamper
   *evidence* on the ledgers.
-- **Ledgers are hash-chained** (credkeep `chain`, was `src/deps/chain.ts`): each row carries
+- **Ledgers are hash-chained** (credvault `chain`, was `src/deps/chain.ts`): each row carries
   `prev` (the hash of the row before) and `hash` (SHA-256 over prev + the
   row's fields in key order). `autobrowse ledger verify` walks a file and
   names the first row that does not fit; rows from before chaining may

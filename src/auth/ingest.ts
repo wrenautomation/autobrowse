@@ -7,7 +7,7 @@
 
 import { execFileSync } from "node:child_process";
 import { closeSync, openSync, readFileSync, statSync, unlinkSync, writeSync } from "node:fs";
-import { type CredentialInput, type CredentialStore, credentialSchema } from "credkeep";
+import { type CredentialInput, type CredentialStore, credentialSchema } from "credvault";
 
 export interface IngestLine {
   site: string;

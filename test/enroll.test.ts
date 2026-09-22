@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileCredentials, totp } from "credkeep";
+import { fileCredentials, totp } from "credvault";
 import { describe, expect, it } from "vitest";
 import { enrollTotpFlow, readSecretFromPage } from "../src/auth/enroll.js";
 import type { FlowPage, Op } from "../src/browser/flow.js";

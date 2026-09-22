@@ -1,4 +1,4 @@
-import type { Credential, CredentialStore } from "credkeep";
+import type { Credential, CredentialStore } from "credvault";
 import { describe, expect, it } from "vitest";
 import { profileOf } from "../src/sites/wire.js";
 

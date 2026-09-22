@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command } from "commander";
-import { memoryEnvStore } from "credkeep";
+import { memoryEnvStore } from "credvault";
 import { describe, expect, it } from "vitest";
 import { registerEnvCommands } from "../src/app/cli-env.js";
 import type { Settings } from "../src/app/config.js";

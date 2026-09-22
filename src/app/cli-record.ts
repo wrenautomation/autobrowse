@@ -301,7 +301,7 @@ export function registerRecordCommands(
           const store = credentialsFor(settings);
           const made = await store.get(site);
           if (made) await store.put(site, { ...made, madeAt: new Date().toISOString() });
-          console.log(`${site}: account made; creds push ${site} sends it to the box`);
+          console.log(`${site}: account made; copied to the store`);
         }
       },
     );

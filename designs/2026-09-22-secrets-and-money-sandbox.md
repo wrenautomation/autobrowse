@@ -31,7 +31,7 @@ opposite. There, the model holds the keys and runs shell it wrote. Here:
    compiled from, its secrets are bound at run time. `boundPage` is the one
    primitive; `guardedPage` (sign-in) is now built on it.
 
-6a. **Canaries** (2026-09-22, credkeep `canary`, was `src/auth/canary.ts`). `creds canary stripe`
+6a. **Canaries** (2026-09-22, credvault `canary`, was `src/auth/canary.ts`). `creds canary stripe`
    stores a real-looking credential (random password, `canary: true`)
    under a name a thief or a confused model reaches for. Nothing in the
    product asks for it, so a `get` IS the incident: `canaryStore` (which

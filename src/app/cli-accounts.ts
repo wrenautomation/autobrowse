@@ -5,7 +5,7 @@
  * account. Addresses and names only; never a value.
  */
 import type { Command } from "commander";
-import type { CredentialStore } from "credkeep";
+import type { CredentialStore } from "credvault";
 import {
   assignPurpose,
   DEFAULT_PURPOSE,

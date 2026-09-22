@@ -5,7 +5,7 @@
  * button with no amount on it is always a question. Every decision is one
  * line in the spend ledger, next to the secret audit.
  */
-import { chainedFile } from "credkeep";
+import { chainedFile } from "credvault";
 import type { Approval, Approver } from "./payment.js";
 
 export interface Amount {

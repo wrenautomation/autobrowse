@@ -174,7 +174,7 @@ a row; it is work.
   (never the value); `pnpm autobrowse creds audit --last 50` reads it.
   `creds canary stripe` plants a tripwire credential: any read of it is a
   refused line in that ledger and a note to you. The ledgers (audit, spend,
-  agent steps) are hash-chained (credkeep's `chain`: each row carries the
+  agent steps) are hash-chained (credvault's `chain`: each row carries the
   hash of the one before): `pnpm autobrowse ledger verify` finds an edited,
   dropped or inserted row. Tamper-evident, not tamper-proof; that is what
   the file mode and the box's IAM are for.
@@ -349,7 +349,7 @@ has needed it, and a caller (wren, `box.sh start`) wakes it.
 src/engine/     workflow/step types, effects seam, guards, run (advance/answer), the Restate run object, Runs registry, events
 src/browser/    session (profiles, Browserbase), lock, flow runner (trace, hand-off, fp.act), locate, repair, flows/
 src/clients/    http.ts (timeouts, retries, safe errors) + one client per API
-src/auth/       site logins, code sources (totp, email), enrollment, the page guard; the vault itself is credkeep (keep.ts = our names in it)
+src/auth/       site logins, code sources (totp, email), enrollment, the page guard; the vault itself is credvault (keep.ts = our names in it)
 src/llm/        Llm seam: anthropic, openai, cohere, claude-code, fake; completeJson; OTLP trace sink
 src/memory/     Memory seam: in-process store, Backboard; what repairs and gate answers taught us
 src/recorder/   observer (in page), browser + terminal capture, redaction, store

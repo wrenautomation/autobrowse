@@ -6,7 +6,7 @@ import {
   memoryCredentials,
   memorySecrets,
   trackingSecrets,
-} from "credkeep";
+} from "credvault";
 import { describe, expect, it } from "vitest";
 import { noCodes } from "../src/auth/codes.js";
 import { boundRunner, guardedPage, registrable, SecretLeak } from "../src/auth/guard.js";

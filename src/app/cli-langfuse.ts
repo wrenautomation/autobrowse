@@ -4,7 +4,7 @@
  * OTEL names the sink reads. Nothing prints a key.
  */
 import type { Command } from "commander";
-import type { EnvStore } from "credkeep";
+import type { EnvStore } from "credvault";
 import { checkTracing, recentSpans, wireTracing } from "../chores/langfuse.js";
 import { httpClient } from "../clients/http.js";
 
