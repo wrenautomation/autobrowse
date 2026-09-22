@@ -12,6 +12,12 @@ export interface GmailUserClient {
   send(mail: { from: string; to: string; subject: string; text: string }): Promise<void>;
   /** Messages in `inbox` received after `since`, newest first; for one-time codes. */
   recent(inbox: string, since: Date): Promise<GmailMessage[]>;
+  /**
+   * Headers of the messages matching a Gmail query, newest first, however
+   * old: "has this inbox ever heard from this sender" (`text` is empty —
+   * the question is who wrote and when, never what they said).
+   */
+  search(inbox: string, query: string, max?: number): Promise<GmailMessage[]>;
 }
 
 export interface GmailMessage {
@@ -138,6 +144,36 @@ export function gmailClient(opts: {
           if (seen.size >= SEEN_CAP) seen.delete(seen.keys().next().value as string);
           seen.set(key, msg);
           return msg;
+        }),
+      );
+      return got
+        .filter((m): m is GmailMessage => m !== null)
+        .sort((a, b) => b.at.getTime() - a.at.getTime());
+    },
+    async search(inbox, query, max = 20) {
+      const token = opts.tokenFor(inbox, [opts.scopes.read]);
+      const list = await authedJson<{ messages?: Array<{ id: string }> }>(
+        opts.http,
+        token,
+        `${GMAIL}/messages?q=${encodeURIComponent(query)}&maxResults=${max}&includeSpamTrash=true`,
+      );
+      if (list.status >= 400) throw new GmailError("list", list.status, list.body);
+      const got = await Promise.all(
+        (list.body?.messages ?? []).map(async ({ id }): Promise<GmailMessage | null> => {
+          const m = await authedJson<RawMessage>(
+            opts.http,
+            token,
+            `${GMAIL}/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,
+          );
+          if (m.status >= 400 || !m.body) return null;
+          const header = (name: string) =>
+            m.body?.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? "";
+          return {
+            from: header("from"),
+            subject: header("subject"),
+            text: "",
+            at: new Date(Number(m.body.internalDate ?? 0)),
+          };
         }),
       );
       return got

@@ -170,6 +170,7 @@ export function registerRecordCommands(
     .option("--handle <handle>", "username or handle to ask for")
     .option("--birthday <date>", "when the form insists")
     .option("--url <url>", "the signup page (default: the site's home)")
+    .option("--anyway", "sign up even if the site already knows the address")
     .option("--max-steps <n>", "step budget", "40")
     .option("--port <port>", "loopback port", "9090")
     .option("--headed", "show the browser (default: BROWSER_HEADLESS)")
@@ -184,6 +185,7 @@ export function registerRecordCommands(
           handle?: string;
           birthday?: string;
           url?: string;
+          anyway?: boolean;
           maxSteps: string;
           port: string;
           headed?: boolean;
@@ -214,6 +216,22 @@ export function registerRecordCommands(
           throw new Error(
             `${inbox}'s inbox is not readable, so the signup's code would never arrive: site setup gmail consent --account ${inbox} first, or --inbox one that is (autobrowse accounts)`,
           );
+        // Look before creating. An address the site already knows needs a
+        // password reset, not a second account — and only the site's own mail
+        // can tell the two apart, whatever its pages say.
+        const { lookForSiteAccount } = await import("./services.js");
+        const look = await lookForSiteAccount({
+          settings,
+          site,
+          email,
+          inbox,
+          headed: o.headed ?? false,
+        });
+        for (const line of look.why) console.log(`  ${line}`);
+        if (look.verdict === "exists" && !o.anyway)
+          throw new Error(
+            `${site} already knows ${email}: reset its password instead (autobrowse login ${site}, or the site's forgot page), or pass --anyway`,
+          );
         const account = {
           site,
           email,
@@ -221,6 +239,27 @@ export function registerRecordCommands(
         };
         const cred = await mintCredential(credentialsFor(settings), account);
         console.log(`stored a new credential for ${site} (creds list); now the signup`);
+        // A site whose account is made by a call needs no browser at all.
+        const { API_SIGNUPS } = await import("../auth/signup.js");
+        const apiSignup = API_SIGNUPS[site];
+        if (apiSignup) {
+          const { httpClient } = await import("../clients/http.js");
+          const { sinkFor } = await import("./services.js");
+          const made = await apiSignup({
+            http: httpClient(),
+            cred,
+            handle: o.handle ?? null,
+          });
+          console.log(`${site}: ${made.note}`);
+          if (made.token) {
+            await sinkFor(settings).put(made.token.name, made.token.value);
+            console.log(`kept its token as ${made.token.name} (env list)`);
+          }
+          const store = credentialsFor(settings);
+          const held = await store.get(site);
+          if (held) await store.put(site, { ...held, madeAt: new Date().toISOString() });
+          return;
+        }
         const phone = ourPhone(settings);
         const secrets = signupSecrets({
           cred,
@@ -250,6 +289,46 @@ export function registerRecordCommands(
           if (made) await store.put(site, { ...made, madeAt: new Date().toISOString() });
           console.log(`${site}: account made; creds push ${site} sends it to the box`);
         }
+      },
+    );
+
+  program
+    .command("known <site>")
+    .description(
+      "Does the site already have an account on this address? Its forgot-password page is asked to write, and the inbox answers; nothing is changed either way",
+    )
+    .option(
+      "--email <address>",
+      "the address to ask about (default: your `signup` account, autobrowse accounts)",
+    )
+    .option("--for <purpose>", "which of your accounts to ask about: signup, pays, …", "signup")
+    .option("--inbox <address>", "read the answer here instead (when --email is an alias of it)")
+    .option("--headed", "show the browser (default: BROWSER_HEADLESS)")
+    .action(
+      async (
+        site: string,
+        o: { email?: string; for: string; inbox?: string; headed?: boolean },
+      ) => {
+        const { identitiesFor, lookForSiteAccount } = await import("./services.js");
+        const { identityFor } = await import("../auth/identities.js");
+        let email = o.email;
+        if (!email) {
+          const id = identityFor(await identitiesFor(settings).list(), o.for);
+          if (!id)
+            throw new Error(
+              `no account for ${o.for}: autobrowse accounts add <address> --for ${o.for}, or give --email`,
+            );
+          email = id.address;
+        }
+        const look = await lookForSiteAccount({
+          settings,
+          site,
+          email,
+          inbox: o.inbox ?? email,
+          headed: o.headed ?? false,
+        });
+        for (const line of look.why) console.log(`  ${line}`);
+        console.log(`${site} · ${email}: ${look.verdict}`);
       },
     );
 

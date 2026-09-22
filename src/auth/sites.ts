@@ -468,6 +468,40 @@ const outlook: SiteLogin = {
   signInHere: { at: MICROSOFT_HOST, run: signInToMicrosoft },
 };
 
+/**
+ * npm. The sign-in page is plain and loads headless (mapped 2026-09-22:
+ * textbox "Username" — it takes the address too — textbox "Password",
+ * button "Sign In"). The username, not the address, is what the registry
+ * knows the account by, so the stored credential's username is the npm
+ * handle and the address lives in `codesInbox`. Signed in, npmjs.com shows
+ * the account menu instead of the Sign In link.
+ *
+ * Unverified past the form: the second factor's page is whatever npm asks
+ * for once 2FA is enrolled, and `code` covers the common shape (an
+ * authenticator box that says "one-time password").
+ */
+const npm: SiteLogin = {
+  site: "npm",
+  home: "https://www.npmjs.com/",
+  ask: "Your npm account (npmjs.com): username, password, authenticator key if set",
+  loggedIn: async (fp) =>
+    /npmjs\.com/.test(fp.url()) && !(await fp.has({ role: "link", name: "Sign In" })),
+  signIn: formLogin("npm", {
+    start: "https://www.npmjs.com/login",
+    username: { role: "textbox", name: "Username" },
+    password: { role: "textbox", name: "Password" },
+    submit: { role: "button", name: "Sign In" },
+    code: {
+      kind: "totp",
+      asks: /one-time password|authenticator|two-factor|2fa/i,
+      field: { role: "textbox", name: "/code|one-time password/i" },
+      submit: { role: "button", name: "/verify|submit|continue/i" },
+    },
+    rejected: /incorrect username or password|invalid credentials/i,
+    success: /npmjs\.com\/(?!login)/,
+  }),
+};
+
 export const SITE_LOGINS: readonly SiteLogin[] = [
   cloudflare,
   google,
@@ -483,4 +517,5 @@ export const SITE_LOGINS: readonly SiteLogin[] = [
   x,
   tiktok,
   outlook,
+  npm,
 ];

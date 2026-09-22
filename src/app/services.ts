@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Logger } from "pino";
 import { fileStepLedger, type StepLedger } from "../agent/ledger.js";
+import { type Look, lookForAccount, RESET_FORMS } from "../auth/exists.js";
 import {
   envIdentities,
   fileIdentities,
@@ -33,6 +34,7 @@ import {
 } from "../auth/index.js";
 import type { FlowRunner } from "../browser/flow.js";
 import { flowRunner, HUMAN_PACE, type Pace } from "../browser/flow.js";
+import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { llmRepairer, noRepairer, rememberingRepairer } from "../browser/repair.js";
 import type { BrowserOptions, FailureRecord } from "../browser/session.js";
 import {
@@ -110,7 +112,7 @@ import { type DomainDeps, domainWorkflow } from "../workflows/domain/index.js";
 import type { Proof } from "../workflows/proof.js";
 import type { Settings } from "./config.js";
 import { holding, type Idle, idleTracker } from "./idle.js";
-import { type Screen, screenOf } from "./screen.js";
+import { headed, type Screen, screenOf } from "./screen.js";
 import type { DeviceLink } from "./setup.js";
 
 function required<T>(value: T | undefined, env: string): T {
@@ -159,6 +161,41 @@ export async function browserFor(
   const opts = screen ? browserOptions(settings, screen) : browserOptions(settings);
   const profile = await profileForSite(settings, site);
   return profile ? { ...opts, profile } : opts;
+}
+
+/**
+ * Whether the site already knows this address, before a signup makes a
+ * second account on it: the site's reset form is asked to write, and the
+ * inbox says whether it did. Nothing is changed either way — a reset link
+ * that nobody opens moves no password.
+ */
+export async function lookForSiteAccount(o: {
+  settings: Settings;
+  site: string;
+  email: string;
+  inbox: string;
+  headed?: boolean;
+}): Promise<Look> {
+  const form = RESET_FORMS[o.site];
+  if (!form)
+    return {
+      verdict: "cannot-tell",
+      why: [`no reset page mapped for ${o.site} (src/auth/exists.ts)`],
+    };
+  const gmail = gmailFor(o.settings);
+  const screen = o.headed ? headed : screenOf(o.settings);
+  const browser = { ...(await browserFor(o.settings, o.site, screen)), profile: o.site };
+  const run = flowRunner(browser, { login: loginFor(o.settings, gmail) });
+  return lookForAccount({
+    site: o.site,
+    email: o.email,
+    inbox: o.inbox,
+    form,
+    ask: async (f, email) =>
+      (await run.run(resetMailProbe, { email, form: f }).catch(() => null))?.asked ?? false,
+    mail: gmail,
+    history: (query) => gmail.search(o.inbox, query),
+  });
 }
 
 export function browserOptions(

@@ -19,8 +19,10 @@ import { instagramOauthConsent } from "../browser/flows/instagram-oauth-consent.
 import { instantlyWarmup } from "../browser/flows/instantly-warmup.js";
 import { linkedinCreatePost } from "../browser/flows/linkedin-create-post.js";
 import { linkedinOauthConsent } from "../browser/flows/linkedin-oauth-consent.js";
+import { npmGranularToken } from "../browser/flows/npm-granular-token.js";
 import { googleOauthConsent } from "../browser/flows/oauth-consent.js";
 import { outlookOauthConsent } from "../browser/flows/outlook-oauth-consent.js";
+import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { tiktokOauthConsent } from "../browser/flows/tiktok-oauth-consent.js";
 import { xOauthConsent } from "../browser/flows/x-oauth-consent.js";
 import { youtubeCommunityPost } from "../browser/flows/youtube-community-post.js";
@@ -60,6 +62,8 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     instagramOauthConsent,
     instagramCreatePost,
     linkedinCreatePost,
+    resetMailProbe,
+    npmGranularToken,
     facebookOauthConsent,
     tiktokOauthConsent,
     xOauthConsent,

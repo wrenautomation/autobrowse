@@ -12,6 +12,7 @@ export { instagram } from "./instagram.js";
 export { langfuse } from "./langfuse.js";
 export { linkedin } from "./linkedin.js";
 export { meta, metaOAuth } from "./meta.js";
+export { createRegistryUser, NPM_TOKEN, npm } from "./npm.js";
 export { accessTokens, accountEnv, runConsent } from "./oauth.js";
 export { outlook } from "./outlook.js";
 export { SITES_SERVICE, type SitesService, sitesService } from "./service.js";
@@ -26,6 +27,7 @@ import { instagram } from "./instagram.js";
 import { langfuse } from "./langfuse.js";
 import { linkedin } from "./linkedin.js";
 import { meta } from "./meta.js";
+import { npm } from "./npm.js";
 import { outlook } from "./outlook.js";
 import { tiktok } from "./tiktok.js";
 import type { SiteApi } from "./types.js";
@@ -43,4 +45,5 @@ export const SITES: readonly SiteApi[] = [
   langfuse,
   meta,
   x,
+  npm,
 ];

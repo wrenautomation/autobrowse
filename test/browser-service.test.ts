@@ -45,6 +45,7 @@ describe("browser service", () => {
   });
   it("names the fixed legs site/name and builds the service", () => {
     expect(Object.keys(BROWSER_FLOWS).sort()).toEqual([
+      "account/reset-mail-probe",
       "cloudflare/buy",
       "facebook/oauth-consent",
       "google-admin/dkim-generate",
@@ -57,6 +58,7 @@ describe("browser service", () => {
       "instantly/warmup",
       "linkedin/create-post",
       "linkedin/oauth-consent",
+      "npm/granular-token",
       "outlook/oauth-consent",
       "tiktok/oauth-consent",
       "x/oauth-consent",

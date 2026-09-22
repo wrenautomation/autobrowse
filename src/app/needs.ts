@@ -123,12 +123,17 @@ export function siteNeeds(ctx: NeedsContext): Need[] {
       });
     } else if ("token" in s.auth) {
       const token = s.auth.token;
+      // A step that mints it is the first line: a person copying a token by hand is the fallback.
+      const tokenStep = s.setup.find((st) => st.makes.includes(token));
       out.push({
         id: `token-${s.site}`,
         kind: "keys",
-        what: `${s.site}: ${token}`,
+        what: `${s.site}: ${token}${tokenStep ? ` (${tokenStep.summary})` : ""}`,
         unlocks: `the ${s.site} API`,
-        how: [`put ${token} in .env, then autobrowse env push ${token}`],
+        how: [
+          ...(tokenStep ? [`autobrowse site setup ${s.site} ${tokenStep.name}`] : []),
+          `or put ${token} in .env, then autobrowse env push ${token}`,
+        ],
         check: async () => Boolean(ctx.env(token)),
       });
     }
@@ -255,6 +260,19 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
         const cred = await ctx.credentials.get("linkedin");
         return Boolean(cred && !cred.via);
       },
+    },
+    {
+      id: "npm-account",
+      kind: "credential",
+      what: "The npm account itself: npmjs.com/signup, username `wrenautomation`, address william@wrenautomation.com",
+      unlocks:
+        "publishing mailifier, and every later package: once the account exists the token, 2FA and publish are all automatic",
+      how: [
+        "autobrowse creds copy npm  (the password is already minted and sealed; it lands on the clipboard for a minute)",
+        "npmjs.com/signup in your own browser — the page is behind a bot check that refuses an automated one, and legacy registry signup answers 403 `Account creation via legacy auth is unavailable`",
+        "autobrowse creds made npm",
+      ],
+      check: async () => Boolean((await ctx.credentials.get("npm"))?.madeAt),
     },
     {
       id: "virtual-cards-vendor",

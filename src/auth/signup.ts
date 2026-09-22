@@ -6,7 +6,9 @@
  * texts come from the same sources sign-in uses.
  */
 
+import type { HttpClient } from "../clients/http.js";
 import { gmailOAuth } from "../sites/gmail.js";
+import { createRegistryUser, NPM_TOKEN } from "../sites/npm.js";
 import { accountEnv } from "../sites/oauth.js";
 import type { CodeSource } from "./codes.js";
 import type { Credential, CredentialStore } from "./credentials.js";
@@ -181,3 +183,42 @@ export function signupGoal(a: NewAccount, phone?: string | null): string {
     .filter(Boolean)
     .join(" ");
 }
+
+export interface ApiSignupResult {
+  /** A token the call answered with, and the env name to keep it under; null when it answered none. */
+  token: { name: string; value: string } | null;
+  /** What the site said, for the person reading the run. */
+  note: string;
+}
+
+/** What an API signup is handed: the sealed credential and the door. */
+export type ApiSignup = (o: {
+  http: HttpClient;
+  cred: Credential;
+  /** The username the site wants beside the address. */
+  handle: string | null;
+}) => Promise<ApiSignupResult>;
+
+/**
+ * Sites whose account is made by a call, not by filling a page. npm's
+ * signup page sits behind a bot check that never clears, headless or
+ * headed; its registry makes the same account in one request. Where this
+ * exists the browser never opens, so there is nothing to hand off at.
+ */
+export const API_SIGNUPS: Record<string, ApiSignup> = {
+  npm: async ({ http, cred, handle }) => {
+    if (!handle)
+      throw new Error("npm needs a username beside the address: signup npm --handle <name>");
+    if (!cred.password)
+      throw new Error("the minted password is missing from the stored credential");
+    const made = await createRegistryUser(http, {
+      name: handle,
+      email: cred.username,
+      password: cred.password,
+    });
+    return {
+      token: made.token ? { name: NPM_TOKEN, value: made.token } : null,
+      note: made.note,
+    };
+  },
+};

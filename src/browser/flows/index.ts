@@ -12,8 +12,14 @@ export {
   linkedinCreatePost,
 } from "./linkedin-create-post.js";
 export { linkedinOauthConsent } from "./linkedin-oauth-consent.js";
+export {
+  type GranularTokenInput,
+  type GranularTokenResult,
+  npmGranularToken,
+} from "./npm-granular-token.js";
 export { googleOauthConsent, type OauthConsentInput, redirectOf } from "./oauth-consent.js";
 export { outlookOauthConsent } from "./outlook-oauth-consent.js";
+export { type ResetProbeInput, resetMailProbe } from "./reset-mail-probe.js";
 export { tiktokOauthConsent } from "./tiktok-oauth-consent.js";
 export { xOauthConsent } from "./x-oauth-consent.js";
 export { youtubeCommunityPost } from "./youtube-community-post.js";
