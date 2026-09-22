@@ -309,7 +309,12 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       if (r.api && token)
         return r.api(parsed.data as never, { token, http: deps.http, env: deps.env });
       if (r.browser) {
-        const run = await legOf(r.browser);
+        // The same account the API leg would have used: its profile, so a browser
+        // leg posts as the site's own identity and never as whoever the default
+        // profile happens to be signed in as.
+        const at = deps.providerOf?.(s) ?? null;
+        const profile = chosen && at ? await deps.profileFor?.(at, chosen) : null;
+        const run = await legOf(r.browser, profile, at);
         if (!run)
           throw new SiteError(
             501,

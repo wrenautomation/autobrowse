@@ -65,3 +65,30 @@ describe("youtube writes stay on the configured channel", () => {
     ).resolves.toBeDefined();
   });
 });
+
+describe("a browser leg runs as the site's own account", () => {
+  it("re-sites the flow at the profile that holds it", async () => {
+    let ranAs = "";
+    const sites = siteFacade([youtube], {
+      http: httpClient({ fetch: fakeFetch(() => ({ body: {} })).fetch }),
+      env: () => undefined,
+      sink: memorySink(),
+      runner: {
+        run: async (flow: { site: string }) => {
+          ranAs = flow.site;
+          return { url: null };
+        },
+      } as never,
+      flow: (name: string) =>
+        name === "google/youtube-community-post"
+          ? ({ site: "google", name: "youtube-community-post", run: async () => ({}) } as never)
+          : null,
+      accountFor: async () => "william@wrenautomation.com",
+      providerOf: () => "google",
+      profileFor: async (at: string, who: string) =>
+        at === "google" && who === "william@wrenautomation.com" ? "google-admin" : null,
+    });
+    await sites.call("youtube", "POST", "/studio/communityPosts", { text: "hi" });
+    expect(ranAs).toBe("google-admin");
+  });
+});

@@ -77,9 +77,15 @@ late, after the 90 s code wait; a retry passes). Twilio's own number
   Until a matching token exists, **every YouTube write is refused** —
   `YOUTUBE_CHANNEL_ID` is set to Wren's channel and the site checks the
   token's own channel before uploading, commenting or posting. If the
-  passkey keeps refusing us: `autobrowse login google-admin --headed`
-  once with your passkey, then re-run
-  `autobrowse site setup youtube consent --account william@wrenautomation.com`.
+  passkey wall is real and tried four ways (2026-09-22): the OAuth consent,
+  the admin-console setting flow, `enroll-passkey`, and the passkeys page
+  itself all land on "Use your passkey to confirm it's really you", and
+  "More ways to verify" lists **only** the passkey — no TOTP, no recovery
+  phone or email. Google holds a passkey we do not have. So, once:
+  `autobrowse login google-admin --headed`, pass the prompt on your device,
+  leave the window; then everything else is automatic (we enroll our own
+  passkey from that session, take the consent, and the channel guard opens).
+  Community posts already work through the browser in that profile.
 - `linkedin-page`: the developer app needs a Page; yours, or one for Wren.
 - `virtual-cards-vendor`: Privacy.com or your bank; the rest is built like
   passwords (placed, origin-bound to the merchant).
