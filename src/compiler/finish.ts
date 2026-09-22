@@ -10,8 +10,7 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { z } from "zod";
-import { completeJson, type Llm, type LlmUsage } from "../llm/types.js";
+import type { Llm, LlmUsage } from "../llm/types.js";
 import { OUTLINE_FILE } from "./outline.js";
 
 export const MODULE_FILE = "index.ts";
@@ -25,6 +24,8 @@ export interface FinishOptions {
   check: (dir: string) => Promise<string | null>;
   /** Model rounds before giving up (each one sees the check's errors). */
   rounds?: number;
+  /** Called after each failed round: the round, what failed. */
+  onRound?: (round: number, errors: string) => void;
   /** Something the caller wants said: the heal's context, a person's note. */
   brief?: string;
   /** A finished workflow to imitate (module and test). */
@@ -41,12 +42,61 @@ export interface FinishOutcome {
   summary: string;
 }
 
-const replySchema = z.object({
-  unchanged: z.boolean().optional(),
-  [MODULE_FILE]: z.string().optional(),
-  [TEST_FILE]: z.string().optional(),
-  notes: z.string().default(""),
-});
+export interface FinishReply {
+  unchanged: boolean;
+  module: string | null;
+  test: string | null;
+  notes: string;
+}
+
+/**
+ * Whole files come back between markers, not inside JSON: a 100-line module
+ * with quotes, backslashes and newlines in it survives a marker and does not
+ * survive a model's JSON escaping (command-a-plus emitted invalid JSON every
+ * round until this changed).
+ */
+export function parseReply(text: string): FinishReply {
+  if (/^\s*UNCHANGED\b/m.test(text))
+    return { unchanged: true, module: null, test: null, notes: after(text, "NOTES") };
+  return {
+    unchanged: false,
+    module: section(text, MODULE_FILE),
+    test: section(text, TEST_FILE),
+    notes: after(text, "NOTES"),
+  };
+}
+
+const marker = (name: string) =>
+  new RegExp(`^===+\\s*${name.replace(".", "\\.")}\\s*===+\\s*$`, "m");
+
+/** The text under `=== <name> ===` up to the next marker line, fences stripped. */
+function section(text: string, name: string): string | null {
+  const open = marker(name).exec(text);
+  if (!open?.index && open?.index !== 0) return null;
+  const from = open.index + open[0].length;
+  const next = /^===+\s*[\w.]+\s*===+\s*$/m.exec(text.slice(from));
+  const body = next ? text.slice(from, from + next.index) : text.slice(from);
+  const fenced = /```(?:\w+)?\n([\s\S]*?)```/.exec(body);
+  const out = clean(fenced?.[1] ?? body).trim();
+  return out ? `${out}\n` : null;
+}
+
+/**
+ * Characters a model emits that a compiler will not take: zero-width marks,
+ * a non-breaking space where a space belongs, smart quotes around code.
+ * (command-a-plus put one in the middle of an identifier: "Invalid character".)
+ */
+export function clean(code: string): string {
+  return code
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\u00A0/g, " ")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"');
+}
+
+function after(text: string, name: string): string {
+  return (section(text, name) ?? "").trim().split("\n")[0] ?? "";
+}
 
 const SYSTEM = `You finish a compiled browser workflow so it is safe to run unattended. You get its module (index.ts), its test (index.test.ts) and the outline it was rendered from. Rewrite the module and the test; nothing else exists to you.
 
@@ -67,7 +117,16 @@ The library (imported from the same path the module already uses). Its only expo
 
 Keep every behaviour: each deps member the module uses, each sink.put (a value the recording kept for later), each upload, each read that feeds a later step stays; you add gates, inputs and proof reads, you never drop what the recording did.
 
-Rules: TypeScript, strict, exactOptionalPropertyTypes (no undefined into an optional field); imports only from the library path the module already uses, "zod", "vitest"; keep the module's header comment and add one line saying what was finished; kebab-case step names; no Playwright calls; no new dependencies; no secrets in code. Reply with JSON: {"index.ts": "<whole file>", "index.test.ts": "<whole file>", "notes": "<one line>"}. When the module already meets every point, reply {"unchanged": true, "notes": "<why>"}.`;
+Rules: TypeScript, strict, exactOptionalPropertyTypes (no undefined into an optional field); imports only from the library path the module already uses, "zod", "vitest"; keep the module's header comment and add one line saying what was finished; kebab-case step names; no Playwright calls; no new dependencies; no secrets in code. Reply with the three sections below and nothing else — no JSON, no code fences, no commentary:
+
+=== index.ts ===
+<the whole file>
+=== index.test.ts ===
+<the whole file>
+=== NOTES ===
+<one line saying what you changed>
+
+When the module already meets every point, reply with the single word UNCHANGED, then a === NOTES === section saying why.`;
 
 export async function finish(o: FinishOptions): Promise<FinishOutcome> {
   const rounds = o.rounds ?? 3;
@@ -81,7 +140,7 @@ export async function finish(o: FinishOptions): Promise<FinishOutcome> {
   let prompt = [
     o.brief ? `Context: ${o.brief}\n` : "",
     o.exemplar
-      ? `A finished workflow to imitate:\n--- index.ts ---\n${o.exemplar.module}\n--- index.test.ts ---\n${o.exemplar.test}\n`
+      ? `A DIFFERENT workflow, finished, to imitate in shape only — never copy its plan fields, its site, its URLs or its step names:\n--- example/index.ts ---\n${o.exemplar.module}\n--- example/index.test.ts ---\n${o.exemplar.test}\n`
       : "",
     outline ? `--- outline.json ---\n${outline}\n` : "",
     `--- ${MODULE_FILE} ---\n${original.module}\n--- ${TEST_FILE} ---\n${original.test}`,
@@ -92,7 +151,7 @@ export async function finish(o: FinishOptions): Promise<FinishOutcome> {
     await writeFile(paths.test, original.test);
   };
   for (let round = 1; round <= rounds; round++) {
-    let value: z.infer<typeof replySchema>;
+    let value: FinishReply;
     try {
       ({ value } = await ask());
     } catch (err) {
@@ -104,8 +163,13 @@ export async function finish(o: FinishOptions): Promise<FinishOutcome> {
       if (round === 1) return { status: "unchanged", rounds: round, usage, summary: value.notes };
       break;
     }
-    const module = value[MODULE_FILE] ?? original.module;
-    const test = value[TEST_FILE] ?? original.test;
+    const module = value.module ?? original.module;
+    const test = value.test ?? original.test;
+    if (!value.module && !value.test) {
+      last = `no ${MODULE_FILE} section in your reply`;
+      prompt = `${last}. Reply again with the markers exactly as asked.\n\n${prompt}`;
+      continue;
+    }
     await writeFile(paths.module, module);
     await writeFile(paths.test, test);
     if (o.format) await o.format([paths.module, paths.test]);
@@ -113,31 +177,41 @@ export async function finish(o: FinishOptions): Promise<FinishOutcome> {
     const errors = dropped(original.module, module) ?? (await o.check(o.dir));
     if (!errors) return { status: "finished", rounds: round, usage, summary: value.notes };
     last = errors;
+    o.onRound?.(round, errors);
     prompt = `Your files failed the check:\n${errors.slice(0, 6_000)}\n\nFix them and reply with both whole files again.\n--- ${MODULE_FILE} ---\n${module}\n--- ${TEST_FILE} ---\n${test}`;
   }
   await restore();
   return { status: "gave-up", rounds, usage, summary: last.slice(0, 600) };
 
   async function ask() {
-    const r = await completeJson(o.llm, replySchema, { system: SYSTEM, prompt, maxTokens: 8_000 });
+    const r = await o.llm.complete({ system: SYSTEM, prompt, maxTokens: 20_000 });
     usage.inputTokens += r.usage.inputTokens;
     usage.outputTokens += r.usage.outputTokens;
-    return r;
+    return { value: parseReply(r.text) };
   }
 }
 
-const KEPT = [/deps\.(\w+)/g, /\.put\(\s*"([^"]+)"/g];
+/** Each pattern's capture is what must survive, whatever the rewrite's line breaks are. */
+const KEPT: ReadonlyArray<[RegExp, (m: RegExpMatchArray) => string]> = [
+  [/deps\.(\w+)/g, (m) => `deps.${m[1]}`],
+  [/\.put\(\s*"([^"]+)"/g, (m) => `.put("${m[1]}"`],
+  [/\.act\(\s*\{\s*kind:\s*"upload"/g, () => 'act({ kind: "upload"'],
+];
 
-/** What the original used that the rewrite no longer does; null when nothing was lost. */
+/** Whitespace between tokens never means anything in TypeScript; a rewrite reflows freely. */
+const flat = (s: string) => s.replace(/\s+/g, " ");
+
+/** What the original did that the rewrite no longer does; null when nothing was lost. */
 export function dropped(original: string, next: string): string | null {
+  const there = flat(next);
   const lost: string[] = [];
-  for (const re of KEPT) {
-    for (const m of original.matchAll(re)) {
-      const token = m[0];
-      if (!next.includes(token) && !lost.includes(token)) lost.push(token);
+  for (const [re, name] of KEPT) {
+    for (const m of flat(original).matchAll(re)) {
+      const want = name(m);
+      if (!there.includes(want) && !lost.includes(want)) lost.push(want);
     }
   }
   return lost.length
-    ? `behaviour dropped: the original used ${lost.join(", ")} and your files do not. Keep them.`
+    ? `behaviour dropped: the original used ${lost.join(", ")} and your files do not. Keep every one of them, in the same step or a new one.`
     : null;
 }

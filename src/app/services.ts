@@ -175,7 +175,16 @@ export function traceSinkFor(settings: Settings, http = httpClient()): TraceSink
         http,
       })
     : null;
+  if (sink) flushAtExit(sink);
   return sink;
+}
+
+/** A CLI process exits long before the 5 s batch timer fires, so the last spans have to be pushed out by hand. */
+function flushAtExit(s: TraceSink): void {
+  const flush = () => s.flush();
+  process.once("beforeExit", flush);
+  process.once("SIGINT", () => void flush().then(() => process.exit(130)));
+  process.once("SIGTERM", () => void flush().then(() => process.exit(143)));
 }
 
 /** The model behind everything: traced when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, under the daily cap when one is (`LLM_DAILY_TOKENS`). */
@@ -194,6 +203,7 @@ export function llmFor(
       anthropicApiKey: settings.anthropicApiKey,
       openaiApiKey: settings.openaiApiKey,
       openaiBaseUrl: settings.openaiBaseUrl,
+      cohereApiKey: settings.cohereApiKey,
     },
     http,
   );

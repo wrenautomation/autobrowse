@@ -9,6 +9,7 @@ export {
 } from "./facade.js";
 export { gmail, gmailOAuth } from "./gmail.js";
 export { instagram } from "./instagram.js";
+export { langfuse } from "./langfuse.js";
 export { linkedin } from "./linkedin.js";
 export { meta, metaOAuth } from "./meta.js";
 export { accessTokens, accountEnv, runConsent } from "./oauth.js";
@@ -22,6 +23,7 @@ export { youtube } from "./youtube.js";
 
 import { gmail } from "./gmail.js";
 import { instagram } from "./instagram.js";
+import { langfuse } from "./langfuse.js";
 import { linkedin } from "./linkedin.js";
 import { meta } from "./meta.js";
 import { outlook } from "./outlook.js";
@@ -38,6 +40,7 @@ export const SITES: readonly SiteApi[] = [
   tiktok,
   outlook,
   gmail,
+  langfuse,
   meta,
   x,
 ];

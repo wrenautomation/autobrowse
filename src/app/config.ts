@@ -63,11 +63,12 @@ const schema = z.object({
   webhookUrl: z.string().url().optional(),
   webhookToken: z.string().min(1).optional(),
   /** Model behind the compiler's polish and the locator repairer. No key = both off. */
-  llmProvider: z.enum(["anthropic", "openai", "claude-code"]).default("anthropic"),
+  llmProvider: z.enum(["anthropic", "openai", "cohere", "claude-code"]).default("anthropic"),
   llmModel: z.string().min(1).optional(),
   anthropicApiKey: z.string().min(1).optional(),
   openaiApiKey: z.string().min(1).optional(),
   openaiBaseUrl: z.string().url().optional(),
+  cohereApiKey: z.string().optional(),
   /** Tokens (in + out) every model call may spend per UTC day, all processes together; 0 = no cap. */
   llmDailyTokens: z.coerce.number().int().min(0).default(3_000_000),
   /** Memory between runs (repairs that worked, hand-off notes). `none` keeps it in-process. */
@@ -229,6 +230,7 @@ export const ENV_KEYS = {
   anthropicApiKey: "ANTHROPIC_API_KEY",
   openaiApiKey: "OPENAI_API_KEY",
   openaiBaseUrl: "OPENAI_BASE_URL",
+  cohereApiKey: "COHERE_API_KEY",
   llmDailyTokens: "LLM_DAILY_TOKENS",
   memory: "MEMORY",
   backboardApiKey: "BACKBOARD_API_KEY",

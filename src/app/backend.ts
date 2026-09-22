@@ -86,7 +86,10 @@ export interface Backend {
   };
   compile(rec: Recording): Promise<Compiled>;
   /** A model finishes a compiled workflow (plan inputs, send gate, proof read) inside the typecheck+test loop; absent without a model. */
-  finish?(name: string, brief?: string): Promise<FinishOutcome>;
+  finish?(
+    name: string,
+    o?: { brief?: string; rounds?: number; onRound?: FinishRound },
+  ): Promise<FinishOutcome>;
   /** Where prove/heal run; one per process, injectable for tests. */
   jobs?: Jobs;
   ingress: Ingress;
@@ -166,10 +169,12 @@ async function exemplarFor(name: string): Promise<{ module: string; test: string
 }
 
 /** The model's last mile on a compiled workflow, judged by tsc and vitest; the files stay as they were when it gives up. */
+export type FinishRound = (round: number, errors: string) => void;
+
 export async function finishCompiled(
   name: string,
   llm: Llm,
-  brief?: string,
+  o: { brief?: string; rounds?: number; onRound?: FinishRound } = {},
 ): Promise<FinishOutcome> {
   return finish({
     llm,
@@ -177,7 +182,9 @@ export async function finishCompiled(
     check: (dir) => checkCompiled(dir),
     exemplar: await exemplarFor(name),
     format,
-    ...(brief ? { brief } : {}),
+    ...(o.brief ? { brief: o.brief } : {}),
+    ...(o.rounds ? { rounds: o.rounds } : {}),
+    ...(o.onRound ? { onRound: o.onRound } : {}),
   });
 }
 
@@ -204,7 +211,9 @@ export function healer(
       ...(llm
         ? {
             finish: (name: string, step: string) =>
-              finishCompiled(name, llm, `step "${step}" was just rewritten from a heal`),
+              finishCompiled(name, llm, {
+                brief: `step "${step}" was just rewritten from a heal`,
+              }),
           }
         : {}),
     });
@@ -377,7 +386,7 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
       : {}),
     outline: outlineEditor(),
     compile: (rec) => compileRecording(rec, o.llm),
-    ...(o.llm ? { finish: (name, brief) => finishCompiled(name, o.llm as Llm, brief) } : {}),
+    ...(o.llm ? { finish: (name, opts) => finishCompiled(name, o.llm as Llm, opts) } : {}),
     ingress: o.ingress,
     bus: app.bus,
     recordingsDir,

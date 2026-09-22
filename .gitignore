@@ -12,3 +12,7 @@ ui/dist/
 deploy/terraform/.terraform/
 deploy/terraform/*.tfstate*
 deploy/terraform/*.tfvars
+
+# Key material that must never reach git (a downloaded service-account key lands here)
+google_service_account.json
+*service_account*.json

@@ -99,7 +99,9 @@ captchas until Browserbase takes them.
   the Runs page), and you hear what got built or where it needs you.
   `autobrowse try <name> --prove` or "prove" on the Runs page writes the
   same proof by hand. `LLM_PROVIDER=claude-code` runs every model call through headless Claude
-  Code on your subscription, no API key (`designs/2026-09-21-claude-code-driver.md`).
+  Code on your subscription, no API key (`designs/2026-09-21-claude-code-driver.md`);
+  `LLM_PROVIDER=cohere` (`COHERE_API_KEY`) goes through Cohere's own v2 door, which
+  is the only one that keeps a thinking model's answer apart from its reasoning.
   Every model call counts against `LLM_DAILY_TOKENS`
   (3M a day by default, one ledger for worker and CLI); over it, calls
   fail loudly until UTC midnight, so an unattended night cannot run up a bill. The agent's `human` is a pause with a prompt: do the
@@ -337,7 +339,7 @@ src/engine/     workflow/step types, effects seam, guards, run (advance/answer),
 src/browser/    session (profiles, Browserbase), lock, flow runner (trace, hand-off, fp.act), locate, repair, flows/
 src/clients/    http.ts (timeouts, retries, safe errors) + one client per API
 src/auth/       credentials (file/env/layered), TOTP, code sources (totp, email), site logins, TOTP enrollment
-src/llm/        Llm seam: anthropic, openai, fake; completeJson
+src/llm/        Llm seam: anthropic, openai, cohere, claude-code, fake; completeJson; OTLP trace sink
 src/memory/     Memory seam: in-process store, Backboard; what repairs and gate answers taught us
 src/recorder/   observer (in page), browser + terminal capture, redaction, store
 src/compiler/   structure → outline → render (+ polish); output typechecks
@@ -381,7 +383,23 @@ outcome, time, host; never a page, a prompt or a value. With
 vendor's auth, `OTEL_SERVICE_NAME`) every model call is a span over
 OTLP/HTTP, one trace per session — Langfuse, Honeycomb, Grafana, Jaeger
 take it as is; no SDK, nothing runs without the endpoint. Spans carry
-sizes, hashes and token counts, never text (`src/llm/trace.ts`).
+sizes, hashes and token counts, never text (`src/llm/trace.ts`), under the
+OpenTelemetry GenAI names (`gen_ai.usage.*`), and the sink flushes when the
+process exits so a one-call CLI does not take its batch with it.
+
+Langfuse is the default endpoint, set up the way every key here is — nothing
+is copied by hand:
+
+```sh
+pnpm autobrowse site setup langfuse project-keys   # mints a key pair in the browser, keeps both
+pnpm autobrowse langfuse wire                      # derives the three OTEL names from them
+pnpm autobrowse langfuse check                     # the door opens
+pnpm autobrowse langfuse recent --minutes 30       # the spans that actually landed
+```
+
+`site call langfuse GET /api/public/v2/observations` reads the same spans
+through the site facade. Point the OTEL names elsewhere and nothing above
+the sink changes.
 
 ## Coupling to `wren`
 

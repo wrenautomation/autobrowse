@@ -304,12 +304,16 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
   // After the password an account with a passkey is asked for it again ("Use your
   // passkey to confirm it's really you", challenge/pk; mapped 2026-09-22 on admin.google.com):
   // "More ways to verify" leads to the same selection page.
-  if (
-    /accounts\.google\.com/.test(fp.url()) &&
-    (/2-step verification|authenticator|enter the code|verification code/i.test(text) ||
-      /use your passkey|using your passkey/i.test(text) ||
-      /challenge\/pk/.test(fp.url()))
-  ) {
+  // Google can ask twice: the code, then the passkey again (mapped 2026-09-22 on
+  // the Langfuse "Sign in with Google" flow). Each pass goes back to the
+  // selection page, so a second one answers with what this system has.
+  for (let pass = 0; pass < 2; pass++) {
+    const onChallenge =
+      /accounts\.google\.com/.test(fp.url()) &&
+      (/2-step verification|authenticator|enter the code|verification code/i.test(text) ||
+        /use your passkey|using your passkey/i.test(text) ||
+        /challenge\/pk/.test(fp.url()));
+    if (!onChallenge) break;
     await googleSecondStep(ctx);
     await fp.wait(SETTLE_MS);
     text = await fp.text();

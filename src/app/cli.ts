@@ -19,6 +19,7 @@ import { registerDesktopCommands } from "./cli-desktop.js";
 import { registerDoCommands } from "./cli-do.js";
 import { registerEnvCommands } from "./cli-env.js";
 import { readJson } from "./cli-json.js";
+import { registerLangfuseCommands } from "./cli-langfuse.js";
 import { registerNeedsCommands } from "./cli-needs.js";
 import { registerRecordCommands } from "./cli-record.js";
 import { registerSiteCommands } from "./cli-site.js";
@@ -234,6 +235,7 @@ registerRecordCommands(program, settings, local);
 registerSiteCommands(program, local);
 registerUnsubscribe(program, local);
 registerAwsCommands(program, local);
+registerLangfuseCommands(program, () => envStoreFor(settings));
 registerDoCommands(program, local);
 registerAuthCommands(program, settings);
 registerNeedsCommands(program, () => ({

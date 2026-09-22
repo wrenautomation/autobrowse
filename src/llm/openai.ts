@@ -4,7 +4,15 @@ import type { Llm, LlmReply, LlmRequest } from "./types.js";
 
 interface ChatResponse {
   model: string;
-  choices: Array<{ message: { content: string | null } }>;
+  /**
+   * A reasoning model (command-a-plus, o-series) spends completion tokens on
+   * `reasoning_content` first; when the budget runs out there, `content` comes
+   * back empty with finish_reason "length".
+   */
+  choices: Array<{
+    message: { content: string | null; reasoning_content?: string | null };
+    finish_reason?: string;
+  }>;
   usage?: { prompt_tokens: number; completion_tokens: number };
   /** The provider's reason on a 4xx (a model name, a token limit); never a secret. */
   error?: { message?: string };
@@ -38,8 +46,16 @@ export function openaiLlm(opts: {
         const why = (r.body?.error?.message ?? r.body?.message ?? "").slice(0, 200);
         throw new Error(`openai: HTTP ${r.status}${why ? ` ${why}` : ""}`);
       }
+      const choice = r.body.choices[0];
+      if (!choice?.message.content && choice?.finish_reason === "length") {
+        throw new Error(
+          `${opts.model}: reply hit the token limit before any content${
+            choice.message.reasoning_content ? " (all of it went to reasoning)" : ""
+          }; raise maxTokens`,
+        );
+      }
       return {
-        text: r.body.choices[0]?.message.content ?? "",
+        text: choice?.message.content ?? "",
         usage: {
           inputTokens: r.body.usage?.prompt_tokens ?? 0,
           outputTokens: r.body.usage?.completion_tokens ?? 0,

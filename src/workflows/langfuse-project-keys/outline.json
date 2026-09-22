@@ -1,0 +1,121 @@
+{
+  "name": "langfuse-project-keys",
+  "site": "langfuse",
+  "description": "Recorded 2026-09-22 on langfuse",
+  "fields": [
+    {
+      "key": "noteOptional",
+      "label": "Note (optional)",
+      "example": "autobrowse tracing"
+    }
+  ],
+  "secrets": [],
+  "steps": [
+    {
+      "kind": "browser",
+      "name": "create-new-api-keys",
+      "description": "Click the button to start creating new API keys for the Langfuse project.",
+      "irreversible": true,
+      "proof": "GET /projects/{projectId}/api-keys returns a list containing the newly created keys.",
+      "url": "https://cloud.langfuse.com/project/cmucofs5801xvad0d4o21fb4p/settings/api-keys",
+      "ops": [
+        {
+          "kind": "click",
+          "goal": "click Create new API keys",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Create new API keys",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": true
+        },
+        {
+          "kind": "fill",
+          "goal": "fill Note (optional)",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Note (optional)",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "noteOptional"
+          }
+        },
+        {
+          "kind": "click",
+          "goal": "click Create API keys",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Create API keys",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": true
+        },
+        {
+          "kind": "keep",
+          "goal": "keep  as LANGFUSE_SECRET_KEY",
+          "hints": {
+            "tag": "",
+            "role": null,
+            "name": null,
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null,
+            "css": "[role=dialog] code"
+          },
+          "env": "LANGFUSE_SECRET_KEY"
+        },
+        {
+          "kind": "keep",
+          "goal": "keep  as LANGFUSE_PUBLIC_KEY",
+          "hints": {
+            "tag": "",
+            "role": null,
+            "name": null,
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null,
+            "css": "[role=dialog] code",
+            "nth": 1
+          },
+          "env": "LANGFUSE_PUBLIC_KEY"
+        },
+        {
+          "kind": "click",
+          "goal": "click Close",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Close",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        }
+      ]
+    }
+  ]
+}

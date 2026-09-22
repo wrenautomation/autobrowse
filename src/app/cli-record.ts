@@ -341,10 +341,16 @@ export function registerRecordCommands(
       `A model finishes the compiled workflow under ${COMPILED_DIR}/<name> (plan inputs, a send gate before the irreversible step, a proof read, a gate test), judged by tsc and its test; the files stay as they were when it gives up`,
     )
     .option("--brief <text>", "something to tell the model (what to add, what the site does)")
-    .action(async (name: string, o: { brief?: string }) => {
+    .option("--rounds <n>", "model rounds before it gives up", "3")
+    .action(async (name: string, o: { brief?: string; rounds: string }) => {
       const { backend } = local();
       if (!backend.finish) throw new Error("finish needs a model: set a model key");
-      const out = await backend.finish(name, o.brief);
+      const out = await backend.finish(name, {
+        ...(o.brief ? { brief: o.brief } : {}),
+        rounds: Number(o.rounds),
+        onRound: (round, errors) =>
+          console.log(`round ${round} failed: ${errors.split("\n").slice(0, 2).join(" ")}`),
+      });
       console.log(finishLine(out));
       if (out.status === "gave-up") process.exitCode = 1;
     });

@@ -179,6 +179,7 @@ describe("instagram and tiktok consents and OAuth shapes", () => {
       "tiktok",
       "outlook",
       "gmail",
+      "langfuse",
       "meta",
       "x",
     ]);

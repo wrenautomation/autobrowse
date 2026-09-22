@@ -59,6 +59,10 @@ export function tracedLlm(llm: Llm, sink: TraceSink): Llm {
       const startMs = Date.now();
       const base: LlmSpan["attributes"] = {
         "llm.id": llm.id,
+        // OpenTelemetry GenAI semantic conventions: any OTLP backend (Langfuse included) reads these.
+        "gen_ai.system": llm.id,
+        "gen_ai.operation.name": "chat",
+        "langfuse.observation.type": "generation",
         "llm.json": req.json ?? false,
         "llm.prompt.chars": req.prompt.length,
         "llm.system.sha": sha(req.system),
@@ -85,6 +89,9 @@ export function tracedLlm(llm: Llm, sink: TraceSink): Llm {
         const reply = await llm.complete(req);
         emit(true, {
           "llm.model": reply.model,
+          "gen_ai.response.model": reply.model,
+          "gen_ai.usage.input_tokens": reply.usage.inputTokens,
+          "gen_ai.usage.output_tokens": reply.usage.outputTokens,
           "llm.usage.input_tokens": reply.usage.inputTokens,
           "llm.usage.output_tokens": reply.usage.outputTokens,
           "llm.reply.chars": reply.text.length,

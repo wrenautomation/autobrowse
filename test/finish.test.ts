@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { finish } from "../src/compiler/finish.js";
+import { finish, parseReply } from "../src/compiler/finish.js";
 import { fakeLlm } from "../src/llm/fake.js";
 
 function dir() {
@@ -18,7 +18,7 @@ describe("finish", () => {
   it("writes the model's files once the check passes", async () => {
     const d = dir();
     const llm = fakeLlm([
-      { "index.ts": "export const v = 2;\n", "index.test.ts": "// test v2\n", notes: "split" },
+      "=== index.ts ===\nexport const v = 2;\n=== index.test.ts ===\n// test v2\n=== NOTES ===\nsplit\n",
     ]);
     const checked: string[] = [];
     const out = await finish({
@@ -44,8 +44,8 @@ describe("finish", () => {
   it("feeds the errors back and restores the originals when it gives up", async () => {
     const d = dir();
     const llm = fakeLlm([
-      { "index.ts": "bad 1\n", notes: "" },
-      { "index.ts": "bad 2\n", notes: "" },
+      "=== index.ts ===\nbad 1\n=== NOTES ===\n",
+      "=== index.ts ===\nbad 2\n=== NOTES ===\n",
     ]);
     const out = await finish({
       llm,
@@ -65,7 +65,7 @@ describe("finish", () => {
   it("leaves a module the model calls finished alone", async () => {
     const d = dir();
     const out = await finish({
-      llm: fakeLlm([{ unchanged: true, notes: "already gated" }]),
+      llm: fakeLlm(["UNCHANGED\n=== NOTES ===\nalready gated\n"]),
       dir: d,
       check: async () => {
         throw new Error("no check when unchanged");
@@ -81,7 +81,7 @@ describe("finish on a failing model", () => {
     const d = mkdtempSync(join(tmpdir(), "finish-"));
     writeFileSync(join(d, "index.ts"), "orig\n");
     writeFileSync(join(d, "index.test.ts"), "orig test\n");
-    const llm = fakeLlm([{ "index.ts": "try 1\n", notes: "" }]);
+    const llm = fakeLlm(["=== index.ts ===\ntry 1\n=== NOTES ===\n"]);
     await expect(finish({ llm, dir: d, check: async () => "typecheck:\nno" })).rejects.toThrow(
       /no reply scripted/,
     );
@@ -105,8 +105,8 @@ describe("dropped", () => {
     writeFileSync(join(d, "index.ts"), "deps.sink.put(x)\n");
     writeFileSync(join(d, "index.test.ts"), "t\n");
     const llm = fakeLlm([
-      { "index.ts": "deps.browser\n", notes: "" },
-      { "index.ts": "deps.sink.put(x)\ndeps.browser\n", notes: "kept" },
+      "=== index.ts ===\ndeps.browser\n=== NOTES ===\n",
+      "=== index.ts ===\ndeps.sink.put(x)\ndeps.browser\n=== NOTES ===\nkept\n",
     ]);
     const checks: string[] = [];
     const out = await finish({
@@ -120,5 +120,34 @@ describe("dropped", () => {
     expect(out.status).toBe("finished");
     expect(checks).toEqual(["deps.sink.put(x)\ndeps.browser\n"]);
     expect(llm.requests[1]?.prompt).toContain("behaviour dropped");
+  });
+});
+
+describe("parseReply", () => {
+  it("takes whole files between markers, fences and all", () => {
+    const r = parseReply(
+      "=== index.ts ===\n```ts\nconst a = `x` + 1;\n```\n=== index.test.ts ===\nit();\n=== NOTES ===\ndid it\nand more\n",
+    );
+    expect(r).toMatchObject({
+      unchanged: false,
+      module: "const a = `x` + 1;\n",
+      test: "it();\n",
+      notes: "did it",
+    });
+  });
+
+  it("reads UNCHANGED, and gives null for a missing section", () => {
+    expect(parseReply("UNCHANGED\n=== NOTES ===\nnothing to do\n")).toMatchObject({
+      unchanged: true,
+      notes: "nothing to do",
+    });
+    expect(parseReply("=== index.ts ===\nx\n").test).toBeNull();
+  });
+});
+
+describe("clean", () => {
+  it("drops what a compiler will not take", async () => {
+    const { clean } = await import("../src/compiler/finish.js");
+    expect(clean("const​ a = “x”;")).toBe('const a = "x";');
   });
 });
