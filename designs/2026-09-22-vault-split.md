@@ -1,7 +1,7 @@
 # The vault leaves autobrowse (credvault)
 
 2026-09-22. Status: step 1 done (credvault on npm, autobrowse on it); expiry kept since 0.2.0;
-every credential mirrored to SSM since 0.3.0. Named credkeep until 0.3.0 (deprecated on npm).
+every credential in SSM since 0.3.0; SSM is the truth since 0.4.0. Named credkeep until 0.3.0 (deprecated on npm).
 
 ## Why
 
@@ -52,16 +52,26 @@ Until 0.3.0, 12 of 16 logins and every passkey and recovery code lived only
 in the sealed file on one Mac, under a Keychain key on that Mac. Time
 Machine was not mounting. A lost Mac lost them.
 
-Now SSM (`/autobrowse/config/AUTOBROWSE_CRED_*`, SecureString, KMS) holds
-the full copy:
+Now SSM (`/autobrowse/config/AUTOBROWSE_CRED_*`, SecureString, KMS) is
+the truth, and the file on each machine is its offline copy
+(`syncedCredentials`, credvault 0.4.0):
 - every field travels: strings as they are, passkeys and recovery codes as
   JSON
-- `mirroredCredentials` copies each write to SSM after the local write;
-  a failed copy is printed with the `creds push <site>` that repairs it
+- a read asks SSM for that site (one call for up to ten fields, reused
+  60s, 3s timeout) and refreshes the file when they differ; offline, the
+  file answers
+- a write lands in the file, then in SSM; a failed copy prints the
+  `creds push <site>` that repairs it
 - a push clears fields a credential no longer has (used codes)
 - canaries never leave the machine
-- `creds pull` on a new Mac rebuilds the file; passkeys merge by id
-- `CREDENTIALS_MIRROR=off` turns it off
+- no pull chore: a new machine's first read of a site fills its file.
+  `creds pull` fills it all at once, e.g. before going offline
+- the box reads SSM live too. Env baked in at deploy is only the fallback,
+  so a changed password is never stale there
+- `CREDENTIALS_SHARED=off` turns it off
+
+No Redis or cache server: a handful of reads a day, and SSM is already
+the shared store.
 
 Checked 2026-09-22: `creds push --all`, then a rebuild from SSM alone
 matched the file for all 16 sites.

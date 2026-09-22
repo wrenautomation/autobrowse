@@ -275,7 +275,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
   creds
     .command("push [sites...]")
     .description(
-      "This machine's stored credentials into the env store (SSM) as AUTOBROWSE_CRED_<SITE>_*, every field; writes already copy themselves, so this repairs a missed copy; --all for every site; nothing printed",
+      "This machine's stored credentials into the env store (SSM) as AUTOBROWSE_CRED_<SITE>_*, every field; writes already land there, so this repairs a missed one; --all for every site; nothing printed",
     )
     .option("--all", "every stored site (canaries never travel)")
     .action(async (sites: string[], o: { all?: boolean }) => {
@@ -284,7 +284,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       const { envStoreFor } = await import("./services.js");
       // Unarmed: the push reads every site to skip the canaries; an armed read of one would trip it.
       const pushed = await pushCredentials(
-        credentialsFor(settings, { armed: false }),
+        credentialsFor(settings, { armed: false, shared: false }),
         envStoreFor(settings),
         sites,
         CRED_ENV,
@@ -295,7 +295,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
   creds
     .command("pull [sites...]")
     .description(
-      "Credentials from the env store into this machine's sealed file (a new laptop rebuilds everything this way); a site already here is kept unless --overwrite; passkeys here are never dropped",
+      "Credentials from the env store into this machine's sealed file (reads fill it on their own; this fills it all at once, e.g. before going offline); a site already here is kept unless --overwrite; passkeys here are never dropped",
     )
     .option("--overwrite", "replace what is here with the store's copy")
     .action(async (sites: string[], o: { overwrite?: boolean }) => {
@@ -303,7 +303,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       const { envStoreFor } = await import("./services.js");
       const r = await pullCredentials(
         envStoreFor(settings),
-        credentialsFor(settings, { armed: false, mirror: false }),
+        credentialsFor(settings, { armed: false, shared: false }),
         sites,
         { ...CRED_ENV, ...(o.overwrite ? { overwrite: true } : {}) },
       );

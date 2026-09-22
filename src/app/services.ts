@@ -14,10 +14,10 @@ import {
   fileCredentials,
   keychainKey,
   layeredCredentials,
-  mirroredCredentials,
   plainCipher,
   type SecretAudit,
   ssmEnvStore,
+  syncedCredentials,
 } from "credvault";
 import type { Logger } from "pino";
 import { fileStepLedger, type StepLedger } from "../agent/ledger.js";
@@ -355,25 +355,31 @@ export function credentialsFor(
     armed?: boolean;
     notify?: CanaryOptions["notify"];
     by?: string;
-    /** Off for a pull: what came from the store need not go back. */
-    mirror?: boolean;
+    /** Off for a pull or a push: the file alone, not the shared store. */
+    shared?: boolean;
   } = {},
 ): CredentialStore {
   const cipher =
     settings.credentialsCipher === "keychain" ? aesGcmCipher(keychainKey(KEYCHAIN)) : plainCipher;
   const file = fileCredentials(settings.credentialsFile, cipher);
-  // Every write also lands in SSM, so losing this machine loses no credential.
-  const local =
-    settings.credentialsMirror === "ssm" && o.mirror !== false
-      ? mirroredCredentials(file, envStoreFor(settings), {
-          ...CRED_ENV,
-          onMirrorError: (site, err) =>
-            console.error(
-              `${site}: kept here, not copied to the store (${err instanceof Error ? err.message : String(err)}); autobrowse creds push ${site}`,
-            ),
-        })
-      : file;
-  const store = layeredCredentials([envCredentials(process.env, CRED_ENV), local]);
+  const env = envCredentials(process.env, CRED_ENV);
+  // SSM is the truth: reads ask it first and refresh the file, writes land in both.
+  // Env baked in at deploy is only the fallback, so a changed password is never stale on the box.
+  const store =
+    settings.credentialsShared === "ssm" && o.shared !== false
+      ? (() => {
+          const synced = syncedCredentials(file, envStoreFor(settings), {
+            ...CRED_ENV,
+            onSharedError: (site, err, during) => {
+              if (during === "write")
+                console.error(
+                  `${site}: kept here, not in the shared store (${err instanceof Error ? err.message : String(err)}); autobrowse creds push ${site}`,
+                );
+            },
+          });
+          return layeredCredentials([synced, env], synced);
+        })()
+      : layeredCredentials([env, file]);
   if (o.armed === false) return store;
   return canaryStore(store, {
     audit: auditFor(settings),

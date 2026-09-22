@@ -75,7 +75,7 @@
     "@restatedev/restate-sdk-tunnel": "1.17.1",
     "@sentry/node": "10.75.0",
     "commander": "15.0.0",
-    "credvault": "0.3.0",
+    "credvault": "0.4.0",
     "hono": "4.13.8",
     "pino": "10.3.1",
     "playwright": "1.63.0",
