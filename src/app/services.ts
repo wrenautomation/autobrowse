@@ -179,9 +179,12 @@ export function traceSinkFor(settings: Settings, http = httpClient()): TraceSink
 }
 
 /** The model behind everything: traced when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, under the daily cap when one is (`LLM_DAILY_TOKENS`). */
+/** A model writing a whole file takes minutes, not the 30 s a JSON API gets. */
+const LLM_TIMEOUT_MS = 180_000;
+
 export function llmFor(
   settings: Settings,
-  http = httpClient(),
+  http = httpClient({ timeoutMs: LLM_TIMEOUT_MS }),
   onExceeded?: (err: BudgetExceeded) => void,
 ): BudgetedLlm | Llm | null {
   const raw = makeLlm(

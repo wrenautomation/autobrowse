@@ -39,10 +39,9 @@ last mile of a compile be done by a model too.
 3. ✅ `tracedLlm` + OTLP sink; `OTEL_*` settings
 4. ✅ `send` gate for compiled irreversible steps (the `human` gate was
    the host's; approving it reran the step into the same gate)
-5. `compile --finish`: a model finishes the rendered file (inputs the
-   recording hard-coded, fill/submit split, proof reads) inside the
-   typecheck + test loop, on a branch; heal triggers it — see
-   `2026-09-22-self-finishing-compile.md` once built
+5. ✅ `compile --finish` / `finish <name>`: a model finishes the rendered
+   file inside the typecheck + test loop; heal triggers it —
+   `2026-09-22-self-finishing-compile.md`
 6. Langfuse/Honeycomb key minted by `site setup` and pushed to SSM
    (William's account first)
 7. Span per browser act (`fp.act`) under the same trace, once the LLM

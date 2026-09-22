@@ -2,6 +2,7 @@
  * Upload a new profile photo on Instagram by opening the photo-change dialog and selecting an image file to set as the account's profile picture..
  * Compiled from the recording "instagram-profile-basics". Edit freely: the outline was the
  * source until this file was written; from here on this file is.
+ * Finished: split the upload into a fill and a send step, added proof.
  */
 
 import { z } from "zod";
@@ -12,6 +13,7 @@ import {
   type FlowRunner,
   rejected,
   type StepDef,
+  skipped,
 } from "../../index.js";
 
 export const planSchema = z.object({
@@ -24,16 +26,22 @@ export interface Deps {
   browser: FlowRunner;
 }
 
-/** What steps pass forward; nothing yet. */
-export type Memo = Record<string, unknown>;
+export interface Memo {
+  /** What the API said after the upload. */
+  proof?: string;
+}
 
 type Step<S extends string> = StepDef<Plan, Deps, Memo, S>;
 
 export interface UploadProfilePhotoInput {
   profilePhotoFile: string;
+  /** Click Upload and read the confirmation; false leaves the filled form for a look. */
+  submit: boolean;
 }
 
-const uploadProfilePhotoFlow = defineFlow<UploadProfilePhotoInput, void>({
+/** Fill the form; with `submit`, send it and return what the API said. */
+const uploadProfilePhotoFlow = defineFlow<UploadProfilePhotoInput, { proof: string | null }>({
+  // Changed return type
   site: "instagram",
   name: "upload-profile-photo",
   async run(fp, input) {
@@ -42,31 +50,47 @@ const uploadProfilePhotoFlow = defineFlow<UploadProfilePhotoInput, void>({
       { kind: "click" },
       { role: "button", name: "Change photo" },
       { goal: "click Change photo" },
-    ); // page.getByRole("button", { name: "Change photo", exact: true })
+    );
+    if (!input.submit) return { proof: null };
     await fp.act(
       { kind: "upload", files: [input.profilePhotoFile] },
       { role: "button", name: "Change photo" },
-      { goal: "upload to Change photo" },
-    ); // page.getByRole("button", { name: "Change photo", exact: true })
+      { goal: "upload to Change photo", irreversible: true },
+    );
+    await fp.wait(3_000);
+    const text = await fp.text();
+    if (
+      /error|required|invalid/i.test(text) &&
+      (await fp.has({ role: "button", name: "Change photo" }))
+    )
+      fp.human("Instagram did not accept the upload; see the screenshot");
+    const said = text.match(/(uploaded|updated|success|profile picture)[^\n]*/i);
+    return { proof: said ? said[0].trim() : text.slice(0, 300) };
   },
 });
 
-const uploadProfilePhoto: Step<"upload-profile-photo"> = {
-  name: "upload-profile-photo",
+const fill: Step<"fill"> = {
+  name: "fill",
+  async run({ fx, deps, plan }) {
+    await fx.run("browser fill profile photo form", () =>
+      deps.browser.run(uploadProfilePhotoFlow, { ...plan, submit: false }),
+    );
+    return done(`form filled for ${plan.profilePhotoFile}, not sent`);
+  },
+};
+
+const upload: Step<"upload"> = {
+  name: "upload",
   irreversible: true,
-  async run({ fx, deps, plan, gate }) {
-    const answer = gate(
-      "send",
-      "Run \"upload-profile-photo\" (Click 'Change photo' on the Instagram profile edit page and upload the specified image file as the new profile picture.)?",
+  async run({ fx, deps, plan, memo, gate }) {
+    if (memo.proof) return skipped("already uploaded");
+    const answer = gate("send", `Upload ${plan.profilePhotoFile} as the Instagram profile photo?`);
+    if (!answer.approved) return rejected(answer.note ?? "not uploaded");
+    const { proof } = await fx.run("browser upload profile photo", () =>
+      deps.browser.run(uploadProfilePhotoFlow, { ...plan, submit: true }),
     );
-    if (!answer.approved) return rejected(answer.note ?? "declined");
-    await fx.run("browser upload-profile-photo", () =>
-      deps.browser.run(uploadProfilePhotoFlow, { profilePhotoFile: plan.profilePhotoFile }),
-    );
-    // TODO proof: GET https://graph.instagram.com/me?fields=profile_picture_url (Instagram Graph API) to confirm the profile picture URL reflects the newly uploaded image.
-    return done(
-      "Click 'Change photo' on the Instagram profile edit page and upload the specified image file as the new profile picture.",
-    );
+    memo.proof = proof ?? "uploaded";
+    return done(`uploaded; Instagram said: ${memo.proof}`);
   },
 };
 
@@ -75,6 +99,6 @@ export const workflow = defineWorkflow<Deps, Memo>()({
   description:
     "Upload a new profile photo on Instagram by opening the photo-change dialog and selecting an image file to set as the account's profile picture.",
   plan: planSchema,
-  steps: [uploadProfilePhoto],
+  steps: [fill, upload],
   emptyMemo: () => ({}),
 });

@@ -6,6 +6,7 @@
  * its own. Dependency rule: adapters depend on this interface and on
  * `backendFor`; nothing here knows about Hono or commander.
  */
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type HealOutcome, healFailure } from "../agent/heal.js";
 import { type AgentSessions, agentSessions } from "../agent/sessions.js";
@@ -14,8 +15,17 @@ import { type LedgerWindow, ledgerSince } from "../auth/ledger.js";
 import { SITE_LOGINS } from "../auth/sites.js";
 import { type FlowRunner, flowRunner } from "../browser/flow.js";
 import type { FailureRecord } from "../browser/session.js";
-import type { Compiled, Outline } from "../compiler/index.js";
-import { compile, loadOutline, rerender, saveOutline, writeRendered } from "../compiler/index.js";
+import type { Compiled, FinishOutcome, Outline } from "../compiler/index.js";
+import {
+  checkCompiled,
+  compile,
+  finish,
+  format,
+  loadOutline,
+  rerender,
+  saveOutline,
+  writeRendered,
+} from "../compiler/index.js";
 import type { SecretSink } from "../deps/sink.js";
 import type { Ability } from "../do/catalog.js";
 import type { Doer } from "../do/doer.js";
@@ -75,6 +85,8 @@ export interface Backend {
     save(name: string, outline: Outline): Promise<Compiled>;
   };
   compile(rec: Recording): Promise<Compiled>;
+  /** A model finishes a compiled workflow (plan inputs, send gate, proof read) inside the typecheck+test loop; absent without a model. */
+  finish?(name: string, brief?: string): Promise<FinishOutcome>;
   /** Where prove/heal run; one per process, injectable for tests. */
   jobs?: Jobs;
   ingress: Ingress;
@@ -136,6 +148,39 @@ export async function compileRecording(rec: Recording, llm: Llm | null): Promise
   return out;
 }
 
+/** The hand-finished workflow every model finish imitates; null when it is not checked out here. */
+const EXEMPLAR = "aws-port25-request";
+
+async function exemplarFor(name: string): Promise<{ module: string; test: string } | null> {
+  if (name === EXEMPLAR) return null;
+  const dir = join(COMPILED_DIR, EXEMPLAR);
+  try {
+    const [module, test] = await Promise.all([
+      readFile(join(dir, "index.ts"), "utf8"),
+      readFile(join(dir, "index.test.ts"), "utf8"),
+    ]);
+    return { module, test };
+  } catch {
+    return null;
+  }
+}
+
+/** The model's last mile on a compiled workflow, judged by tsc and vitest; the files stay as they were when it gives up. */
+export async function finishCompiled(
+  name: string,
+  llm: Llm,
+  brief?: string,
+): Promise<FinishOutcome> {
+  return finish({
+    llm,
+    dir: join(COMPILED_DIR, name),
+    check: (dir) => checkCompiled(dir),
+    exemplar: await exemplarFor(name),
+    format,
+    ...(brief ? { brief } : {}),
+  });
+}
+
 /** The outline beside a compiled module is its edit surface; saving re-renders through the heal's path. */
 export const outlineEditor = (): NonNullable<Backend["outline"]> => ({
   load: (name) => loadOutline(join(COMPILED_DIR, name)).catch(() => null),
@@ -147,6 +192,7 @@ export function healer(
   agent: AgentSessions,
   settings: Settings,
   prove?: (name: string) => Promise<Proof>,
+  llm?: Llm | null,
 ): (record: FailureRecord) => Promise<HealOutcome> {
   return (record) =>
     healFailure(record, {
@@ -155,6 +201,12 @@ export function healer(
       recordingsDir: expandHome(settings.recordingsDir),
       lib: COMPILED_LIB,
       ...(prove ? { prove: async (name: string) => proofLine(await prove(name)) } : {}),
+      ...(llm
+        ? {
+            finish: (name: string, step: string) =>
+              finishCompiled(name, llm, `step "${step}" was just rewritten from a heal`),
+          }
+        : {}),
     });
 }
 
@@ -318,10 +370,14 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
     screen: app.screen,
     accounts: accountsOf({ store: app.credentials, logins: SITE_LOGINS, runner: app.browser }),
     ...(agent
-      ? { agent, heal: healer(agent, settings, o.proveAfterHeal === false ? undefined : prove) }
+      ? {
+          agent,
+          heal: healer(agent, settings, o.proveAfterHeal === false ? undefined : prove, o.llm),
+        }
       : {}),
     outline: outlineEditor(),
     compile: (rec) => compileRecording(rec, o.llm),
+    ...(o.llm ? { finish: (name, brief) => finishCompiled(name, o.llm as Llm, brief) } : {}),
     ingress: o.ingress,
     bus: app.bus,
     recordingsDir,

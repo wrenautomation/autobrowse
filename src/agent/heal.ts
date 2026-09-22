@@ -12,7 +12,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { FailureRecord } from "../browser/session.js";
-import { loadOutline, rerender } from "../compiler/index.js";
+import { type FinishOutcome, loadOutline, rerender } from "../compiler/index.js";
 import type { Outline } from "../compiler/outline.js";
 import { structure } from "../compiler/structure.js";
 import { loadRecording } from "../recorder/store.js";
@@ -28,6 +28,8 @@ export interface HealOptions {
   lib: string;
   /** Run the healed workflow once; returns one line. Absent = no proof. */
   prove?: (workflow: string) => Promise<string>;
+  /** After the re-render: the model's finish (plan inputs, gates, proof reads) under tsc+vitest. Absent = template output stands. */
+  finish?: (workflow: string, step: string) => Promise<FinishOutcome>;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
 }
@@ -153,18 +155,26 @@ export async function healFailure(record: FailureRecord, o: HealOptions): Promis
   const healed = structure(await loadRecording(o.recordingsDir, recName));
   const outline = spliceStep(found.outline, found.stepIndex, healed);
   await rerender(found.dir, outline, { lib: o.lib });
-  if (!o.prove)
-    return {
-      ...base,
-      status: "healed",
-      summary: `step "${record.flow}" rewritten from the repair; not yet proven`,
-    };
+  const finished = o.finish
+    ? await o.finish(found.name, record.flow).catch((err: Error) => ({
+        status: "gave-up" as const,
+        rounds: 0,
+        usage: { inputTokens: 0, outputTokens: 0 },
+        summary: err.message,
+      }))
+    : null;
+  const rewritten = `step "${record.flow}" rewritten from the repair${
+    finished
+      ? `, ${finished.status === "finished" ? "finished" : finished.status} by the model`
+      : ""
+  }`;
+  if (!o.prove) return { ...base, status: "healed", summary: `${rewritten}; not yet proven` };
   const proof = await o.prove(found.name).catch((err: Error) => `proof failed: ${err.message}`);
   const ok = proof.startsWith("proven");
   return {
     ...base,
     status: ok ? "healed" : "proof-failed",
-    summary: `step "${record.flow}" rewritten from the repair; ${proof}`,
+    summary: `${rewritten}; ${proof}`,
   };
 }
 

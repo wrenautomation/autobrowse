@@ -134,11 +134,23 @@ describe("heal", () => {
       list: () => views,
     } as never;
     const proven: string[] = [];
+    const finished: string[] = [];
     const out = await healFailure(record, {
       agent,
       compiledDir: root,
       recordingsDir: recs,
       lib: "../../index.js",
+      finish: async (name, step) => {
+        // After the re-render, before the proof: what the model finishes is what gets proven.
+        expect(proven).toEqual([]);
+        finished.push(`${name}/${step}`);
+        return {
+          status: "finished",
+          rounds: 1,
+          usage: { inputTokens: 1, outputTokens: 1 },
+          summary: "gate added",
+        };
+      },
       prove: async (name) => {
         proven.push(name);
         return "proven 2026-09-21T00:00";
@@ -147,6 +159,8 @@ describe("heal", () => {
     });
     expect(out.status).toBe("healed");
     expect(proven).toEqual(["set-thing"]);
+    expect(finished).toEqual(["set-thing/save-thing"]);
+    expect(out.summary).toMatch(/finished by the model/);
     const rewritten = JSON.parse(
       readFileSync(join(root, "set-thing", "outline.json"), "utf8"),
     ) as Outline;

@@ -6,6 +6,9 @@ interface ChatResponse {
   model: string;
   choices: Array<{ message: { content: string | null } }>;
   usage?: { prompt_tokens: number; completion_tokens: number };
+  /** The provider's reason on a 4xx (a model name, a token limit); never a secret. */
+  error?: { message?: string };
+  message?: string;
 }
 
 export function openaiLlm(opts: {
@@ -31,7 +34,10 @@ export function openaiLlm(opts: {
           ],
         },
       });
-      if (!r.ok || !r.body) throw new Error(`openai: HTTP ${r.status}`);
+      if (!r.ok || !r.body) {
+        const why = (r.body?.error?.message ?? r.body?.message ?? "").slice(0, 200);
+        throw new Error(`openai: HTTP ${r.status}${why ? ` ${why}` : ""}`);
+      }
       return {
         text: r.body.choices[0]?.message.content ?? "",
         usage: {

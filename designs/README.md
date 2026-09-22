@@ -20,5 +20,6 @@ decided. Each ends with a ranked "where to attack"; ✅ marks what landed.
 | [site-apis](2026-09-21-site-apis.md) | a site as a service under its official REST shape |
 | [accounts](2026-09-22-accounts.md) | accounts the agent makes; which account is for what |
 | [performance](2026-09-22-performance.md) | bounded stores, cached reads, what crosses a wire |
-| [observability](2026-09-22-observability.md) | chained ledgers, agent sessions as runs, step ledger, OTLP traces; self-finishing compiles |
+| [observability](2026-09-22-observability.md) | chained ledgers, agent sessions as runs, step ledger, OTLP traces |
+| [self-finishing-compile](2026-09-22-self-finishing-compile.md) | a model does the last mile on a compiled workflow under tsc + its test; heal uses it |
 | [secrets-and-money-sandbox](2026-09-22-secrets-and-money-sandbox.md) | credentials, spend policy, virtual cards |

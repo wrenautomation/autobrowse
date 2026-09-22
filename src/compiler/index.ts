@@ -65,7 +65,7 @@ export async function writeRendered(dir: string, r: Rendered): Promise<string[]>
 }
 
 /** The repo's formatter over what was written, so compiled code passes the same gates as hand-written code. Best effort. */
-async function format(files: string[]): Promise<void> {
+export async function format(files: string[]): Promise<void> {
   const biome = join(process.cwd(), "node_modules", ".bin", "biome");
   if (!existsSync(biome)) return;
   await new Promise<void>((resolve) => {
@@ -73,6 +73,8 @@ async function format(files: string[]): Promise<void> {
   });
 }
 
+export { checkCompiled } from "./check.js";
+export { type FinishOptions, type FinishOutcome, finish } from "./finish.js";
 export { OUTLINE_FILE, type Outline, type OutlineStep, outlineSchema } from "./outline.js";
 export { polish } from "./polish.js";
 export { type Rendered, type RenderOptions, render } from "./render.js";

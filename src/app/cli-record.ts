@@ -307,7 +307,11 @@ export function registerRecordCommands(
     )
     .option("--no-llm", "skip the model pass (names, proofs); pure template output")
     .option("--from-outline", "re-render <name>'s edited outline.json instead of re-structuring")
-    .action(async (name: string, o: { llm: boolean; fromOutline?: boolean }) => {
+    .option(
+      "--finish",
+      "then a model finishes it (plan inputs, send gate, proof read) until tsc and its test pass",
+    )
+    .action(async (name: string, o: { llm: boolean; fromOutline?: boolean; finish?: boolean }) => {
       const { loadRecording } = await import("../recorder/store.js");
       const { backend } = local({ llm: o.llm });
       if (o.llm && !backend.llm) console.log("no model key set; template output only");
@@ -326,7 +330,33 @@ export function registerRecordCommands(
       console.log(
         `steps: ${out.outline.steps.map((s) => `${s.name}${s.irreversible ? "!" : ""}`).join(" → ")}`,
       );
+      if (o.finish) {
+        if (!backend.finish) throw new Error("--finish needs a model: set a model key");
+        console.log(finishLine(await backend.finish(out.outline.name)));
+      }
     });
+  program
+    .command("finish <name>")
+    .description(
+      `A model finishes the compiled workflow under ${COMPILED_DIR}/<name> (plan inputs, a send gate before the irreversible step, a proof read, a gate test), judged by tsc and its test; the files stay as they were when it gives up`,
+    )
+    .option("--brief <text>", "something to tell the model (what to add, what the site does)")
+    .action(async (name: string, o: { brief?: string }) => {
+      const { backend } = local();
+      if (!backend.finish) throw new Error("finish needs a model: set a model key");
+      const out = await backend.finish(name, o.brief);
+      console.log(finishLine(out));
+      if (out.status === "gave-up") process.exitCode = 1;
+    });
+}
+
+function finishLine(out: {
+  status: string;
+  rounds: number;
+  summary: string;
+  usage: { inputTokens: number; outputTokens: number };
+}): string {
+  return `finish: ${out.status} after ${out.rounds} round(s), ${out.usage.inputTokens} in / ${out.usage.outputTokens} out — ${out.summary}`;
 }
 
 interface AgentRun {
