@@ -61,7 +61,12 @@ export function consentLoginOf(s: SiteApi): string | null {
   return spec && "flow" in spec.consent ? (spec.consent.flow.split("/")[0] ?? null) : null;
 }
 
-const has = (env: NeedsContext["env"], names: readonly string[]) => names.every((n) => env(n));
+/** In hand: in this process's env, or in the store the sink writes (SSM holds what the laptop's .env may not). */
+async function holds(ctx: NeedsContext, name: string): Promise<boolean> {
+  return Boolean(ctx.env(name)) || Boolean((await ctx.kept?.())?.some((e) => e.name === name));
+}
+const holdsAll = async (ctx: NeedsContext, names: readonly string[]) =>
+  (await Promise.all(names.map((n) => holds(ctx, n)))).every(Boolean);
 
 /** A minted token is renewed this long before it lapses. */
 export const RENEW_WITHIN_MS = 14 * 86_400_000;
@@ -120,7 +125,7 @@ export function siteNeeds(ctx: NeedsContext): Need[] {
         ...(login && login !== "google"
           ? { after: `login-${ctx.logins.find((x) => x.site === login)?.credential ?? login}` }
           : {}),
-        check: async () => has(ctx.env, keyNames),
+        check: () => holdsAll(ctx, keyNames),
       });
       const tokenNames = [oauth.refreshToken, ...(oauth.accessToken ? [oauth.accessToken] : [])];
       out.push({
@@ -130,7 +135,7 @@ export function siteNeeds(ctx: NeedsContext): Need[] {
         unlocks: `${s.site} calls as the site's own account`,
         how: [`autobrowse site setup ${s.site} ${spec.name}`],
         after: `keys-${s.site}`,
-        check: async () => tokenNames.some((n) => ctx.env(n)),
+        check: async () => (await Promise.all(tokenNames.map((n) => holds(ctx, n)))).some(Boolean),
       });
     } else if ("token" in s.auth) {
       const token = s.auth.token;
@@ -146,7 +151,7 @@ export function siteNeeds(ctx: NeedsContext): Need[] {
           `or put ${token} in .env, then autobrowse env push ${token}`,
         ],
         // Present and not about to lapse: a token inside the renew window reopens the row.
-        check: async () => Boolean(ctx.env(token)) && !(await lapsing(ctx, token)),
+        check: async () => (await holds(ctx, token)) && !(await lapsing(ctx, token)),
       });
     }
   }
@@ -183,7 +188,7 @@ export function accountNeeds(ctx: NeedsContext): Need[] {
       after: `login-google-${label}`,
       check: async () =>
         signupInbox(id.address, { env: ctx.env, workspaceDomain: ctx.workspaceDomain }) ||
-        Boolean(ctx.env(accountEnv(gmailOAuth.refreshToken, id.address))),
+        (await holds(ctx, accountEnv(gmailOAuth.refreshToken, id.address))),
     });
   }
   return out;
@@ -235,7 +240,7 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
       how: [
         "Twilio console → upgrade → buy a number; TWILIO_NUMBER in .env; autobrowse env push TWILIO_NUMBER",
       ],
-      check: async () => Boolean(ctx.env("TWILIO_NUMBER")),
+      check: () => holds(ctx, "TWILIO_NUMBER"),
     },
     {
       id: "anthropic-credits",
@@ -308,7 +313,7 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
         "autobrowse site setup youtube consent --account william@wrenautomation.com",
         "if Google blocks it: add that address as a test user on the Cloud project's OAuth consent screen first",
       ],
-      check: async () => Boolean(ctx.env(accountEnv(youtubeOAuth.refreshToken, WREN_ADDRESS))),
+      check: () => holds(ctx, accountEnv(youtubeOAuth.refreshToken, WREN_ADDRESS)),
     },
     {
       id: "linkedin-page",

@@ -36,10 +36,11 @@ const ctx = (env: Record<string, string>, extra: Partial<NeedsContext> = {}): Ne
 describe("needs", () => {
   it("reopens a minted token's row inside the renew window, and its first line mints a new one", async () => {
     const day = 86_400_000;
+    // Only in the shared store (SSM), not this process's env: still in hand.
     const row = (expiresInDays: number | null) =>
       siteNeeds(
         ctx(
-          { NPM_TOKEN: "t" },
+          {},
           {
             sites: [npm],
             kept: async () => [
