@@ -1,6 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { memoryCredentials } from "credkeep";
 import { describe, expect, it } from "vitest";
 import { setupArgs } from "../src/app/cli-needs.js";
 import {
@@ -14,7 +15,6 @@ import {
   signupNeeds,
   siteNeeds,
 } from "../src/app/needs.js";
-import { memoryCredentials } from "../src/auth/credentials.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";
 import { gmail, meta, youtube } from "../src/sites/index.js";
 

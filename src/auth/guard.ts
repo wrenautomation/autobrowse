@@ -5,55 +5,9 @@
  * ledger: which credential, which field, which site, which page, by whom.
  * Values are never written anywhere here.
  */
+
+import type { Credential, SecretAudit, SecretUse, TrackingSecrets } from "credkeep";
 import type { BrowserFlow, FlowPage, FlowRunner } from "../browser/flow.js";
-import { chainedFile } from "../deps/chain.js";
-import type { SecretSource } from "../deps/secrets.js";
-import type { Credential } from "./credentials.js";
-
-export interface SecretUse {
-  at: string;
-  /** The credential's store name (`google`, `google@will`). */
-  credential: string;
-  field: "password" | "previousPassword" | "secret";
-  /** The site the session is on (the profile). */
-  site: string;
-  /** The page, without its query (tokens ride in queries). */
-  url: string;
-  /** Who used it: `login`, `place`, a flow name. */
-  by: string;
-  allowed: boolean;
-}
-
-export interface SecretAudit {
-  record(use: SecretUse): Promise<void>;
-  /** Newest last. */
-  recent(n?: number): Promise<SecretUse[]>;
-}
-
-/** JSON lines, owner-only, appended. */
-/** The file ledger is hash-chained (`deps/chain.ts`): `ledger verify` finds any edit. */
-export function fileAudit(path: string): SecretAudit {
-  const file = chainedFile<SecretUse>(path);
-  return {
-    async record(use) {
-      await file.append(use);
-    },
-    recent: (n = 50) => file.recent(n),
-  };
-}
-
-export function memoryAudit(): SecretAudit & { uses: SecretUse[] } {
-  const uses: SecretUse[] = [];
-  return {
-    uses,
-    async record(u) {
-      uses.push(u);
-    },
-    async recent(n = 50) {
-      return uses.slice(-n);
-    },
-  };
-}
 
 export class SecretLeak extends Error {
   constructor(
@@ -185,24 +139,6 @@ export function guardedPage(fp: FlowPage, g: GuardOptions): FlowPage {
     by: g.by,
     audit: g.audit,
   });
-}
-
-/** A secret source that remembers what it handed out, so a page can tell a secret's value from any other. */
-export interface TrackingSecrets extends SecretSource {
-  /** The key a value was handed out under, or null. */
-  keyOf(value: string): string | null;
-}
-
-export function trackingSecrets(source: SecretSource): TrackingSecrets {
-  const keys = new Map<string, string>();
-  return {
-    async get(key) {
-      const value = await source.get(key);
-      keys.set(value, key);
-      return value;
-    },
-    keyOf: (value) => keys.get(value) ?? null,
-  };
 }
 
 export interface BoundRunnerOptions {

@@ -1,8 +1,8 @@
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { memoryCredentials } from "credkeep";
 import { describe, expect, it } from "vitest";
-import { memoryCredentials } from "../src/auth/credentials.js";
 import { ingest, parseCredentialLines, takeFile } from "../src/auth/ingest.js";
 
 describe("credential ingest", () => {

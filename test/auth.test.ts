@@ -1,40 +1,29 @@
-import { mkdtempSync, statSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { memoryCredentials, totp } from "credkeep";
 import { describe, expect, it } from "vitest";
+import type { Settings } from "../src/app/config.js";
+import { credentialsFor } from "../src/app/services.js";
 import {
-  credentialEnv,
-  envCredentials,
-  fileCredentials,
-  layeredCredentials,
-  pullCredentials,
-  pushCredentials,
-} from "../src/auth/credentials.js";
-import {
-  base32Decode,
   type CodeKind,
   codeSources,
   credentialFor,
   extractCode,
-  findTotpSecret,
   formLogin,
   LoginFailed,
   landAfterOauth,
   loginProvider,
   type Message,
-  memoryCredentials,
   messageSource,
-  parseOtpauth,
   resolveLogin,
   type SignInContext,
   type SiteLogin,
   signInToGoogle,
-  totp,
-  totpRemainingMs,
   totpSource,
   viaLogin,
 } from "../src/auth/index.js";
-import type { FlowPage, Op } from "../src/browser/flow.js";
+import type { FlowPage } from "../src/browser/flow.js";
 import type { Hints } from "../src/browser/locate.js";
 import { NeedsHuman } from "../src/browser/session.js";
 import { fakePage } from "./auth-fakes.js";
@@ -42,160 +31,22 @@ import { fakePage } from "./auth-fakes.js";
 // RFC 6238 test vector: secret "12345678901234567890" (base32 GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ).
 const RFC_SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
 
-describe("totp", () => {
-  it("decodes base32", () => {
-    expect(base32Decode("GEZDGNBVGY3TQOJQ").toString()).toBe("1234567890");
-    expect(base32Decode("gezd gnbv-gy3t qojq").toString()).toBe("1234567890");
-  });
-  it("matches the RFC 6238 vectors", () => {
-    expect(totp(RFC_SECRET, { at: 59_000, digits: 8 })).toBe("94287082");
-    expect(totp(RFC_SECRET, { at: 1_111_111_109_000, digits: 8 })).toBe("07081804");
-    expect(totp(RFC_SECRET, { at: 59_000 })).toBe("287082");
-  });
-  it("knows when the code rolls over", () => {
-    expect(totpRemainingMs(59_000)).toBe(1_000);
-    expect(totpRemainingMs(60_000)).toBe(30_000);
-  });
-  it("parses otpauth URIs", () => {
-    const p = parseOtpauth(
-      "otpauth://totp/Cloudflare:will%40example.com?secret=jbsw%20y3dp-ehpk3pxp&issuer=Cloudflare&digits=6",
-    );
-    expect(p).toEqual({
-      secret: "JBSWY3DPEHPK3PXP",
-      issuer: "Cloudflare",
-      account: "will@example.com",
-      digits: 6,
-      period: 30,
-      algorithm: "sha1",
-    });
-  });
-  it("finds the seed on a page: URI first, then a manual key, else nothing", () => {
-    expect(
-      findTotpSecret(
-        '<img src="data:..."><a href="otpauth://totp/X:a?secret=JBSWY3DPEHPK3PXP&amp;issuer=X">',
-      ),
-    ).toBe("JBSWY3DPEHPK3PXP");
-    expect(findTotpSecret("Can't scan? Enter this key: jbsw y3dp ehpk 3pxp")).toBe(
-      "JBSWY3DPEHPK3PXP",
-    );
-    expect(findTotpSecret("Welcome back, nothing to see")).toBeNull();
-  });
-  it("keeps the key apart from the 4-letter words after it", () => {
-    const google =
-      "Enter your email address and this key (spaces don’t matter): jbsw y3dp ehpk 3pxp jbsw y3dp ehpk 3pxp Make sure Time based is selected Tap Add to finish";
-    expect(findTotpSecret(google)).toBe("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP");
-    expect(findTotpSecret("key: jbsw y3dp ehpk 3pxp then tap add")).toBe("JBSWY3DPEHPK3PXP");
-    expect(findTotpSecret("MAKE SURE TIME BASED IS SELECTED")).toBeNull();
-  });
-});
-
-describe("credentials", () => {
-  it("file store writes 0600, round-trips, and lists names only", async () => {
+describe("autobrowse's names in the vault", () => {
+  it("reads credentials from AUTOBROWSE_CRED_* env ahead of the file", async () => {
     const dir = mkdtempSync(join(tmpdir(), "autobrowse-creds-"));
-    const store = fileCredentials(join(dir, "c.json"));
-    await store.put("cloudflare", { username: "u", password: "p", totpSecret: RFC_SECRET });
-    expect(statSync(join(dir, "c.json")).mode & 0o777).toBe(0o600);
-    expect(await store.list()).toEqual(["cloudflare"]);
-    expect((await store.get("cloudflare"))?.totpSecret).toBe(RFC_SECRET);
-    expect(await store.get("nope")).toBeNull();
-  });
-  it("env store reads AUTOBROWSE_CRED_* and is read-only", async () => {
-    const env = {
-      AUTOBROWSE_CRED_GOOGLE_ADMIN_USERNAME: "a@b.co",
-      AUTOBROWSE_CRED_GOOGLE_ADMIN_PASSWORD: "pw",
-    };
-    const store = envCredentials(env);
-    expect(await store.list()).toEqual(["google-admin"]);
-    expect((await store.get("google-admin"))?.username).toBe("a@b.co");
-    await expect(store.put("x", { username: "u", password: "p" })).rejects.toThrow(/read-only/);
-  });
-  it("a credential round-trips through env entries, via-only included", async () => {
-    const entries = credentialEnv("my-site", {
-      username: "w@wren.co",
-      via: "google",
-      codesInbox: "codes@wren.co",
-      recoveryCodes: [],
-      passkeys: [],
-    });
-    expect(entries.map((e) => e.name)).toEqual([
-      "AUTOBROWSE_CRED_MY_SITE_USERNAME",
-      "AUTOBROWSE_CRED_MY_SITE_VIA",
-      "AUTOBROWSE_CRED_MY_SITE_CODES_INBOX",
-    ]);
-    const env = Object.fromEntries(entries.map((e) => [e.name, e.value]));
-    const back = await envCredentials(env).get("my-site");
-    expect(back?.via).toBe("google");
-    expect(back?.codesInbox).toBe("codes@wren.co");
-    expect(back?.password).toBeUndefined();
-  });
-  it("an account keeps its own mark in the env name and comes back as itself", async () => {
-    const entries = credentialEnv("google@ops", {
-      username: "o@x.co",
-      password: "p",
-      recoveryCodes: [],
-      passkeys: [],
-    });
-    expect(entries[0]?.name).toBe("AUTOBROWSE_CRED_GOOGLE__OPS_USERNAME");
-    const env = Object.fromEntries(entries.map((e) => [e.name, e.value]));
-    expect(await envCredentials(env).list()).toEqual(["google@ops"]);
-    expect((await envCredentials(env).get("google@ops"))?.username).toBe("o@x.co");
-  });
-  it("push sends every site but canaries; pull keeps what is here unless told, and never drops passkeys", async () => {
-    const local = memoryCredentials({
-      a: { username: "a", password: "1", totpSecret: "JBSWY3DPEHPK3PXP" },
-      "b@two": { username: "b", via: "google" },
-      stripe: { username: "bait", password: "x", canary: true },
-    });
-    const kv = new Map<string, string>();
-    const store = {
-      all: async () => [...kv].map(([name, value]) => ({ name, value })),
-      put: async (name: string, value: string) => void kv.set(name, value),
-    };
-    const pushed = await pushCredentials(local, store);
-    expect(pushed.map((p) => p.site)).toEqual(["a", "b@two"]);
-    expect([...kv.keys()]).toEqual([
-      "AUTOBROWSE_CRED_A_USERNAME",
-      "AUTOBROWSE_CRED_A_PASSWORD",
-      "AUTOBROWSE_CRED_A_TOTP_SECRET",
-      "AUTOBROWSE_CRED_B__TWO_USERNAME",
-      "AUTOBROWSE_CRED_B__TWO_VIA",
-    ]);
-    const other = memoryCredentials({
-      a: {
-        username: "old",
-        password: "old",
-        passkeys: [
-          {
-            rpId: "a",
-            credentialId: "k",
-            privateKey: "d",
-            signCount: 0,
-            isResidentCredential: true,
-          },
-        ],
-      },
-    });
-    const first = await pullCredentials(store, other);
-    expect(first).toEqual({ written: ["b@two"], kept: ["a"] });
-    expect((await other.get("a"))?.password).toBe("old");
-    const second = await pullCredentials(store, other, ["a"], { overwrite: true });
-    expect(second).toEqual({ written: ["a"], kept: [] });
-    const a = await other.get("a");
-    expect(a?.password).toBe("1");
-    expect(a?.passkeys).toHaveLength(1);
-    await expect(pullCredentials(store, other, ["nope"])).rejects.toThrow(/creds push nope/);
-  });
-  it("layered: first hit wins, writes go to the first store", async () => {
-    const a = memoryCredentials({ s: { username: "a", password: "1" } });
-    const b = memoryCredentials({
-      s: { username: "b", password: "2" },
-      t: { username: "t", password: "3" },
-    });
-    const l = layeredCredentials([a, b], a);
-    expect((await l.get("s"))?.username).toBe("a");
-    expect((await l.get("t"))?.username).toBe("t");
-    await l.put("n", { username: "n", password: "4" });
-    expect(await a.list()).toContain("n");
+    const settings = {
+      credentialsCipher: "none",
+      credentialsFile: join(dir, "c.json"),
+    } as Settings;
+    const env = { AUTOBROWSE_CRED_X_USERNAME: "u", AUTOBROWSE_CRED_X_PASSWORD: "p" };
+    Object.assign(process.env, env);
+    try {
+      const store = credentialsFor(settings, { armed: false });
+      expect((await store.get("x"))?.username).toBe("u");
+      expect(await store.list()).toContain("x");
+    } finally {
+      for (const k of Object.keys(env)) delete process.env[k];
+    }
   });
 });
 
@@ -746,59 +597,6 @@ describe("signInToGoogle second step", () => {
       /does not offer the authenticator app here; our passkey was refused/,
     );
     expect(acts[0]?.hints.css).toMatch(/Use your passkey/);
-  });
-});
-
-describe("credential schema", () => {
-  it("takes a via credential without a password, and nothing without either", async () => {
-    const store = memoryCredentials();
-    await store.put("s", { username: "u", via: "google", url: "https://s.test/login" });
-    expect((await store.get("s"))?.password).toBeUndefined();
-    await expect(store.put("t", { username: "u" })).rejects.toThrow(/password or a via/);
-  });
-  it("normalizes a spaced seed and rejects a 6-digit code", async () => {
-    const store = memoryCredentials();
-    await store.put("s", { username: "u", password: "p", totpSecret: "jbsw y3dp-ehpk 3pxp" });
-    expect((await store.get("s"))?.totpSecret).toBe("JBSWY3DPEHPK3PXP");
-    await expect(
-      store.put("s", { username: "u", password: "p", totpSecret: "123456" }),
-    ).rejects.toThrow(/base32 seed/);
-  });
-});
-
-describe("sealed credential file", () => {
-  it("writes ciphertext, reads it back, and upgrades a plain file on the next write", async () => {
-    const { aesGcmCipher, isSealed } = await import("../src/auth/cipher.js");
-    const { readFileSync, writeFileSync } = await import("node:fs");
-    const dir = mkdtempSync(join(tmpdir(), "autobrowse-sealed-"));
-    const file = join(dir, "c.json");
-    const key = Buffer.alloc(32, 7);
-    writeFileSync(
-      file,
-      JSON.stringify({ sites: { old: { username: "o", password: "p", recoveryCodes: [] } } }),
-    );
-    const store = fileCredentials(file, aesGcmCipher(key));
-    expect((await store.get("old"))?.username).toBe("o");
-    await store.put("new", { username: "n", password: "q" });
-    const raw = readFileSync(file, "utf8");
-    expect(isSealed(raw)).toBe(true);
-    expect(raw).not.toContain("password");
-    expect((await store.get("old"))?.username).toBe("o");
-    expect((await store.get("new"))?.password).toBe("q");
-    await expect(
-      fileCredentials(file, aesGcmCipher(Buffer.alloc(32, 8))).get("new"),
-    ).rejects.toThrow();
-  });
-
-  it("read as plain text, it names the setting instead of a parse error", async () => {
-    const { aesGcmCipher } = await import("../src/auth/cipher.js");
-    const dir = mkdtempSync(join(tmpdir(), "autobrowse-sealed-"));
-    const file = join(dir, "c.json");
-    await fileCredentials(file, aesGcmCipher(Buffer.alloc(32, 7))).put("s", {
-      username: "u",
-      password: "p",
-    });
-    await expect(fileCredentials(file).get("s")).rejects.toThrow(/CREDENTIALS_CIPHER=keychain/);
   });
 });
 

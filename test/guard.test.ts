@@ -1,18 +1,17 @@
-import { describe, expect, it } from "vitest";
-import { CanaryTripped, canaryCredential, canaryStore } from "../src/auth/canary.js";
-import { noCodes } from "../src/auth/codes.js";
-import { memoryCredentials } from "../src/auth/credentials.js";
 import {
-  boundRunner,
-  guardedPage,
+  CanaryTripped,
+  canaryCredential,
+  canaryStore,
   memoryAudit,
-  registrable,
-  SecretLeak,
+  memoryCredentials,
+  memorySecrets,
   trackingSecrets,
-} from "../src/auth/guard.js";
+} from "credkeep";
+import { describe, expect, it } from "vitest";
+import { noCodes } from "../src/auth/codes.js";
+import { boundRunner, guardedPage, registrable, SecretLeak } from "../src/auth/guard.js";
 import { passwordDomains, SITE_LOGINS, signInContext, siteAllowsHost } from "../src/auth/index.js";
 import { defineFlow, type FlowRunner } from "../src/browser/flow.js";
-import { memorySecrets } from "../src/deps/secrets.js";
 import { fakePage } from "./auth-fakes.js";
 
 const cred = { username: "u", password: "hunter2!", recoveryCodes: [], passkeys: [] };

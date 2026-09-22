@@ -4,10 +4,11 @@
  * From then on the login needs nobody. `readSecretFromPage` is the
  * site-agnostic half; the page walk is per site.
  */
+
+import type { CredentialStore } from "credkeep";
+import { findTotpSecret, totp } from "credkeep";
 import { defineFlow, type FlowPage } from "../browser/flow.js";
-import type { CredentialStore } from "./credentials.js";
 import { LoginFailed, type SiteLogin, type TotpSetupSpec } from "./login.js";
-import { findTotpSecret, totp } from "./totp.js";
 
 /** How long a page gets to draw the seed after a click. */
 const RENDER_MS = 8_000;

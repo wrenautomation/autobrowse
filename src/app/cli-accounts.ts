@@ -5,7 +5,7 @@
  * account. Addresses and names only; never a value.
  */
 import type { Command } from "commander";
-import type { CredentialStore } from "../auth/credentials.js";
+import type { CredentialStore } from "credkeep";
 import {
   assignPurpose,
   DEFAULT_PURPOSE,

@@ -7,7 +7,7 @@
  * vendor client, and the same three names point at Honeycomb or anything
  * else tomorrow.
  */
-import type { EnvStore } from "../deps/env-store.js";
+import type { EnvStore } from "credkeep";
 
 export const LANGFUSE_PUBLIC_KEY = "LANGFUSE_PUBLIC_KEY";
 export const LANGFUSE_SECRET_KEY = "LANGFUSE_SECRET_KEY";

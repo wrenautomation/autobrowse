@@ -3,11 +3,12 @@
  * (which runs one) and `compiled` (which lists them) both import it
  * without importing each other.
  */
-import { boundRunner, type SecretAudit, trackingSecrets } from "../auth/guard.js";
+import { envSecrets, type SecretAudit, type SecretSource, trackingSecrets } from "credkeep";
+import { boundRunner } from "../auth/guard.js";
+import { SECRET_ENV_PREFIX } from "../auth/keep.js";
 import { siteAllowsHost } from "../auth/login.js";
 import { SITE_LOGINS } from "../auth/sites.js";
 import type { FlowRunner } from "../browser/flow.js";
-import { envSecrets, type SecretSource } from "../deps/secrets.js";
 import { localShell, type Shell } from "../deps/shell.js";
 import { envFileSink, type SecretSink } from "../deps/sink.js";
 import { macDesktop } from "../desktop/mac.js";
@@ -43,7 +44,7 @@ export function compiledDeps(
     audit?: SecretAudit;
   } = {},
 ): CompiledDeps {
-  const secrets = trackingSecrets(o.secrets ?? envSecrets());
+  const secrets = trackingSecrets(o.secrets ?? envSecrets(process.env, SECRET_ENV_PREFIX));
   return {
     browser: boundRunner(browser, {
       secrets,

@@ -6,6 +6,9 @@
  * stores), `autobrowse/do` (the one verb), `autobrowse/agent` (the page
  * outline, the exploring agent), `autobrowse/flows` (the hand-written legs).
  */
+
+/** Compiled workflows ask for their redacted values through this. */
+export { envSecrets, memorySecrets, type SecretSource } from "credkeep";
 export type {
   ActOptions,
   BrowserFlow,
@@ -42,7 +45,6 @@ export {
   structure,
   writeRendered,
 } from "./compiler/index.js";
-export { envSecrets, memorySecrets, type SecretSource } from "./deps/secrets.js";
 export { fakeShell, localShell, type Shell, type ShellResult } from "./deps/shell.js";
 export { envFileSink, memorySink, type SecretSink } from "./deps/sink.js";
 export { macDesktop } from "./desktop/mac.js";

@@ -7,12 +7,13 @@
  * `formLogin` covers the common shape (username, maybe a Next, password,
  * submit, maybe a code). Sites that differ write `signIn` by hand.
  */
+
+import type { Credential, CredentialStore, SecretAudit } from "credkeep";
 import type { FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
 import { wallOf } from "../browser/session.js";
 import type { CodeKind, CodeSource } from "./codes.js";
-import type { Credential, CredentialStore } from "./credentials.js";
-import { guardedPage, hostUnder, registrable, type SecretAudit } from "./guard.js";
+import { guardedPage, hostUnder, registrable } from "./guard.js";
 import { type IdentityProvider, type Provider, providerOf, registerProvider } from "./providers.js";
 
 export interface SignInContext {
@@ -790,7 +791,8 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
     if (!cred) return known ? "no-credential" : "unknown-site";
     // A credential that signs in via a provider takes the generic provider path when the
     // site's own spec does not know that provider (or there is no spec at all).
-    const login = cred.via && !known?.via?.includes(cred.via) ? viaLogin(name, cred) : known;
+    const login =
+      cred.via && !known?.via?.includes(cred.via as Provider) ? viaLogin(name, cred) : known;
     if (!login) return "unknown-site";
     const since = now();
     const ctx = signInContext({

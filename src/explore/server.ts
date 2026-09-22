@@ -10,14 +10,16 @@
  * (`tokenFileFor(port)`) for the session's life. What comes back is
  * masked like a transcript (tokens, keys) unless a command asks for raw.
  */
+
 import { randomBytes } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import type { SecretAudit } from "credkeep";
 import type { Page } from "playwright";
 import { z } from "zod";
-import { type SecretAudit, SecretLeak, urlWithoutQuery } from "../auth/guard.js";
+import { SecretLeak, urlWithoutQuery } from "../auth/guard.js";
 import type { SecretValues } from "../auth/signup.js";
 import {
   chooseOption,

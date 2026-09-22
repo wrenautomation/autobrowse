@@ -4,9 +4,10 @@
  * with a real sign-in. The CLI's `creds set`/`login` and the UI's
  * Accounts page are the same code.
  */
+
+import { type Credential, type CredentialStore, credentialSchema } from "credkeep";
 import { z } from "zod";
 import { defineFlow, type FlowPage, type FlowRunner } from "../browser/flow.js";
-import { type Credential, type CredentialStore, credentialSchema } from "./credentials.js";
 import { resolveLogin, type SiteLogin, viaLogin } from "./login.js";
 import { PROVIDERS } from "./providers.js";
 

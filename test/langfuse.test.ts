@@ -1,3 +1,4 @@
+import { memoryEnvStore } from "credkeep";
 import { describe, expect, it } from "vitest";
 import {
   checkTracing,
@@ -10,7 +11,6 @@ import {
   recentSpans,
   wireTracing,
 } from "../src/chores/langfuse.js";
-import { memoryEnvStore } from "../src/deps/env-store.js";
 
 const keys = { [LANGFUSE_PUBLIC_KEY]: "pk-lf-1", [LANGFUSE_SECRET_KEY]: "sk-lf-2" };
 

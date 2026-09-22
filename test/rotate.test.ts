@@ -1,6 +1,6 @@
+import { memoryCredentials } from "credkeep";
 import { describe, expect, it } from "vitest";
-import { memoryCredentials } from "../src/auth/credentials.js";
-import { newPassword, rotatePasswordFlow } from "../src/auth/rotate.js";
+import { rotatePasswordFlow } from "../src/auth/rotate.js";
 import type { FlowPage, Op } from "../src/browser/flow.js";
 import type { Hints } from "../src/browser/locate.js";
 import { NeedsHuman } from "../src/browser/session.js";
@@ -45,21 +45,6 @@ const login = {
     done: /password changed/i,
   },
 };
-
-describe("newPassword", () => {
-  it("is long, mixed, and free of look-alikes", () => {
-    for (let n = 0; n < 50; n++) {
-      const p = newPassword();
-      expect(p).toHaveLength(24);
-      expect(p).toMatch(/[a-z]/);
-      expect(p).toMatch(/[A-Z]/);
-      expect(p).toMatch(/[0-9]/);
-      expect(p).toMatch(/[!@#$%^&*\-_=+]/);
-      expect(p).not.toMatch(/[lIO01]/);
-    }
-    expect(newPassword()).not.toBe(newPassword());
-  });
-});
 
 describe("rotatePasswordFlow", () => {
   it("types the new password, stores it with the old as fallback, reports the confirmation", async () => {

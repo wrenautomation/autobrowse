@@ -5,7 +5,7 @@
  * Everything it reads from the process (env, the HTTP client, the catalog of
  * sites and flows) is an option, so a library caller can hand its own.
  */
-import type { CredentialStore } from "../auth/credentials.js";
+import type { CredentialStore } from "credkeep";
 import {
   DEFAULT_PURPOSE,
   type Identity,

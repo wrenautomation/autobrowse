@@ -6,13 +6,13 @@
  * texts come from the same sources sign-in uses.
  */
 
+import type { Credential, CredentialStore } from "credkeep";
+import { newPassword } from "credkeep";
 import type { HttpClient } from "../clients/http.js";
 import { gmailOAuth } from "../sites/gmail.js";
 import { createRegistryUser, NPM_TOKEN } from "../sites/npm.js";
 import { accountEnv } from "../sites/oauth.js";
 import type { CodeSource } from "./codes.js";
-import type { Credential, CredentialStore } from "./credentials.js";
-import { newPassword } from "./rotate.js";
 
 /** Values a page gets by name and the model never sees; null when there is no such secret. */
 export type SecretValues = (name: string) => Promise<string | null>;

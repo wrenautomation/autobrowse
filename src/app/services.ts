@@ -2,6 +2,21 @@
 
 import { dirname, join } from "node:path";
 import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
+import {
+  aesGcmCipher,
+  type CanaryOptions,
+  type CredentialStore,
+  canaryStore,
+  type EnvStore,
+  envCredentials,
+  fileAudit,
+  fileCredentials,
+  keychainKey,
+  layeredCredentials,
+  plainCipher,
+  type SecretAudit,
+  ssmEnvStore,
+} from "credkeep";
 import type { Logger } from "pino";
 import { fileStepLedger, type StepLedger } from "../agent/ledger.js";
 import { type Look, lookForAccount, RESET_FORMS } from "../auth/exists.js";
@@ -12,26 +27,16 @@ import {
   layeredIdentities,
 } from "../auth/identities.js";
 import {
-  aesGcmCipher,
-  type CanaryOptions,
   type CodeSource,
-  type CredentialStore,
-  canaryStore,
   codeSources,
   credentialFor,
-  envCredentials,
-  fileAudit,
-  fileCredentials,
-  keychainKey,
   type LoginProvider,
-  layeredCredentials,
   loginProvider,
   messageSource,
-  plainCipher,
-  type SecretAudit,
   SITE_LOGINS,
   totpSource,
 } from "../auth/index.js";
+import { CRED_ENV, ENV_STORE_PREFIX, KEYCHAIN } from "../auth/keep.js";
 import type { FlowRunner } from "../browser/flow.js";
 import { flowRunner } from "../browser/flow.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
@@ -56,7 +61,6 @@ import { domainAvailability } from "../clients/rdap.js";
 import { ssmRosterStore } from "../clients/roster.js";
 import { twilioReader } from "../clients/twilio.js";
 import { wrenClient } from "../clients/wren.js";
-import { type EnvStore, ssmEnvStore } from "../deps/env-store.js";
 import { envFileSink, type SecretSink } from "../deps/sink.js";
 import {
   openFullDiskAccessPane,
@@ -348,9 +352,9 @@ export function credentialsFor(
   o: { armed?: boolean; notify?: CanaryOptions["notify"]; by?: string } = {},
 ): CredentialStore {
   const cipher =
-    settings.credentialsCipher === "keychain" ? aesGcmCipher(keychainKey()) : plainCipher;
+    settings.credentialsCipher === "keychain" ? aesGcmCipher(keychainKey(KEYCHAIN)) : plainCipher;
   const store = layeredCredentials([
-    envCredentials(),
+    envCredentials(process.env, CRED_ENV),
     fileCredentials(settings.credentialsFile, cipher),
   ]);
   if (o.armed === false) return store;
@@ -501,7 +505,7 @@ export function envStoreFor(
   settings: Settings,
   ssm: SSMClient = lazy(() => new SSMClient({ region: settings.awsRegion })),
 ): EnvStore {
-  return ssmEnvStore(ssm);
+  return ssmEnvStore(ssm, ENV_STORE_PREFIX);
 }
 
 export function memoryFor(settings: Settings, http = httpClient()): Memory {

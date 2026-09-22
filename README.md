@@ -174,7 +174,7 @@ a row; it is work.
   (never the value); `pnpm autobrowse creds audit --last 50` reads it.
   `creds canary stripe` plants a tripwire credential: any read of it is a
   refused line in that ledger and a note to you. The ledgers (audit, spend,
-  agent steps) are hash-chained (`src/deps/chain.ts`: each row carries the
+  agent steps) are hash-chained (credkeep's `chain`: each row carries the
   hash of the one before): `pnpm autobrowse ledger verify` finds an edited,
   dropped or inserted row. Tamper-evident, not tamper-proof; that is what
   the file mode and the box's IAM are for.
@@ -349,13 +349,13 @@ has needed it, and a caller (wren, `box.sh start`) wakes it.
 src/engine/     workflow/step types, effects seam, guards, run (advance/answer), the Restate run object, Runs registry, events
 src/browser/    session (profiles, Browserbase), lock, flow runner (trace, hand-off, fp.act), locate, repair, flows/
 src/clients/    http.ts (timeouts, retries, safe errors) + one client per API
-src/auth/       credentials (file/env/layered), TOTP, code sources (totp, email), site logins, TOTP enrollment
+src/auth/       site logins, code sources (totp, email), enrollment, the page guard; the vault itself is credkeep (keep.ts = our names in it)
 src/llm/        Llm seam: anthropic, openai, cohere, claude-code, fake; completeJson; OTLP trace sink
 src/memory/     Memory seam: in-process store, Backboard; what repairs and gate answers taught us
 src/recorder/   observer (in page), browser + terminal capture, redaction, store
 src/compiler/   structure → outline → render (+ polish); output typechecks
 src/channels/   email, phone (iMessage on this Mac), linq, webhook, inbound command parser
-src/deps/       SecretSource, SecretSink (env file / SSM), Shell: what workflows read and write
+src/deps/       SecretSink (env file), Shell: what workflows read and write
 src/devices/    what a person owns and a second step leans on: the paired phone (SMS in, iMessage out)
 src/explore/    explore mode: one open browser, a loopback command API, pause/resume with hand acts journaled
 src/agent/      the exploration agent (digest, one act a step), sessions (play/pause, persisted), repair, evaluator

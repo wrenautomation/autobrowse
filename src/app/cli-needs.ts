@@ -5,7 +5,7 @@
  * <id>` clears a decision. Names only; no value is ever printed.
  */
 import type { Command } from "commander";
-import type { CredentialStore } from "../auth/credentials.js";
+import type { CredentialStore } from "credkeep";
 import { ingest, parseCredentialLines, takeClipboard } from "../auth/ingest.js";
 import type { SiteFacade } from "../sites/facade.js";
 import {

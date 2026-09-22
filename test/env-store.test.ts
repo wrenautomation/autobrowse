@@ -2,48 +2,10 @@ import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command } from "commander";
+import { memoryEnvStore } from "credkeep";
 import { describe, expect, it } from "vitest";
 import { registerEnvCommands } from "../src/app/cli-env.js";
 import type { Settings } from "../src/app/config.js";
-import {
-  memoryEnvStore,
-  parseDotenv,
-  toDotenv,
-  toExports,
-  upsertDotenv,
-} from "../src/deps/env-store.js";
-
-describe("dotenv helpers", () => {
-  it("parses as a shell would, inlines a JSON file a value names, and renders back", () => {
-    const text = `# comment
-export A=1
-B="two words" # trailing
-C='x'
-SA=/tmp/sa.json
-bad-name=1
-EMPTY=
-`;
-    const entries = parseDotenv(text, (p) => (p === "/tmp/sa.json" ? '{"k":1}' : null));
-    expect(entries).toEqual([
-      { name: "A", value: "1" },
-      { name: "B", value: "two words" },
-      { name: "C", value: "x" },
-      { name: "SA", value: '{"k":1}' },
-    ]);
-    expect(toExports([{ name: "P", value: "it's" }])).toBe("export P='it'\\''s'\n");
-    expect(toDotenv([{ name: "A", value: "1" }])).toBe("A=1\n");
-    expect(toDotenv([{ name: "SA", value: "{\n}" }], (n) => `/x/${n.toLowerCase()}.json`)).toBe(
-      "SA=/x/sa.json\n",
-    );
-    expect(() => toDotenv([{ name: "SA", value: "{\n}" }])).toThrow(/spans lines/);
-    expect(
-      upsertDotenv("A=old\nKEEP=1\n", [
-        { name: "A", value: "new" },
-        { name: "Z", value: "9" },
-      ]),
-    ).toBe("A=new\nKEEP=1\nZ=9\n");
-  });
-});
 
 describe("autobrowse env", () => {
   const setup = (initial: Record<string, string>) => {

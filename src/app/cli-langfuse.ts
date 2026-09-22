@@ -4,9 +4,9 @@
  * OTEL names the sink reads. Nothing prints a key.
  */
 import type { Command } from "commander";
+import type { EnvStore } from "credkeep";
 import { checkTracing, recentSpans, wireTracing } from "../chores/langfuse.js";
 import { httpClient } from "../clients/http.js";
-import type { EnvStore } from "../deps/env-store.js";
 
 export function registerLangfuseCommands(program: Command, store: () => EnvStore): void {
   const langfuse = program

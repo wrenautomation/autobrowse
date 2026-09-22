@@ -1,8 +1,9 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileAudit } from "credkeep";
 import { describe, expect, it } from "vitest";
-import { fileAudit } from "../src/auth/guard.js";
+
 import { ledgerSince, ledgerSummary } from "../src/auth/ledger.js";
 import { memorySpendLedger } from "../src/gates/spend.js";
 

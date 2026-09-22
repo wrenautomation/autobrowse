@@ -4,8 +4,8 @@
  * A login asks `codes.get(...)` and gets a string or null; it never sees
  * how the code was obtained.
  */
-import type { Credential } from "./credentials.js";
-import { totp, totpRemainingMs } from "./totp.js";
+import type { Credential } from "credkeep";
+import { totp, totpRemainingMs } from "credkeep";
 
 export type CodeKind = "totp" | "email" | "sms";
 

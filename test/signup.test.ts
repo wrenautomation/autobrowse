@@ -1,7 +1,7 @@
+import { memoryCredentials } from "credkeep";
 import { describe, expect, it } from "vitest";
 import { exploreWithAgent } from "../src/agent/explorer.js";
 import type { CodeSource } from "../src/auth/codes.js";
-import { memoryCredentials } from "../src/auth/credentials.js";
 import {
   codeSecrets,
   localPhone,

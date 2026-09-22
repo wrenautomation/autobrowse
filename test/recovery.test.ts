@@ -1,5 +1,5 @@
+import type { Credential, CredentialStore } from "credkeep";
 import { describe, expect, it } from "vitest";
-import type { Credential, CredentialStore } from "../src/auth/credentials.js";
 import { codesOn, sealRecoveryCodesFlow } from "../src/auth/recovery.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";
 import { loadedCount } from "../src/browser/webauthn.js";

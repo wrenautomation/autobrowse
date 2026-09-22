@@ -17,7 +17,7 @@ import {
   toDotenv,
   toExports,
   upsertDotenv,
-} from "../deps/env-store.js";
+} from "credkeep";
 import { expandHome } from "../google-auth.js";
 import type { Settings } from "./config.js";
 

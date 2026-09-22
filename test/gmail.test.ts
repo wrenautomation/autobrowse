@@ -1,7 +1,7 @@
+import { memoryCredentials } from "credkeep";
 import { describe, expect, it } from "vitest";
 import { loadSettings } from "../src/app/config.js";
 import { googleTokens } from "../src/app/services.js";
-import { memoryCredentials } from "../src/auth/credentials.js";
 import type { FlowRunner } from "../src/browser/flow.js";
 import { googleOauthConsent } from "../src/browser/flows/oauth-consent.js";
 import { httpClient } from "../src/clients/http.js";

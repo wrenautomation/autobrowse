@@ -6,7 +6,7 @@
  */
 
 import type { Interface } from "node:readline/promises";
-import type { CredentialStore } from "../auth/credentials.js";
+import type { CredentialStore } from "credkeep";
 import type { SiteLogin } from "../auth/login.js";
 import type { Provider } from "../auth/providers.js";
 

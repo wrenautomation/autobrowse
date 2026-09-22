@@ -3,11 +3,12 @@
  * <site>`: the credential ladder from the terminal. Values arrive on
  * stdin, never as arguments (argv is visible to every process).
  */
+
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
+import { credentialSchema } from "credkeep";
 import {
-  credentialSchema,
   enrollPasskeyFlow,
   enrollTotpFlow,
   ingest,
@@ -22,6 +23,7 @@ import {
   takeFile,
   viaLogin,
 } from "../auth/index.js";
+import { CRED_ENV } from "../auth/keep.js";
 import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
 
 /** A copied secret lives on the clipboard for a minute, then is emptied if untouched. */
@@ -280,13 +282,14 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .option("--all", "every stored site (canaries never travel)")
     .action(async (sites: string[], o: { all?: boolean }) => {
       if (sites.length === 0 && !o.all) throw new Error("name sites, or --all");
-      const { pushCredentials } = await import("../auth/credentials.js");
+      const { pushCredentials } = await import("credkeep");
       const { envStoreFor } = await import("./services.js");
       // Unarmed: the push reads every site to skip the canaries; an armed read of one would trip it.
       const pushed = await pushCredentials(
         credentialsFor(settings, { armed: false }),
         envStoreFor(settings),
         sites,
+        CRED_ENV,
       );
       for (const p of pushed) console.log(`pushed ${p.site}: ${p.names.join(", ")}`);
       console.log("the box reads the store on its next deploy (push to main)");
@@ -298,15 +301,13 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     )
     .option("--overwrite", "replace what is here with the store's username/password/TOTP/via")
     .action(async (sites: string[], o: { overwrite?: boolean }) => {
-      const { pullCredentials } = await import("../auth/credentials.js");
+      const { pullCredentials } = await import("credkeep");
       const { envStoreFor } = await import("./services.js");
       const r = await pullCredentials(
         envStoreFor(settings),
         credentialsFor(settings, { armed: false }),
         sites,
-        {
-          ...(o.overwrite ? { overwrite: true } : {}),
-        },
+        { ...CRED_ENV, ...(o.overwrite ? { overwrite: true } : {}) },
       );
       if (r.written.length) console.log(`pulled ${r.written.join(", ")}`);
       if (r.kept.length)
@@ -332,7 +333,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     )
     .option("--username <u>", "what it looks like", "billing@wrenautomation.com")
     .action(async (name: string, o: { username: string }) => {
-      const { canaryCredential } = await import("../auth/canary.js");
+      const { canaryCredential } = await import("credkeep");
       await credentialsFor(settings, { armed: false }).put(name, canaryCredential(o.username));
       console.log(
         `canary ${name} armed: nothing legitimate reads it; \`creds audit\` shows a read`,
@@ -365,7 +366,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .action(async (verb: string) => {
       if (verb !== "verify") throw new Error(`ledger: unknown verb ${verb}; verify`);
       const { ledgerPath } = await import("./services.js");
-      const { verifyChain } = await import("../deps/chain.js");
+      const { verifyChain } = await import("credkeep");
       let bad = 0;
       for (const name of ["audit", "spend", "steps"] as const) {
         const v = await verifyChain(ledgerPath(settings, name));

@@ -4,9 +4,10 @@
  * loaded into every later session for that site. From then on the site's
  * "use your passkey" step completes by itself: no password, no code.
  */
+
+import type { CredentialStore } from "credkeep";
 import { defineFlow } from "../browser/flow.js";
 import { redactText } from "../recorder/redact.js";
-import type { CredentialStore } from "./credentials.js";
 import { LoginFailed, type SiteLogin } from "./login.js";
 import { codesOn, readRecoveryCodes, sealCodes } from "./recovery.js";
 

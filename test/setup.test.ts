@@ -1,6 +1,6 @@
+import { memoryCredentials } from "credkeep";
 import { describe, expect, it } from "vitest";
 import { needsFor, type Prompter, runSetup } from "../src/app/setup.js";
-import { memoryCredentials } from "../src/auth/credentials.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";
 
 function scripted(answers: string[]) {

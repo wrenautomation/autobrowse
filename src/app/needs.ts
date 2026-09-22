@@ -10,7 +10,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { CredentialStore } from "../auth/credentials.js";
+import type { CredentialStore } from "credkeep";
 import { type Identity, identityFor } from "../auth/identities.js";
 import type { SiteLogin } from "../auth/login.js";
 import { signupInbox } from "../auth/signup.js";

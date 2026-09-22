@@ -12,7 +12,7 @@ import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as restate from "@restatedev/restate-sdk";
-import type { SecretAudit } from "../auth/guard.js";
+import type { SecretAudit } from "credkeep";
 import type { FlowRunner } from "../browser/flow.js";
 import type { SecretSink } from "../deps/sink.js";
 import { type HostDeps, makeRunObjectFrom, type RunObjectDefinition } from "../engine/object.js";

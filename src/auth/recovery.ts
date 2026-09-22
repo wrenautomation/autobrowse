@@ -4,9 +4,10 @@
  * way they are read off the page, sealed with the credential, and only
  * counted in what we print.
  */
+
+import type { Credential, CredentialStore } from "credkeep";
 import { defineFlow, type FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
-import type { Credential, CredentialStore } from "./credentials.js";
 import { LoginFailed, type RecoveryCodesSpec, type SiteLogin } from "./login.js";
 
 const UNLOCK_WAIT_MS = 5_000;

@@ -1,6 +1,6 @@
+import { memoryCredentials } from "credkeep";
 import { describe, expect, it } from "vitest";
 import { accountsOf, merged, rowOf } from "../src/auth/accounts.js";
-import { memoryCredentials } from "../src/auth/credentials.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";
 import type { FlowRunner } from "../src/browser/flow.js";
 

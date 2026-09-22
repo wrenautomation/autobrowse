@@ -5,7 +5,7 @@
  * step cost, where it was. Never a page, a value or a prompt: the model's
  * one-line thought, the act, the host, tokens and time.
  */
-import { chainedFile } from "../deps/chain.js";
+import { chainedFile } from "credkeep";
 
 export interface StepRow {
   at: string;
