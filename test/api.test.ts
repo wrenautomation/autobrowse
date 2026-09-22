@@ -2,6 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import type { AgentSessions, SessionView } from "../src/agent/sessions.js";
 import type { Ingress } from "../src/app/client.js";
 import { signLinqWebhook } from "../src/clients/linq.js";
@@ -823,5 +824,40 @@ describe("api: agent sessions", () => {
     });
     const bare = await setup();
     expect((await bare.app.request("/api/sites")).status).toBe(501);
+  });
+});
+
+describe("send gate", () => {
+  it("a step's send gate waits, then one approve runs the step once", async () => {
+    const { memoryEffects, runFlow, defineWorkflow, done } = await import("../src/index.js");
+    let sent = 0;
+    const wf = defineWorkflow<Record<string, never>, Record<string, never>>()({
+      name: "send-test",
+      description: "",
+      plan: z.object({ dryRun: z.boolean().default(false) }),
+      steps: [
+        {
+          name: "send",
+          irreversible: true,
+          async run({ gate }) {
+            const a = gate("send", "send it?");
+            if (!a.approved) return done("not sent");
+            sent++;
+            return done("sent");
+          },
+        },
+      ],
+      emptyMemo: () => ({}),
+    });
+    const { fx } = memoryEffects();
+    expect((await runFlow(fx, wf, {}, { dryRun: false })).status).toBe("waiting");
+    expect(sent).toBe(0);
+    const out = await runFlow(fx, wf, {}, { dryRun: false }, (g) => ({
+      approved: g.name === "send",
+      note: null,
+      at: "now",
+    }));
+    expect(out.status).toBe("done");
+    expect(sent).toBe(1);
   });
 });

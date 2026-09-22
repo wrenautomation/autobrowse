@@ -191,7 +191,7 @@ describe("desktop step", () => {
     expect(src).toContain("deps.desktop.type(typedText1)");
     expect(src).toContain("deps.desktop.shell(cmd, root)");
     expect(src).toContain('await sh(4, "systemsetup -getremotelogin", true);');
-    expect(src).toContain('gate("human"');
+    expect(src).toContain('gate("send"');
   });
 
   it("the rendered module typechecks and runs against the fake desktop", async () => {

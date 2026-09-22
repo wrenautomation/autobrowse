@@ -173,7 +173,7 @@ const addAndVerifyEmail: Step<"add-and-verify-email"> = {
   irreversible: true,
   async run({ fx, deps, plan, gate }) {
     const answer = gate(
-      "human",
+      "send",
       'Run "add-and-verify-email" (Enter the new email address, select it for the Instagram account, submit, enter the confirmation code sent to that email, confirm, and close the dialog.)?',
     );
     if (!answer.approved) return rejected(answer.note ?? "declined");

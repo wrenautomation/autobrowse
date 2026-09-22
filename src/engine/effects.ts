@@ -20,8 +20,14 @@ export interface Effects {
   now(): Promise<Date>;
 }
 
-/** `human` = a person has to do something; the others are guards (see guards.ts) a person approves. */
-export type GateName = "purchase" | "password" | "human";
+/**
+ * `human` = a person has to do something (a step threw NeedsHuman; approve reruns it).
+ * `send` = the step files, posts or sends something in the person's name; always asked.
+ * The others are guards (see guards.ts) a person approves, or turns off.
+ */
+export type GateName = "purchase" | "password" | "send" | "human";
+/** What a step may ask for; `human` is the host's, an approve there records no answer. */
+export type StepGate = Exclude<GateName, "human">;
 
 export interface GateAnswer {
   approved: boolean;

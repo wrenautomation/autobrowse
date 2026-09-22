@@ -129,7 +129,7 @@ function renderBrowserStep(o: Outline, step: Extract<OutlineStep, { kind: "brows
     ...(keeps ? ["sink: deps.sink"] : []),
   ].join(", ");
   const gate = step.irreversible
-    ? `    const answer = gate("human", ${q(`Run "${step.name}" (${step.description || "irreversible"})?`)});\n    if (!answer.approved) return rejected(answer.note ?? "declined");\n`
+    ? `    const answer = gate("send", ${q(`Run "${step.name}" (${step.description || "irreversible"})?`)});\n    if (!answer.approved) return rejected(answer.note ?? "declined");\n`
     : "";
   const proof = step.proof
     ? `    // TODO proof: ${step.proof}`
@@ -162,7 +162,7 @@ function renderTerminalStep(step: Extract<OutlineStep, { kind: "terminal" }>): s
       : `    await sh(${i}, ${q(cmd)});`,
   );
   const gate = step.irreversible
-    ? `    const answer = gate("human", ${q(`Run "${step.name}" (${step.description})?`)});\n    if (!answer.approved) return rejected(answer.note ?? "declined");\n`
+    ? `    const answer = gate("send", ${q(`Run "${step.name}" (${step.description})?`)});\n    if (!answer.approved) return rejected(answer.note ?? "declined");\n`
     : "";
   return `const ${id}: Step<${q(step.name)}> = {
   name: ${q(step.name)},${step.irreversible ? "\n  irreversible: true," : ""}
@@ -228,7 +228,7 @@ function renderDesktopStep(step: Extract<OutlineStep, { kind: "desktop" }>): str
   const usesPlan = step.ops.some((op) => op.kind === "type" && op.value.from === "plan");
   const anyShell = step.ops.some((op) => op.kind === "shell");
   const gate = step.irreversible
-    ? `    const answer = gate("human", ${q(`Run "${step.name}" (${step.description || "irreversible"})?`)});\n    if (!answer.approved) return rejected(answer.note ?? "declined");\n`
+    ? `    const answer = gate("send", ${q(`Run "${step.name}" (${step.description || "irreversible"})?`)});\n    if (!answer.approved) return rejected(answer.note ?? "declined");\n`
     : "";
   const secretLines = secrets.map(
     (k) =>

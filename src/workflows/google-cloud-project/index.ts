@@ -68,7 +68,7 @@ const createProject: Step<"create-project"> = {
   irreversible: true,
   async run({ fx, deps, plan, gate }) {
     const answer = gate(
-      "human",
+      "send",
       'Run "create-project" (Create the project and keep its id (the console adds a suffix when the name is taken))?',
     );
     if (!answer.approved) return rejected(answer.note ?? "declined");

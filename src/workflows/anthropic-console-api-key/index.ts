@@ -78,7 +78,7 @@ const navigateToApiKeys: Step<"navigate-to-api-keys"> = {
   irreversible: true,
   async run({ fx, deps, plan, gate }) {
     const answer = gate(
-      "human",
+      "send",
       'Run "navigate-to-api-keys" (Navigate to the API keys settings page.)?',
     );
     if (!answer.approved) return rejected(answer.note ?? "declined");

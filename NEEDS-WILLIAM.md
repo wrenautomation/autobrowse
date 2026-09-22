@@ -35,6 +35,14 @@ carry. Dated 2026-09-22.
    `william@wrenautomation.com`; your own stay on jinwilliam.jin@gmail.com.
 4. **Anthropic credits** ($5) → the agent explores with the good model.
 5. **`unsubscribe`** — the list below, ready to paste.
+6. **AWS port 25 (asked by the wren email session, 2026-09-22)** — the
+   "remove email sending limitations" form for `34.233.233.146` (wren-prod-pg,
+   rDNS `probe.wrenautomation.com`) is filled and waiting at its gate on the
+   local worker: `pnpm autobrowse approve aws-port25-request wren-prod-pg`
+   sends it (`reject` drops it). The reply address in the plan is the pays
+   account; the IAM user cannot read the root email, so check it in the
+   prompt. Rerun anywhere: `pnpm autobrowse run aws-port25-request <key>
+   --plan '{"contactEmail":…,"elasticIpAddress":…,"reverseDnsRecord":…,"useCaseDescription":…}'`.
 
 ## Accounts (policy, seeded 2026-09-22)
 

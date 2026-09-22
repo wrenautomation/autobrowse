@@ -106,7 +106,7 @@ const submitSignupForm: Step<"submit-signup-form"> = {
   irreversible: true,
   async run({ fx, deps, plan, gate }) {
     const answer = gate(
-      "human",
+      "send",
       'Run "submit-signup-form" (Fill birthday, name, username, email, and password, then submit the signup form, accept terms, and enter the email confirmation code to create the account.)?',
     );
     if (!answer.approved) return rejected(answer.note ?? "declined");

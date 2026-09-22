@@ -10,7 +10,7 @@
  * inferred as a literal union, so results are typed per workflow.
  */
 import type { z } from "zod";
-import type { Effects, GateAnswer, GateName } from "./effects.js";
+import type { Effects, GateAnswer, GateName, StepGate } from "./effects.js";
 
 /** What one step returns. The host adds `at` and the artifacts. */
 export type StepOutput =
@@ -28,7 +28,7 @@ export interface StepCtx<P, D, M> {
   plan: P;
   memo: M;
   /** The recorded answer, or `GateOpen` so the host can ask. */
-  gate(name: GateName, prompt: string): GateAnswer;
+  gate(name: StepGate, prompt: string): GateAnswer;
 }
 
 export interface StepDef<P, D, M, S extends string = string> {

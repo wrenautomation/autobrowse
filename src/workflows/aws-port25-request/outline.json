@@ -1,0 +1,89 @@
+{
+  "name": "aws-port25-request",
+  "site": "aws",
+  "description": "Request AWS to allow port 25 access for a specific use case, providing optional Elastic IP and reverse DNS details.",
+  "fields": [
+    {
+      "key": "useCaseDescription",
+      "label": "Use case description",
+      "example": "Outbound SMTP verification probes (MX lookup, EHLO, MAIL FROM, RCPT TO, QUIT) from one host, to check that business contact addresses we already hold are deliverable before we mail them from Google Workspace. No mail is sent from this instance; probes are rate-limited per destination MX (max 1 connection at a time, ~2/s overall) and use a dedicated HELO hostname with matching forward and reverse DNS. Sending itself goes through Google Workspace, never EC2. Bounce prevention is the purpose: fewer connections to recipient servers overall, not more."
+    },
+    {
+      "key": "elasticIpAddress",
+      "label": "Elastic IP address - optional",
+      "example": "34.233.233.146"
+    },
+    {
+      "key": "reverseDnsRecord",
+      "label": "Reverse DNS record - optional",
+      "example": "probe.wrenautomation.com"
+    }
+  ],
+  "secrets": [],
+  "steps": [
+    {
+      "kind": "browser",
+      "name": "fill-port25-request",
+      "description": "Fill in the port 25 request form with use case description, optional Elastic IP, and reverse DNS record.",
+      "irreversible": false,
+      "proof": null,
+      "url": "https://support.console.aws.amazon.com/support/contacts#/rdns-limits",
+      "ops": [
+        {
+          "kind": "fill",
+          "goal": "fill Use case description",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Use case description",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "useCaseDescription"
+          }
+        },
+        {
+          "kind": "fill",
+          "goal": "fill Elastic IP address - optional",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Elastic IP address - optional",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "elasticIpAddress"
+          }
+        },
+        {
+          "kind": "fill",
+          "goal": "fill Reverse DNS record - optional",
+          "hints": {
+            "tag": "",
+            "role": "textbox",
+            "name": "Reverse DNS record - optional",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "reverseDnsRecord"
+          }
+        }
+      ]
+    }
+  ]
+}

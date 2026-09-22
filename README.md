@@ -40,9 +40,11 @@ Nothing waits for a person unless a guard says so. Login walls are solved
 with stored credentials, TOTP generated in-process, and one-time codes
 read from an inbox we control. Guards (`GUARDS`) are the situations a
 person still approves: a purchase, a password reset, a locator miss on an
-irreversible act. Each is on by default and can be switched off. What
-stays human: hardware keys, adding a payment method, captchas until
-Browserbase takes them.
+irreversible act. Each is on by default and can be switched off. A `send`
+gate (a step that files, posts or sends something in your name; every
+compiled irreversible step opens one) is always asked: `approve <workflow>
+<key> send`. What stays human: hardware keys, adding a payment method,
+captchas until Browserbase takes them.
 
 ## How it works
 
@@ -233,7 +235,8 @@ Browserbase takes them.
   `outlook/oauth-consent`, `google/youtube-community-post`.
 - **Compiled from recordings** (`src/workflows/`): `bootstrap` (mints the
   first Cloudflare token), `google-cloud-project`, `google-cloud-oauth-client`,
-  `anthropic-console-api-key`, `workspace-skip-passwords`, `google-name`.
+  `anthropic-console-api-key`, `workspace-skip-passwords`, `google-name`,
+  `aws-port25-request` (EC2 email-limit removal form; the submit is a gate).
 - **Logins** (`src/auth/sites.ts`): cloudflare, google, google-admin,
   instantly, aws, anthropic, twilio, sentry, linkedin, instagram, tiktok,
   outlook (the `microsoft` credential); providers google, github, microsoft

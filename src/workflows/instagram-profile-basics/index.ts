@@ -56,7 +56,7 @@ const uploadProfilePhoto: Step<"upload-profile-photo"> = {
   irreversible: true,
   async run({ fx, deps, plan, gate }) {
     const answer = gate(
-      "human",
+      "send",
       "Run \"upload-profile-photo\" (Click 'Change photo' on the Instagram profile edit page and upload the specified image file as the new profile picture.)?",
     );
     if (!answer.approved) return rejected(answer.note ?? "declined");

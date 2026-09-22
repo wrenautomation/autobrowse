@@ -123,7 +123,7 @@ describe("render", () => {
     expect(src).toContain('const cardCvv = await deps.secrets.get("cardCvv");');
     expect(src).not.toMatch(/fx\.run\([^)]*secrets/);
     expect(src).toContain("({ code: r.code })");
-    expect(src).toContain('gate("human"');
+    expect(src).toContain('gate("send"');
     expect(src).toContain("throw new NeedsHuman(");
     expect(src).toContain("irreversible: true");
     expect(src).toContain(
