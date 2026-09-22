@@ -91,19 +91,47 @@ account, no mail, ever.
 - Later releases: the mailifier session wires npm trusted publishing
   from CI, so no token is needed after publish #1.
 
+## 2FA and trusted publishing (evening 2026-09-22)
+
+- **2FA on, by security key.** New npm enrollments offer only a security
+  key, not an authenticator app. `enroll-passkey npm` walks
+  `/settings/<user>/tfa` (Continue → name "autobrowse" → Add security key).
+  Our virtual authenticator answers, and "Require 2FA for write actions" is on.
+- **Two authenticator fixes, all sites.** WebAuthn refuses a page without
+  focus, and a headed window behind other apps has none. So
+  every attach turns on CDP focus emulation. Sites refuse a
+  signature count they have already seen, and stored counts go stale each
+  session. So a loaded key counts from the clock (seconds since 1970).
+  Nothing is written back.
+- **Recovery codes are a site spec** (`SiteLogin.recoveryCodes`: page,
+  unlock button, code pattern), not part of enrollment. `recovery-codes
+  <site>` reads and seals them. Enrollment calls it once the page confirms.
+  npm has five 64-hex codes behind "Use security key". Only the count prints.
+- **Key prompts.** `FormLoginSpec.passkey` answers a key prompt after the
+  password; the code steps are skipped after it, since npm's 2FA banner
+  would match them. `unlockWithPasskey` clicks the button when a page asks
+  again (recovery page, token page, package settings).
+- **Trusted publisher.** `site call npm POST /packages/<pkg>/trust`
+  (irreversible; browser leg `npm/trusted-publisher`) fills the package's
+  Settings form. It is idempotent: a rerun reads the connection back.
+  mailifier now trusts `wrenautomation/mailifier:release.yml` with
+  `npm publish` allowed. `npm trust list` answers 403 with a bypass
+  token (npm restricts them), so the page is the check.
+
 ## Where to attack, ranked
 
-1. **Token expiry.** 90 days, then publishing stops. A scheduled rerun of
-   `site setup npm token` at ~80 days, or trusted publishing, which
-   retires the need for a token.
-2. **Headless npmjs.com.** Cloudflare stalls headless, so the token step
-   needs a headed browser (fine on the Mac, not on the box).
-3. **2FA.** `creds enroll-totp npm` exists generically but has never run
-   against npm; npm will likely require it before a granular token with
-   write.
-4. **More `RESET_FORMS`.** Every site the fleet signs up for should be in
+1. **Token expiry.** 90 days, then publishing stops. Trusted publishing
+   now covers mailifier from CI; the token is only for packages without it.
+2. **Headless npmjs.com.** Cloudflare stalled headless once; the 2FA runs
+   passed headless. Unproven on the box.
+3. **One key, no backup.** The only second factor is the virtual key in the
+   credential store; the sealed recovery codes are the way back. A second
+   key (a phone passkey) would remove the single point.
+4. **Token flow under 2FA is unproven.** It unlocks at open and after
+   Generate, but has not run since 2FA went on.
+5. **More `RESET_FORMS`.** Every site the fleet signs up for should be in
    the table before its first signup. github, Meta, X, TikTok are the
    obvious next four.
-5. **`cannot-tell` is load-bearing.** It is the verdict when the inbox is
+6. **`cannot-tell` is load-bearing.** It is the verdict when the inbox is
    unreadable — so an address on an inbox without consent can never be
    looked up. `accounts` already tracks which inboxes read.

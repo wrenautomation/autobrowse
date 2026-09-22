@@ -40,6 +40,16 @@ interface Attached {
 }
 
 /**
+ * A site remembers the last signature count it saw and refuses one that is
+ * not higher (a cloned key). Stored counts go stale after every session, so
+ * a loaded key counts from the clock: seconds since 1970 only go up, fit the
+ * spec's 32 bits until 2106, and need nothing written back.
+ */
+export function loadedCount(stored: number, now = Date.now()): number {
+  return Math.max(stored, Math.floor(now / 1000));
+}
+
+/**
  * Attach a virtual authenticator to every page in the context, present
  * and future, loaded with `stored`. Chromium only; elsewhere a no-op
  * handle that exports nothing.
@@ -53,11 +63,15 @@ export function virtualAuthenticator(
     try {
       const cdp = await context.newCDPSession(page);
       await cdp.send("WebAuthn.enable");
+      // WebAuthn refuses a page without focus ("NotAllowedError"); a background
+      // or headless window never has it, so the page is told it does.
+      await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
       const { authenticatorId } = await cdp.send("WebAuthn.addVirtualAuthenticator", {
         options: OPTIONS,
       });
       for (const c of stored) {
         const { userHandle, ...rest } = c;
+        rest.signCount = loadedCount(c.signCount);
         await cdp.send("WebAuthn.addCredential", {
           authenticatorId,
           credential: userHandle ? { ...rest, userHandle } : rest,

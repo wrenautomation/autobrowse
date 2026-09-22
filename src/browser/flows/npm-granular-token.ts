@@ -22,6 +22,8 @@
  * of staged publishing and trusted publishing from CI; `access: "stage"`
  * is that path once the packages publish from CI.
  */
+
+import { unlockWithPasskey } from "../../auth/recovery.js";
 import type { SecretSink } from "../../deps/sink.js";
 import { NPM_TOKEN } from "../../sites/npm.js";
 import { defineFlow, type FlowPage } from "../flow.js";
@@ -49,6 +51,9 @@ export interface GranularTokenResult {
 
 /** Every npm token is `npm_` and 36 url-safe characters. */
 const TOKEN = /\bnpm_[A-Za-z0-9]{36}\b/;
+
+/** With 2FA on, npm asks for the key again before sensitive pages. */
+const USE_KEY = { role: "button", name: "Use security key" } as const;
 
 const ACCESS: Record<NpmTokenAccess, string> = {
   publish: "Read and write (publish and stage)",
@@ -79,6 +84,7 @@ export const npmGranularToken = defineFlow<GranularTokenInput, GranularTokenResu
     const user = await signedInUser(fp);
     if (!user) return fp.human("npmjs.com does not show a signed-in account");
     await fp.open(`https://www.npmjs.com/settings/${user}/tokens/granular-access-tokens/new`);
+    await unlockWithPasskey(fp, USE_KEY);
     await fp.act(
       { kind: "fill", value: tokenName(input.name, new Date()) },
       { role: "textbox", name: "Token name" },
@@ -115,6 +121,7 @@ export const npmGranularToken = defineFlow<GranularTokenInput, GranularTokenResu
       { role: "button", name: "Generate token" },
       { goal: "mint the token", irreversible: true },
     );
+    await unlockWithPasskey(fp, USE_KEY);
     // The token is shown once, on the next page; after that npm keeps only its last four.
     let token: string | undefined;
     for (let i = 0; i < 10 && !token; i++) {

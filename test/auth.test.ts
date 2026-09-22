@@ -326,6 +326,36 @@ describe("formLogin", () => {
       LoginFailed,
     );
   });
+  it("answers a key prompt with our passkey, and then asks for no code", async () => {
+    const withKey = {
+      ...spec,
+      passkey: { asks: /security key/i, start: { role: "button", name: "Use security key" } },
+    };
+    const { fp, acts } = fakePage({
+      text: ["login", "Security key: ready to authenticate (2FA)", "Dashboard 2FA banner"],
+      present: () => true,
+    });
+    const asked: string[] = [];
+    const passkeys = [
+      {
+        rpId: "site.test",
+        credentialId: "c",
+        privateKey: "k",
+        signCount: 1,
+        isResidentCredential: false,
+      },
+    ];
+    await formLogin("s", { ...withKey, code: { ...spec.code, asks: /2fa/i } })({
+      fp,
+      cred: { ...cred, passkeys },
+      code: async (k) => {
+        asked.push(k);
+        return "1";
+      },
+    });
+    expect(asked).toEqual([]);
+    expect(acts.at(-1)?.hints).toEqual({ role: "button", name: "Use security key" });
+  });
   it("fails loudly when the page is still not signed in", async () => {
     const { fp } = fakePage({ text: ["login", "something else"], present: () => true });
     await expect(formLogin("s", spec)({ fp, cred, code: async () => "1" })).rejects.toThrow(

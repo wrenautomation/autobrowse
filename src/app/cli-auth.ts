@@ -17,6 +17,7 @@ import {
   resolveLogin,
   rotatePasswordFlow,
   SITE_LOGINS,
+  sealRecoveryCodesFlow,
   takeClipboard,
   takeFile,
   viaLogin,
@@ -472,6 +473,22 @@ export function registerAuthCommands(program: Command, settings: Settings): void
         login: loginFor(settings, gmailFor(settings)),
       });
       console.log(await runner.run(enrollPasskeyFlow(login, credentialsFor(settings)), undefined));
+    });
+
+  program
+    .command("recovery-codes <site>")
+    .description(
+      "Read the account's recovery codes off the site's recovery page and seal them with the credential; prints only how many",
+    )
+    .option("--headed", "show the browser")
+    .action(async (site: string, o: { headed?: boolean }) => {
+      const login = loginNamed(site);
+      const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
+        login: loginFor(settings, gmailFor(settings)),
+      });
+      console.log(
+        await runner.run(sealRecoveryCodesFlow(login, credentialsFor(settings)), undefined),
+      );
     });
 
   program

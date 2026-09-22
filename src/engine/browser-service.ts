@@ -20,6 +20,7 @@ import { instantlyWarmup } from "../browser/flows/instantly-warmup.js";
 import { linkedinCreatePost } from "../browser/flows/linkedin-create-post.js";
 import { linkedinOauthConsent } from "../browser/flows/linkedin-oauth-consent.js";
 import { npmGranularToken } from "../browser/flows/npm-granular-token.js";
+import { npmTrustedPublisher } from "../browser/flows/npm-trusted-publisher.js";
 import { googleOauthConsent } from "../browser/flows/oauth-consent.js";
 import { outlookOauthConsent } from "../browser/flows/outlook-oauth-consent.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
@@ -64,6 +65,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinCreatePost,
     resetMailProbe,
     npmGranularToken,
+    npmTrustedPublisher,
     facebookOauthConsent,
     tiktokOauthConsent,
     xOauthConsent,

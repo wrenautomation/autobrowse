@@ -481,8 +481,32 @@ const outlook: SiteLogin = {
  * Password", button "Login"). Once an authenticator is enrolled it asks
  * for that instead — unverified until then.
  */
+/**
+ * npm 2FA is security keys only for a new enrollment (2026-09-22: the method
+ * list offers nothing else). The virtual authenticator is the key; the
+ * passkey and the recovery codes npm shows once are sealed with the
+ * credential. Mapped live to "Add security key"; past that is unverified.
+ */
+const NPM_PASSKEY_SETUP: PasskeySetupSpec = {
+  url: (cred) => `https://www.npmjs.com/settings/${cred.username}/tfa`,
+  before: [{ role: "button", name: "/^continue/i" }],
+  name: { role: "textbox", name: "/security key name/i" },
+  create: { role: "button", name: "Add security key" },
+  done: /recovery codes|manage security keys|two-factor authentication (is )?(enabled|on)|security key (was )?added/i,
+};
+
+/** npm's key prompt, at sign-in and before sensitive pages ("Click the button below when you are ready to authenticate"). */
+const NPM_USE_KEY = { role: "button", name: "Use security key" } as const;
+
 const npm: SiteLogin = {
   site: "npm",
+  passkeySetup: NPM_PASSKEY_SETUP,
+  // Five 64-hex codes, behind the key (mapped 2026-09-22).
+  recoveryCodes: {
+    url: (cred) => `https://www.npmjs.com/settings/${cred.username}/recovery-codes`,
+    unlock: NPM_USE_KEY,
+    codes: /\b[0-9a-f]{64}\b/i,
+  },
   home: "https://www.npmjs.com/",
   ask: "Your npm account (npmjs.com): username, password, authenticator key if set",
   loggedIn: async (fp) =>
@@ -492,6 +516,7 @@ const npm: SiteLogin = {
     username: { role: "textbox", name: "Username" },
     password: { role: "textbox", name: "Password" },
     submit: { role: "button", name: "Sign In" },
+    passkey: { asks: /security key|ready to authenticate/i, start: NPM_USE_KEY },
     code: [
       {
         kind: "email",

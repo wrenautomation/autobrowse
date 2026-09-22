@@ -79,6 +79,22 @@ export const npm: SiteApi = {
       },
       summary: "Who the stored token publishes as: the cheapest proof it is live",
     }),
+    route({
+      method: "POST",
+      path: "/packages/{package}/trust",
+      summary:
+        "Trust a GitHub Actions workflow to publish the package over OIDC (no token in CI); owner, repo and workflow are fixed once made",
+      request: z.object({
+        package: z.string().min(1),
+        owner: z.string().min(1),
+        repo: z.string().min(1),
+        workflow: z.string().regex(/^[^/]+\.ya?ml$/),
+        environment: z.string().min(1).optional(),
+        allowPublish: z.boolean().optional(),
+      }),
+      irreversible: true,
+      browser: { flow: "npm/trusted-publisher" },
+    }),
   ],
   setup: [
     {
@@ -89,7 +105,7 @@ export const npm: SiteApi = {
         input: { name: "autobrowse publish", access: "publish", bypass2fa: true, expiresDays: 90 },
       },
       summary:
-        "Mint a 90-day granular token that publishes every package the account owns (2FA bypassed: the account has none) and keep it as NPM_TOKEN; rerun before it expires",
+        "Mint a 90-day granular token that publishes every package the account owns (bypasses 2FA; the security key unlocks the page) and keep it as NPM_TOKEN; rerun before it expires",
     },
   ],
 };

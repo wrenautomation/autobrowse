@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { API_SIGNUPS } from "../src/auth/signup.js";
 import { tokenName } from "../src/browser/flows/npm-granular-token.js";
+import { npmTrustedPublisher } from "../src/browser/flows/npm-trusted-publisher.js";
 import type { HttpClient, JsonRequest } from "../src/clients/http.js";
+import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
 import { createRegistryUser, NPM_TOKEN, npm } from "../src/sites/npm.js";
 
 /** A door that answers one canned response and keeps what it was asked. */
@@ -86,5 +88,20 @@ describe("npm", () => {
     const at = new Date("2026-09-22T19:05:00Z");
     expect(tokenName("autobrowse publish", at)).toBe("autobrowse publish 2026-09-22 19:05");
     expect(tokenName("x".repeat(60), at)).toHaveLength(40);
+  });
+
+  it("trusts a CI workflow through the page, gated as irreversible", () => {
+    const trust = npm.routes.find((r) => r.path === "/packages/{package}/trust");
+    expect(trust?.irreversible).toBe(true);
+    expect(trust?.browser).toEqual({ flow: "npm/trusted-publisher" });
+    expect(BROWSER_FLOWS["npm/trusted-publisher"]).toBe(npmTrustedPublisher);
+    expect(
+      trust?.request.safeParse({
+        package: "p",
+        owner: "o",
+        repo: "r",
+        workflow: ".github/workflows/x.yml",
+      }).success,
+    ).toBe(false);
   });
 });

@@ -84,6 +84,7 @@ export {
   providerOf,
   registerProvider,
 } from "./providers.js";
+export { readRecoveryCodes, sealRecoveryCodesFlow, unlockWithPasskey } from "./recovery.js";
 export { newPassword, rotatePasswordFlow } from "./rotate.js";
 export {
   mintCredential,

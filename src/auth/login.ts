@@ -70,6 +70,8 @@ export interface SiteLogin {
   passwordChange?: PasswordChangeSpec;
   /** How this site's passkey page walks, for `enroll-passkey`. */
   passkeySetup?: PasskeySetupSpec;
+  /** Where this site shows the account's recovery codes, for `recovery-codes` and after an enrollment. */
+  recoveryCodes?: RecoveryCodesSpec;
   /**
    * Registrable domains the credential's password may be typed on, beside
    * `home`'s own (Google signs in on accounts.google.com, Microsoft on
@@ -81,10 +83,25 @@ export interface SiteLogin {
 /** The passkeys page: the button that starts the ceremony (our authenticator answers it), what the page says after. */
 export interface PasskeySetupSpec {
   url: string | ((cred: Credential) => string);
+  /** Clicks before `create`, when present (pick the method, "Continue"). */
+  before?: Hints[];
+  /** The box the site wants the key's name in, before `create`. */
+  name?: Hints;
   create: Hints;
   /** Confirmations after `create`, clicked when present ("Continue passkey enrollment"). */
   confirmations?: Hints[];
   done: RegExp;
+}
+
+/**
+ * The page that lists the account's recovery codes. Each match of `codes`
+ * on it is one code, sealed with the credential and never printed.
+ */
+export interface RecoveryCodesSpec {
+  url: string | ((cred: Credential) => string);
+  /** The button a page shows when it wants the key again before it shows them. */
+  unlock?: Hints;
+  codes: RegExp;
 }
 
 /** The change-password page: fields to fill, the submit, what the page says after. */
@@ -132,6 +149,8 @@ export interface FormLoginSpec {
   submit: Hints;
   /** The second step; a list when the site asks differently by account (an emailed code until 2FA, then the authenticator): the first whose page matches answers. */
   code?: CodeStep | CodeStep[];
+  /** A second step our enrolled passkey answers: the page asks, one click starts the ceremony. Tried before `code`. */
+  passkey?: { asks: RegExp; start: Hints };
   /** Signed in when the page text or URL matches; else when the password field is gone. */
   success?: RegExp;
   /** Text that means the password was rejected: stop, do not lock the account. */
@@ -181,8 +200,15 @@ export function formLogin(site: string, spec: FormLoginSpec): SiteLogin["signIn"
       text = await fp.text();
     }
     if (spec.rejected?.test(text)) throw new LoginFailed(site, "password rejected");
+    const byKey = !!(spec.passkey && cred.passkeys.length && spec.passkey.asks.test(text));
+    if (spec.passkey && byKey) {
+      // Our authenticator holds the key: the ceremony completes on the click.
+      await fp.act({ kind: "click" }, spec.passkey.start, { goal: "verify with our passkey" });
+      await fp.wait(SETTLE_MS * 2);
+      text = await fp.text();
+    }
     let step: CodeStep | null = null;
-    for (const s of spec.code ? [spec.code].flat() : [])
+    for (const s of spec.code && !byKey ? [spec.code].flat() : [])
       if (s.asks ? s.asks.test(text) : await fp.has(s.field)) {
         step = s;
         break;

@@ -59,6 +59,7 @@ describe("browser service", () => {
       "linkedin/create-post",
       "linkedin/oauth-consent",
       "npm/granular-token",
+      "npm/trusted-publisher",
       "outlook/oauth-consent",
       "tiktok/oauth-consent",
       "x/oauth-consent",
