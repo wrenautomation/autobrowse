@@ -18,14 +18,14 @@ carry. Dated 2026-09-22.
 
 ## In order of payoff
 
-0. **AWS port 25 — one command, blocks the wren email session** (asked
-   2026-09-22). The "remove email sending limitations" form for
-   `34.233.233.146` (wren-prod-pg, rDNS `probe.wrenautomation.com`) is filled
-   and parked at its `send` gate on the local worker (`pnpm worker` must be
-   up): `pnpm autobrowse approve aws-port25-request wren-prod-pg send`
-   submits it; `reject` drops it. The reply address in the prompt is the pays
-   account (the IAM user cannot read the root email): check it there. Rerun
-   anywhere: `pnpm autobrowse run aws-port25-request <key> --plan
+0. **AWS port 25 — submitted, unconfirmed; watch the pays inbox** (approved
+   by you 2026-09-22). The "remove email sending limitations" form for
+   `34.233.233.146` (wren-prod-pg, rDNS `probe.wrenautomation.com`) was sent
+   through its `send` gate and the page answered with its own confirmation
+   text — but no case shows in Support Center (Basic plan files these
+   outside it) and no AWS mail has arrived in the pays inbox yet. Nothing
+   more to do until a reply lands; if none does in a few days, refile.
+   Note the EIP still has no rDNS record set. Rerun anywhere: `pnpm autobrowse run aws-port25-request <key> --plan
    '{"contactEmail":…,"elasticIpAddress":…,"reverseDnsRecord":…,"useCaseDescription":…}'`.
    The Mac's AWS CLI session is no longer yours to renew: `pnpm autobrowse
    aws-login --user william --overwrite` does it (default profile now = IAM
