@@ -36,6 +36,7 @@ import { cursorOf, LIST_LIMIT, type ListQuery } from "../engine/rows.js";
 import { commandSchema } from "../explore/server.js";
 import { listRecordingSummaries, loadRecording, recordingDir } from "../recorder/store.js";
 import { type Method, SiteError } from "../sites/index.js";
+import { needAffordances, runAffordances, setupAffordances } from "./affordances.js";
 import { bearerAuth, rateLimit } from "./auth.js";
 import { Jobs } from "./jobs.js";
 
@@ -212,9 +213,14 @@ export function api(deps: ApiDeps): Hono {
   });
 
   /** What only the person can give, with each row's check; a decision is marked done here (never a value). */
-  app.get("/api/needs", async (c) =>
-    deps.owed ? c.json(await deps.owed.rows()) : c.json({ error: "no owed list here" }, 501),
-  );
+  app.get("/api/needs", async (c) => {
+    if (!deps.owed) return c.json({ error: "no owed list here" }, 501);
+    const owed = await deps.owed.rows();
+    return c.json({
+      ...owed,
+      rows: owed.rows.map((r) => ({ ...r, actions: needAffordances(r) })),
+    });
+  });
   const doneBody = z.object({ note: z.string().max(500).optional() });
   app.post("/api/needs/:id/done", async (c) => {
     if (!deps.owed) return c.json({ error: "no owed list here" }, 501);
@@ -315,7 +321,8 @@ export function api(deps: ApiDeps): Hono {
   app.get("/api/sites/:site", async (c) => {
     if (!deps.sites) return c.json({ error: "no site apis here" }, 501);
     try {
-      return c.json(await deps.sites.status(c.req.param("site")));
+      const row = await deps.sites.status(c.req.param("site"));
+      return c.json({ ...row, actions: setupAffordances(row) });
     } catch (err) {
       return siteError(c, err);
     }
@@ -381,7 +388,8 @@ export function api(deps: ApiDeps): Hono {
   app.get("/api/runs/:workflow/:key", async (c) => {
     const { workflow, key } = c.req.param();
     if (!(await find(workflow))) return c.json({ error: "unknown workflow" }, 404);
-    return c.json(await runOf(workflow, key).status());
+    const status = await runOf(workflow, key).status();
+    return c.json({ ...status, actions: runAffordances(status) });
   });
 
   app.post("/api/runs/:workflow/:key", async (c) => {

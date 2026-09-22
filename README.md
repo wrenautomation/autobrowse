@@ -46,6 +46,14 @@ compiled irreversible step opens one) is always asked: `approve <workflow>
 <key> send`. What stays human: hardware keys, adding a payment method,
 captchas until Browserbase takes them.
 
+**The bar for asking.** Try it first. `NEEDS-WILLIAM.md` and the `needs`
+rows are only for what a machine cannot hold: your password or passkey,
+your money, your taste, your name on a decision — or something autobrowse
+tried and failed at repeatedly, with the failures written down. Anything
+else, autobrowse does: a flow it has not recorded is a flow to record, a
+site with no leg is a leg to build. "Someone should set this up" is never
+a row; it is work.
+
 ## How it works
 
 - **Durable.** Every flow is a Restate Virtual Object. Each step is one
@@ -422,6 +430,14 @@ credential on any site takes that path, spec or not. API consent
 (`site setup youtube consent`) is the hand-written `google/oauth-consent`
 flow: chooser, unverified-app warning, scope boxes, Continue, until the
 loopback redirect. Design: `designs/2026-09-20-oauth-sign-in.md`.
+
+Three resources answer with what you may do to them next: a run
+(`GET /api/runs/:workflow/:key`) carries `actions` — the gate's `approve`
+and `reject` while one is open, `pause`/`play`, `run`, `reset` — a need
+carries the setup step that clears it, and a site carries the setup steps
+whose inputs are in hand. Legality lives in state, so an agent reads it
+instead of guessing a vocabulary (`src/ui/affordances.ts`). Nothing else is
+hypermedia; the site facade keeps each vendor's own shape.
 
 ## Site APIs
 
