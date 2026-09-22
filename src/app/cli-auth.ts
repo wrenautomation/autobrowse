@@ -27,6 +27,7 @@ import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
 const CLIPBOARD_MS = 60_000;
 import type { Settings } from "./config.js";
 import { macClipboard } from "./cli-env.js";
+import { askSecretTwice } from "./prompt.js";
 import { headed } from "./screen.js";
 import { browserOptions, credentialsFor, devicesFor, gmailFor, loginFor } from "./services.js";
 
@@ -166,15 +167,38 @@ export function registerAuthCommands(program: Command, settings: Settings): void
   creds
     .command("rotate <site>")
     .description(
-      "Change the site's password to a new random one, stored sealed; nothing is printed",
+      "Change the site's password on the site itself: a new random one, or --ask to type it here; stored sealed, nothing printed",
     )
     .option("--headed", "show the browser")
-    .action(async (site: string, o: { headed?: boolean }) => {
+    .option("--ask", "type the new password on this terminal (twice, never echoed) instead of drawing one")
+    .action(async (site: string, o: { headed?: boolean; ask?: boolean }) => {
       const login = loginNamed(site);
+      // Asked for before the browser opens, so a typo costs nothing.
+      const chosen = o.ask ? await askSecretTwice(`new password for ${site}`) : null;
       const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
         login: loginFor(settings, gmailFor(settings)),
       });
-      console.log(await runner.run(rotatePasswordFlow(login, credentialsFor(settings)), undefined));
+      const flow = chosen
+        ? rotatePasswordFlow(login, credentialsFor(settings), () => chosen)
+        : rotatePasswordFlow(login, credentialsFor(settings));
+      console.log(await runner.run(flow, undefined));
+    });
+  creds
+    .command("password <site>")
+    .description(
+      "The password changed on the site (you changed it by hand): type it here, twice, never echoed; only the store is touched, no browser",
+    )
+    .action(async (site: string) => {
+      const store = credentialsFor(settings);
+      const cred = await store.get(site);
+      if (!cred) throw new Error(`no credential stored for ${site}`);
+      const next = await askSecretTwice(`password for ${site}`);
+      await store.put(site, {
+        ...cred,
+        password: next,
+        ...(cred.password ? { previousPassword: cred.password } : {}),
+      });
+      console.log(`${site}: stored; creds push ${site} sends it to the box`);
     });
   creds
     .command("copy <site>")
