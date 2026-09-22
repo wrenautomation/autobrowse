@@ -306,7 +306,8 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         });
         if (!ok) throw new SiteError(403, `${what}: refused`);
       }
-      if (r.api && token) return r.api(parsed.data as never, { token, http: deps.http });
+      if (r.api && token)
+        return r.api(parsed.data as never, { token, http: deps.http, env: deps.env });
       if (r.browser) {
         const run = await legOf(r.browser);
         if (!run)
@@ -314,7 +315,9 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
             501,
             `${method} ${r.path}: ${legName(r.browser)} not recorded yet; explore it`,
           );
-        const input = r.browser.input ? r.browser.input(parsed.data as never) : parsed.data;
+        const input = r.browser.input
+          ? r.browser.input(parsed.data as never, deps.env)
+          : parsed.data;
         const out = await run(input);
         return r.browser.output ? r.browser.output(out) : out;
       }

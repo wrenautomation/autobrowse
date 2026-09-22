@@ -69,15 +69,17 @@ late, after the 90 s code wait; a retry passes). Twilio's own number
 - `facebook-page-owner`: Pages hang off a personal profile. Your profile
   makes a "Wren Automation" Page (one click, I drive it headed), or a new
   profile for Wren (Meta may ask for ID).
-- `youtube-channel-owner`: a channel on william@wrenautomation.com, not
-  a signup. Google offers only "Use your passkey" for that account on a
-  new browser (2026-09-22; TOTP is not offered). The login now clicks it
-  and our enrolled passkey answers, but Google says "Something went
-  wrong… Bluetooth" (pk/error): the passkey Google holds is not the one
-  we hold. So `login google-admin --headed` once with your passkey, then
-  `creds enroll-passkey google-admin` from that signed-in profile so it
-  never recurs; `google/youtube-channel-create` is recorded from there.
-  JinstersJournal is jin's.
+- Wren's YouTube channel is **made**: "Wren Automation"
+  (`UCJvP02ENWoDeOZxec-hoz9Q`) on william@wrenautomation.com, created
+  2026-09-22 from the signed-in google-admin profile. What is left is the
+  API token: the stored one is still JinstersJournal's (yours), and the
+  OAuth consent as william@ hits Google's passkey wall (`challenge/pk`).
+  Until a matching token exists, **every YouTube write is refused** —
+  `YOUTUBE_CHANNEL_ID` is set to Wren's channel and the site checks the
+  token's own channel before uploading, commenting or posting. If the
+  passkey keeps refusing us: `autobrowse login google-admin --headed`
+  once with your passkey, then re-run
+  `autobrowse site setup youtube consent --account william@wrenautomation.com`.
 - `linkedin-page`: the developer app needs a Page; yours, or one for Wren.
 - `virtual-cards-vendor`: Privacy.com or your bank; the rest is built like
   passwords (placed, origin-bound to the merchant).

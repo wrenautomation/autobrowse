@@ -50,6 +50,9 @@ export async function macClipboard(text: string, clearAfterMs: number): Promise<
   ).unref();
 }
 
+/** Names that describe the machine, not the fleet: a blanket `pull` leaves them alone. */
+export const MACHINE_LOCAL = new Set(["CREDENTIALS_CIPHER", "BROWSER", "BROWSER_HEADLESS"]);
+
 export function registerEnvCommands(program: Command, settings: Settings, deps: EnvCliDeps): void {
   const say = deps.say ?? ((l: string) => console.log(l));
   const out = deps.out ?? ((t: string) => process.stdout.write(t));
@@ -95,7 +98,11 @@ export function registerEnvCommands(program: Command, settings: Settings, deps: 
       const all = await deps.store().all();
       const missing = names.filter((n) => !all.some((e) => e.name === n));
       if (missing.length) throw new Error(`not in the store: ${missing.join(", ")}`);
-      const entries = names.length ? all.filter((e) => names.includes(e.name)) : all;
+      const chosen = names.length ? all.filter((e) => names.includes(e.name)) : all;
+      // The store is the fleet's; a few names describe THIS machine and a blanket
+      // pull would hand it the box's answer (a sealed credential file read as plain).
+      const entries = names.length ? chosen : chosen.filter((e) => !MACHINE_LOCAL.has(e.name));
+      const kept = chosen.length - entries.length;
       if (o.export) return out(toExports(entries));
       const file = resolve(expandHome(o.out));
       // A multi-line value (a service-account JSON) goes to its own 0600 file beside the env file.
@@ -124,6 +131,10 @@ export function registerEnvCommands(program: Command, settings: Settings, deps: 
       say(
         `${entries.length} value${entries.length === 1 ? "" : "s"} → ${file}: ${entries.map((e) => e.name).join(", ")}`,
       );
+      if (kept)
+        say(
+          `kept this machine's own: ${[...MACHINE_LOCAL].join(", ")} (name one explicitly to pull it anyway)`,
+        );
     });
 
   env

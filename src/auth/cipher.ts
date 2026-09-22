@@ -12,7 +12,21 @@ export interface Cipher {
   open(sealed: string): string;
 }
 
-export const plainCipher: Cipher = { seal: (p) => p, open: (s) => s };
+/**
+ * No sealing. `open` still refuses a sealed file: reading one as plain text
+ * yields a parse error three layers away, and the cause is always the same
+ * — this machine seals with the keychain and CREDENTIALS_CIPHER says none.
+ */
+export const plainCipher: Cipher = {
+  seal: (p) => p,
+  open: (s) => {
+    if (isSealed(s))
+      throw new Error(
+        "the credential file is sealed by this tool, but CREDENTIALS_CIPHER says none: set CREDENTIALS_CIPHER=keychain on this machine (env pull may have overwritten it with a container's value)",
+      );
+    return s;
+  },
+};
 
 const MAGIC = "autobrowse-sealed-v1";
 

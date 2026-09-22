@@ -758,6 +758,17 @@ describe("sealed credential file", () => {
       fileCredentials(file, aesGcmCipher(Buffer.alloc(32, 8))).get("new"),
     ).rejects.toThrow();
   });
+
+  it("read as plain text, it names the setting instead of a parse error", async () => {
+    const { aesGcmCipher } = await import("../src/auth/cipher.js");
+    const dir = mkdtempSync(join(tmpdir(), "autobrowse-sealed-"));
+    const file = join(dir, "c.json");
+    await fileCredentials(file, aesGcmCipher(Buffer.alloc(32, 7))).put("s", {
+      username: "u",
+      password: "p",
+    });
+    await expect(fileCredentials(file).get("s")).rejects.toThrow(/CREDENTIALS_CIPHER=keychain/);
+  });
 });
 
 describe("resolveLogin", () => {

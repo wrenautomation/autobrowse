@@ -441,6 +441,12 @@ hypermedia; the site facade keeps each vendor's own shape.
 
 ## Site APIs
 
+Which account a site posts as is configuration, not a habit: YouTube writes
+(upload, thumbnail, comment, community post) check the token's own channel
+against `YOUTUBE_CHANNEL_ID` and refuse when they differ or when it is unset,
+so a stale consent cannot put Wren's video on a personal channel. Point it at
+another channel and consent as that account to move it.
+
 A service under its own API's shape: `POST /api/sites/linkedin/rest/posts`
 takes what LinkedIn's Posts API takes and answers what it answers; `GET
 /api/sites/youtube/youtube/v3/videos?part=statistics&id=…` is the Data API.

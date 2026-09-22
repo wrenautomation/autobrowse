@@ -12,6 +12,12 @@ export interface CommunityPostInput {
   text: string;
   /** An image file to attach. */
   image?: string;
+  /**
+   * The channel this post belongs on (`UC…`). The composer follows whoever
+   * this profile is signed in as, so without it a post can land on the
+   * wrong channel; the flow refuses rather than guess.
+   */
+  channel?: string;
 }
 
 /** Redirects to the signed-in channel's Posts tab (`/channel/<id>/posts`). */
@@ -25,6 +31,15 @@ export const youtubeCommunityPost = defineFlow<CommunityPostInput, { url: string
     await fp.open(COMPOSER);
     if (!(await fp.waitForUrl(/youtube\.com\/channel\/[^/]+\/posts/, 15_000)))
       return fp.human(`no Posts tab for this channel (landed on ${fp.url()})`);
+    const landed = /youtube\.com\/channel\/([^/]+)\/posts/.exec(fp.url())?.[1] ?? "";
+    if (!input.channel)
+      return fp.human(
+        `no channel was named for this post; this profile is on ${landed}. Set YOUTUBE_CHANNEL_ID to the channel these posts belong on`,
+      );
+    if (landed !== input.channel)
+      return fp.human(
+        `this profile posts as channel ${landed}, not ${input.channel}: sign the profile in as the account that owns it`,
+      );
     const before = await postLinks(fp);
     await fp.act(
       { kind: "click" },

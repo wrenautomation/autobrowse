@@ -84,3 +84,10 @@ describe("langfuse wiring", () => {
     ).rejects.toThrow(/not wired/);
   });
 });
+
+describe("machine-local env names", () => {
+  it("are left out of a blanket pull", async () => {
+    const { MACHINE_LOCAL } = await import("../src/app/cli-env.js");
+    expect(MACHINE_LOCAL.has("CREDENTIALS_CIPHER")).toBe(true);
+  });
+});

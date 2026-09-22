@@ -14,10 +14,12 @@ import type { Amount } from "../gates/spend.js";
 
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-/** What a route's `api` leg is handed: the bearer for this site, the HTTP door. */
+/** What a route's `api` leg is handed: the bearer for this site, the HTTP door, the settings. */
 export interface ApiLeg {
   token: string;
   http: HttpClient;
+  /** Env names the route itself needs (which channel a post belongs on, say). */
+  env: (name: string) => string | undefined;
 }
 
 /**
@@ -26,8 +28,8 @@ export interface ApiLeg {
  * answer map onto it.
  */
 export type BrowserLeg<I, O> = Leg & {
-  /** The flow's input (or the workflow's plan) from the request; the request itself when absent. */
-  input?: (i: I) => unknown;
+  /** The flow's input (or the workflow's plan) from the request and the env; the request itself when absent. */
+  input?: (i: I, env: (name: string) => string | undefined) => unknown;
   /** The official response shape from what the leg read; the output itself when absent. */
   output?: (o: unknown) => O;
 };

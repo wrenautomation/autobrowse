@@ -47,8 +47,19 @@ if (plan.mode === "listen") {
   await tunnel.ready;
   if (!tunnel.deploymentUrl) throw new Error("restate tunnel handshake gave no deployment URL");
   log.info({ tunnel: plan.tunnelName, browser: settings.browser }, "autobrowse restate tunnel up");
+  // A tunnel is a Restate Cloud thing, so the cloud's admin URL is the right one:
+  // a stale RESTATE_ADMIN_URL from a local Restate would send this registration nowhere.
+  const local = /^https?:\/\/(localhost|127\.0\.0\.1)\b/.test(settings.restateAdminUrl ?? "");
+  if (local)
+    log.warn(
+      { adminUrl: settings.restateAdminUrl },
+      "ignoring RESTATE_ADMIN_URL: this worker is on the cloud tunnel",
+    );
   register = {
-    adminUrl: settings.restateAdminUrl ?? cloudAdminUrl(plan.environmentId, plan.region),
+    adminUrl:
+      !local && settings.restateAdminUrl
+        ? settings.restateAdminUrl
+        : cloudAdminUrl(plan.environmentId, plan.region),
     endpointUrl: tunnel.deploymentUrl,
   };
 }

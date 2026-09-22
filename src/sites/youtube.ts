@@ -8,9 +8,56 @@
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
-import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import { type ApiLeg, type OAuthSpec, route, type SiteApi, SiteError } from "./types.js";
 
 export const YOUTUBE_ORIGIN = "https://www.googleapis.com";
+
+/**
+ * Which channel these writes belong on. A Google account can own several
+ * channels, and the account a token was consented as decides which one an
+ * upload lands on — so a stale consent quietly posts Wren's video to a
+ * person's own channel. Every write checks the token's channel against this
+ * name first and refuses when it cannot prove they match.
+ */
+export const YOUTUBE_CHANNEL = "YOUTUBE_CHANNEL_ID";
+
+/** One channel lookup per bearer: a token is one account, and it does not change mid-process. */
+const channelOf = new Map<string, string>();
+const REMEMBERED = 4;
+
+async function channelIdFor(leg: ApiLeg): Promise<string> {
+  const seen = channelOf.get(leg.token);
+  if (seen) return seen;
+  const r = await leg.http.json<{ items?: Array<{ id?: string }> }>(
+    `${YOUTUBE_ORIGIN}/youtube/v3/channels?part=id&mine=true`,
+    { headers: bearer(leg) },
+  );
+  const id = r.ok ? r.body?.items?.[0]?.id : undefined;
+  if (!id)
+    throw new SiteError(
+      409,
+      "the stored YouTube token owns no channel (or cannot be read): consent again as the account that owns the channel",
+    );
+  if (channelOf.size >= REMEMBERED) channelOf.clear();
+  channelOf.set(leg.token, id);
+  return id;
+}
+
+/** Throws unless the token's own channel is the configured one. Reads are untouched. */
+export async function onTheRightChannel(leg: ApiLeg): Promise<void> {
+  const want = leg.env(YOUTUBE_CHANNEL);
+  if (!want)
+    throw new SiteError(
+      409,
+      `set ${YOUTUBE_CHANNEL} to the channel these posts belong on before writing (\`site call youtube GET /youtube/v3/channels\` with \`{"mine":true,"part":"id,snippet"}\` lists what this token owns)`,
+    );
+  const mine = await channelIdFor(leg);
+  if (mine !== want)
+    throw new SiteError(
+      409,
+      `this token is on channel ${mine}, not ${YOUTUBE_CHANNEL}=${want}: consent again as the account that owns it (\`site setup youtube consent --account <address>\`)`,
+    );
+}
 
 const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 
@@ -114,6 +161,7 @@ export const youtube: SiteApi = {
       request: upload,
       irreversible: true,
       api: async (body, leg) => {
+        await onTheRightChannel(leg);
         const { file, contentType, part, uploadType, ...meta } = body;
         const bytes = await bytesOf(file);
         const start = await leg.http.json<unknown>(
@@ -152,8 +200,9 @@ export const youtube: SiteApi = {
       path: "/upload/youtube/v3/thumbnails/set",
       summary: "Set a video's thumbnail from `file` (path or URL)",
       request: thumbnail,
-      api: async ({ videoId, file, contentType }, leg) =>
-        must(
+      api: async ({ videoId, file, contentType }, leg) => {
+        await onTheRightChannel(leg);
+        return must(
           await leg.http.json<unknown>(
             `${YOUTUBE_ORIGIN}/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(videoId)}&uploadType=media`,
             {
@@ -163,7 +212,8 @@ export const youtube: SiteApi = {
             },
           ),
           "upload/youtube/v3/thumbnails/set",
-        ),
+        );
+      },
     }),
     route({
       method: "GET",
@@ -187,8 +237,9 @@ export const youtube: SiteApi = {
       summary: "A top-level comment on a video",
       request: commentThread,
       irreversible: true,
-      api: async ({ part, ...body }, leg) =>
-        must(
+      api: async ({ part, ...body }, leg) => {
+        await onTheRightChannel(leg);
+        return must(
           await leg.http.json<unknown>(
             `${YOUTUBE_ORIGIN}/youtube/v3/commentThreads?part=${encodeURIComponent(part)}`,
             {
@@ -198,7 +249,8 @@ export const youtube: SiteApi = {
             },
           ),
           "youtube/v3/commentThreads",
-        ),
+        );
+      },
     }),
     route({
       method: "POST",
@@ -206,8 +258,9 @@ export const youtube: SiteApi = {
       summary: "Reply to a comment (`snippet.parentId`)",
       request: reply,
       irreversible: true,
-      api: async ({ part, ...body }, leg) =>
-        must(
+      api: async ({ part, ...body }, leg) => {
+        await onTheRightChannel(leg);
+        return must(
           await leg.http.json<unknown>(
             `${YOUTUBE_ORIGIN}/youtube/v3/comments?part=${encodeURIComponent(part)}`,
             {
@@ -217,7 +270,8 @@ export const youtube: SiteApi = {
             },
           ),
           "youtube/v3/comments",
-        ),
+        );
+      },
     }),
     route({
       method: "POST",
@@ -226,7 +280,10 @@ export const youtube: SiteApi = {
         "A community post (no official API; autobrowse-only path, YouTube Studio in the browser)",
       request: communityPost,
       irreversible: true,
-      browser: { flow: "google/youtube-community-post" },
+      browser: {
+        flow: "google/youtube-community-post",
+        input: (i, env) => ({ ...i, channel: env(YOUTUBE_CHANNEL) }),
+      },
     }),
   ],
   setup: [
