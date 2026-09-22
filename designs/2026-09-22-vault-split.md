@@ -65,17 +65,28 @@ anything. `expiring(list, ms)` returns what lapses within `ms`.
    (wren's Restate, once a day) that renews every reopened token row that
    has a setup step. OAuth access tokens stored without a refresh token also
    do not record `expires_in` yet.
-2. **wren still has its own SSM secret code** (`apps/worker/src/ssm-env.ts`,
-   `packages/provision` `ssmSecretStore`). That makes two readers of one
-   path, each with its own rules. Move both onto credkeep.
-3. **The sites facade still makes clean API calls** (YouTube reads, npm
-   REST, LinkedIn reads). Per the rule above, those move to wren. The
-   browser legs and setups stay.
+2. **Clean API routes still run on the box.** Today only YouTube has a live
+   API token. LinkedIn, Meta, X and TikTok wait on credentials or go through
+   the browser, so each YouTube metrics read wakes the box for one GET. Do
+   the move once a second API is live, not by copying site definitions into
+   wren:
+   - lift the routes' API legs (schemas, `api`, token minting) into a package
+     with no browser code
+   - wren wraps its `SiteClient` so a route with a token in the vault
+     (`ssmEnvStore(ssm, "/autobrowse/config")`) is called directly, and
+     everything else still goes to autobrowse
+   - the Lambda role needs read access to `/autobrowse/config/*`
+3. **wren's own SSM code stays as it is** (`apps/worker/src/ssm-env.ts`,
+   provision's `ssmSecretStore`). Checked 2026-09-22: it is a JSON env blob
+   for Lambda plus per-inbox password paths containing `@`. Neither is one
+   name per parameter, and neither shares autobrowse's path. Moving it
+   would change prod for nothing. Revisit only if wren needs expiry.
 4. **One vault for everyone.** Client isolation is the `KEYCHAIN` /
    `CRED_ENV` / `ENV_STORE_PREFIX` triple in `keep.ts`. Today it is a
    constant. It needs to be per client before a second client exists.
-5. **`via` is a plain string in credkeep.** autobrowse casts it to
-   `Provider` at the one place it reads it (`login.ts`). A typo in a stored
-   credential shows up as "no provider", not as a parse error.
-6. **The legacy seal marker** stays readable forever unless we drop it.
-   Once every file has been rewritten, remove it in credkeep 0.2.
+5. **The legacy seal marker** stays readable forever unless we drop it.
+   Once every file has been rewritten, remove it in credkeep 0.3.
+
+Checked and dropped: `via` is a plain string in credkeep, and autobrowse
+casts it. That is fine: `providerOf` throws "no identity provider named X"
+on a typo.
