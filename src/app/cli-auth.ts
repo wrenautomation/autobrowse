@@ -276,6 +276,27 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     });
 
   program
+    .command("ledger")
+    .description(
+      "Check the hash chains of the ledgers (secret uses, spend decisions, agent steps): an edited, dropped or reordered row breaks every hash after it",
+    )
+    .argument("<verb>", "verify")
+    .action(async (verb: string) => {
+      if (verb !== "verify") throw new Error(`ledger: unknown verb ${verb}; verify`);
+      const { ledgerPath } = await import("./services.js");
+      const { verifyChain } = await import("../deps/chain.js");
+      let bad = 0;
+      for (const name of ["audit", "spend", "steps"] as const) {
+        const v = await verifyChain(ledgerPath(settings, name));
+        if (!v.ok) bad++;
+        console.log(
+          `${name.padEnd(6)} ${v.rows} rows${v.unchained ? ` (${v.unchained} from before chaining)` : ""}  ${v.ok ? "chain intact" : `BROKEN at row ${v.brokenAt}; rows before it are intact`}`,
+        );
+      }
+      if (bad) process.exitCode = 1;
+    });
+
+  program
     .command("spend")
     .description("Every payment-gate decision: auto, person, denied, over the cap (SPEND_* policy)")
     .option("--last <n>", "how many lines", "50")

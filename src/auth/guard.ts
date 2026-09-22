@@ -5,11 +5,9 @@
  * ledger: which credential, which field, which site, which page, by whom.
  * Values are never written anywhere here.
  */
-import { appendFile, chmod, mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
 import type { BrowserFlow, FlowPage, FlowRunner } from "../browser/flow.js";
+import { chainedFile } from "../deps/chain.js";
 import type { SecretSource } from "../deps/secrets.js";
-import { tailJson } from "../deps/tail.js";
 import type { Credential } from "./credentials.js";
 
 export interface SecretUse {
@@ -33,22 +31,14 @@ export interface SecretAudit {
 }
 
 /** JSON lines, owner-only, appended. */
+/** The file ledger is hash-chained (`deps/chain.ts`): `ledger verify` finds any edit. */
 export function fileAudit(path: string): SecretAudit {
-  let ready: Promise<void> | null = null;
-  const ensure = () =>
-    (ready ??= (async () => {
-      await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-      await appendFile(path, "", { mode: 0o600 });
-      await chmod(path, 0o600);
-    })());
+  const file = chainedFile<SecretUse>(path);
   return {
     async record(use) {
-      await ensure();
-      await appendFile(path, `${JSON.stringify(use)}\n`, { mode: 0o600 });
+      await file.append(use);
     },
-    async recent(n = 50) {
-      return tailJson<SecretUse>(path, n);
-    },
+    recent: (n = 50) => file.recent(n),
   };
 }
 

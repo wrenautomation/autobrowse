@@ -264,8 +264,13 @@ export function credentialsFor(
 }
 
 /** Where every secret use is written: next to the credential file, 0600, one JSON line each. */
+/** The ledgers live beside the credential file, one hash-chained JSONL each (`autobrowse ledger verify`). */
+export function ledgerPath(settings: Settings, name: "audit" | "spend" | "steps"): string {
+  return join(dirname(expandHome(settings.credentialsFile)), `${name}.jsonl`);
+}
+
 export function auditFor(settings: Settings): SecretAudit {
-  return fileAudit(join(dirname(expandHome(settings.credentialsFile)), "audit.jsonl"));
+  return fileAudit(ledgerPath(settings, "audit"));
 }
 
 /** The paired phone, when one is configured: reader, notifier and channel share these options. */
@@ -484,7 +489,7 @@ export function spendPolicyFor(settings: Settings): SpendPolicy {
 
 /** Every gate decision, next to the credential file and the secret audit. */
 export function spendLedgerFor(settings: Settings): SpendLedger {
-  return fileSpendLedger(join(dirname(expandHome(settings.credentialsFile)), "spend.jsonl"));
+  return fileSpendLedger(ledgerPath(settings, "spend"));
 }
 
 /** The channel a person answers on: phone, then Linq, then email. */
