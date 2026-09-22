@@ -3,6 +3,7 @@
 import { dirname, join } from "node:path";
 import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Logger } from "pino";
+import { fileStepLedger, type StepLedger } from "../agent/ledger.js";
 import {
   envIdentities,
   fileIdentities,
@@ -86,6 +87,7 @@ import {
 } from "../google-auth.js";
 import { type BudgetExceeded, type BudgetedLlm, budgetedLlm, fileLedger } from "../llm/budget.js";
 import { type Llm, makeLlm } from "../llm/index.js";
+import { otlpSink, type TraceSink, tracedLlm } from "../llm/trace.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
 import {
   accessTokens,
@@ -161,13 +163,28 @@ export function browserOptions(
   };
 }
 
-/** The model behind everything, under the daily cap when one is set (`LLM_DAILY_TOKENS`). */
+/** One trace sink per process: every traced model call batches through it; null with no endpoint. */
+let sink: TraceSink | null | undefined;
+export function traceSinkFor(settings: Settings, http = httpClient()): TraceSink | null {
+  if (sink !== undefined) return sink;
+  sink = settings.otlpEndpoint
+    ? otlpSink({
+        endpoint: settings.otlpEndpoint,
+        headers: settings.otlpHeaders,
+        serviceName: settings.otlpServiceName,
+        http,
+      })
+    : null;
+  return sink;
+}
+
+/** The model behind everything: traced when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, under the daily cap when one is (`LLM_DAILY_TOKENS`). */
 export function llmFor(
   settings: Settings,
   http = httpClient(),
   onExceeded?: (err: BudgetExceeded) => void,
 ): BudgetedLlm | Llm | null {
-  const llm = makeLlm(
+  const raw = makeLlm(
     {
       provider: settings.llmProvider,
       model: settings.llmModel,
@@ -177,6 +194,8 @@ export function llmFor(
     },
     http,
   );
+  const traces = raw && traceSinkFor(settings, http);
+  const llm = raw && traces ? tracedLlm(raw, traces) : raw;
   if (!llm || settings.llmDailyTokens === 0) return llm;
   return budgetedLlm(llm, {
     dailyTokens: settings.llmDailyTokens,
@@ -267,6 +286,10 @@ export function credentialsFor(
 /** The ledgers live beside the credential file, one hash-chained JSONL each (`autobrowse ledger verify`). */
 export function ledgerPath(settings: Settings, name: "audit" | "spend" | "steps"): string {
   return join(dirname(expandHome(settings.credentialsFile)), `${name}.jsonl`);
+}
+
+export function stepLedgerFor(settings: Settings): StepLedger {
+  return fileStepLedger(ledgerPath(settings, "steps"));
 }
 
 export function auditFor(settings: Settings): SecretAudit {

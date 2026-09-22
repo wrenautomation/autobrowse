@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { clip, exploreWithAgent } from "../src/agent/explorer.js";
+import { memoryStepLedger } from "../src/agent/ledger.js";
 import type { ExploreCommand, Explorer } from "../src/explore/server.js";
 import { fakeLlm } from "../src/llm/fake.js";
 
@@ -55,9 +56,26 @@ describe("exploreWithAgent", () => {
         action: { cmd: "done", summary: "dark mode already on", achieved: true },
       },
     ]);
-    const r = await exploreWithAgent({ explorer: ex, llm, goal: "make sure dark mode is on" });
+    const ledger = memoryStepLedger();
+    const r = await exploreWithAgent({
+      explorer: ex,
+      llm,
+      goal: "make sure dark mode is on",
+      ledger,
+      session: "s-1",
+      site: "site",
+    });
     expect(r.achieved).toBe(true);
     expect(r.steps.map((s) => s.step?.action.cmd)).toEqual(["click", "done"]);
+    // Every step is a ledger row with its own spend and time, never the page.
+    await new Promise((ok) => setTimeout(ok, 0));
+    expect(ledger.rows.map((x) => [x.session, x.site, x.n, x.cmd, x.ok, x.host])).toEqual([
+      ["s-1", "site", 1, "click", true, "site.test"],
+      ["s-1", "site", 2, "done", true, "site.test"],
+    ]);
+    expect(ledger.rows[0]).toMatchObject({ inputTokens: 10, outputTokens: 5 });
+    expect(r.steps[0]?.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
+    expect(JSON.stringify(ledger.rows)).not.toContain("Settings");
     expect(calls.find((c) => c.cmd === "click")).toMatchObject({
       hints: { role: "button", name: "Settings" },
     });

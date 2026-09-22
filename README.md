@@ -363,6 +363,18 @@ channel, and a reply on any of them is a command (`yes`, `no`, `pause`,
 With `SENTRY_DSN` set, failed runs, failed steps and crashes become
 Sentry issues tagged workflow/key/step.
 
+Agent sessions are runs too: rows in the Runs registry and on the live
+feed under workflow `agent` (started, one `step` per agent step, finished;
+a session that dies with the worker is finished as failed on the next
+start). Every step is also a row of the hash-chained step ledger
+(`pnpm autobrowse steps --last 50 [--session id]`): model, tokens, act,
+outcome, time, host; never a page, a prompt or a value. With
+`OTEL_EXPORTER_OTLP_ENDPOINT` (+ `OTEL_EXPORTER_OTLP_HEADERS` for the
+vendor's auth, `OTEL_SERVICE_NAME`) every model call is a span over
+OTLP/HTTP, one trace per session — Langfuse, Honeycomb, Grafana, Jaeger
+take it as is; no SDK, nothing runs without the endpoint. Spans carry
+sizes, hashes and token counts, never text (`src/llm/trace.ts`).
+
 ## Coupling to `wren`
 
 Thin: writes the roster to SSM, dispatches wren's deploy, calls its ingress

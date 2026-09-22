@@ -297,6 +297,26 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     });
 
   program
+    .command("steps")
+    .description(
+      "The agent step ledger: every step of every session (UI, `agent`, repair) with its model spend and time; never a page or a value",
+    )
+    .option("--last <n>", "how many lines", "50")
+    .option("--session <id>", "one session only")
+    .action(async (o: { last: string; session?: string }) => {
+      const { stepLedgerFor } = await import("./services.js");
+      const rows = (await stepLedgerFor(settings).recent(Number(o.last))).filter(
+        (r) => !o.session || r.session === o.session,
+      );
+      if (!rows.length) console.log("no agent steps recorded yet");
+      for (const r of rows) {
+        console.log(
+          `${r.at}\t${r.session}\t${r.site}\t${String(r.n).padStart(2)}\t${r.ok ? "ok    " : "failed"}\t${r.cmd.padEnd(8)}\t${r.inputTokens}+${r.outputTokens} tok\t${r.ms} ms\t${r.host}${r.error ? `\t${r.error}` : ""}`,
+        );
+      }
+    });
+
+  program
     .command("spend")
     .description("Every payment-gate decision: auto, person, denied, over the cap (SPEND_* policy)")
     .option("--last <n>", "how many lines", "50")

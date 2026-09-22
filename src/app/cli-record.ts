@@ -361,11 +361,14 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<{ achieved: bo
   );
   try {
     if (r.url) await ex.exec({ cmd: "open", url: r.url });
+    const { stepLedgerFor } = await import("./services.js");
     const result = await exploreWithAgent({
       explorer: ex,
       llm,
       goal: r.goal,
       inputs: r.inputs,
+      site: r.site,
+      ledger: stepLedgerFor(settings),
       ...(r.secrets ? { secrets: r.secrets.names } : {}),
       maxSteps: r.maxSteps,
       // Headed, the person does the captcha in the window and presses enter here.

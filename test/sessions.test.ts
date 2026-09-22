@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { agentSessions } from "../src/agent/sessions.js";
+import type { RunEvent } from "../src/engine/events.js";
 import type { ExploreCommand, Explorer } from "../src/explore/server.js";
 import { fakeLlm } from "../src/llm/fake.js";
 
@@ -62,12 +63,26 @@ describe("agentSessions", () => {
       { thought: "go", action: { cmd: "click", ref: 1, goal: "go" } },
       { thought: "there", action: { cmd: "done", summary: "arrived", achieved: true } },
     ]);
-    const s = agentSessions({ llm, open: async () => ex, basePort: 9500 });
+    const events: RunEvent[] = [];
+    const s = agentSessions({
+      llm,
+      open: async () => ex,
+      basePort: 9500,
+      emit: async (e) => {
+        events.push(e);
+      },
+    });
     const v = await s.start({ site: "site", goal: "arrive" });
     expect(v.port).toBe(9500);
     for (let i = 0; i < 20 && s.get(v.id)?.status !== "done"; i++) await tick();
     const done = s.get(v.id);
     expect(done).toMatchObject({ status: "done", achieved: true, summary: "arrived" });
+    // The session is a run on the registry: started, one step each, finished.
+    await tick();
+    expect(events.map((e) => e.type)).toEqual(["started", "step", "step", "finished"]);
+    expect(events[0]?.run).toEqual({ workflow: "agent", key: v.id });
+    expect(events[1]).toMatchObject({ step: "1. click", result: { status: "done", detail: "go" } });
+    expect(events[3]).toMatchObject({ status: "done", summary: "achieved: arrived" });
     expect(done?.steps.map((x) => x.step?.action.cmd)).toEqual(["click", "done"]);
     await tick();
     expect(done?.steps[0]?.screenshot).toMatch(/\.png$/);

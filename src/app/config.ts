@@ -80,6 +80,10 @@ const schema = z.object({
   /** Which guards stay on: `all`, `none`, or a comma list (purchase, password, irreversible). */
   guards: z.string().default("all"),
   /** Sentry: failed runs, failed steps and crashes become issues. Off when unset. */
+  /** OTLP/HTTP traces for every model call (Langfuse, Honeycomb, Grafana …); off when unset. */
+  otlpEndpoint: z.string().url().optional(),
+  otlpHeaders: z.string().optional(),
+  otlpServiceName: z.string().min(1).default("autobrowse"),
   sentryDsn: z.string().url().optional(),
   sentryEnvironment: z.string().min(1).default("local"),
   /**
@@ -232,6 +236,9 @@ export const ENV_KEYS = {
   secretSink: "SECRET_SINK",
   envFile: "ENV_FILE",
   guards: "GUARDS",
+  otlpEndpoint: "OTEL_EXPORTER_OTLP_ENDPOINT",
+  otlpHeaders: "OTEL_EXPORTER_OTLP_HEADERS",
+  otlpServiceName: "OTEL_SERVICE_NAME",
   sentryDsn: "SENTRY_DSN",
   sentryEnvironment: "SENTRY_ENVIRONMENT",
   evaluateEveryHours: "EVALUATE_EVERY_HOURS",

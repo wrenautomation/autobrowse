@@ -21,6 +21,7 @@ import type { Ability } from "../do/catalog.js";
 import type { Doer } from "../do/doer.js";
 import { filePicks } from "../do/memory.js";
 import { doerFor } from "../do/wire.js";
+import type { RunEvent } from "../engine/events.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import { type ExploreOptions, type Explorer, startExplore } from "../explore/server.js";
 import type { Approver } from "../gates/payment.js";
@@ -54,6 +55,7 @@ import {
   paceFor,
   sinkFor,
   spendLedgerFor,
+  stepLedgerFor,
   WORKFLOWS,
 } from "./services.js";
 import type { Status } from "./status.js";
@@ -190,13 +192,20 @@ export function explorerOpener(
 export function agentFor(
   settings: Settings,
   llm: Llm,
-  o: { sink?: SecretSink; notify?: (line: string) => Promise<void>; screen?: Screen } = {},
+  o: {
+    sink?: SecretSink;
+    notify?: (line: string) => Promise<void>;
+    screen?: Screen;
+    emit?: (event: RunEvent) => Promise<void>;
+  } = {},
 ): AgentSessions {
   const open = explorerOpener(settings, o.sink, o.screen);
   return agentSessions({
     llm,
     dir: join(expandHome(settings.recordingsDir), ".sessions"),
+    ledger: stepLedgerFor(settings),
     ...(o.notify ? { notify: o.notify } : {}),
+    ...(o.emit ? { emit: o.emit } : {}),
     open: (site, port) => open(site, port),
   });
 }
@@ -259,6 +268,8 @@ export interface BackendOptions {
   status?: Status;
   /** A heal ends with a proof run unless told not to (CLI `heal --no-prove`). */
   proveAfterHeal?: boolean;
+  /** False for a backend with no Restate behind its ingress (the CLI's local set). */
+  registry?: boolean;
 }
 
 /**
@@ -274,6 +285,13 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
         sink: app.sink,
         screen: app.screen,
         ...(o.notify ? { notify: o.notify } : {}),
+        // Sessions are rows in the Runs registry and on the live feed, like any run.
+        emit: async (event) => {
+          await Promise.allSettled([
+            app.bus.deliver(event),
+            o.registry === false ? Promise.resolve() : o.ingress.registry().record(event),
+          ]);
+        },
       })
     : undefined;
   const recordingsDir = expandHome(settings.recordingsDir);
@@ -335,6 +353,8 @@ export function localBackend(settings: Settings, ingress: Ingress): LocalBackend
     const backend = backendFor(settings, parts, {
       llm: o.llm === false ? null : llmFor(settings),
       ingress,
+      // The CLI's sessions are its own; the registry is the worker's to keep.
+      registry: false,
       ...(o.proveAfterHeal === undefined ? {} : { proveAfterHeal: o.proveAfterHeal }),
     });
     return { backend, parts };

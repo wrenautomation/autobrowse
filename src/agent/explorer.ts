@@ -11,8 +11,10 @@ import { z } from "zod";
 import { desktopOpSchema } from "../desktop/types.js";
 import type { ExploreCommand, Explorer } from "../explore/server.js";
 import { PaymentGate } from "../gates/payment.js";
+import { withTrace } from "../llm/trace.js";
 import { completeJson, type Llm, LlmOutputInvalid, type LlmUsage } from "../llm/types.js";
 import { type Digest, digest, hintsFor, LEGEND } from "./digest.js";
+import { hostOf, type StepLedger } from "./ledger.js";
 
 /** A ref number from the digest; the code turns it back into locator hints. */
 const ref = z.number().int().positive();
@@ -57,6 +59,9 @@ export interface StepRecord {
   result: unknown;
   error: string | null;
   url: string;
+  /** This step's model spend and wall time (observe, model, act). */
+  usage: LlmUsage;
+  ms: number;
 }
 
 export interface AgentOptions {
@@ -68,6 +73,10 @@ export interface AgentOptions {
   /** Names the model may `place` into fields (a password, a code); the values stay in the explorer. */
   secrets?: readonly string[];
   maxSteps?: number;
+  /** Where every step lands as a row (`~/.config/autobrowse/steps.jsonl`); `session` names the run there. */
+  ledger?: StepLedger;
+  session?: string;
+  site?: string;
   /** A person said stop: the loop ends before its next step. */
   stopped?: () => boolean;
   /**
@@ -132,9 +141,35 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
     ...Object.entries(o.inputs ?? {}).map(([k, v]) => `${k}: ${v}`),
     ...(o.secrets?.length ? [`SECRETS (use place): ${o.secrets.join(", ")}`] : []),
   ].join("\n");
+  const session = o.session ?? `cli-${Date.now().toString(36)}`;
+  /** When the current step began: observe, model, act. */
+  let t0 = Date.now();
+  /** Every step goes out through here once: the caller's hook and the ledger row. */
+  const land = (rec: StepRecord): void => {
+    rec.ms = Date.now() - t0;
+    steps.push(rec);
+    o.onStep?.(rec);
+    void o.ledger
+      ?.record({
+        at: new Date().toISOString(),
+        session,
+        site: o.site ?? "",
+        n: rec.n,
+        model: o.llm.id,
+        inputTokens: rec.usage.inputTokens,
+        outputTokens: rec.usage.outputTokens,
+        cmd: rec.step?.action.cmd ?? "invalid",
+        ok: rec.error === null,
+        error: rec.error,
+        ms: rec.ms,
+        host: hostOf(rec.url),
+      })
+      .catch(() => undefined);
+  };
   for (let n = 1; n <= max; n++) {
     await o.explorer.resumed();
     if (o.stopped?.()) return { achieved: false, summary: "stopped by a person", steps, usage };
+    t0 = Date.now();
     const url = (await o.explorer.exec({ cmd: "url" })) as { url: string };
     const aria = (await o.explorer.exec({ cmd: "aria", limit: 60_000 })) as { aria: string };
     // The whole outline every step: a model with no memory between calls (claude-code) guessed refs from a delta.
@@ -146,52 +181,57 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
       .join("\n");
     const prompt = `GOAL: ${o.goal}\n${inputs ? `INPUTS:\n${inputs}\n` : ""}\nSTEP ${n} of ${max}\nURL: ${url.url}\nRECENT STEPS:\n${history || "(none)"}\n\nPAGE:\n${shown}`;
     let step: Step;
+    let stepUsage: LlmUsage = { inputTokens: 0, outputTokens: 0 };
     try {
-      const reply = await completeJson(o.llm, stepSchema, {
-        system: SYSTEM,
-        prompt,
-        maxTokens: 600,
-      });
+      const reply = await withTrace({ session, step: n }, () =>
+        completeJson(o.llm, stepSchema, { system: SYSTEM, prompt, maxTokens: 600 }),
+      );
       usage.inputTokens += reply.usage.inputTokens;
       usage.outputTokens += reply.usage.outputTokens;
+      stepUsage = reply.usage;
       step = reply.value;
     } catch (err) {
       if (!(err instanceof LlmOutputInvalid)) throw err;
       // A malformed reply is a failed step the model sees next turn, not the end of the run.
-      const rec: StepRecord = {
+      land({
         n,
         step: null,
         result: null,
         error: `your reply was not a valid action (${err.issues})`,
         url: url.url,
-      };
-      steps.push(rec);
-      o.onStep?.(rec);
+        usage: stepUsage,
+        ms: 0,
+      });
       continue;
     }
-    const rec: StepRecord = { n, step, result: null, error: null, url: url.url };
+    const rec: StepRecord = {
+      n,
+      step,
+      result: null,
+      error: null,
+      url: url.url,
+      usage: stepUsage,
+      ms: 0,
+    };
     // Giving up with budget left and nothing tried that failed: once, push back.
     if (step.action.cmd === "done" && !step.action.achieved && !nudged && n < max) {
       const tried = steps.some((s) => s.error);
       if (!tried) {
         nudged = true;
         rec.error = `you gave up at step ${n} of ${max} without any failed act; look at the controls again (names carry content) and try the most promising path before deciding`;
-        steps.push(rec);
-        o.onStep?.(rec);
+        land(rec);
         continue;
       }
     }
     if (step.action.cmd === "human" && o.onHuman) {
       await o.explorer.exec({ cmd: "note", text: `needs a person: ${step.action.reason}` });
-      steps.push(rec);
-      o.onStep?.(rec);
+      land(rec);
       if (await o.onHuman(step.action.reason)) continue;
       return { achieved: false, summary: step.action.reason, steps, usage };
     }
     if (step.action.cmd === "done" || step.action.cmd === "human") {
       await o.explorer.exec({ cmd: "note", text: step.thought });
-      steps.push(rec);
-      o.onStep?.(rec);
+      land(rec);
       const achieved = step.action.cmd === "done" && step.action.achieved;
       const summary = step.action.cmd === "done" ? step.action.summary : step.action.reason;
       return { achieved, summary, steps, usage };
@@ -206,13 +246,11 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
       rec.error = (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "failed";
       // The person said no to spending (or could not be asked): that ends the goal, not the model's turn.
       if (err instanceof PaymentGate) {
-        steps.push(rec);
-        o.onStep?.(rec);
+        land(rec);
         return { achieved: false, summary: err.message, steps, usage };
       }
     }
-    steps.push(rec);
-    o.onStep?.(rec);
+    land(rec);
   }
   return { achieved: false, summary: `no verdict after ${max} steps`, steps, usage };
 }

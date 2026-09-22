@@ -9,9 +9,11 @@ import { randomBytes } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { RunEvent } from "../engine/events.js";
 import type { ExploreCommand, Explorer } from "../explore/server.js";
 import type { Llm } from "../llm/types.js";
 import { type AgentResult, exploreWithAgent, type StepRecord } from "./explorer.js";
+import type { StepLedger } from "./ledger.js";
 
 export type SessionStatus =
   | "starting"
@@ -96,6 +98,14 @@ export interface SessionsOptions {
   now?: () => Date;
   /** A line to the person when the agent needs them or finishes (a phone, email); optional. */
   notify?: (text: string) => Promise<void>;
+  /** Every step as a hash-chained row; optional. */
+  ledger?: StepLedger;
+  /**
+   * Sessions as rows of the Runs registry (workflow `agent`, key = session id): started, a
+   * `step` per agent step, finished. A session that dies with the worker is finished as failed
+   * on the next start, so the registry never shows one running that is not.
+   */
+  emit?: (event: RunEvent) => Promise<void>;
   /**
    * Where session views are written (one JSON per session) so the list,
    * and the evaluator's evidence, survive a worker restart. Sessions that
@@ -113,9 +123,14 @@ interface Live {
 
 const LIVE_STATES = new Set<SessionStatus>(["starting", "running", "paused", "needs-human"]);
 
+/** The registry's workflow name for agent sessions. */
+export const AGENT = "agent";
+
 export function agentSessions(o: SessionsOptions): AgentSessions {
   const sessions = new Map<string, Live>();
   const now = o.now ?? (() => new Date());
+  const emit = (event: RunEvent): Promise<void> =>
+    o.emit ? o.emit(event).catch(() => undefined) : Promise.resolve();
   const base = o.basePort ?? 9100;
   // The disk copy is a convenience; the live view is the truth. Writes go
   // off the loop, one at a time per session, and a burst of steps lands as
@@ -155,6 +170,13 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
           view.status = "closed";
           view.error = view.error ?? "the worker restarted while this session was live";
           persist(view);
+          void emit({
+            type: "finished",
+            run: { workflow: AGENT, key: view.id },
+            at: now().toISOString(),
+            status: "failed",
+            summary: view.error,
+          });
         }
         sessions.set(view.id, {
           view,
@@ -213,6 +235,8 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
       const live: Live = { view, explorer: null, stopFlag: false, finished: Promise.resolve() };
       sessions.set(id, live);
       persist(view);
+      const ref = { workflow: AGENT, key: id };
+      void emit({ type: "started", run: ref, at: view.startedAt });
       live.finished = (async () => {
         try {
           const ex = await o.open(req.site, view.port);
@@ -230,6 +254,9 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
             goal: req.goal,
             inputs: view.inputs,
             maxSteps: req.maxSteps ?? o.maxSteps ?? 25,
+            session: id,
+            site: req.site,
+            ...(o.ledger ? { ledger: o.ledger } : {}),
             stopped: () => live.stopFlag,
             // The model's `human` is a pause with a prompt, not the end: the
             // person does the thing in the window and resumes.
@@ -250,6 +277,17 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
               const step: StepView = { ...r, screenshot: null };
               view.steps.push(step);
               persist(view);
+              void emit({
+                type: "step",
+                run: ref,
+                at: now().toISOString(),
+                step: `${r.n}. ${r.step?.action.cmd ?? "invalid"}`,
+                result: {
+                  status: r.error ? "failed" : "done",
+                  detail: r.error ?? r.step?.thought ?? "",
+                  at: now().toISOString(),
+                },
+              });
               // Off the loop: the picture arrives when it arrives.
               void ex
                 .exec({ cmd: "screenshot" })
@@ -274,6 +312,15 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
           view.status = "failed";
         }
         persist(view);
+        void emit({
+          type: "finished",
+          run: ref,
+          at: now().toISOString(),
+          status:
+            view.status === "failed" ? "failed" : view.status === "stopped" ? "rejected" : "done",
+          summary:
+            view.error ?? `${view.achieved ? "achieved" : "not achieved"}: ${view.summary ?? ""}`,
+        });
       })();
       return view;
     },
