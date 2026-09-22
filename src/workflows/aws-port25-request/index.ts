@@ -1,7 +1,11 @@
 /**
- * Ask AWS to remove the EC2 email sending limit (port 25) for one Elastic IP
- * and set its reverse DNS: the "Request to remove email sending limitations"
- * form at support/contacts#/rdns-limits. Compiled from the recording
+ * Ask AWS to remove the EC2 email sending limit (port 25) for one Elastic IP:
+ * the "Request to remove email sending limitations" form at
+ * support/contacts#/rdns-limits. The form is only the limit removal — the
+ * reverse DNS record it asks for is set by the API and should already exist:
+ * `aws ec2 modify-address-attribute --allocation-id <eipalloc> --domain-name
+ * <host>` (PENDING → PtrRecord in ~2 min; AWS wants the forward A record to
+ * point back first). Compiled from the recording
  * "aws-port25-request", then given its gate: the submit files a request in
  * the account owner's name, so a person approves it first.
  */

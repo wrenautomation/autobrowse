@@ -25,7 +25,9 @@ carry. Dated 2026-09-22.
    text — but no case shows in Support Center (Basic plan files these
    outside it) and no AWS mail has arrived in the pays inbox yet. Nothing
    more to do until a reply lands; if none does in a few days, refile.
-   Note the EIP still has no rDNS record set. Rerun anywhere: `pnpm autobrowse run aws-port25-request <key> --plan
+   rDNS is done and needs nothing from you: `probe.wrenautomation.com.` is
+   the EIP's PtrRecord (set with `aws ec2 modify-address-attribute`, not the
+   form) and resolves. Rerun anywhere: `pnpm autobrowse run aws-port25-request <key> --plan
    '{"contactEmail":…,"elasticIpAddress":…,"reverseDnsRecord":…,"useCaseDescription":…}'`.
    The Mac's AWS CLI session is no longer yours to renew: `pnpm autobrowse
    aws-login --user william --overwrite` does it (default profile now = IAM
