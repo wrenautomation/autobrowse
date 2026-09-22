@@ -168,6 +168,11 @@ describe("gmail site: one consent per account", () => {
       made: ["GMAIL_REFRESH_TOKEN__WILL_WILLIAMJIN_DEV"],
     });
     expect(ran).toEqual([{ site: "google@will", account: "will@williamjin.dev" }]);
+    // An account with no credential of its own never consents in the default profile, as whoever that is.
+    await expect(sites.setup("gmail", "consent", "stranger@x.dev")).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(ran).toHaveLength(1);
     expect(sink.values).toEqual({ GMAIL_REFRESH_TOKEN__WILL_WILLIAMJIN_DEV: "rt-will" });
     // A call as that account carries its token; the site's own has none yet.
     env.GMAIL_REFRESH_TOKEN__WILL_WILLIAMJIN_DEV = "rt-will";

@@ -76,6 +76,29 @@ the shared store.
 Checked 2026-09-22: `creds push --all`, then a rebuild from SSM alone
 matched the file for all 16 sites.
 
+## History: a wrong write is undone (credvault 0.5.0)
+
+2026-09-22 a password meant for Wren's LinkedIn landed on William's
+personal `linkedin` entry. Moving it back meant a push that deleted the
+SSM field, and deleting an SSM parameter deletes its versions. Nothing
+kept the state before.
+
+Now every state of a credential is kept:
+- one SecureString per site at `/autobrowse/config/history/<SITE>`, a new
+  version per change (SSM keeps 100). One level down, so env listings and
+  the box's deploy never read it
+- a push keeps what SSM held, then what it writes. A push that cannot keep
+  the old state writes nothing
+- nothing deletes a history parameter
+- `creds history <site>`: when, whose (masked), which fields changed;
+  never values
+- `creds restore <site> <n>`: shows what would change; `--yes` writes it,
+  itself a new version, so a restore is undone the same way
+
+Consent guard (autobrowse): a named `--account` with no credential of its
+own is refused (409). It used to run in the site's default profile, as
+whoever that is.
+
 ## Expiry
 
 `put(name, value, { expiresAt })` writes `expires <ISO>` into the SSM
@@ -119,7 +142,10 @@ anything. `expiring(list, ms)` returns what lapses within `ms`.
    credential, including the AWS login itself. Losing the AWS root login
    (or the account) loses the lot. Its password and 2FA need a copy
    outside AWS: William's password manager or paper.
-6. **Legacy seal markers** (`credkeep-sealed-v1`, `autobrowse-sealed-v1`)
+6. **History starts now.** Versions exist from the first write after
+   0.5.0; `creds push --all` seeds every site once. Writes made while SSM
+   was down (file only) are kept at the next push, not before.
+7. **Legacy seal markers** (`credkeep-sealed-v1`, `autobrowse-sealed-v1`)
    stay readable forever unless dropped. Once every file has been
    rewritten, remove them.
 

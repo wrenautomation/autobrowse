@@ -366,11 +366,15 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       const spec = step.how.oauth;
       const implicit = !account ? ((await deps.accountFor?.(s, step)) ?? null) : null;
       const as = account ?? implicit;
-      const profile =
-        asProfile ??
-        (as && "flow" in spec.consent
-          ? await deps.profileFor?.(spec.consent.flow.split("/")[0] ?? name, as)
-          : null);
+      const at = "flow" in spec.consent ? (spec.consent.flow.split("/")[0] ?? name) : null;
+      const profile = asProfile ?? (as && at ? await deps.profileFor?.(at, as) : null);
+      // A named account with no credential of its own would consent in the default profile,
+      // as whoever that is (a person's own account, once): refuse instead.
+      if (as && at && !profile && deps.profileFor)
+        throw new SiteError(
+          409,
+          `no ${at} credential for ${as}: store one first (creds set ${at}@<label>)`,
+        );
       const open = await legOf(spec.consent, profile);
       if (!open) throw new SiteError(501, `${legName(spec.consent)} not recorded yet; explore it`);
       const got = await runConsent(spec, {

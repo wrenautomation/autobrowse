@@ -5,6 +5,7 @@ import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import {
   aesGcmCipher,
   type CanaryOptions,
+  type CredentialHistory,
   type CredentialStore,
   canaryStore,
   type EnvStore,
@@ -16,6 +17,7 @@ import {
   layeredCredentials,
   plainCipher,
   type SecretAudit,
+  ssmCredentialHistory,
   ssmEnvStore,
   syncedCredentials,
 } from "credvault";
@@ -370,6 +372,7 @@ export function credentialsFor(
       ? (() => {
           const synced = syncedCredentials(file, envStoreFor(settings), {
             ...CRED_ENV,
+            history: credentialHistoryFor(settings),
             onSharedError: (site, err, during) => {
               if (during === "write")
                 console.error(
@@ -522,6 +525,18 @@ export function sinkFor(
   return settings.secretSink === "ssm"
     ? envStoreFor(settings, ssm)
     : envFileStore(settings.envFile);
+}
+
+/**
+ * Every state each credential has had: a version per change, one SSM
+ * parameter per site under /autobrowse/config/history (one level down, so
+ * env listings and the box's deploy never see it). `creds history`, `creds restore`.
+ */
+export function credentialHistoryFor(
+  settings: Settings,
+  ssm: SSMClient = lazy(() => new SSMClient({ region: settings.awsRegion })),
+): CredentialHistory {
+  return ssmCredentialHistory(ssm, `${ENV_STORE_PREFIX}/history`);
 }
 
 /** The store `autobrowse env` and prod's sink share: SSM under /autobrowse/config. */

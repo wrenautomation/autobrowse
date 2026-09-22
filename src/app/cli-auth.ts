@@ -42,6 +42,8 @@ import {
   loginFor,
 } from "./services.js";
 
+/** `william@wrenautomation.com` → `w***@wrenautomation.com`: whose, without the address in a log. */
+const maskAddress = (u: string) => u.replace(/^(.)[^@]*@/, "$1***@");
 const SITES = SITE_LOGINS.map((s) => s.site);
 const KNOWN = `one of ${SITES.join(", ")}, or <site>@<account> for a second account`;
 
@@ -281,13 +283,13 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .action(async (sites: string[], o: { all?: boolean }) => {
       if (sites.length === 0 && !o.all) throw new Error("name sites, or --all");
       const { pushCredentials } = await import("credvault");
-      const { envStoreFor } = await import("./services.js");
+      const { credentialHistoryFor, envStoreFor } = await import("./services.js");
       // Unarmed: the push reads every site to skip the canaries; an armed read of one would trip it.
       const pushed = await pushCredentials(
         credentialsFor(settings, { armed: false, shared: false }),
         envStoreFor(settings),
         sites,
-        CRED_ENV,
+        { ...CRED_ENV, history: credentialHistoryFor(settings) },
       );
       for (const p of pushed) console.log(`pushed ${p.site}: ${p.names.join(", ")}`);
       console.log("the box reads the store on its next deploy (push to main)");
@@ -311,6 +313,43 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       if (r.kept.length)
         console.log(`kept (already here; --overwrite to replace): ${r.kept.join(", ")}`);
       if (!r.written.length && !r.kept.length) console.log("nothing in the store");
+    });
+  creds
+    .command("history <site>")
+    .description(
+      "Every state the site's credential has had (a version per change, kept in SSM): when, whose, which fields changed; never values",
+    )
+    .action(async (site: string) => {
+      const { credentialHistoryFor } = await import("./services.js");
+      const versions = await credentialHistoryFor(settings).versions(site);
+      if (!versions.length) console.log(`no history for ${site} yet (it starts at the next write)`);
+      for (const v of versions)
+        console.log(
+          `${v.version}\t${v.at ?? "?"}\t${maskAddress(v.username)}\t${v.changed.join(", ")}`,
+        );
+    });
+  creds
+    .command("restore <site> <version>")
+    .description(
+      "Put a kept version of the site's credential back, here and in SSM (itself a new version, so it can be undone too); shows what would change, --yes writes",
+    )
+    .option("--yes", "write it")
+    .action(async (site: string, version: string, o: { yes?: boolean }) => {
+      const { changedFields } = await import("credvault");
+      const { credentialHistoryFor } = await import("./services.js");
+      const n = Number(version);
+      if (!Number.isInteger(n) || n < 1)
+        throw new Error(`a version is a number (creds history ${site})`);
+      const store = credentialsFor(settings, { armed: false });
+      const kept = await credentialHistoryFor(settings).get(site, n);
+      if (!kept) throw new Error(`${site} has no version ${n} (creds history ${site})`);
+      const now = await store.get(site);
+      const changes = now ? changedFields(now, kept) : ["all"];
+      if (!changes.length) return console.log(`${site} already is version ${n}`);
+      console.log(`${site} → version ${n} (${maskAddress(kept.username)}): ${changes.join(", ")}`);
+      if (!o.yes) return console.log("nothing written; --yes to write");
+      await store.put(site, kept);
+      console.log("restored");
     });
   creds
     .command("list")
