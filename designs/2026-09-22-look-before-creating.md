@@ -44,9 +44,15 @@ account, no mail, ever.
   unavailable`. `npmjs.com/signup` is a DataDome device check that never
   clears — headless, headed, direct, or clicked from `/login` (mapped
   again 2026-09-22). `/login` and `/forgot` load fine, so it is the signup
-  page specifically. That leaves the person: `needs` row `npm-account`,
-  with the minted password already sealed (`creds copy npm`) and
-  `creds made npm` to clear it.
+  page specifically. That leaves the person, for one minute:
+  `signup npm --by-hand --handle wrenautomation` opens the page in their
+  own browser with the minted password on the clipboard (5 min), then
+  `watchForSiteMail` waits for npm's first mail to the inbox — the same
+  sender that proves an old account proves a new one — and marks the
+  credential made, username = handle, address kept as `codesInbox`.
+  No captcha solving or fingerprint spoofing, by decision: a bot check is
+  a human gate, and circumventing it risks a ToS ban on the account that
+  publishes every Wren package, to save a minute once.
 - **Signup without a browser.** `API_SIGNUPS` in `src/auth/signup.ts`:
   sites whose account is made by a call, not a page. npm's is the registry
   PUT. The password never leaves the process — it comes from the sealed

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Message } from "../src/auth/codes.js";
-import { type LookOptions, lookForAccount, RESET_FORMS } from "../src/auth/exists.js";
+import {
+  type LookOptions,
+  lookForAccount,
+  RESET_FORMS,
+  watchForSiteMail,
+} from "../src/auth/exists.js";
 
 const form = RESET_FORMS.npm as NonNullable<(typeof RESET_FORMS)["npm"]>;
 
@@ -87,5 +92,47 @@ describe("lookForAccount", () => {
       ).verdict,
     ).toBe("cannot-tell");
     expect((await lookForAccount(probe({ ask: async () => false }))).verdict).toBe("cannot-tell");
+  });
+});
+
+describe("watchForSiteMail", () => {
+  const clocked = () => {
+    const clock = { at: START };
+    return {
+      now: () => new Date(clock.at),
+      sleep: async (ms: number) => {
+        clock.at += ms;
+      },
+    };
+  };
+
+  it("returns the site's first mail to a new account, ignoring everyone else's", async () => {
+    let polls = 0;
+    const hit = await watchForSiteMail({
+      form,
+      inbox: "someone@example.com",
+      since: new Date(START),
+      waitMs: 60_000,
+      mail: {
+        recent: async () =>
+          ++polls < 3
+            ? [mail("news@elsewhere.com", new Date())]
+            : [mail("support@npmjs.com", new Date())],
+      },
+      ...clocked(),
+    });
+    expect(hit?.from).toBe("support@npmjs.com");
+  });
+
+  it("gives up with null when the site never writes", async () => {
+    const hit = await watchForSiteMail({
+      form,
+      inbox: "someone@example.com",
+      since: new Date(START),
+      waitMs: 60_000,
+      mail: { recent: async () => [] },
+      ...clocked(),
+    });
+    expect(hit).toBeNull();
   });
 });

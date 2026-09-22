@@ -121,3 +121,31 @@ export async function lookForAccount(o: LookOptions): Promise<Look> {
   why.push(`nothing arrived in ${Math.round((o.form.waitMs ?? 120_000) / 1000)}s`);
   return { verdict: "unknown-to-the-site", why };
 }
+
+/**
+ * Wait for the site's first mail to this inbox. A signup a person finishes
+ * in their own browser is invisible from here except for this: every site
+ * writes to a new account (a welcome, a verify-your-address), so the same
+ * sender that proves an old account proves a new one.
+ */
+export async function watchForSiteMail(o: {
+  form: ResetForm;
+  inbox: string;
+  mail: MessageReader;
+  since: Date;
+  waitMs: number;
+  now?: () => Date;
+  sleep?: (ms: number) => Promise<void>;
+}): Promise<Message | null> {
+  const now = o.now ?? (() => new Date());
+  const sleep = o.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+  const deadline = now().getTime() + o.waitMs;
+  while (now().getTime() < deadline) {
+    await sleep(POLL_MS);
+    const hit = (await o.mail.recent(o.inbox, o.since).catch(() => [])).find((m) =>
+      o.form.from.test(m.from),
+    );
+    if (hit) return hit;
+  }
+  return null;
+}

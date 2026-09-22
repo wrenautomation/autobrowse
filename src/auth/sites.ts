@@ -470,10 +470,10 @@ const outlook: SiteLogin = {
 
 /**
  * npm. The sign-in page is plain and loads headless (mapped 2026-09-22:
- * textbox "Username" — it takes the address too — textbox "Password",
- * button "Sign In"). The username, not the address, is what the registry
- * knows the account by, so the stored credential's username is the npm
- * handle and the address lives in `codesInbox`. Signed in, npmjs.com shows
+ * textbox "Username", textbox "Password", button "Sign In"). The username,
+ * not the address, is what npm knows the account by, so `signup --by-hand
+ * --handle` stores the handle as the credential's username and keeps the
+ * address as `codesInbox`. Signed in, npmjs.com shows
  * the account menu instead of the Sign In link.
  *
  * Unverified past the form: the second factor's page is whatever npm asks

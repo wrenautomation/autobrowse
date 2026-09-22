@@ -268,9 +268,8 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
       unlocks:
         "publishing mailifier, and every later package: once the account exists the token, 2FA and publish are all automatic",
       how: [
-        "autobrowse creds copy npm  (the password is already minted and sealed; it lands on the clipboard for a minute)",
-        "npmjs.com/signup in your own browser — the page is behind a bot check that refuses an automated one, and legacy registry signup answers 403 `Account creation via legacy auth is unavailable`",
-        "autobrowse creds made npm",
+        "autobrowse signup npm --by-hand --handle wrenautomation  (opens npmjs.com/signup in your browser, password on the clipboard; clears itself when npm's first mail lands)",
+        "why by hand: the page is behind a bot check, and legacy registry signup answers 403 `Account creation via legacy auth is unavailable`",
       ],
       check: async () => Boolean((await ctx.credentials.get("npm"))?.madeAt),
     },

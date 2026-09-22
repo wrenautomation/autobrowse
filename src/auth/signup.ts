@@ -184,6 +184,15 @@ export function signupGoal(a: NewAccount, phone?: string | null): string {
     .join(" ");
 }
 
+/**
+ * Signup pages a person fills in their own browser, because the site
+ * guards them with a bot check this system does not defeat. `signup
+ * <site> --by-hand` opens it with the minted password on the clipboard.
+ */
+export const SIGNUP_PAGES: Record<string, string> = {
+  npm: "https://www.npmjs.com/signup",
+};
+
 export interface ApiSignupResult {
   /** A token the call answered with, and the env name to keep it under; null when it answered none. */
   token: { name: string; value: string } | null;

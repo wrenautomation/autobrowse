@@ -7,6 +7,11 @@ import type { Settings } from "./config.js";
 import { headed } from "./screen.js";
 import { browserOptions, COMPILED_DIR, llmFor } from "./services.js";
 
+/** Long enough to fill a signup form; `creds copy` puts it back after. */
+const HAND_CLIPBOARD_MS = 5 * 60_000;
+/** How long a signup by hand may take before the wait gives up. */
+const HAND_WAIT_MS = 30 * 60_000;
+
 export function registerRecordCommands(
   program: Command,
   settings: Settings,
@@ -171,6 +176,10 @@ export function registerRecordCommands(
     .option("--birthday <date>", "when the form insists")
     .option("--url <url>", "the signup page (default: the site's home)")
     .option("--anyway", "sign up even if the site already knows the address")
+    .option(
+      "--by-hand",
+      "the site's signup page has a bot check: open it in your own browser with the password on the clipboard, and wait for the site's first mail",
+    )
     .option("--max-steps <n>", "step budget", "40")
     .option("--port <port>", "loopback port", "9090")
     .option("--headed", "show the browser (default: BROWSER_HEADLESS)")
@@ -186,6 +195,7 @@ export function registerRecordCommands(
           birthday?: string;
           url?: string;
           anyway?: boolean;
+          byHand?: boolean;
           maxSteps: string;
           port: string;
           headed?: boolean;
@@ -239,6 +249,10 @@ export function registerRecordCommands(
         };
         const cred = await mintCredential(credentialsFor(settings), account);
         console.log(`stored a new credential for ${site} (creds list); now the signup`);
+        if (o.byHand) {
+          await signUpByHand(site, { email, inbox, handle: o.handle ?? null, url: o.url ?? null });
+          return;
+        }
         // A site whose account is made by a call needs no browser at all.
         const { API_SIGNUPS } = await import("../auth/signup.js");
         const apiSignup = API_SIGNUPS[site];
@@ -291,6 +305,72 @@ export function registerRecordCommands(
         }
       },
     );
+
+  /**
+   * The person fills the signup in their own browser (a bot check guards
+   * it); everything around it stays automatic. The password is the one just
+   * minted and sealed, handed over on the clipboard; the site's first mail to
+   * the inbox is the proof the account exists, so the credential is marked
+   * made without anyone saying so.
+   */
+  async function signUpByHand(
+    site: string,
+    a: { email: string; inbox: string; handle: string | null; url: string | null },
+  ): Promise<void> {
+    const { SIGNUP_PAGES } = await import("../auth/signup.js");
+    const { RESET_FORMS, watchForSiteMail } = await import("../auth/exists.js");
+    const { credentialsFor, gmailFor } = await import("./services.js");
+    const { macClipboard } = await import("./cli-env.js");
+    const page = a.url ?? SIGNUP_PAGES[site];
+    if (!page) throw new Error(`no signup page mapped for ${site}: give --url`);
+    const store = credentialsFor(settings);
+    const cred = await store.get(site);
+    if (!cred?.password) throw new Error(`no minted password for ${site}`);
+    const since = new Date();
+    await macClipboard(cred.password, HAND_CLIPBOARD_MS);
+    if (process.platform === "darwin") {
+      const { execFile } = await import("node:child_process");
+      execFile("open", [page]);
+    }
+    console.log(
+      [
+        `${page} — in your own browser`,
+        `  email     ${a.email}`,
+        ...(a.handle ? [`  username  ${a.handle}`] : []),
+        `  password  on the clipboard for ${HAND_CLIPBOARD_MS / 60_000} min (creds copy ${site} puts it back)`,
+      ].join("\n"),
+    );
+    const form = RESET_FORMS[site];
+    if (!form) {
+      console.log(`no sender mapped for ${site}: when you are done, autobrowse creds made ${site}`);
+      return;
+    }
+    console.log(
+      `waiting for ${site}'s first mail to ${a.inbox} (up to ${HAND_WAIT_MS / 60_000} min)…`,
+    );
+    const hit = await watchForSiteMail({
+      form,
+      inbox: a.inbox,
+      mail: gmailFor(settings),
+      since,
+      waitMs: HAND_WAIT_MS,
+    });
+    if (!hit)
+      throw new Error(
+        `no mail from ${site} yet: finish the signup, then autobrowse creds made ${site}`,
+      );
+    // A site that asked for a username signs in with it; the address stays as the codes inbox.
+    const held = await store.get(site);
+    if (held)
+      await store.put(site, {
+        ...held,
+        ...(a.handle ? { username: a.handle, codesInbox: a.inbox } : {}),
+        madeAt: new Date().toISOString(),
+      });
+    console.log(
+      `${site} wrote ("${hit.subject}"): account made. autobrowse needs shows what is next`,
+    );
+  }
 
   program
     .command("known <site>")
