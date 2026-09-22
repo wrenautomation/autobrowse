@@ -22,7 +22,11 @@ import {
   viaLogin,
 } from "../auth/index.js";
 import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
+
+/** A copied secret lives on the clipboard for a minute, then is emptied if untouched. */
+const CLIPBOARD_MS = 60_000;
 import type { Settings } from "./config.js";
+import { macClipboard } from "./cli-env.js";
 import { headed } from "./screen.js";
 import { browserOptions, credentialsFor, devicesFor, gmailFor, loginFor } from "./services.js";
 
@@ -171,6 +175,29 @@ export function registerAuthCommands(program: Command, settings: Settings): void
         login: loginFor(settings, gmailFor(settings)),
       });
       console.log(await runner.run(rotatePasswordFlow(login, credentialsFor(settings)), undefined));
+    });
+  creds
+    .command("copy <site>")
+    .description(
+      "One field of a stored credential onto the clipboard (emptied after a minute); nothing is ever printed",
+    )
+    .option("--field <what>", "password | username | totp | recovery | previous", "password")
+    .action(async (site: string, o: { field: string }) => {
+      const cred = await credentialsFor(settings).get(site);
+      if (!cred) throw new Error(`no credential stored for ${site}`);
+      const fields: Record<string, string | undefined> = {
+        password: cred.password,
+        username: cred.username,
+        totp: cred.totpSecret,
+        recovery: cred.recoveryCodes.join("\n") || undefined,
+        previous: cred.previousPassword,
+      };
+      if (!(o.field in fields))
+        throw new Error(`no field ${o.field}: ${Object.keys(fields).join(" | ")}`);
+      const value = fields[o.field];
+      if (!value) throw new Error(`${site} has no ${o.field} stored`);
+      await macClipboard(value, CLIPBOARD_MS);
+      console.log(`${site} ${o.field} is on the clipboard for ${CLIPBOARD_MS / 1000}s`);
     });
   creds
     .command("paste <site>")

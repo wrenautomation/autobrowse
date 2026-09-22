@@ -96,6 +96,15 @@ export interface FlowPage {
    * hints for the same goal and try once more; report the repair either way.
    */
   act(op: Op, hints: Hints, opts: ActOptions): Promise<void>;
+  /**
+   * Answer a wall the flow walked into on its own (a re-verification in
+   * the middle of an OAuth consent): the runner signs in where the page
+   * is, with no navigation to lose the URL that carries the walk.
+   */
+  signIn(
+    site?: Site,
+    account?: string,
+  ): Promise<"signed-in" | "no-credential" | "unknown-site" | "no-login">;
   /** Stop here and ask a person. */
   human(reason: string): never;
 }
@@ -167,7 +176,12 @@ export interface RunnerOptions {
    * Solves a login wall for a site: "signed-in" to retry the open,
    * anything else to hand off. Absent = every wall is a person's.
    */
-  login?: (fp: FlowPage, site: Site) => Promise<"signed-in" | "no-credential" | "unknown-site">;
+  login?: (
+    fp: FlowPage,
+    site: Site,
+    /** Whose sign-in it is, when the caller knows: picks the `<site>@<label>` credential for it. */
+    account?: string,
+  ) => Promise<"signed-in" | "no-credential" | "unknown-site">;
   /** Repair misses on irreversible acts too (the `irreversible` guard is off). */
   repairIrreversible?: boolean;
   /** Every repair, tried or not, so the flow's source can be fixed for good. */
@@ -395,6 +409,15 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
                 runner.onRepair?.(report);
                 if (canLearn(repairer)) await repairer.learn(report);
               }
+            }
+          },
+          async signIn(site, account) {
+            if (!runner.login || signingIn) return "no-login";
+            signingIn = true;
+            try {
+              return await runner.login(fp, site ?? flow.site, account);
+            } finally {
+              signingIn = false;
             }
           },
           human(reason) {

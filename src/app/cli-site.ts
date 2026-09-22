@@ -79,10 +79,14 @@ export function registerSiteCommands(program: Command, local: LocalBackend): voi
       "--account <address>",
       "consent as that account (a `<site>@<label>` credential with that username signs in); its token is kept under its own name",
     )
-    .action(async (name: string, step: string, o: { account?: string }) => {
+    .option(
+      "--profile <name>",
+      "force the browser profile it runs in: a second profile for the same account, when the first one's session is stuck",
+    )
+    .action(async (name: string, step: string, o: { account?: string; profile?: string }) => {
       const sites = local().backend.sites;
       if (!sites) throw new Error("no site apis here");
-      const { made } = await sites.setup(name, step, o.account ?? null);
+      const { made } = await sites.setup(name, step, o.account ?? null, o.profile ?? null);
       console.log(`kept ${made.join(", ")}`);
     });
 }

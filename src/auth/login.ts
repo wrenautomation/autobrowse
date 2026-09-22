@@ -702,21 +702,37 @@ export function signInContext(p: SignInParts): SignInContext {
  */
 export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
   const now = opts.now ?? (() => new Date());
-  return async (fp: FlowPage, site: string): Promise<LoginOutcome> => {
-    const known = resolveLogin(sites, site);
-    const cred = await opts.credentials.get(known?.credential ?? site);
+  return async (fp: FlowPage, site: string, account?: string): Promise<LoginOutcome> => {
+    let name = site;
+    let known = resolveLogin(sites, name);
+    let cred = await opts.credentials.get(known?.credential ?? name);
+    // The caller knows whose sign-in this is (the account an OAuth consent
+    // is for): a second account at the same provider lives as `<site>@<label>`,
+    // and that credential — not the site's default one — signs in.
+    if (account && !(cred && sameUser(cred.username, account))) {
+      const base = known?.credential ?? name;
+      for (const other of await opts.credentials.list()) {
+        if (!other.startsWith(`${base}@`)) continue;
+        const alt = await opts.credentials.get(other);
+        if (!alt || !sameUser(alt.username, account)) continue;
+        name = other;
+        known = resolveLogin(sites, other) ?? known;
+        cred = alt;
+        break;
+      }
+    }
     if (!cred) return known ? "no-credential" : "unknown-site";
     // A credential that signs in via a provider takes the generic provider path when the
     // site's own spec does not know that provider (or there is no spec at all).
-    const login = cred.via && !known?.via?.includes(cred.via) ? viaLogin(site, cred) : known;
+    const login = cred.via && !known?.via?.includes(cred.via) ? viaLogin(name, cred) : known;
     if (!login) return "unknown-site";
     const since = now();
     const ctx = signInContext({
       fp,
-      site,
+      site: name,
       cred,
       since,
-      credential: known?.credential ?? site,
+      credential: known?.credential ?? name,
       credentials: opts.credentials,
       codes: opts.codes,
       domainsFor: (name, c) => passwordDomains(sites, name, c),
@@ -727,12 +743,12 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
     if (here?.at.test(fp.url())) {
       await here.run(ctx);
       if (!(await fp.waitForUrl((u) => !here.at.test(u), 30_000)))
-        throw new LoginFailed(site, `still on ${fp.url()} after signing in`);
+        throw new LoginFailed(name, `still on ${fp.url()} after signing in`);
       return "signed-in";
     }
     await login.signIn(ctx);
     if (!(await login.loggedIn(fp)))
-      throw new LoginFailed(site, "sign-in ran but the page is not signed in");
+      throw new LoginFailed(name, "sign-in ran but the page is not signed in");
     return "signed-in";
   };
 }

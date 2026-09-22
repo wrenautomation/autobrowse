@@ -106,7 +106,13 @@ export interface SiteFacade {
     account?: string | null,
   ): Promise<unknown>;
   /** Run one setup step; what it makes lands in the sink (under the account's name, with one). */
-  setup(site: string, step: string, account?: string | null): Promise<{ made: readonly string[] }>;
+  setup(
+    site: string,
+    step: string,
+    account?: string | null,
+    /** Force the browser profile the step runs in (a second profile for the same account). */
+    profile?: string | null,
+  ): Promise<{ made: readonly string[] }>;
 }
 
 /** `/rest/socialActions/{urn}/comments` against `/rest/socialActions/urn:li:share:1/comments`. */
@@ -328,7 +334,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       }
       throw new SiteError(501, `${method} ${r.path}: no token for ${name} and no browser leg`);
     },
-    async setup(name, stepName, account) {
+    async setup(name, stepName, account, asProfile) {
       const s = site(name);
       const step = s.setup.find((x) => x.name === stepName);
       if (!step) throw new SiteError(404, `no setup step ${stepName} on ${name}`);
@@ -341,7 +347,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         // profile re-sites the leg's flows at the provider so they sign in as it.
         const as = account ?? (await deps.accountFor?.(s, step)) ?? null;
         const at = deps.providerOf?.(s) ?? null;
-        const profile = as && at ? await deps.profileFor?.(at, as) : null;
+        const profile = asProfile ?? (as && at ? await deps.profileFor?.(at, as) : null);
         const run = await legOf(leg, profile, at);
         if (!run) throw new SiteError(501, `${legName(leg)} not recorded yet; explore it`);
         // A hand-written flow keeps what it made through the sink it is handed; a compiled one has the worker's.
@@ -361,9 +367,10 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       const implicit = !account ? ((await deps.accountFor?.(s, step)) ?? null) : null;
       const as = account ?? implicit;
       const profile =
-        as && "flow" in spec.consent
+        asProfile ??
+        (as && "flow" in spec.consent
           ? await deps.profileFor?.(spec.consent.flow.split("/")[0] ?? name, as)
-          : null;
+          : null);
       const open = await legOf(spec.consent, profile);
       if (!open) throw new SiteError(501, `${legName(spec.consent)} not recorded yet; explore it`);
       const got = await runConsent(spec, {

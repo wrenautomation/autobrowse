@@ -19,6 +19,8 @@ export interface OauthConsentInput {
 const SIGNED_IN_PAGE = "https://myaccount.google.com/";
 const SETTLE_MS = 1_500;
 const ROUNDS = 12;
+/** Google's re-verification pages, the passkey ceremony and its error among them. */
+const CHALLENGE = /accounts\.google\.com\/(v3\/)?signin\/challenge\//;
 
 /** `redirect_uri` from the authorize URL, so the walk knows where it ends. */
 export function redirectOf(authorizeUrl: string): string {
@@ -37,11 +39,24 @@ export const googleOauthConsent = defineFlow<OauthConsentInput, { landed: string
     // too, and the runner's sign-in would otherwise take each of them for a wall.
     await fp.open(SIGNED_IN_PAGE);
     await fp.open(input.url, { allowWall: true });
+    let verified = false;
     for (let round = 0; round < ROUNDS; round++) {
       if (landed(fp.url())) return { landed: fp.url() };
       await fp.wait(SETTLE_MS);
       if (landed(fp.url())) return { landed: fp.url() };
       const text = await fp.text();
+      // Before sensitive scopes Google verifies the person again, in the
+      // middle of the walk ("Verify it's you", challenge/pk, and pk/error
+      // when it asks for a passkey it does not hold). Navigating away would
+      // lose the URL that carries the consent, so the sign-in answers the
+      // wall on this very page, as the account being consented for.
+      if (CHALLENGE.test(fp.url())) {
+        if (verified) return fp.human(`Google keeps re-verifying: ${fp.url()}`);
+        verified = true;
+        const how = await fp.signIn("google", input.account);
+        if (how !== "signed-in") return fp.human(`Google re-verification: ${how}`);
+        continue;
+      }
       if (/choose an account/i.test(text)) {
         const pick = input.account ? { text: input.account } : { css: "[data-identifier]" };
         if (!(await fp.has(pick)))
