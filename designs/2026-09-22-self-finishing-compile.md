@@ -37,6 +37,16 @@ memo skip on re-run, gate test. Two earlier attempts gave up on invented
 imports (`gate`, `fp`) until the prompt listed the library's exports; a
 stronger model (Anthropic, once credits are in) needs less prompt.
 
+## What the check cannot see
+
+tsc and the test pass a rewrite that silently drops behaviour: the first
+`google-cloud-project` finish lost the `sink.put("GOOGLE_CLOUD_PROJECT", …)`
+that keeps the project id. `dropped()` in `finish.ts` is the cheap tell:
+every `deps.<member>` and `.put("<name>"` the original used must survive,
+else the round fails with that message. command-a then gives up on it
+three rounds running; the guard, not the model, is what makes the loop
+safe to run unattended.
+
 ## Decisions
 
 - Whole files, not patches: a rendered module is ~100 lines and patches
@@ -52,9 +62,11 @@ stronger model (Anthropic, once credits are in) needs less prompt.
 1. ✅ `finish()` + check + restore; tests
 2. ✅ `compile --finish`, `finish <name>`, heal hook
 3. ✅ first real finish on a compiled workflow
-4. Finish every compiled workflow that is still template-shaped
-   (`instagram-change-email`, `google-cloud-project`, `signup-instagram`)
-   and prove them
+4. Finish the compiled workflows still template-shaped
+   (`instagram-change-email`, `google-cloud-project`, `signup-instagram`,
+   `anthropic-console-api-key`) and prove them: command-a gives up on all
+   four (invented generics, dropped `sink.put`); rerun with an Anthropic
+   model once credits are in
 5. A `finish` job in the UI's Workflow page (the CLI is enough now)
 6. Let the finish read the recording's aria snapshots so proof reads name
    real confirmation text, not a guess

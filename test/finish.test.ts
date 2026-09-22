@@ -89,3 +89,36 @@ describe("finish on a failing model", () => {
     expect(readFileSync(join(d, "index.test.ts"), "utf8")).toBe("orig test\n");
   });
 });
+
+describe("dropped", () => {
+  it("names deps and stored values the rewrite lost", async () => {
+    const { dropped } = await import("../src/compiler/finish.js");
+    const orig = 'await deps.sink.put("GOOGLE_CLOUD_PROJECT", id); deps.browser.run(f, x);';
+    expect(dropped(orig, "deps.browser.run(f, x);")).toMatch(
+      /deps\.sink, \.put\("GOOGLE_CLOUD_PROJECT"/,
+    );
+    expect(dropped(orig, orig)).toBeNull();
+  });
+
+  it("sends a dropped-behaviour reply back as a failed round", async () => {
+    const d = mkdtempSync(join(tmpdir(), "finish-"));
+    writeFileSync(join(d, "index.ts"), "deps.sink.put(x)\n");
+    writeFileSync(join(d, "index.test.ts"), "t\n");
+    const llm = fakeLlm([
+      { "index.ts": "deps.browser\n", notes: "" },
+      { "index.ts": "deps.sink.put(x)\ndeps.browser\n", notes: "kept" },
+    ]);
+    const checks: string[] = [];
+    const out = await finish({
+      llm,
+      dir: d,
+      check: async (at) => {
+        checks.push(readFileSync(join(at, "index.ts"), "utf8"));
+        return null;
+      },
+    });
+    expect(out.status).toBe("finished");
+    expect(checks).toEqual(["deps.sink.put(x)\ndeps.browser\n"]);
+    expect(llm.requests[1]?.prompt).toContain("behaviour dropped");
+  });
+});

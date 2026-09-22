@@ -65,6 +65,8 @@ The library (imported from the same path the module already uses). Its only expo
 - done(detail), skipped(detail), rejected(detail); defineWorkflow<Deps, Memo>()({ name, description, plan, steps, emptyMemo })
 - tests: runFlow(memoryEffects().fx, workflow, deps, plan, answer?) → { status: "planned"|"waiting"|"done"|"rejected"|"failed", results: { [step]: { status, detail } } }; answer = (gate: { name, prompt }) => ({ approved: true, note: null, at: new Date().toISOString() })
 
+Keep every behaviour: each deps member the module uses, each sink.put (a value the recording kept for later), each upload, each read that feeds a later step stays; you add gates, inputs and proof reads, you never drop what the recording did.
+
 Rules: TypeScript, strict, exactOptionalPropertyTypes (no undefined into an optional field); imports only from the library path the module already uses, "zod", "vitest"; keep the module's header comment and add one line saying what was finished; kebab-case step names; no Playwright calls; no new dependencies; no secrets in code. Reply with JSON: {"index.ts": "<whole file>", "index.test.ts": "<whole file>", "notes": "<one line>"}. When the module already meets every point, reply {"unchanged": true, "notes": "<why>"}.`;
 
 export async function finish(o: FinishOptions): Promise<FinishOutcome> {
@@ -107,7 +109,8 @@ export async function finish(o: FinishOptions): Promise<FinishOutcome> {
     await writeFile(paths.module, module);
     await writeFile(paths.test, test);
     if (o.format) await o.format([paths.module, paths.test]);
-    const errors = await o.check(o.dir);
+    // tsc cannot see dropped behaviour; the deps the recording used are the cheap tell.
+    const errors = dropped(original.module, module) ?? (await o.check(o.dir));
     if (!errors) return { status: "finished", rounds: round, usage, summary: value.notes };
     last = errors;
     prompt = `Your files failed the check:\n${errors.slice(0, 6_000)}\n\nFix them and reply with both whole files again.\n--- ${MODULE_FILE} ---\n${module}\n--- ${TEST_FILE} ---\n${test}`;
@@ -121,4 +124,20 @@ export async function finish(o: FinishOptions): Promise<FinishOutcome> {
     usage.outputTokens += r.usage.outputTokens;
     return r;
   }
+}
+
+const KEPT = [/deps\.(\w+)/g, /\.put\(\s*"([^"]+)"/g];
+
+/** What the original used that the rewrite no longer does; null when nothing was lost. */
+export function dropped(original: string, next: string): string | null {
+  const lost: string[] = [];
+  for (const re of KEPT) {
+    for (const m of original.matchAll(re)) {
+      const token = m[0];
+      if (!next.includes(token) && !lost.includes(token)) lost.push(token);
+    }
+  }
+  return lost.length
+    ? `behaviour dropped: the original used ${lost.join(", ")} and your files do not. Keep them.`
+    : null;
 }
