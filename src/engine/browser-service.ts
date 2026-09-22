@@ -14,6 +14,7 @@ import { cloudflareBuy } from "../browser/flows/cloudflare-buy.js";
 import { facebookOauthConsent } from "../browser/flows/facebook-oauth-consent.js";
 import { googleDkimGenerate, googleDkimStart } from "../browser/flows/google-dkim.js";
 import { googleWorkspaceLogo } from "../browser/flows/google-workspace-logo.js";
+import { instagramCreatePost } from "../browser/flows/instagram-create-post.js";
 import { instagramOauthConsent } from "../browser/flows/instagram-oauth-consent.js";
 import { instantlyWarmup } from "../browser/flows/instantly-warmup.js";
 import { linkedinOauthConsent } from "../browser/flows/linkedin-oauth-consent.js";
@@ -56,6 +57,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     googleOauthConsent,
     linkedinOauthConsent,
     instagramOauthConsent,
+    instagramCreatePost,
     facebookOauthConsent,
     tiktokOauthConsent,
     xOauthConsent,

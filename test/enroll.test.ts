@@ -36,6 +36,9 @@ function fakePage(script: { text: string[]; html?: string; dialog?: string[] }) 
       acts.push({ op, hints });
       if (op.kind === "click") i++;
     },
+    async signIn() {
+      return "no-login" as const;
+    },
     human(reason) {
       throw new NeedsHuman(reason);
     },

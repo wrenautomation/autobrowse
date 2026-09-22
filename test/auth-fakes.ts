@@ -30,6 +30,9 @@ export function fakePage(script: {
       if (op.kind === "click") i++;
       script.onAct?.(acts.length);
     },
+    async signIn() {
+      return "no-login";
+    },
     human(reason) {
       throw new NeedsHuman(reason);
     },

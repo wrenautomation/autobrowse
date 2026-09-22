@@ -38,6 +38,9 @@ function consentPages(
       }
       i++;
     },
+    async signIn() {
+      return "no-login" as const;
+    },
     human(reason) {
       throw new NeedsHuman(reason);
     },

@@ -4,6 +4,7 @@ export { type ConsentWalk, consentFlow } from "./consent-walker.js";
 export { facebookOauthConsent } from "./facebook-oauth-consent.js";
 export { googleDkimGenerate, googleDkimStart } from "./google-dkim.js";
 export { googleWorkspaceLogo } from "./google-workspace-logo.js";
+export { type CreatePostInput, instagramCreatePost } from "./instagram-create-post.js";
 export { instagramOauthConsent } from "./instagram-oauth-consent.js";
 export { instantlyWarmup } from "./instantly-warmup.js";
 export { linkedinOauthConsent } from "./linkedin-oauth-consent.js";

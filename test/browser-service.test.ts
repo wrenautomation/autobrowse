@@ -52,6 +52,7 @@ describe("browser service", () => {
       "google-admin/workspace-logo",
       "google/oauth-consent",
       "google/youtube-community-post",
+      "instagram/create-post",
       "instagram/oauth-consent",
       "instantly/warmup",
       "linkedin/oauth-consent",

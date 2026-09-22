@@ -11,6 +11,12 @@ import { z } from "zod";
 import { HttpError } from "../clients/http.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 
+/**
+ * Whose account the browser legs post as. The composer follows whoever the
+ * profile is signed in as, so without it a post could land on a personal
+ * account; the flow refuses rather than guess. Same guard as YOUTUBE_CHANNEL_ID.
+ */
+export const INSTAGRAM_ACCOUNT = "INSTAGRAM_ACCOUNT";
 export const INSTAGRAM_ORIGIN = "https://graph.instagram.com";
 /** Graph API versions live about two years. */
 export const INSTAGRAM_VERSION = "v23.0";
@@ -147,7 +153,10 @@ export const instagram: SiteApi = {
         "A post from a local file with a caption (no official path: the API wants a public URL; the browser leg uploads)",
       request: webPost,
       irreversible: true,
-      browser: { workflow: "instagram-create-post" },
+      browser: {
+        flow: "instagram/create-post",
+        input: (i, env) => ({ ...i, account: env(INSTAGRAM_ACCOUNT) }),
+      },
     }),
     route({
       method: "GET",

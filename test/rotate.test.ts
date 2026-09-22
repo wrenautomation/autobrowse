@@ -23,6 +23,9 @@ function fakePage(script: { text: string[]; present?: (h: Hints) => boolean; url
       acts.push({ op, hints });
       if (op.kind === "click") i++;
     },
+    async signIn() {
+      return "no-login" as const;
+    },
     human(reason) {
       throw new NeedsHuman(reason);
     },
