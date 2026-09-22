@@ -213,11 +213,16 @@ const aws: SiteLogin = {
   ask: "Your AWS console sign-in (root email, or <account>/<iam user>), for `aws login`",
   loggedIn: async (fp) =>
     /console\.aws\.amazon\.com/.test(fp.url()) &&
+    !/signin\.aws\.amazon\.com/.test(fp.url()) &&
     !(await fp.has({ role: "textbox", name: "Password" })),
   async signIn({ fp, cred, code }: SignInContext) {
     const who = awsIdentity(cred.username);
-    if (!(await fp.has({ role: "textbox", name: "Password" }, 8_000))) {
-      await fp.open("https://signin.aws.amazon.com/signin", { allowWall: true });
+    // The sign-in page renders its form 10–40 s after DOMContentLoaded (headless is slow-walked).
+    const password = { role: "textbox", name: "Password" } as const;
+    if (!(await fp.has(password, 45_000))) {
+      // The bare /signin URL answers 400 since the 2026 sign-in update; the console bounces to the live one.
+      await fp.open("https://console.aws.amazon.com/", { allowWall: true });
+      await fp.has(password, 45_000);
     }
     if (who.kind === "root") {
       const rootButton = { role: "button", name: "/root user email/i" } as const;

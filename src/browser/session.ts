@@ -262,14 +262,14 @@ export interface Wall {
 export async function looksLikeWall(page: Page): Promise<Wall | null> {
   const url = page.url();
   // A sign-in path segment, not a substring: myaccount's /signinoptions/ is a settings page.
-  if (/accounts\.google\.com\/|\/(login|sign-?in)(\/|\?|#|$)/i.test(url))
+  if (/accounts\.google\.com\/|signin\.aws\.amazon\.com\/|\/(login|sign-?in)(\/|\?|#|$)/i.test(url))
     return { kind: "login", detail: `login page: ${url}` };
   return wallOf(url, await bodyText(page, 4000));
 }
 
 /** The wall a URL and page text show, if any; `looksLikeWall` over a page, this over what a flow already read. */
 export function wallOf(url: string, text: string): Wall | null {
-  if (/accounts\.google\.com\/|\/(login|sign-?in)(\/|\?|#|$)/i.test(url))
+  if (/accounts\.google\.com\/|signin\.aws\.amazon\.com\/|\/(login|sign-?in)(\/|\?|#|$)/i.test(url))
     return { kind: "login", detail: `login page: ${url}` };
   // "protected by reCAPTCHA" is the legal footer on every sign-up form, not a wall.
   if (

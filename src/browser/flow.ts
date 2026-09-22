@@ -193,6 +193,8 @@ export function drawMs([lo, hi]: [number, number], random = Math.random): number
   return Math.round(Math.exp(Math.log(lo) + random() * (Math.log(hi) - Math.log(lo))));
 }
 const SETTLE_MS = 8_000;
+/** AWS's console → sign-in chain takes 30–60 s to DOMContentLoaded headless; Playwright's 30 s default cut it. */
+const NAVIGATE_MS = 90_000;
 
 /**
  * Navigate and let client-side redirects finish: a dashboard that bounces
@@ -200,7 +202,7 @@ const SETTLE_MS = 8_000;
  * before that would call an unauthenticated page "signed in".
  */
 async function settle(page: Page, url: string): Promise<void> {
-  await page.goto(url, { waitUntil: "domcontentloaded" });
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAVIGATE_MS });
   await page.waitForLoadState("networkidle", { timeout: SETTLE_MS }).catch(() => undefined);
 }
 
