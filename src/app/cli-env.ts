@@ -65,11 +65,14 @@ export function registerEnvCommands(program: Command, settings: Settings, deps: 
 
   env
     .command("ls")
-    .description("Names in the store and when each changed; never values")
+    .description("Names in the store, when each changed and when it lapses; never values")
     .action(async () => {
       const rows = await deps.store().list();
       if (!rows.length) return say("(empty)");
-      for (const r of rows) say(`${r.name.padEnd(32)} ${r.updatedAt ?? ""}`);
+      for (const r of rows)
+        say(
+          `${r.name.padEnd(32)} ${(r.updatedAt ?? "").padEnd(24)} ${r.expiresAt ? `expires ${r.expiresAt}` : ""}`.trimEnd(),
+        );
     });
 
   env
@@ -157,6 +160,21 @@ export function registerEnvCommands(program: Command, settings: Settings, deps: 
       for (const e of chosen) await store.put(e.name, e.value);
       say(`pushed ${chosen.length}: ${chosen.map((e) => e.name).join(", ")}`);
       say("the box reads the store on its next deploy (push to main)");
+    });
+
+  env
+    .command("expires <name> <when>")
+    .description(
+      "Record when a value lapses (an ISO date, or `none`) without printing it: for a token minted by hand, or before expiry was kept",
+    )
+    .action(async (name: string, when: string) => {
+      const store = deps.store();
+      const value = await store.get(name);
+      if (value === null) throw new Error(`${name} is not in the store`);
+      const at = when === "none" ? undefined : new Date(when);
+      if (at && Number.isNaN(at.getTime())) throw new Error(`not a date: ${when}`);
+      await store.put(name, value, at ? { expiresAt: at.toISOString() } : {});
+      say(at ? `${name} expires ${at.toISOString()}` : `${name}: no expiry`);
     });
 
   env

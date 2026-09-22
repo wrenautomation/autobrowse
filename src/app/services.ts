@@ -9,6 +9,7 @@ import {
   canaryStore,
   type EnvStore,
   envCredentials,
+  envFileStore,
   fileAudit,
   fileCredentials,
   keychainKey,
@@ -61,7 +62,7 @@ import { domainAvailability } from "../clients/rdap.js";
 import { ssmRosterStore } from "../clients/roster.js";
 import { twilioReader } from "../clients/twilio.js";
 import { wrenClient } from "../clients/wren.js";
-import { envFileSink, type SecretSink } from "../deps/sink.js";
+import type { SecretSink } from "../deps/sink.js";
 import {
   openFullDiskAccessPane,
   type PhoneOptions,
@@ -491,13 +492,14 @@ export function paceFor(settings: Settings): Pace | null {
   return settings.pace === "fast" ? null : HUMAN_PACE;
 }
 
-/** Where minted secrets go: the env store (SSM) in prod, the env file otherwise. */
+/** Where minted secrets go, and are listed from with their expiry: the env store (SSM) in prod, the env file otherwise. */
 export function sinkFor(
   settings: Settings,
   ssm: SSMClient = lazy(() => new SSMClient({ region: settings.awsRegion })),
-): SecretSink {
-  if (settings.secretSink !== "ssm") return envFileSink(settings.envFile);
-  return { put: (name, value) => envStoreFor(settings, ssm).put(name, value) };
+): EnvStore {
+  return settings.secretSink === "ssm"
+    ? envStoreFor(settings, ssm)
+    : envFileStore(settings.envFile);
 }
 
 /** The store `autobrowse env` and prod's sink share: SSM under /autobrowse/config. */

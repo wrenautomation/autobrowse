@@ -129,7 +129,10 @@ export const npmGranularToken = defineFlow<GranularTokenInput, GranularTokenResu
       token = (await fp.text()).match(TOKEN)?.[0] ?? (await fp.html()).match(TOKEN)?.[0];
     }
     if (!token) return fp.human("the token page did not show a token");
-    await input.sink?.put(NPM_TOKEN, token);
+    const days = input.expiresDays ?? 90;
+    await input.sink?.put(NPM_TOKEN, token, {
+      expiresAt: new Date(Date.now() + days * 86_400_000).toISOString(),
+    });
     return { token, user };
   },
 });

@@ -24,7 +24,7 @@ import {
   needView,
   resolveNeeds,
 } from "./needs.js";
-import { credentialsFor, identitiesFor, phoneFor } from "./services.js";
+import { credentialsFor, envStoreFor, identitiesFor, phoneFor, sinkFor } from "./services.js";
 
 export interface Owed {
   /** The rows and the kind titles they group under (the UI has no access to the server modules). */
@@ -54,6 +54,15 @@ export function needsContextFor(
     identities: await identitiesFor(settings).list(),
     credentials: credentialsFor(settings, { armed: false }),
     env: (n) => env[n],
+    // Expiry from both places a minted value can live; the shared store may be out of reach offline.
+    kept: once(async () => [
+      ...(await sinkFor(settings).list()),
+      ...(settings.secretSink === "ssm"
+        ? []
+        : await envStoreFor(settings)
+            .list()
+            .catch(() => [])),
+    ]),
     workspaceDomain: settings.googleWorkspaceDomain?.toLowerCase() ?? null,
     // Each probe spawns a tool; several rows ask, one context answers once.
     phone: (() => {

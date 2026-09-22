@@ -1,31 +1,9 @@
-import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { cloudflareAccountId, cloudflareApiToken } from "../src/browser/flows/cloudflare-token.js";
-import { envFileSink, memorySink } from "../src/deps/sink.js";
+import { memorySink } from "../src/deps/sink.js";
 import { runFlow } from "../src/engine/run.js";
 import { type BootstrapDeps, bootstrapWorkflow } from "../src/workflows/bootstrap/index.js";
 import { fakeBrowser, fakeEffects } from "./fakes.js";
-
-describe("envFileSink", () => {
-  it("upserts one key, keeps the rest, writes 0600, updates the process env", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "autobrowse-sink-"));
-    const file = join(dir, ".env");
-    writeFileSync(file, "A=1\nCLOUDFLARE_API_TOKEN=old\n# note\n");
-    const env: NodeJS.ProcessEnv = {};
-    const sink = envFileSink(file, env);
-    await sink.put("CLOUDFLARE_API_TOKEN", "new");
-    await sink.put("CLOUDFLARE_ACCOUNT_ID", "abc");
-    expect(readFileSync(file, "utf8")).toBe(
-      "A=1\nCLOUDFLARE_API_TOKEN=new\n# note\nCLOUDFLARE_ACCOUNT_ID=abc\n",
-    );
-    expect(statSync(file).mode & 0o777).toBe(0o600);
-    expect(env.CLOUDFLARE_API_TOKEN).toBe("new");
-    await expect(sink.put("bad key", "x")).rejects.toThrow(/bad key/);
-    await expect(sink.put("X", "a\nb")).rejects.toThrow(/newline/);
-  });
-});
 
 function deps(
   over: Partial<BootstrapDeps> & {

@@ -1,6 +1,6 @@
 # The vault leaves autobrowse (credkeep)
 
-2026-09-22. Status: step 1 done (credkeep 0.1.0 on npm, autobrowse on it).
+2026-09-22. Status: step 1 done (credkeep on npm, autobrowse on it); expiry kept since 0.2.0.
 
 ## Why
 
@@ -53,11 +53,18 @@ anything. `expiring(list, ms)` returns what lapses within `ms`.
 
 ## Where to attack (ranked)
 
-1. **Nothing records expiry yet.** `site setup npm token` mints a 90-day
-   token and stores it without `expiresAt`. Setup steps should say how long
-   what they mint lasts, and the sink should pass that on. Then a watcher
-   re-mints from `expiring()`, or adds a `needs` row. Until then a token
-   lapses silently.
+1. **Renewal is not scheduled.** Expiry is now kept, in credkeep 0.2
+   (`envFileStore` stores it as a comment; SSM keeps it in the description):
+   - the npm token flow records its 90 days
+   - `env expires <name> <date>` backfills a token minted by hand
+   - `env ls` shows the expiry
+   - the `token-<site>` row in `needs` reopens 14 days before a token lapses,
+     and `needs do token-npm` mints a new one
+
+   Still open: nothing runs `needs do` on its own. It needs a scheduled job
+   (wren's Restate, once a day) that renews every reopened token row that
+   has a setup step. OAuth access tokens stored without a refresh token also
+   do not record `expires_in` yet.
 2. **wren still has its own SSM secret code** (`apps/worker/src/ssm-env.ts`,
    `packages/provision` `ssmSecretStore`). That makes two readers of one
    path, each with its own rules. Move both onto credkeep.

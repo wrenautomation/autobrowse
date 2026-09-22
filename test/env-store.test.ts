@@ -32,7 +32,7 @@ describe("autobrowse env", () => {
   it("lists names only, copies one value, prints on request", async () => {
     const t = setup({ TWILIO_AUTH_TOKEN: "tok", A: "1" });
     await t.run("ls");
-    expect(t.said.join("\n")).toMatch(/^A\s+\nTWILIO_AUTH_TOKEN/);
+    expect(t.said.join("\n")).toMatch(/^A\nTWILIO_AUTH_TOKEN/);
     expect(t.said.join("\n")).not.toContain("tok");
     await t.run("get", "TWILIO_AUTH_TOKEN");
     expect(t.copied).toEqual(["tok"]);
@@ -40,6 +40,20 @@ describe("autobrowse env", () => {
     await t.run("get", "TWILIO_AUTH_TOKEN", "--print");
     expect(t.printed()).toBe("tok");
     await expect(t.run("get", "NOPE")).rejects.toThrow(/not in the store/);
+  });
+
+  it("records an expiry without printing the value, shows it in ls, and clears it", async () => {
+    const t = setup({ NPM_TOKEN: "tok" });
+    await t.run("expires", "NPM_TOKEN", "2026-12-21");
+    expect(t.said.at(-1)).toBe("NPM_TOKEN expires 2026-12-21T00:00:00.000Z");
+    expect(await t.store.get("NPM_TOKEN")).toBe("tok");
+    await t.run("ls");
+    expect(t.said.at(-1)).toMatch(/^NPM_TOKEN\s+expires 2026-12-21T00:00:00.000Z$/);
+    await t.run("expires", "NPM_TOKEN", "none");
+    expect((await t.store.list())[0]?.expiresAt).toBeNull();
+    expect(t.said.join("\n")).not.toContain("tok");
+    await expect(t.run("expires", "NPM_TOKEN", "soon")).rejects.toThrow(/not a date/);
+    await expect(t.run("expires", "NOPE", "2026-12-21")).rejects.toThrow(/not in the store/);
   });
 
   it("pulls into a 0600 env file (merged), as exports, or to stdout; sidecars for multi-line values", async () => {

@@ -10,7 +10,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { CredentialStore } from "credkeep";
+import { type CredentialStore, type EnvListing, expiring } from "credkeep";
 import { type Identity, identityFor } from "../auth/identities.js";
 import type { SiteLogin } from "../auth/login.js";
 import { signupInbox } from "../auth/signup.js";
@@ -45,6 +45,8 @@ export interface NeedsContext {
   /** Unarmed: the checks read every credential's presence, never a canary trip. */
   credentials: CredentialStore;
   env: (name: string) => string | undefined;
+  /** What the sink holds, with each value's expiry; absent = expiry unknown. */
+  kept?: () => Promise<EnvListing[]>;
   workspaceDomain: string | null;
   /** The paired phone's legs, when a number is configured. */
   phone?: (() => Promise<{ read: boolean; send: boolean }>) | null;
@@ -60,6 +62,15 @@ export function consentLoginOf(s: SiteApi): string | null {
 }
 
 const has = (env: NeedsContext["env"], names: readonly string[]) => names.every((n) => env(n));
+
+/** A minted token is renewed this long before it lapses. */
+export const RENEW_WITHIN_MS = 14 * 86_400_000;
+
+/** When `name` lapses, if that is within the renew window; null while it is safe or unknown. */
+async function lapsing(ctx: NeedsContext, name: string): Promise<string | null> {
+  const kept = (await ctx.kept?.()) ?? [];
+  return expiring(kept, RENEW_WITHIN_MS).find((e) => e.name === name)?.expiresAt ?? null;
+}
 
 /** Wren's own Google account: its channel, its Pages, its signups. */
 const WREN_ADDRESS = "william@wrenautomation.com";
@@ -128,13 +139,14 @@ export function siteNeeds(ctx: NeedsContext): Need[] {
       out.push({
         id: `token-${s.site}`,
         kind: "keys",
-        what: `${s.site}: ${token}${tokenStep ? ` (${tokenStep.summary})` : ""}`,
+        what: `${s.site}: ${token}${tokenStep ? ` (${tokenStep.summary}); reopens 14 days before it lapses` : ""}`,
         unlocks: `the ${s.site} API`,
         how: [
           ...(tokenStep ? [`autobrowse site setup ${s.site} ${tokenStep.name}`] : []),
           `or put ${token} in .env, then autobrowse env push ${token}`,
         ],
-        check: async () => Boolean(ctx.env(token)),
+        // Present and not about to lapse: a token inside the renew window reopens the row.
+        check: async () => Boolean(ctx.env(token)) && !(await lapsing(ctx, token)),
       });
     }
   }

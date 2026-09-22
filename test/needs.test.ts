@@ -16,7 +16,7 @@ import {
   siteNeeds,
 } from "../src/app/needs.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";
-import { gmail, meta, youtube } from "../src/sites/index.js";
+import { gmail, meta, npm, youtube } from "../src/sites/index.js";
 
 const ctx = (env: Record<string, string>, extra: Partial<NeedsContext> = {}): NeedsContext => ({
   sites: [meta, youtube, gmail],
@@ -34,6 +34,33 @@ const ctx = (env: Record<string, string>, extra: Partial<NeedsContext> = {}): Ne
 });
 
 describe("needs", () => {
+  it("reopens a minted token's row inside the renew window, and its first line mints a new one", async () => {
+    const day = 86_400_000;
+    const row = (expiresInDays: number | null) =>
+      siteNeeds(
+        ctx(
+          { NPM_TOKEN: "t" },
+          {
+            sites: [npm],
+            kept: async () => [
+              {
+                name: "NPM_TOKEN",
+                updatedAt: null,
+                expiresAt:
+                  expiresInDays === null
+                    ? null
+                    : new Date(Date.now() + expiresInDays * day).toISOString(),
+              },
+            ],
+          },
+        ),
+      ).find((r) => r.id === "token-npm");
+    expect(await row(60)?.check?.()).toBe(true);
+    expect(await row(null)?.check?.()).toBe(true);
+    expect(await row(10)?.check?.()).toBe(false);
+    expect(await row(-1)?.check?.()).toBe(false);
+    expect(row(10)?.how[0]).toBe("autobrowse site setup npm token");
+  });
   it("derives a site's login, keys and consent rows; google logins come from the accounts instead", async () => {
     expect(consentLoginOf(meta)).toBe("facebook");
     expect(consentLoginOf(youtube)).toBe("google");
