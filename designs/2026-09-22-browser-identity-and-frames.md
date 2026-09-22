@@ -1,8 +1,8 @@
 # Browser identity, frames and the checkbox captcha
 
 LinkedIn's password reset stops at reCAPTCHA Enterprise. The checkbox
-never ticked. Four things were wrong, each fixed where it lives. The
-password is set now (`linkedin-password` cleared).
+never ticked. Four things were wrong, each fixed where it lives. Wren's
+LinkedIn (william@) has a password now, stored as `linkedin@wren`.
 
 ## What a site sees: `src/browser/identity.ts`
 
@@ -53,8 +53,14 @@ with a local two-host page, headed: hidden → never ticks, kept → ticks.
 ## Explore can finish a reset
 
 - `explore --codes <inbox>`: `place {secret:"code"}` types the newest code.
-- `explore --new-password`: `mintPassword` stores a password on a
-  provider-only (`via`) credential before the browser opens.
+- `explore --new-password <address>`: `mintPassword` stores a password
+  on the credential whose username is that address (`site` or
+  `site@<label>`), before the browser opens.
+  - It first ran without the address and wrote onto `linkedin`, which is
+    William's personal account (jinwilliam.jin@gmail.com, via Google),
+    while the reset was done as william@. Found within the hour, then
+    moved to `linkedin@wren`. `linkedin` is back to no password, in the
+    file and in SSM. His personal LinkedIn and Google were never changed.
   - A stalled reset keeps the password it stored.
   - A password the person set is refused (`creds rotate` is theirs).
 - `eval` with `hints` runs a function of that element, in its frame.
@@ -65,6 +71,13 @@ untick "sign out all devices" → Submit. The tail is saved as
 `recordings/linkedin-password-reset`.
 
 ## Where to attack
+
+0. **The stored personal Google password is stale.** `site setup
+   linkedin consent` signed in through `google` (jinwilliam.jin@gmail.com),
+   and Google said "wrong password" (audit 22:48Z). Nothing here changed
+   it. Only William can store the current one (`creds paste google`).
+   Until then nothing signs in as `google`: every failed try is a security
+   signal on his account.
 
 1. **One headed session at a time is still headed.** The window now
    stays on screen behind the front app. If that gets in the way, the

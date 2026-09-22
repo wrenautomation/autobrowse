@@ -270,7 +270,7 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
       unlocks:
         "the LinkedIn API: /oauth/v2/authorization always lands on /uas/login and asks for a password, even with a live session — until then posting goes through the composer",
       how: [
-        "autobrowse explore linkedin --url https://www.linkedin.com/passwordReset --headed --codes <its inbox> --new-password",
+        "autobrowse explore linkedin --url https://www.linkedin.com/passwordReset --headed --codes <its inbox> --new-password <its address>",
         "  (address → Next → tick the checkbox captcha → place code → place password twice → Submit)",
       ],
       // The reset route mints one beside `via`: Google sign-in keeps working.

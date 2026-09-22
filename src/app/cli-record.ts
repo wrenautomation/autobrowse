@@ -33,13 +33,13 @@ export function registerRecordCommands(
       'place{secret:"code"} types the newest code this inbox got after the session opened',
     )
     .option(
-      "--new-password",
-      'give an account that signs in through a provider (creds via) a password of its own, stored before the browser opens; place{secret:"password"} types it',
+      "--new-password <address>",
+      'give that account (its stored credential, `site` or `site@<label>`) a password of its own, stored before the browser opens; place{secret:"password"} types it',
     )
     .action(
       async (
         site: string,
-        o: { url?: string; port: string; headed?: boolean; codes?: string; newPassword?: boolean },
+        o: { url?: string; port: string; headed?: boolean; codes?: string; newPassword?: string },
       ) => {
         const { tokenFileFor } = await import("../explore/server.js");
         const tokenFile = tokenFileFor(Number(o.port));
@@ -64,7 +64,7 @@ export function registerRecordCommands(
   /** What `place` may type in an explore session: codes from an inbox, a minted password. */
   const exploreSecrets = async (
     site: string,
-    o: { url?: string; codes?: string; newPassword?: boolean },
+    o: { url?: string; codes?: string; newPassword?: string },
   ): Promise<{ secrets?: SecretValues; secretHosts?: (host: string) => boolean }> => {
     if (!o.codes && !o.newPassword) return {};
     const { codeSecrets, mintPassword, signupHosts } = await import("../auth/signup.js");
@@ -76,7 +76,9 @@ export function registerRecordCommands(
           new Date(),
         )
       : null;
-    const cred = o.newPassword ? await mintPassword(credentialsFor(settings), site) : null;
+    const cred = o.newPassword
+      ? (await mintPassword(credentialsFor(settings), site, o.newPassword)).cred
+      : null;
     return {
       secrets: async (name) => {
         if (name === "code") return code ? code(name) : null;

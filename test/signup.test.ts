@@ -57,19 +57,22 @@ describe("signup", () => {
     expect(aliased.codesInbox).toBe("will@wren.test");
   });
 
-  it("mints a password only for a provider-only account; a person's password is refused", async () => {
+  it("mints a password only on the named account, only where none was set", async () => {
     const store = memoryCredentials({
-      li: { username: "hello@wren.test", via: "google" },
+      li: { username: "me@personal.test", via: "google" },
+      "li@wren": { username: "hello@wren.test", via: "google" },
       mine: { username: "hello@wren.test", password: "theirs" },
     });
-    const c = await mintPassword(store, "li");
-    expect(c.password?.length).toBe(24);
-    expect(c.via).toBe("google");
+    const { name, cred } = await mintPassword(store, "li", "Hello@wren.test");
+    expect(name).toBe("li@wren");
+    expect(cred.password?.length).toBe(24);
+    // The other account at the same site is untouched.
+    expect((await store.get("li"))?.password).toBeUndefined();
     // A reset that stalled after storing: the same password stands.
-    expect((await mintPassword(store, "li")).password).toBe(c.password);
-    await expect(mintPassword(store, "mine")).rejects.toThrow(/creds rotate/);
+    expect((await mintPassword(store, "li", "hello@wren.test")).cred.password).toBe(cred.password);
+    await expect(mintPassword(store, "mine", "hello@wren.test")).rejects.toThrow(/creds rotate/);
     expect((await store.get("mine"))?.password).toBe("theirs");
-    await expect(mintPassword(store, "none")).rejects.toThrow(/no stored credential/);
+    await expect(mintPassword(store, "li", "nobody@wren.test")).rejects.toThrow(/no li credential/);
   });
 
   it("secrets by name: email, password, phone, and a fresh code each time", async () => {

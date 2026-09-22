@@ -167,24 +167,33 @@ export async function mintCredential(
 /**
  * A password for an account that has none: it signs in through a provider
  * (`via`), and a site wants one of its own (an API, a reset form). Minted and
- * stored before any form sees it. A `via` credential that has one already is
- * a reset that stalled: it stands. A password the person set is refused;
- * changing it is `creds rotate`, theirs to run.
+ * stored before any form sees it, on the credential whose username is
+ * `account` (`site` or a `site@<label>`): never on another account's. A
+ * `via` credential that has one already is a reset that stalled: it stands.
+ * A password the person set is refused; changing it is `creds rotate`.
  */
 export async function mintPassword(
   store: CredentialStore,
   site: string,
+  account: string,
   password: string = newPassword(),
-): Promise<Credential> {
-  const had = await store.get(site);
-  if (!had) throw new Error(`${site} has no stored credential: nothing to give a password`);
-  if (had.password && had.via) return had;
+): Promise<{ name: string; cred: Credential }> {
+  const same = (c: Credential | null) => c?.username.toLowerCase() === account.toLowerCase();
+  const names = [site, ...(await store.list()).filter((n) => n.startsWith(`${site}@`))];
+  let name: string | null = null;
+  for (const n of names) if (same(await store.get(n))) name = n;
+  if (!name)
+    throw new Error(
+      `no ${site} credential for ${account}: store one first (creds set ${site}@<label>)`,
+    );
+  const had = (await store.get(name)) as Credential;
+  if (had.password && had.via) return { name, cred: had };
   if (had.password)
-    throw new Error(`${site} has a password; changing it is \`creds rotate ${site}\`, run by hand`);
-  await store.put(site, { ...had, password });
-  const cred = await store.get(site);
-  if (!cred?.password) throw new Error(`${site}: the password did not store`);
-  return cred;
+    throw new Error(`${name} has a password; changing it is \`creds rotate ${name}\`, run by hand`);
+  await store.put(name, { ...had, password });
+  const cred = await store.get(name);
+  if (!cred?.password) throw new Error(`${name}: the password did not store`);
+  return { name, cred };
 }
 
 /** The agent's goal text for a signup; the secrets are named, never valued. */
