@@ -1,5 +1,6 @@
 import { loadEnvFile, loadSettings } from "../src/app/config.js";
 import { loadServiceAccountKey, serviceAccountToken } from "../src/google-auth.js";
+
 loadEnvFile();
 const s = loadSettings();
 const key = loadServiceAccountKey(s.googleServiceAccount as string);

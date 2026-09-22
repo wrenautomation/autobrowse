@@ -17,11 +17,16 @@ for (const scope of [
       { headers: { authorization: `Bearer ${token}` } },
     );
     const b = (await r.json()) as Record<string, unknown> & { error?: { message?: string } };
-    console.log(scope.split("/").pop(), r.status, b.error?.message ?? JSON.stringify({
-      isEnrolledIn2Sv: b.isEnrolledIn2Sv,
-      isEnforcedIn2Sv: b.isEnforcedIn2Sv,
-      isAdmin: b.isAdmin,
-    }));
+    console.log(
+      scope.split("/").pop(),
+      r.status,
+      b.error?.message ??
+        JSON.stringify({
+          isEnrolledIn2Sv: b.isEnrolledIn2Sv,
+          isEnforcedIn2Sv: b.isEnforcedIn2Sv,
+          isAdmin: b.isAdmin,
+        }),
+    );
   } catch (err) {
     console.log(scope.split("/").pop(), "mint failed:", (err as Error).message.slice(0, 160));
   }

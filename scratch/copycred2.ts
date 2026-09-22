@@ -1,5 +1,6 @@
 import { loadEnvFile, loadSettings } from "../src/app/config.js";
 import { credentialsFor } from "../src/app/services.js";
+
 loadEnvFile();
 const creds = credentialsFor(loadSettings(), { armed: false });
 const from = await creds.get("google-admin");
