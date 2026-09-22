@@ -460,6 +460,18 @@ Only mail that says how to leave it is listed (a receipt, a code, a person
 has no `List-Unsubscribe`); nothing leaves without `--yes`. The list is
 `src/chores/unsubscribe.ts`.
 
+```sh
+pnpm autobrowse aws-login --user william              # renew the Mac's AWS CLI session: `aws login --remote` answered from the aws profile
+pnpm autobrowse aws-login --user william --overwrite  # …even when the profile holds another identity's (root) session
+```
+
+`aws login --remote` prints an authorize URL and waits for a verification
+code; the signed-in `aws` browser profile picks the console session and
+reads the code off the Copy button (the code view elides it). The code goes
+straight into the CLI's stdin: nothing prints it, no file holds it. The
+CLI then refreshes its own credentials until the console session expires.
+`src/chores/aws-login.ts`, flow `src/browser/flows/aws-cli-login.ts`.
+
 ## Use as a library
 
 Every layer is a plain function over explicit parts; only the composers

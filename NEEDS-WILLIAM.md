@@ -18,6 +18,18 @@ carry. Dated 2026-09-22.
 
 ## In order of payoff
 
+0. **AWS port 25 — one command, blocks the wren email session** (asked
+   2026-09-22). The "remove email sending limitations" form for
+   `34.233.233.146` (wren-prod-pg, rDNS `probe.wrenautomation.com`) is filled
+   and parked at its `send` gate on the local worker (`pnpm worker` must be
+   up): `pnpm autobrowse approve aws-port25-request wren-prod-pg send`
+   submits it; `reject` drops it. The reply address in the prompt is the pays
+   account (the IAM user cannot read the root email): check it there. Rerun
+   anywhere: `pnpm autobrowse run aws-port25-request <key> --plan
+   '{"contactEmail":…,"elasticIpAddress":…,"reverseDnsRecord":…,"useCaseDescription":…}'`.
+   The Mac's AWS CLI session is no longer yours to renew: `pnpm autobrowse
+   aws-login --user william --overwrite` does it (default profile now = IAM
+   user william, admin; root-only work still needs you).
 1. **`needs do login-facebook`, then `keys-meta`, `consent-meta`, the card**
    → ads run, Page and Instagram post (`walkthrough/03-meta-app.md`).
    The developer app: a Business app on developers.facebook.com with
@@ -35,15 +47,6 @@ carry. Dated 2026-09-22.
    `william@wrenautomation.com`; your own stay on jinwilliam.jin@gmail.com.
 4. **Anthropic credits** ($5) → the agent explores with the good model.
 5. **`unsubscribe`** — the list below, ready to paste.
-6. **AWS port 25 (asked by the wren email session, 2026-09-22)** — the
-   "remove email sending limitations" form for `34.233.233.146` (wren-prod-pg,
-   rDNS `probe.wrenautomation.com`) is filled and waiting at its gate on the
-   local worker: `pnpm autobrowse approve aws-port25-request wren-prod-pg`
-   sends it (`reject` drops it). The reply address in the plan is the pays
-   account; the IAM user cannot read the root email, so check it in the
-   prompt. Rerun anywhere: `pnpm autobrowse run aws-port25-request <key>
-   --plan '{"contactEmail":…,"elasticIpAddress":…,"reverseDnsRecord":…,"useCaseDescription":…}'`.
-
 ## Accounts (policy, seeded 2026-09-22)
 
 `jinwilliam.jin@gmail.com` = pays (Cloud project `wren-509223`, YouTube

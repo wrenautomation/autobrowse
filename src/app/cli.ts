@@ -14,6 +14,7 @@ import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
 import { localBackend, proofsOf, workflowsOf } from "./backend.js";
 import { registerAccountsCommands } from "./cli-accounts.js";
 import { registerAuthCommands } from "./cli-auth.js";
+import { registerAwsCommands } from "./cli-aws.js";
 import { registerDesktopCommands } from "./cli-desktop.js";
 import { registerDoCommands } from "./cli-do.js";
 import { registerEnvCommands } from "./cli-env.js";
@@ -232,6 +233,7 @@ program
 registerRecordCommands(program, settings, local);
 registerSiteCommands(program, local);
 registerUnsubscribe(program, local);
+registerAwsCommands(program, local);
 registerDoCommands(program, local);
 registerAuthCommands(program, settings);
 registerNeedsCommands(program, () => ({
