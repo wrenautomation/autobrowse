@@ -13,6 +13,7 @@
  * then state marks (✓ checked, ✗ disabled, ▾ expanded, • selected).
  * Containers are `role "name":` with children indented one space.
  */
+import { frameOfSection } from "../browser/frames.js";
 import type { Hints } from "../browser/locate.js";
 
 /** Actionable roles and their one-letter codes in the outline. */
@@ -94,6 +95,8 @@ export interface Ref {
   nth: number;
   /** `[checked]`, `[disabled]`, `[expanded]`, `[level=2]` as the tree wrote them. */
   attrs: string;
+  /** Inside an iframe: its selector chain from the page (`ariaWithFrames`). */
+  frame?: string;
 }
 
 export interface Digest {
@@ -217,16 +220,18 @@ export function digest(aria: string, o: DigestOptions = {}): Digest {
   const seenText = new Set<string>();
   let textLines = 0;
   let hiddenRefs = 0;
+  /** The iframe section being emitted, if any: its refs are found through it. */
+  let frame: string | null = null;
 
   const ref = (role: string, name: string, attrs: string): Ref | null => {
     if (refs.length >= maxRefs) {
       hiddenRefs++;
       return null;
     }
-    const key = `${role}\u0000${name}`;
+    const key = `${frame ?? ""}\u0000${role}\u0000${name}`;
     const nth = twins.get(key) ?? 0;
     twins.set(key, nth + 1);
-    const r = { n: refs.length + 1, role, name, nth, attrs };
+    const r: Ref = { n: refs.length + 1, role, name, nth, attrs, ...(frame ? { frame } : {}) };
     refs.push(r);
     return r;
   };
@@ -235,6 +240,16 @@ export function digest(aria: string, o: DigestOptions = {}): Digest {
   type Piece = { kind: "leaf"; text: string } | { kind: "block"; lines: string[] };
 
   const emit = (n: Node, depth: number): Piece[] => {
+    const section = depth === 0 && n.role === "iframe" ? frameOfSection(n.name) : null;
+    if (section) {
+      // An iframe's own section (a captcha, an embedded sign-in): shown as `iframe:`, refs carry the chain.
+      frame = section;
+      const kids = fold(n.children, 1);
+      frame = null;
+      return kids.length
+        ? [{ kind: "block", lines: ["iframe:", ...pack(kids, width - 1).map((l) => ` ${l}`)] }]
+        : [];
+    }
     const code = CODES[n.role];
     if (code) {
       const name = n.name || clip(deepText(n), 60) || n.placeholder;
@@ -385,6 +400,7 @@ export function hintsFor(ref: Ref): Hints {
   const h: Hints = { role: ref.role };
   if (ref.name) h.name = ref.name;
   if (ref.nth) h.nth = ref.nth;
+  if (ref.frame) h.frame = ref.frame;
   return h;
 }
 

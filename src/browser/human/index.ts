@@ -95,18 +95,28 @@ export const instantHands: Hands = {
 /** Where each page's pointer is: Playwright's mouse has no getter. Dies with the page. */
 const pointers = new WeakMap<Page, Point>();
 
-function pointerOf(page: Page, random: Random): Point {
+/** The page's size: the emulated viewport, or a real window's (headed Chrome is not emulated). */
+async function viewOf(page: Page): Promise<{ width: number; height: number } | null> {
+  return (
+    page.viewportSize() ??
+    (await page
+      .evaluate<{ width: number; height: number }>("({ width: innerWidth, height: innerHeight })")
+      .catch(() => null))
+  );
+}
+
+async function pointerOf(page: Page, random: Random): Promise<Point> {
   const known = pointers.get(page);
   if (known) return known;
   // A fresh page: the hand is somewhere over it, not at the corner.
-  const view = page.viewportSize() ?? { width: 1280, height: 800 };
+  const view = (await viewOf(page)) ?? { width: 1280, height: 800 };
   const start = { x: view.width * (0.3 + random() * 0.4), y: view.height * (0.3 + random() * 0.4) };
   pointers.set(page, start);
   return start;
 }
 
 async function glide(page: Page, to: Point, size: number, pace: Pace, random: Random) {
-  for (const step of mousePath(pointerOf(page, random), to, size, pace.mouse, random)) {
+  for (const step of mousePath(await pointerOf(page, random), to, size, pace.mouse, random)) {
     await page.mouse.move(step.x, step.y);
     if (step.after) await page.waitForTimeout(step.after);
   }
@@ -138,10 +148,10 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
   return {
     async think(page) {
       const ms = drawMs(pace.think, random);
-      const view = page.viewportSize();
-      if (view && chance(pace.drift, random)) {
+      const view = chance(pace.drift, random) ? await viewOf(page) : null;
+      if (view) {
         const start = Date.now();
-        const to = driftPoint(pointerOf(page, random), view, random);
+        const to = driftPoint(await pointerOf(page, random), view, random);
         await glide(page, to, 40, pace, random).catch(() => undefined);
         const left = ms - (Date.now() - start);
         if (left > 0) await page.waitForTimeout(left);

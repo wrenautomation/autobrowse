@@ -28,22 +28,76 @@ export function registerRecordCommands(
     .option("--url <url>", "start here")
     .option("--port <port>", "loopback port", "9090")
     .option("--headed", "show the browser (default: BROWSER_HEADLESS)")
-    .action(async (site: string, o: { url?: string; port: string; headed?: boolean }) => {
-      const { tokenFileFor } = await import("../explore/server.js");
-      const tokenFile = tokenFileFor(Number(o.port));
-      const ex = await opener(o)(site, Number(o.port), { tokenFile });
-      // The token lives in an owner-only file, not in this output: logs get pasted, files do not.
-      console.log(
-        `exploring ${site} on http://127.0.0.1:${ex.port}\ntoken file ${tokenFile}\ncurl -s -X POST -H "Authorization: Bearer $(cat ${tokenFile})" http://127.0.0.1:${ex.port}/ -d '{"cmd":"aria"}'`,
-      );
-      if (o.url)
-        await fetch(`http://127.0.0.1:${ex.port}/`, {
-          method: "POST",
-          headers: { authorization: `Bearer ${ex.token}` },
-          body: JSON.stringify({ cmd: "open", url: o.url }),
+    .option(
+      "--codes <inbox>",
+      'place{secret:"code"} types the newest code this inbox got after the session opened',
+    )
+    .option(
+      "--new-password",
+      'give an account that signs in through a provider (creds via) a password of its own, stored before the browser opens; place{secret:"password"} types it',
+    )
+    .action(
+      async (
+        site: string,
+        o: { url?: string; port: string; headed?: boolean; codes?: string; newPassword?: boolean },
+      ) => {
+        const { tokenFileFor } = await import("../explore/server.js");
+        const tokenFile = tokenFileFor(Number(o.port));
+        const ex = await opener(o)(site, Number(o.port), {
+          tokenFile,
+          ...(await exploreSecrets(site, o)),
         });
-      await ex.done;
+        // The token lives in an owner-only file, not in this output: logs get pasted, files do not.
+        console.log(
+          `exploring ${site} on http://127.0.0.1:${ex.port}\ntoken file ${tokenFile}\ncurl -s -X POST -H "Authorization: Bearer $(cat ${tokenFile})" http://127.0.0.1:${ex.port}/ -d '{"cmd":"aria"}'`,
+        );
+        if (o.url)
+          await fetch(`http://127.0.0.1:${ex.port}/`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${ex.token}` },
+            body: JSON.stringify({ cmd: "open", url: o.url }),
+          });
+        await ex.done;
+      },
+    );
+
+  /** What `place` may type in an explore session: codes from an inbox, a minted password. */
+  const exploreSecrets = async (
+    site: string,
+    o: { url?: string; codes?: string; newPassword?: boolean },
+  ): Promise<{ secrets?: SecretValues; secretHosts?: (host: string) => boolean }> => {
+    if (!o.codes && !o.newPassword) return {};
+    const { codeSecrets, mintPassword, signupHosts } = await import("../auth/signup.js");
+    const { codesFor, credentialsFor, gmailFor } = await import("./services.js");
+    const code = o.codes
+      ? codeSecrets(
+          codesFor(settings, gmailFor(settings)),
+          await readableInbox(o.codes),
+          new Date(),
+        )
+      : null;
+    const cred = o.newPassword ? await mintPassword(credentialsFor(settings), site) : null;
+    return {
+      secrets: async (name) => {
+        if (name === "code") return code ? code(name) : null;
+        if (name === "password") return cred?.password ?? null;
+        if (name === "email") return cred?.username ?? null;
+        return null;
+      },
+      secretHosts: signupHosts(site, o.url ?? null),
+    };
+  };
+
+  /** An inbox this system reads codes from, or why not. */
+  const readableInbox = async (inbox: string): Promise<string> => {
+    const { signupInbox } = await import("../auth/signup.js");
+    const ok = signupInbox(inbox, {
+      env: (n) => process.env[n],
+      workspaceDomain: settings.googleWorkspaceDomain ?? null,
     });
+    if (!ok) throw new Error(`${inbox}'s inbox is not readable (autobrowse accounts)`);
+    return inbox;
+  };
 
   program
     .command("mcp")
@@ -131,18 +185,15 @@ export function registerRecordCommands(
       ) => {
         let secrets: AgentRun["secrets"] = null;
         if (o.codes) {
-          const { codeSecrets, signupHosts, signupInbox } = await import("../auth/signup.js");
+          const { codeSecrets, signupHosts } = await import("../auth/signup.js");
           const { codesFor, gmailFor } = await import("./services.js");
-          if (
-            !signupInbox(o.codes, {
-              env: (n) => process.env[n],
-              workspaceDomain: settings.googleWorkspaceDomain ?? null,
-            })
-          )
-            throw new Error(`${o.codes}'s inbox is not readable (autobrowse accounts)`);
           secrets = {
             names: ["code"],
-            values: codeSecrets(codesFor(settings, gmailFor(settings)), o.codes, new Date()),
+            values: codeSecrets(
+              codesFor(settings, gmailFor(settings)),
+              await readableInbox(o.codes),
+              new Date(),
+            ),
             hosts: signupHosts(site, o.url ?? null),
           };
         }

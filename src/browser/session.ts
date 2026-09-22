@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
 import type { HttpClient } from "../clients/http.js";
 import { expandHome } from "../google-auth.js";
+import { geometry, type Identity, learnIdentity, wearIdentity } from "./identity.js";
 import { type PasskeyRecord, type Passkeys, virtualAuthenticator } from "./webauthn.js";
 
 /** A page needs a person: login, captcha, consent, or a layout nobody planned for. */
@@ -105,11 +106,9 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
   } else {
     const profileDir = join(expandHome(opts.profilesDir), opts.profile ?? site);
     context = await launchLocal(profileDir, opts);
-    if (opts.headless === false) keepOutOfTheWay(profileDir);
-    // Sites read `navigator.webdriver` to refuse "insecure" browsers; these are our own accounts.
-    await context.addInitScript(
-      "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });",
-    );
+    if (opts.headless === false) keepOutOfTheWay();
+    // `navigator.webdriver` is already false (LOCAL_ARGS). No init-script shim: an own
+    // `webdriver` property on navigator, reading undefined, is itself a tell.
   }
   const page = context.pages()[0] ?? (await context.newPage());
   const passkeys = virtualAuthenticator(context, await opts.passkeys?.(site).catch(() => []));
@@ -130,53 +129,57 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
 }
 
 /**
- * A headed Chrome on a laptop someone is using: hide its windows (they
- * still render, and bot checks still pass) and give focus back to the app
- * that had it. Best effort; only macOS has the tools.
+ * A headed Chrome on a laptop someone is using: give focus back to the app
+ * that had it; the window stays, behind. Never hidden: a hidden window
+ * stops Chrome routing clicks into a cross-site frame inside a frame (the
+ * parent gets them), so a captcha checkbox never ticks. Best effort; only
+ * macOS has the tools.
  */
-function keepOutOfTheWay(profileDir: string): void {
+function keepOutOfTheWay(): void {
   if (process.platform !== "darwin") return;
-  const osascript = (script: string) =>
-    execFileSync("osascript", ["-e", script], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
   try {
-    const front = osascript(
-      'tell application "System Events" to get name of first process whose frontmost is true',
-    );
-    const pid = execFileSync("pgrep", ["-f", `user-data-dir=${profileDir}`], { encoding: "utf8" })
-      .split("\n")
-      .find(Boolean);
-    if (pid)
-      osascript(
-        `tell application "System Events" to set visible of (first process whose unix id is ${pid}) to false`,
-      );
+    const front = execFileSync(
+      "osascript",
+      [
+        "-e",
+        'tell application "System Events" to get name of first process whose frontmost is true',
+      ],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
     if (front)
-      osascript(
-        `tell application "System Events" to set frontmost of process "${front.replace(/"/g, "")}" to true`,
+      execFileSync(
+        "osascript",
+        [
+          "-e",
+          `tell application "System Events" to set frontmost of process "${front.replace(/"/g, "")}" to true`,
+        ],
+        { stdio: "ignore" },
       );
   } catch {
-    // no Accessibility permission, or nothing frontmost: the window shows, nothing else changes
+    // no Accessibility permission, or nothing frontmost: Chrome keeps the focus
   }
 }
 
 /** Launch flags that keep a site from telling the browser apart from a person's. */
 const LOCAL_ARGS = ["--disable-blink-features=AutomationControlled"];
 
-/** The user agent a headed Chrome of the installed version would send; learned from the first headless launch. */
-let headedUserAgent: string | null = null;
+/** The headed identity of this host's Chrome, learned on the first headless launch. */
+let headedIdentity: Identity | null = null;
 
 async function launchLocal(profileDir: string, opts: BrowserOptions): Promise<BrowserContext> {
   const headless = opts.headless ?? true;
-  const base = {
+  const { args: sizeArgs, ...size } = geometry(headless);
+  // Headless says the headed identity (identity.ts). Not through Playwright's
+  // `userAgent`: that rebuilds the client hints from the UA string and sends
+  // `Sec-CH-UA-Arch: "x86"` and platform version "10_15_7" from an arm Mac on 26.x.
+  const uaArgs = (ua: string | null) => (headless && ua ? [`--user-agent=${ua}`] : []);
+  const base = (ua: string | null) => ({
     headless,
-    viewport: { width: 1280, height: 900 },
-    args: LOCAL_ARGS,
+    ...size,
+    args: [...LOCAL_ARGS, ...sizeArgs, ...uaArgs(ua)],
     ignoreDefaultArgs: ["--enable-automation"],
-    ...(headless && headedUserAgent ? { userAgent: headedUserAgent } : {}),
-  };
-  const launch = async (o: typeof base) => {
+  });
+  const launch = async (o: ReturnType<typeof base>) => {
     if (opts.channel !== "chromium") {
       try {
         return await chromium.launchPersistentContext(profileDir, { ...o, channel: "chrome" });
@@ -187,17 +190,21 @@ async function launchLocal(profileDir: string, opts: BrowserOptions): Promise<Br
     }
     return chromium.launchPersistentContext(profileDir, o);
   };
-  const context = await launch(base);
-  if (!headless || headedUserAgent) return context;
+  const context = await launch(base(headedIdentity?.userAgent ?? null));
+  if (!headless) return context;
+  if (headedIdentity) {
+    wearIdentity(context, headedIdentity);
+    return context;
+  }
   // Headless Chrome says "HeadlessChrome/153…" and sites like YouTube Studio refuse it as an
   // unsupported browser. The version is only known once launched: learn it, relaunch as the headed one.
-  const ua = await (context.pages()[0] ?? (await context.newPage())).evaluate(
-    () => navigator.userAgent,
-  );
-  if (!ua.includes("HeadlessChrome")) return context;
-  headedUserAgent = ua.replace("HeadlessChrome", "Chrome");
+  const learned = await learnIdentity(context.pages()[0] ?? (await context.newPage()));
+  if (!learned.headless) return context;
+  headedIdentity = learned.identity;
   await context.close();
-  return launch({ ...base, userAgent: headedUserAgent });
+  const relaunched = await launch(base(headedIdentity.userAgent));
+  wearIdentity(relaunched, headedIdentity);
+  return relaunched;
 }
 
 // --- Browserbase: persistent contexts keyed by site name -------------------

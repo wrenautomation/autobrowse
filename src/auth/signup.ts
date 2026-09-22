@@ -164,6 +164,29 @@ export async function mintCredential(
   return cred;
 }
 
+/**
+ * A password for an account that has none: it signs in through a provider
+ * (`via`), and a site wants one of its own (an API, a reset form). Minted and
+ * stored before any form sees it. A `via` credential that has one already is
+ * a reset that stalled: it stands. A password the person set is refused;
+ * changing it is `creds rotate`, theirs to run.
+ */
+export async function mintPassword(
+  store: CredentialStore,
+  site: string,
+  password: string = newPassword(),
+): Promise<Credential> {
+  const had = await store.get(site);
+  if (!had) throw new Error(`${site} has no stored credential: nothing to give a password`);
+  if (had.password && had.via) return had;
+  if (had.password)
+    throw new Error(`${site} has a password; changing it is \`creds rotate ${site}\`, run by hand`);
+  await store.put(site, { ...had, password });
+  const cred = await store.get(site);
+  if (!cred?.password) throw new Error(`${site}: the password did not store`);
+  return cred;
+}
+
 /** The agent's goal text for a signup; the secrets are named, never valued. */
 export function signupGoal(a: NewAccount, phone?: string | null): string {
   const facts = [
@@ -178,7 +201,7 @@ export function signupGoal(a: NewAccount, phone?: string | null): string {
       ? `When the phone field has its own country-code picker, pick ${phoneCountry(phone)} and place{secret:"phoneLocal"} (the number without the country code) instead.`
       : null,
     facts.length ? `Other details: ${facts.join(", ")}.` : null,
-    `Decline optional extras (contacts, ads, trials). At a captcha or a step you cannot fill, return human{reason}.`,
+    `Decline optional extras (contacts, ads, trials). Click a checkbox captcha ("I'm not a robot"). At an image or puzzle challenge, or a step you cannot fill, return human{reason}.`,
   ]
     .filter(Boolean)
     .join(" ");

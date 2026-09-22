@@ -125,7 +125,9 @@ Actions, with "cmd" set to exactly one of these words:
 ref is the [n] of a control in the outline; only those numbers exist.
 Use os acts only when the goal is outside the browser (an app, a system setting, a file, a command); look with tree before clicking.
 Control names carry content too: a link named "Name Jane Doe" tells you the name is Jane Doe. When the goal asks you to report or collect something, read it with read{ref,as} first, then quote it in the done summary.
+An "iframe:" section is a frame inside the page (a captcha, an embedded sign-in); its refs work like any other.
 Rules: never invent values; use only the inputs given. Never buy, delete, or submit money-related forms: return human{reason} instead.
+A checkbox captcha ("I'm not a robot") is a control: click it, then wait a step for it to tick. An image or puzzle challenge (pick the squares, drag a slider) is for a person: return human{reason}.
 Prefer the shortest path. When the tree shows the goal is met, return done with achieved=true.
 If the same step fails twice, try another element or return done with achieved=false.`;
 

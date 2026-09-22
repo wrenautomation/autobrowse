@@ -270,13 +270,11 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
       unlocks:
         "the LinkedIn API: /oauth/v2/authorization always lands on /uas/login and asks for a password, even with a live session — until then posting goes through the composer",
       how: [
-        "linkedin.com → Settings → Sign in & security → set or change password (yours to do)",
-        "autobrowse creds password linkedin",
+        "autobrowse explore linkedin --url https://www.linkedin.com/passwordReset --headed --codes <its inbox> --new-password",
+        "  (address → Next → tick the checkbox captcha → place code → place password twice → Submit)",
       ],
-      check: async () => {
-        const cred = await ctx.credentials.get("linkedin");
-        return Boolean(cred && !cred.via);
-      },
+      // The reset route mints one beside `via`: Google sign-in keeps working.
+      check: async () => Boolean((await ctx.credentials.get("linkedin"))?.password),
     },
     {
       id: "npm-account",

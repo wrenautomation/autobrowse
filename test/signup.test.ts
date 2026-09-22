@@ -6,6 +6,7 @@ import {
   codeSecrets,
   localPhone,
   mintCredential,
+  mintPassword,
   signupGoal,
   signupHosts,
   signupSecrets,
@@ -54,6 +55,21 @@ describe("signup", () => {
       inbox: "will@wren.test",
     });
     expect(aliased.codesInbox).toBe("will@wren.test");
+  });
+
+  it("mints a password only for a provider-only account; a person's password is refused", async () => {
+    const store = memoryCredentials({
+      li: { username: "hello@wren.test", via: "google" },
+      mine: { username: "hello@wren.test", password: "theirs" },
+    });
+    const c = await mintPassword(store, "li");
+    expect(c.password?.length).toBe(24);
+    expect(c.via).toBe("google");
+    // A reset that stalled after storing: the same password stands.
+    expect((await mintPassword(store, "li")).password).toBe(c.password);
+    await expect(mintPassword(store, "mine")).rejects.toThrow(/creds rotate/);
+    expect((await store.get("mine"))?.password).toBe("theirs");
+    await expect(mintPassword(store, "none")).rejects.toThrow(/no stored credential/);
   });
 
   it("secrets by name: email, password, phone, and a fresh code each time", async () => {

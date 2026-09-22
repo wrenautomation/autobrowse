@@ -28,10 +28,11 @@ import {
   flowRunner,
   type RunnerOptions,
 } from "../browser/flow.js";
+import { ariaWithFrames } from "../browser/frames.js";
 import { handsFor } from "../browser/human/index.js";
 import { type Hints, locate, locateAll, textOf } from "../browser/locate.js";
 import { snapshotPage } from "../browser/repair.js";
-import { type BrowserOptions, bodyText, looksLikeWall } from "../browser/session.js";
+import { type BrowserOptions, bodyText, looksLikeWall, NeedsHuman } from "../browser/session.js";
 import type { SecretSink } from "../deps/sink.js";
 import { macDesktop } from "../desktop/mac.js";
 import {
@@ -74,6 +75,8 @@ const hintsSchema = z.object({
   inputType: z.string().nullable().optional(),
   css: z.string().nullable().optional(),
   nth: z.number().int().nonnegative().nullable().optional(),
+  /** Inside an iframe: its selector chain from the page, as `aria` names it. */
+  frame: z.string().nullable().optional(),
 });
 
 /** What an act points at: the same hints a flow uses (`css` and `nth` included). */
@@ -125,7 +128,13 @@ export const commandSchema = z.discriminatedUnion("cmd", [
     index: z.union([z.number().int().min(0), z.literal("main")]),
   }),
   z.object({ cmd: z.literal("screenshot") }),
-  z.object({ cmd: z.literal("eval"), js: z.string(), raw: z.boolean().optional() }),
+  /** With `hints`, `js` is a function of that element, run in its frame (`el => el.className`). */
+  z.object({
+    cmd: z.literal("eval"),
+    js: z.string(),
+    raw: z.boolean().optional(),
+    hints: hintsSchema.optional(),
+  }),
   targetSchema.extend({ cmd: z.literal("count") }),
   /** Read an element's text and keep it under `as`; journaled, so the compiled flow reads it too. */
   targetSchema.extend({ cmd: z.literal("read"), as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/) }),
@@ -207,6 +216,7 @@ const toLocatorHints = (h: z.infer<typeof hintsSchema>): LocatorHints => ({
   inputType: h.inputType ?? null,
   ...(h.css ? { css: h.css } : {}),
   ...(h.nth ? { nth: h.nth } : {}),
+  ...(h.frame ? { frame: h.frame } : {}),
 });
 
 async function settle(page: Page): Promise<void> {
@@ -312,7 +322,8 @@ async function serve(
 
   const shoot = async (): Promise<string> => {
     const file = join(shotsDir, `${String(shotN++).padStart(4, "0")}.png`);
-    await page.screenshot({ path: file }).catch(() => undefined);
+    // A failed shot is an error, never a path to a file that is not there.
+    await page.screenshot({ path: file });
     return file;
   };
   const journal = (a: Journaled) =>
@@ -415,8 +426,14 @@ async function serve(
     page = fp.page;
     switch (c.cmd) {
       case "open": {
-        // Through the runner: a login wall is signed through, a captcha throws.
-        await fp.open(c.url, { allowWall: !opts.login });
+        // Through the runner: a login wall is signed through. A captcha comes back as the
+        // wall, not an error: a checkbox one is clicked like any control, a puzzle goes to a person.
+        try {
+          await fp.open(c.url, { allowWall: !opts.login });
+        } catch (err) {
+          if (!(err instanceof NeedsHuman) || (await looksLikeWall(page))?.kind !== "captcha")
+            throw err;
+        }
         journal({ kind: "navigate" });
         return { url: page.url(), wall: await looksLikeWall(page) };
       }
@@ -475,7 +492,8 @@ async function serve(
       }
       case "select": {
         await gate("select", c, wait);
-        await chooseOption(page, find(c), c.value, 10_000);
+        await hands.think(page);
+        await chooseOption(page, find(c), c.value, 10_000, hands);
         journalAct(c, (target) => ({ kind: "select", target, value: c.value }));
         return { ok: true };
       }
@@ -503,8 +521,10 @@ async function serve(
         await settle(page);
         return { url: page.url() };
       case "aria": {
-        const scope = c.hints ? locate(page, c.hints as Hints) : page.locator("body");
-        const tree = await scope.ariaSnapshot().catch((e: Error) => `error: ${e.message}`);
+        const tree = await (c.hints
+          ? locate(page, c.hints as Hints).ariaSnapshot()
+          : ariaWithFrames(page)
+        ).catch((e: Error) => `error: ${e.message}`);
         // Even raw: a password typed into a field is never something a caller may read back.
         return { aria: out(redactAria(tree.slice(0, c.limit ?? 12_000)), c.raw) };
       }
@@ -534,7 +554,18 @@ async function serve(
       case "screenshot":
         return { file: await shoot() };
       case "eval": {
-        const result: unknown = await page.evaluate(c.js);
+        const result: unknown = c.hints
+          ? await locate(page, c.hints as Hints)
+              .first()
+              // A string is an expression to Playwright, never called: wrap it as a function of el.
+              .evaluate(
+                new Function("el", `return (${c.js})(el);`) as (el: unknown) => unknown,
+                undefined,
+                {
+                  timeout: 10_000,
+                },
+              )
+          : await page.evaluate(c.js);
         return { result: typeof result === "string" ? out(result, c.raw) : result };
       }
       case "count":

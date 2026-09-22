@@ -17,7 +17,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "playwright";
 import { expandHome } from "../google-auth.js";
 import { redactAria, redactText } from "../recorder/redact.js";
-import { type Hands, HUMAN_PACE, handsFor, type Pace } from "./human/index.js";
+import { type Hands, HUMAN_PACE, handsFor, instantHands, type Pace } from "./human/index.js";
 import { type Hints, locate, textOf } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
 import { canLearn, noRepairer, type Repairer, type RepairReport, snapshotPage } from "./repair.js";
@@ -220,6 +220,7 @@ export async function chooseOption(
   target: Locator,
   value: string,
   timeout: number,
+  hands: Hands = instantHands,
 ): Promise<void> {
   try {
     await target.selectOption(value, { timeout });
@@ -227,7 +228,7 @@ export async function chooseOption(
   } catch (err) {
     if (!/not a <select>/i.test(String(err))) throw err;
   }
-  await target.click({ timeout });
+  await hands.click(target, { timeout });
   const option = page
     .getByRole("option", { name: value, exact: true })
     .or(page.getByRole("menuitem", { name: value, exact: true }))
@@ -237,9 +238,11 @@ export async function chooseOption(
     .waitFor({ state: "visible", timeout })
     .then(() => true)
     .catch(() => false);
-  if (shown) return option.click({ timeout });
+  if (shown) return hands.click(option, { timeout });
   // A list with no roles: the first visible element whose whole text is the value.
-  await page.getByText(value, { exact: true }).locator("visible=true").first().click({ timeout });
+  await hands.click(page.getByText(value, { exact: true }).locator("visible=true").first(), {
+    timeout,
+  });
 }
 
 async function doOp(
@@ -257,7 +260,7 @@ async function doOp(
     case "fill":
       return hands.type(target, op.value, { timeout });
     case "select":
-      return chooseOption(page, target, op.value, timeout);
+      return chooseOption(page, target, op.value, timeout, hands);
     case "press":
       return hands.press(target, op.key, { timeout });
     case "upload": {

@@ -106,7 +106,7 @@ export function buildMcpServer(deps: McpDeps): McpServer & { sessions: Map<strin
     "aria",
     {
       description:
-        "The page's accessibility tree: every control by role and name, headings and text. Read it before acting; hints for click/fill come from it.",
+        "The page's accessibility tree: every control by role and name, headings and text, then each visible iframe's under `- iframe \"<chain>\":` (pass that chain as hints.frame). Read it before acting; hints for click/fill come from it.",
       inputSchema: { site, limit: z.number().int().positive().optional() },
     },
     ({ site: s, limit }) => run(s, { cmd: "aria", ...(limit ? { limit } : {}) }),
@@ -127,8 +127,14 @@ export function buildMcpServer(deps: McpDeps): McpServer & { sessions: Map<strin
       placeholder: z.string().optional(),
       css: z.string().optional(),
       nth: z.number().int().nonnegative().optional(),
+      frame: z
+        .string()
+        .optional()
+        .describe('inside an iframe: the chain its aria section is named by (- iframe "<chain>":)'),
     })
-    .describe("locator hints from the aria tree; role+name first, css last");
+    .describe(
+      'locator hints from the aria tree; role+name first, css last. A checkbox captcha ("I\'m not a robot") is clicked like any control; an image or puzzle challenge is for a person',
+    );
   server.registerTool(
     "click",
     {
