@@ -25,6 +25,12 @@ export interface LocatorHints {
    */
   css?: string | null;
   nth?: number | null;
+  /**
+   * The element is inside an iframe, named by this CSS selector. A
+   * "Sign in with Google" button is one: Google renders it cross-origin, so
+   * the page's own locators never reach it.
+   */
+  frame?: string | null;
 }
 
 interface Base {

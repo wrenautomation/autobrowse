@@ -29,7 +29,7 @@ import type { Settings } from "./config.js";
 import { macClipboard } from "./cli-env.js";
 import { askSecretTwice } from "./prompt.js";
 import { headed } from "./screen.js";
-import { browserOptions, credentialsFor, devicesFor, gmailFor, loginFor } from "./services.js";
+import { browserFor, browserOptions, credentialsFor, devicesFor, gmailFor, loginFor } from "./services.js";
 
 const SITES = SITE_LOGINS.map((s) => s.site);
 const KNOWN = `one of ${SITES.join(", ")}, or <site>@<account> for a second account`;
@@ -395,7 +395,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .option("--headed", "show the browser")
     .action(async (site: string, o: { headed?: boolean }) => {
       const login = await loginOrVia(settings, site);
-      const opts = browserOptions(settings, o.headed ? headed : undefined);
+      const opts = await browserFor(settings, site, o.headed ? headed : undefined);
       const credName = login.credential ?? site;
       const cred = await credentialsFor(settings).get(credName);
       if (!cred && !o.headed)

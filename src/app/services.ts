@@ -93,6 +93,7 @@ import {
   accessTokens,
   accountEnv,
   gmailOAuth,
+  profileOf,
   type SiteFacade,
   type SitesService,
   sitesFor,
@@ -131,6 +132,33 @@ function lazy<T extends object>(make: () => T): T {
       return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(real) : v;
     },
   });
+}
+
+/**
+ * The profile a site's browser work belongs in: its own, or — when its
+ * credential signs in through a provider's button — the provider's, where
+ * that session already lives. One Google sign-in then answers every
+ * "Continue with Google" instead of each site's profile asking again.
+ */
+export async function profileForSite(settings: Settings, site: string): Promise<string | null> {
+  const store = credentialsFor(settings);
+  const cred = await store.get(credentialFor(SITE_LOGINS, site));
+  if (!cred?.via) return null;
+  return (await profileOf(store, cred.via, cred.username)) ?? cred.via;
+}
+
+/**
+ * `browserOptions` for one site's work, in the profile its credential says:
+ * the site's own, or the provider's when it signs in through a button there.
+ */
+export async function browserFor(
+  settings: Settings,
+  site: string,
+  screen?: Screen,
+): Promise<BrowserOptions> {
+  const opts = screen ? browserOptions(settings, screen) : browserOptions(settings);
+  const profile = await profileForSite(settings, site);
+  return profile ? { ...opts, profile } : opts;
 }
 
 export function browserOptions(

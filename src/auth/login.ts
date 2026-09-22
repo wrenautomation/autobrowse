@@ -762,6 +762,9 @@ registerProvider({
     { role: "button", name: "/google/i" },
     { role: "link", name: "/google/i" },
     { text: "/(continue|sign ?in|log ?in|sign ?up) with google/i" },
+    // Google Identity Services renders the button itself, cross-origin, so the
+    // page's own locators never see it (LinkedIn, mapped 2026-09-22).
+    { frame: 'iframe[src*="accounts.google.com/gsi/button"]', css: "div[role=button]" },
   ],
   signIn: signInToGoogle,
 });

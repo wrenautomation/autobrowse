@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planLocator, renderLocator } from "../src/browser/locate.js";
+import { applyLocator, planLocator, renderLocator } from "../src/browser/locate.js";
 
 describe("planLocator", () => {
   it("prefers test ids, then role+name, then label, placeholder, text, id", () => {
@@ -38,5 +38,36 @@ describe("planLocator", () => {
       'page.getByRole("link", { name: /use another/i })',
     );
     expect(renderLocator({ by: "text", value: "/admin/i" })).toBe("page.getByText(/admin/i)");
+  });
+});
+
+describe("a hint inside an iframe", () => {
+  it("reaches through a FrameLocator, which the page's own locators cannot", () => {
+    const calls: string[] = [];
+    const inner = {
+      locator: (v: string) => {
+        calls.push(`frame.locator ${v}`);
+        return "inner" as unknown as never;
+      },
+      getByRole: () => "inner" as unknown as never,
+    };
+    const page = {
+      frameLocator: (sel: string) => {
+        calls.push(`frameLocator ${sel}`);
+        return inner;
+      },
+      locator: (v: string) => {
+        calls.push(`page.locator ${v}`);
+        return "outer" as unknown as never;
+      },
+    } as unknown as Parameters<typeof applyLocator>[0];
+    applyLocator(page, { by: "css", value: "div[role=button]" }, 'iframe[src*="gsi/button"]');
+    expect(calls).toEqual([
+      'frameLocator iframe[src*="gsi/button"]',
+      "frame.locator div[role=button]",
+    ]);
+    calls.length = 0;
+    applyLocator(page, { by: "css", value: "a" });
+    expect(calls).toEqual(["page.locator a"]);
   });
 });

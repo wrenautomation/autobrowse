@@ -52,41 +52,44 @@ export function namePattern(name: string): string | RegExp {
   return m ? new RegExp(m[1] as string, m[2]) : name;
 }
 
-export function applyLocator(page: Page, plan: LocatorPlan): Locator {
+export function applyLocator(page: Page, plan: LocatorPlan, frame?: string | null): Locator {
+  // A cross-origin iframe (Google's rendered sign-in button) is reached
+  // through a FrameLocator, which answers the same `getBy*` calls.
+  const root = frame ? page.frameLocator(frame) : page;
   switch (plan.by) {
     case "css":
-      return page.locator(plan.value);
+      return root.locator(plan.value);
     case "testId":
-      return page.getByTestId(plan.value);
+      return root.getByTestId(plan.value);
     case "role": {
       // Role strings come from the DOM; Playwright's union is narrower than what a page can carry.
       const role = plan.role as Parameters<Page["getByRole"]>[0];
-      if (!plan.name) return page.getByRole(role);
+      if (!plan.name) return root.getByRole(role);
       const name = namePattern(plan.name);
       return typeof name === "string"
-        ? page.getByRole(role, { name, exact: true })
-        : page.getByRole(role, { name });
+        ? root.getByRole(role, { name, exact: true })
+        : root.getByRole(role, { name });
     }
     case "label": {
       const name = namePattern(plan.value);
       return typeof name === "string"
-        ? page.getByLabel(name, { exact: true })
-        : page.getByLabel(name);
+        ? root.getByLabel(name, { exact: true })
+        : root.getByLabel(name);
     }
     case "placeholder": {
       const name = namePattern(plan.value);
       return typeof name === "string"
-        ? page.getByPlaceholder(name, { exact: true })
-        : page.getByPlaceholder(name);
+        ? root.getByPlaceholder(name, { exact: true })
+        : root.getByPlaceholder(name);
     }
     case "text": {
       const name = namePattern(plan.value);
       return typeof name === "string"
-        ? page.getByText(name, { exact: true })
-        : page.getByText(name);
+        ? root.getByText(name, { exact: true })
+        : root.getByText(name);
     }
     case "id":
-      return page.locator(`#${CSS.escape(plan.value)}`);
+      return root.locator(`#${CSS.escape(plan.value)}`);
   }
 }
 
@@ -94,7 +97,7 @@ export function applyLocator(page: Page, plan: LocatorPlan): Locator {
 export function locateAll(page: Page, hints: Hints): Locator {
   const plan = planLocator(hints);
   if (!plan) throw new Error(`no usable locator hints: ${JSON.stringify(hints)}`);
-  return applyLocator(page, plan);
+  return applyLocator(page, plan, hints.frame);
 }
 
 /** The one match a flow acts on: `nth` when the hints say so, else the first. */

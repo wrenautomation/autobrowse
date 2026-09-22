@@ -53,6 +53,7 @@ import {
   type App,
   approverFor,
   auditFor,
+  browserFor,
   browserOptions,
   budgetOf,
   COMPILED_DIR,
@@ -234,10 +235,10 @@ export function explorerOpener(
   extra?: Pick<ExploreOptions, "tokenFile" | "secrets" | "secretHosts">,
 ) => Promise<Explorer> {
   const approver: Approver | null = approverFor(settings, gmailFor(settings));
-  return (site, port, extra = {}) =>
+  return async (site, port, extra = {}) =>
     startExplore({
       site,
-      browser: browserOptions(settings, screen),
+      browser: await browserFor(settings, site, screen),
       recordingsDir: expandHome(settings.recordingsDir),
       port,
       login: loginFor(settings, gmailFor(settings)),

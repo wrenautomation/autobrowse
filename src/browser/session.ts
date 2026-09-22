@@ -70,6 +70,13 @@ export interface BrowserOptions {
   cdpUrl?: string | null;
   /** Passkeys to load into the site's session: the ones enrolled for its account. */
   passkeys?: (site: string) => Promise<readonly PasskeyRecord[]>;
+  /**
+   * The profile to work in, when it is not the site's own. A credential that
+   * signs in through a provider's button belongs in that provider's profile:
+   * the session Google already holds there answers the button, where a fresh
+   * profile would ask for the password again.
+   */
+  profile?: string;
 }
 
 export interface Session {
@@ -86,7 +93,7 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
   if (opts.tier === "browserbase") {
     if (!opts.browserbase)
       throw new Error("BROWSER=browserbase needs BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID");
-    const contextId = await browserbaseContext(site, opts.browserbase);
+    const contextId = await browserbaseContext(opts.profile ?? site, opts.browserbase);
     const session = await browserbaseSession(opts.browserbase, contextId);
     browser = await chromium.connectOverCDP(session.connectUrl);
     context = browser.contexts()[0] ?? (await browser.newContext());
@@ -96,7 +103,7 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
     browser = await chromium.connectOverCDP(opts.cdpUrl);
     context = browser.contexts()[0] ?? (await browser.newContext());
   } else {
-    const profileDir = join(expandHome(opts.profilesDir), site);
+    const profileDir = join(expandHome(opts.profilesDir), opts.profile ?? site);
     context = await launchLocal(profileDir, opts);
     if (opts.headless === false) keepOutOfTheWay(profileDir);
     // Sites read `navigator.webdriver` to refuse "insecure" browsers; these are our own accounts.
