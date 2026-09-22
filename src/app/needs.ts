@@ -264,7 +264,7 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
     {
       id: "npm-account",
       kind: "credential",
-      what: "The npm account itself: npmjs.com/signup, username `wrenautomation`, address william@wrenautomation.com",
+      what: "The npm account itself: npmjs.com/signup on william@wrenautomation.com, then `creds username npm <the username you picked>`",
       unlocks:
         "publishing mailifier, and every later package: once the account exists the token, 2FA and publish are all automatic",
       how: [

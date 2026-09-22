@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { API_SIGNUPS } from "../src/auth/signup.js";
+import { tokenName } from "../src/browser/flows/npm-granular-token.js";
 import type { HttpClient, JsonRequest } from "../src/clients/http.js";
 import { createRegistryUser, NPM_TOKEN, npm } from "../src/sites/npm.js";
 
@@ -79,5 +80,11 @@ describe("npm", () => {
   it("carries its token name and the step that mints it", () => {
     expect(npm.auth).toEqual({ token: NPM_TOKEN });
     expect(npm.setup.find((s) => s.name === "token")?.makes).toEqual([NPM_TOKEN]);
+  });
+
+  it("names each token uniquely by the minute, inside npm's 40 characters", () => {
+    const at = new Date("2026-09-22T19:05:00Z");
+    expect(tokenName("autobrowse publish", at)).toBe("autobrowse publish 2026-09-22 19:05");
+    expect(tokenName("x".repeat(60), at)).toHaveLength(40);
   });
 });

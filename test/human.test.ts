@@ -1,0 +1,194 @@
+import type { Locator, Page } from "playwright";
+import { describe, expect, it } from "vitest";
+import { drawMs } from "../src/browser/human/draw.js";
+import {
+  aimPoint,
+  HUMAN_PACE,
+  handsFor,
+  instantHands,
+  mousePath,
+  typingPlan,
+} from "../src/browser/human/index.js";
+
+/** A fixed, repeatable random source. */
+function seeded(seed = 7): () => number {
+  let s = seed;
+  return () => {
+    s = (s * 1664525 + 1013904223) % 4294967296;
+    return s / 4294967296;
+  };
+}
+
+describe("draws", () => {
+  it("stay inside their range, mostly low", () => {
+    for (const r of [0, 0.25, 0.5, 0.99]) {
+      const ms = drawMs(HUMAN_PACE.think, () => r);
+      expect(ms).toBeGreaterThanOrEqual(HUMAN_PACE.think[0]);
+      expect(ms).toBeLessThanOrEqual(HUMAN_PACE.think[1]);
+    }
+    expect(drawMs([100, 1000], () => 0.5)).toBe(316);
+  });
+});
+
+describe("typing plan", () => {
+  const text = "hello there, this is William. Nothing else.";
+  const plan = typingPlan(text, HUMAN_PACE.typing, seeded());
+
+  it("types every character, in order, each held a moment", () => {
+    expect(plan.map((k) => k.ch).join("")).toBe(text);
+    for (const k of plan) {
+      expect(k.hold).toBeGreaterThanOrEqual(HUMAN_PACE.typing.hold[0]);
+      expect(k.hold).toBeLessThanOrEqual(HUMAN_PACE.typing.hold[1]);
+    }
+    expect(plan.at(-1)?.after).toBe(0);
+  });
+
+  it("is never one steady rate: runs, beats after punctuation", () => {
+    const gaps = plan.slice(0, -1).map((k) => k.after);
+    expect(new Set(gaps).size).toBeGreaterThan(gaps.length / 2);
+    const comma = plan.findIndex((k) => k.ch === ",");
+    expect(plan[comma]?.after).toBeGreaterThanOrEqual(HUMAN_PACE.typing.beat[0]);
+  });
+
+  it("is the same plan for the same random source", () => {
+    expect(typingPlan(text, HUMAN_PACE.typing, seeded())).toEqual(plan);
+  });
+
+  it("counts an emoji as one keystroke", () => {
+    expect(typingPlan("a👍b", HUMAN_PACE.typing, seeded()).map((k) => k.ch)).toEqual([
+      "a",
+      "👍",
+      "b",
+    ]);
+  });
+});
+
+describe("mouse path", () => {
+  const from = { x: 100, y: 100 };
+  const to = { x: 900, y: 500 };
+
+  it("ends exactly on the aim, curved and eased on the way", () => {
+    const path = mousePath(from, to, 40, HUMAN_PACE.mouse, seeded());
+    expect(path.at(-1)).toMatchObject(to);
+    // Not a straight line: some point sits off the chord.
+    const off = path.map((p) =>
+      Math.abs((p.x - from.x) * (to.y - from.y) - (p.y - from.y) * (to.x - from.x)),
+    );
+    expect(Math.max(...off)).toBeGreaterThan(0);
+    // Slow at the ends, fast in the middle.
+    const step = (i: number) => {
+      const a = path[i - 1] ?? from;
+      const b = path[i] ?? from;
+      return Math.hypot(b.x - a.x, b.y - a.y);
+    };
+    expect(step(Math.floor(path.length / 2))).toBeGreaterThan(step(1));
+  });
+
+  it("takes longer to reach far than near (Fitts)", () => {
+    const time = (t: { x: number; y: number }) =>
+      mousePath(from, t, 40, { ...HUMAN_PACE.mouse, overshoot: 0 }, () => 0.5).reduce(
+        (n, s) => n + s.after,
+        0,
+      );
+    expect(time({ x: 1200, y: 800 })).toBeGreaterThan(time({ x: 140, y: 110 }));
+  });
+
+  it("sometimes overshoots a long reach and comes back", () => {
+    const path = mousePath(from, to, 40, { ...HUMAN_PACE.mouse, overshoot: 1 }, seeded());
+    expect(Math.max(...path.map((p) => p.x))).toBeGreaterThan(to.x);
+    expect(path.at(-1)).toMatchObject(to);
+  });
+
+  it("aims inside the control, near its middle", () => {
+    const box = { x: 10, y: 20, width: 200, height: 40 };
+    const r = seeded();
+    for (let i = 0; i < 50; i++) {
+      const p = aimPoint(box, r);
+      expect(p.x).toBeGreaterThanOrEqual(box.x + box.width * 0.15);
+      expect(p.x).toBeLessThanOrEqual(box.x + box.width * 0.85);
+      expect(p.y).toBeGreaterThanOrEqual(box.y + box.height * 0.15);
+      expect(p.y).toBeLessThanOrEqual(box.y + box.height * 0.85);
+    }
+  });
+});
+
+/** A page and a control that record what the hands did. */
+function fakes(box: { x: number; y: number; width: number; height: number } | null) {
+  const log: string[] = [];
+  const page = {
+    viewportSize: () => ({ width: 1280, height: 800 }),
+    mouse: {
+      move: async (x: number, y: number) => void log.push(`move ${Math.round(x)},${Math.round(y)}`),
+    },
+    keyboard: {
+      type: async (t: string, o?: { delay?: number }) => void log.push(`key ${t} ${o?.delay ?? 0}`),
+      press: async (k: string) => void log.push(`press ${k}`),
+      insertText: async (t: string) => void log.push(`insert ${t.length}`),
+    },
+    waitForTimeout: async () => {},
+  } as unknown as Page;
+  const target = {
+    page: () => page,
+    scrollIntoViewIfNeeded: async () => {},
+    boundingBox: async () => box,
+    click: async (o: { position?: { x: number; y: number }; delay?: number }) =>
+      void log.push(
+        o.position
+          ? `click at ${Math.round(o.position.x)},${Math.round(o.position.y)} held ${o.delay}`
+          : "click plain",
+      ),
+    fill: async (v: string) => void log.push(`fill ${v.length}`),
+    pressSequentially: async (ch: string, o: { delay: number }) =>
+      void log.push(`key ${ch} ${o.delay}`),
+    press: async (k: string) => void log.push(`press ${k}`),
+  } as unknown as Locator;
+  return { log, page, target };
+}
+
+describe("hands", () => {
+  it("reach the control along a path, then click inside it with the button held", async () => {
+    const { log, target } = fakes({ x: 400, y: 300, width: 120, height: 30 });
+    await handsFor(HUMAN_PACE, seeded()).click(target, { timeout: 1000 });
+    const moves = log.filter((l) => l.startsWith("move"));
+    expect(moves.length).toBeGreaterThan(5);
+    const click = log.at(-1) ?? "";
+    const [, x, y, held] = click.match(/^click at (\d+),(\d+) held (\d+)$/) ?? [];
+    expect(Number(x)).toBeGreaterThan(0);
+    expect(Number(x)).toBeLessThan(120);
+    expect(Number(y)).toBeLessThan(30);
+    expect(Number(held)).toBeGreaterThanOrEqual(HUMAN_PACE.mouse.hold[0]);
+  });
+
+  it("fall back to a plain click when the control has no box", async () => {
+    const { log, target } = fakes(null);
+    await handsFor(HUMAN_PACE, seeded()).click(target, { timeout: 1000 });
+    expect(log).toEqual(["click plain"]);
+  });
+
+  it("clear the field, then type it key by key", async () => {
+    const { log, target } = fakes({ x: 0, y: 0, width: 100, height: 20 });
+    await handsFor(HUMAN_PACE, seeded()).type(target, "hi", { timeout: 1000 });
+    expect(log.filter((l) => /^(fill|key)/.test(l)).map((l) => l.replace(/ \d+$/, ""))).toEqual([
+      "fill",
+      "key h",
+      "key i",
+    ]);
+  });
+
+  it("paste long text instead of typing it", async () => {
+    const { log, target } = fakes({ x: 0, y: 0, width: 100, height: 20 });
+    await handsFor(HUMAN_PACE, seeded()).type(target, "x".repeat(500), { timeout: 1000 });
+    expect(log.filter((l) => l.startsWith("key"))).toEqual([]);
+    expect(log.at(-1)).toBe("fill 500");
+  });
+
+  it("type at the caret when handed a page", async () => {
+    const { log, page } = fakes(null);
+    await handsFor(HUMAN_PACE, seeded()).type(page, "ok", { timeout: 1000 });
+    expect(log.map((l) => l.replace(/ \d+$/, ""))).toEqual(["key o", "key k"]);
+  });
+
+  it("are instant with no pace", () => {
+    expect(handsFor(null)).toBe(instantHands);
+  });
+});

@@ -17,6 +17,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "playwright";
 import { expandHome } from "../google-auth.js";
 import { redactAria, redactText } from "../recorder/redact.js";
+import { type Hands, HUMAN_PACE, handsFor, type Pace } from "./human/index.js";
 import { type Hints, locate, textOf } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
 import { canLearn, noRepairer, type Repairer, type RepairReport, snapshotPage } from "./repair.js";
@@ -169,9 +170,9 @@ export class FlowFailed extends Error {
 export interface RunnerOptions {
   repairer?: Repairer;
   /**
-   * Human-like timing: a random pause before every act and per-key delay
-   * while typing, so a session does not look like a script firing at
-   * machine speed. On by default; tests turn it off.
+   * How a person's hands would do each act (`browser/human`): a pause to
+   * read, a curved reach, typing in runs. On by default; null is instant
+   * (tests, demos).
    */
   pace?: Pace | null;
   /**
@@ -195,19 +196,6 @@ export interface RunnerOptions {
 
 const ACT_TIMEOUT_MS = 15_000;
 
-export interface Pace {
-  /** Pause before an act, ms, drawn each time. */
-  beforeAct: [number, number];
-  /** Delay between typed keys, ms, drawn per key. */
-  perKey: [number, number];
-}
-
-export const HUMAN_PACE: Pace = { beforeAct: [350, 1_600], perKey: [40, 140] };
-
-/** Log-uniform in [lo, hi]: mostly quick, sometimes slow, like a person. */
-export function drawMs([lo, hi]: [number, number], random = Math.random): number {
-  return Math.round(Math.exp(Math.log(lo) + random() * (Math.log(hi) - Math.log(lo))));
-}
 const SETTLE_MS = 8_000;
 /** AWS's console → sign-in chain takes 30–60 s to DOMContentLoaded headless; Playwright's 30 s default cut it. */
 const NAVIGATE_MS = 90_000;
@@ -259,24 +247,19 @@ async function doOp(
   hints: Hints,
   op: Op,
   timeout: number,
-  pace: Pace | null,
+  hands: Hands,
 ): Promise<void> {
   const target = locate(page, hints);
-  if (pace) await page.waitForTimeout(drawMs(pace.beforeAct));
+  await hands.think(page);
   switch (op.kind) {
     case "click":
-      return target.click({ timeout });
-    case "fill": {
-      if (!pace) return target.fill(op.value, { timeout });
-      await target.click({ timeout });
-      await target.fill("", { timeout });
-      for (const ch of op.value) await target.pressSequentially(ch, { delay: drawMs(pace.perKey) });
-      return;
-    }
+      return hands.click(target, { timeout });
+    case "fill":
+      return hands.type(target, op.value, { timeout });
     case "select":
       return chooseOption(page, target, op.value, timeout);
     case "press":
-      return target.press(op.key, { timeout });
+      return hands.press(target, op.key, { timeout });
     case "upload": {
       const isInput = await target
         .evaluate(
@@ -287,7 +270,7 @@ async function doOp(
         .catch(() => false);
       if (isInput) return target.setInputFiles(op.files, { timeout });
       const chooser = page.waitForEvent("filechooser", { timeout });
-      await target.click({ timeout });
+      await hands.click(target, { timeout });
       return (await chooser).setFiles(op.files);
     }
   }
@@ -297,7 +280,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
   const artifactsDir = expandHome(opts.artifactsDir);
   const locks = runner.locks ?? new KeyedMutex();
   const repairer = runner.repairer ?? noRepairer;
-  const pace = runner.pace === undefined ? HUMAN_PACE : runner.pace;
+  const hands = handsFor(runner.pace === undefined ? HUMAN_PACE : runner.pace);
   return {
     run: (flow, input) =>
       locks.withLock(flow.site, async () => {
@@ -383,7 +366,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             const timeout = a.timeoutMs ?? ACT_TIMEOUT_MS;
             const page = active;
             try {
-              await doOp(page, hints, op, timeout, pace);
+              await doOp(page, hints, op, timeout, hands);
               return;
             } catch (err) {
               if (a.irreversible && !runner.repairIrreversible)
@@ -406,7 +389,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
                 ok: false,
               };
               try {
-                await doOp(page, proposal.hints, op, timeout, pace);
+                await doOp(page, proposal.hints, op, timeout, hands);
                 report.ok = true;
               } finally {
                 runner.onRepair?.(report);

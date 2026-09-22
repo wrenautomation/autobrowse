@@ -130,7 +130,8 @@ export interface FormLoginSpec {
   next?: Hints;
   password: Hints;
   submit: Hints;
-  code?: CodeStep;
+  /** The second step; a list when the site asks differently by account (an emailed code until 2FA, then the authenticator): the first whose page matches answers. */
+  code?: CodeStep | CodeStep[];
   /** Signed in when the page text or URL matches; else when the password field is gone. */
   success?: RegExp;
   /** Text that means the password was rejected: stop, do not lock the account. */
@@ -180,10 +181,16 @@ export function formLogin(site: string, spec: FormLoginSpec): SiteLogin["signIn"
       text = await fp.text();
     }
     if (spec.rejected?.test(text)) throw new LoginFailed(site, "password rejected");
-    if (spec.code && (spec.code.asks ? spec.code.asks.test(text) : await fp.has(spec.code.field))) {
-      const c = await code(spec.code.kind, spec.code.hint);
-      await fp.act({ kind: "fill", value: c }, spec.code.field, { goal: "type verification code" });
-      await fp.act({ kind: "click" }, spec.code.submit, { goal: "submit verification code" });
+    let step: CodeStep | null = null;
+    for (const s of spec.code ? [spec.code].flat() : [])
+      if (s.asks ? s.asks.test(text) : await fp.has(s.field)) {
+        step = s;
+        break;
+      }
+    if (step) {
+      const c = await code(step.kind, step.hint);
+      await fp.act({ kind: "fill", value: c }, step.field, { goal: "type verification code" });
+      await fp.act({ kind: "click" }, step.submit, { goal: "submit verification code" });
       await fp.wait(SETTLE_MS);
       text = await fp.text();
     }

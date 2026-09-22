@@ -80,15 +80,3 @@ describe("flowRunner", () => {
     await expect(runner.run(offline, undefined)).rejects.toBeInstanceOf(FlowInterrupted);
   }, 60_000);
 });
-
-describe("pace", () => {
-  it("draws log-uniform delays inside the range", async () => {
-    const { drawMs, HUMAN_PACE } = await import("../src/browser/flow.js");
-    for (const r of [0, 0.25, 0.5, 0.99]) {
-      const ms = drawMs(HUMAN_PACE.beforeAct, () => r);
-      expect(ms).toBeGreaterThanOrEqual(HUMAN_PACE.beforeAct[0]);
-      expect(ms).toBeLessThanOrEqual(HUMAN_PACE.beforeAct[1]);
-    }
-    expect(drawMs([100, 1000], () => 0.5)).toBe(316);
-  });
-});

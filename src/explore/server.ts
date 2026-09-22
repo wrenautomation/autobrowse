@@ -26,6 +26,7 @@ import {
   flowRunner,
   type RunnerOptions,
 } from "../browser/flow.js";
+import { handsFor } from "../browser/human/index.js";
 import { type Hints, locate, locateAll, textOf } from "../browser/locate.js";
 import { snapshotPage } from "../browser/repair.js";
 import { type BrowserOptions, bodyText, looksLikeWall } from "../browser/session.js";
@@ -356,6 +357,8 @@ async function serve(
       wait,
     );
   };
+  /** Instant for a console; a person's hands when an agent drives (`pace`). */
+  const hands = handsFor(opts.pace ?? null);
   const gate = async (act: "fill" | "select" | "click", t: Target, wait: boolean) => {
     const what = paymentGate(act, t.hints as Hints);
     if (!what) return;
@@ -417,14 +420,16 @@ async function serve(
       }
       case "click": {
         await gate("click", c, wait);
-        await find(c).click({ timeout: 10_000 });
+        await hands.think(page);
+        await hands.click(find(c), { timeout: 10_000 });
         await settle(page);
         journalAct(c, (target) => ({ kind: "click", target }));
         return { url: page.url() };
       }
       case "fill": {
         await gate("fill", c, wait);
-        await find(c).fill(c.value, { timeout: 10_000 });
+        await hands.think(page);
+        await hands.type(find(c), c.value, { timeout: 10_000 });
         const secret =
           looksLikeSecretField(toLocatorHints(c.hints)) || looksLikeSecretValue(c.value);
         journalAct(c, (target) => ({
@@ -455,7 +460,8 @@ async function serve(
         });
         if (!allowed) throw new SecretLeak(`${opts.site} (${c.secret})`, host);
         await gate("fill", c, wait);
-        await find(c).fill(value, { timeout: 10_000 });
+        await hands.think(page);
+        await hands.type(find(c), value, { timeout: 10_000 });
         journalAct(c, (target) => ({
           kind: "input",
           target,
@@ -481,16 +487,17 @@ async function serve(
         return { url: page.url() };
       }
       case "press": {
-        await find(c).press(c.key, { timeout: 10_000 });
+        await hands.think(page);
+        await hands.press(find(c), c.key, { timeout: 10_000 });
         await settle(page);
         journalAct(c, (target) => ({ kind: "press", target, key: c.key }));
         return { url: page.url() };
       }
       case "type":
-        await page.keyboard.type(c.text);
+        await hands.type(page, c.text, { timeout: 10_000 });
         return { ok: true };
       case "key":
-        await page.keyboard.press(c.key);
+        await hands.press(page, c.key, { timeout: 10_000 });
         await settle(page);
         return { url: page.url() };
       case "aria": {

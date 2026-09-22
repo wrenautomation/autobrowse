@@ -73,13 +73,31 @@ account, no mail, ever.
 - A token need now names the step that mints it, for every site, instead
   of telling the person to paste it into `.env`.
 
+## Update, later on 2026-09-22
+
+- William made the account by hand: username `william_jin`, on
+  william@wrenautomation.com, with the minted password (`creds copy npm`).
+  `creds username <site> <name>` (new) points the credential at the
+  handle and keeps the codes inbox; `creds made npm` cleared the need.
+- **Sign-in, mapped:** with no 2FA, npm emails a one-time password on every
+  login (`/login/email-otp`). `FormLoginSpec.code` now takes a list:
+  first the email code, then an authenticator code once one is enrolled.
+- **Token, mapped and proven:** `site setup npm token` ran live (headed —
+  headless npmjs.com stalls on a Cloudflare check) and kept a 90-day
+  granular token as `NPM_TOKEN` in SSM. A token without **Bypass 2FA**
+  can read but not publish (npm answers 403 on publish) on an account
+  without 2FA, so the flow ticks it. Token names get a timestamp, since npm
+  wants them unique.
+- Later releases: the mailifier session wires npm trusted publishing
+  from CI, so no token is needed after publish #1.
+
 ## Where to attack, ranked
 
-1. **The account.** Everything downstream is written and waits on one
-   human minute at `npmjs.com/signup`. Then: `creds made npm` →
-   `site setup npm token` → `npm publish --access public` for mailifier.
-2. **`npm/granular-token` is unmapped.** Expect the first run to need
-   repair — the expiry control and the "read and write" radio are guesses.
+1. **Token expiry.** 90 days, then publishing stops. A scheduled rerun of
+   `site setup npm token` at ~80 days, or trusted publishing, which
+   retires the need for a token.
+2. **Headless npmjs.com.** Cloudflare stalls headless, so the token step
+   needs a headed browser (fine on the Mac, not on the box).
 3. **2FA.** `creds enroll-totp npm` exists generically but has never run
    against npm; npm will likely require it before a granular token with
    write.

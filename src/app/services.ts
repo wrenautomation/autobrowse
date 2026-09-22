@@ -33,8 +33,9 @@ import {
   totpSource,
 } from "../auth/index.js";
 import type { FlowRunner } from "../browser/flow.js";
-import { flowRunner, HUMAN_PACE, type Pace } from "../browser/flow.js";
+import { flowRunner } from "../browser/flow.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
+import { HUMAN_PACE, type Pace } from "../browser/human/index.js";
 import { llmRepairer, noRepairer, rememberingRepairer } from "../browser/repair.js";
 import type { BrowserOptions, FailureRecord } from "../browser/session.js";
 import {

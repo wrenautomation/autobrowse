@@ -86,10 +86,10 @@ export const npm: SiteApi = {
       makes: [NPM_TOKEN],
       how: {
         flow: "npm/granular-token",
-        input: { name: "autobrowse publish", expiresDays: 90 },
+        input: { name: "autobrowse publish", access: "publish", bypass2fa: true, expiresDays: 90 },
       },
       summary:
-        "Mint a granular access token with write on every package the account owns, and keep it as NPM_TOKEN (the registry only mints the classic kind npm is restricting)",
+        "Mint a 90-day granular token that publishes every package the account owns (2FA bypassed: the account has none) and keep it as NPM_TOKEN; rerun before it expires",
     },
   ],
 };

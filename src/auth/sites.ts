@@ -476,9 +476,10 @@ const outlook: SiteLogin = {
  * address as `codesInbox`. Signed in, npmjs.com shows
  * the account menu instead of the Sign In link.
  *
- * Unverified past the form: the second factor's page is whatever npm asks
- * for once 2FA is enrolled, and `code` covers the common shape (an
- * authenticator box that says "one-time password").
+ * Second step, mapped 2026-09-22: with no 2FA, npm emails a one-time
+ * password on every sign-in (/login/email-otp, textbox "One-Time
+ * Password", button "Login"). Once an authenticator is enrolled it asks
+ * for that instead — unverified until then.
  */
 const npm: SiteLogin = {
   site: "npm",
@@ -491,12 +492,21 @@ const npm: SiteLogin = {
     username: { role: "textbox", name: "Username" },
     password: { role: "textbox", name: "Password" },
     submit: { role: "button", name: "Sign In" },
-    code: {
-      kind: "totp",
-      asks: /one-time password|authenticator|two-factor|2fa/i,
-      field: { role: "textbox", name: "/code|one-time password/i" },
-      submit: { role: "button", name: "/verify|submit|continue/i" },
-    },
+    code: [
+      {
+        kind: "email",
+        asks: /sent a one-time password to your email/i,
+        field: { role: "textbox", name: "One-Time Password" },
+        submit: { role: "button", name: "Login" },
+        hint: "npm",
+      },
+      {
+        kind: "totp",
+        asks: /authenticator|two-factor|2fa/i,
+        field: { role: "textbox", name: "/code|one-time password/i" },
+        submit: { role: "button", name: "/verify|submit|continue|login/i" },
+      },
+    ],
     rejected: /incorrect username or password|invalid credentials/i,
     success: /npmjs\.com\/(?!login)/,
   }),
