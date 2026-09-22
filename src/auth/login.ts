@@ -212,6 +212,24 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
     await fp.wait(SETTLE_MS);
     text = await fp.text();
   }
+  // Google One Tap: `gsi/select` is a card, not a sign-in page. It picks an
+  // account the profile is already signed in as and asks to confirm it — no
+  // password. Its channel to the opener dies if the opener navigates, so
+  // nothing here may touch the main page (mapped 2026-09-22 on LinkedIn).
+  if (/\/gsi\/select/.test(fp.url())) {
+    const confirm = { css: "#confirm_yes" } as const;
+    const account = { text: cred.username } as const;
+    if (!(await fp.has(confirm, RENDER_MS)) && (await fp.has(account))) {
+      await fp.act({ kind: "click" }, account, { goal: "pick the account" });
+      await fp.wait(SETTLE_MS);
+    }
+    if (await fp.has(confirm, RENDER_MS)) {
+      await fp.act({ kind: "click" }, confirm, { goal: "confirm the sign-in" });
+      return;
+    }
+    // Neither: the card offers a full sign-in, which the walk below does.
+    text = await fp.text();
+  }
   if (/choose an account/i.test(text)) {
     if (await fp.has({ text: cred.username })) {
       await fp.act({ kind: "click" }, { text: cred.username }, { goal: "pick the account" });
@@ -475,13 +493,28 @@ export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signI
     const { fp } = ctx;
     const main = fp.page;
     await fp.open(spec.start, { allowWall: true });
-    const button = await providerButton(fp, provider, spec.button);
-    const popup = fp.nextPage(8_000);
-    await fp.act({ kind: "click" }, button, { goal: `sign in with ${provider.site}` });
-    const page = await popup;
+    const opened = () => fp.pages().find((p) => p !== main && provider.host.test(p.url())) ?? null;
+    // One Tap opens its own card as the page loads (`auto_select`), before
+    // anything is pressed — and the button under that card can then be
+    // unclickable. A card that is already there is the sign-in (LinkedIn, 2026-09-22).
+    let page = opened();
+    if (!page) {
+      const button = await providerButton(fp, provider, spec.button);
+      const popup = fp.nextPage(8_000);
+      const failed = await fp
+        .act({ kind: "click" }, button, { goal: `sign in with ${provider.site}` })
+        .then(
+          () => null,
+          (err: unknown) => err,
+        );
+      page = (await popup) ?? opened();
+      if (!page) {
+        if (failed) throw failed;
+        if (!(await fp.waitForUrl(provider.host, 15_000)) && !provider.host.test(fp.url()))
+          throw new LoginFailed(site, `no ${provider.site} sign-in page after pressing the button`);
+      }
+    }
     if (page) fp.switchTo(page);
-    else if (!(await fp.waitForUrl(provider.host, 15_000)) && !provider.host.test(fp.url()))
-      throw new LoginFailed(site, `no ${provider.site} sign-in page after pressing the button`);
     const cred = await ctx.credFor(provider.site, spec.account);
     await provider.signIn(ctx.as(cred));
     fp.switchTo(main);

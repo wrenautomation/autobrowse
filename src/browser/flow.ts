@@ -89,6 +89,8 @@ export interface FlowPage {
   waitForUrl(pattern: RegExp | ((url: string) => boolean), timeoutMs: number): Promise<boolean>;
   /** The next page the site opens (an OAuth popup), or null when none comes in time. */
   nextPage(timeoutMs: number): Promise<Page | null>;
+  /** Every page open right now: a card that opened itself is already here, so no event comes. */
+  pages(): Page[];
   /** Act on this page from now on (a popup); pass the main page to return. */
   switchTo(page: Page): void;
   /**
@@ -372,6 +374,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               ),
           nextPage: (timeout) =>
             session.context.waitForEvent("page", { timeout }).catch(() => null),
+          pages: () => session.context.pages(),
           switchTo(page) {
             active = page;
           },

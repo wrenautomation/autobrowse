@@ -31,6 +31,7 @@ function fakePage(script: { text: string[]; html?: string; dialog?: string[] }) 
     wait: async () => {},
     waitForUrl: async () => true,
     nextPage: async () => null,
+    pages: () => [],
     switchTo() {},
     async act(op, hints) {
       acts.push({ op, hints });

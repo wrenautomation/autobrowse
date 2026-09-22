@@ -7,6 +7,10 @@ export { googleWorkspaceLogo } from "./google-workspace-logo.js";
 export { type CreatePostInput, instagramCreatePost } from "./instagram-create-post.js";
 export { instagramOauthConsent } from "./instagram-oauth-consent.js";
 export { instantlyWarmup } from "./instantly-warmup.js";
+export {
+  type CreatePostInput as LinkedInCreatePostInput,
+  linkedinCreatePost,
+} from "./linkedin-create-post.js";
 export { linkedinOauthConsent } from "./linkedin-oauth-consent.js";
 export { googleOauthConsent, type OauthConsentInput, redirectOf } from "./oauth-consent.js";
 export { outlookOauthConsent } from "./outlook-oauth-consent.js";

@@ -17,6 +17,7 @@ import { googleWorkspaceLogo } from "../browser/flows/google-workspace-logo.js";
 import { instagramCreatePost } from "../browser/flows/instagram-create-post.js";
 import { instagramOauthConsent } from "../browser/flows/instagram-oauth-consent.js";
 import { instantlyWarmup } from "../browser/flows/instantly-warmup.js";
+import { linkedinCreatePost } from "../browser/flows/linkedin-create-post.js";
 import { linkedinOauthConsent } from "../browser/flows/linkedin-oauth-consent.js";
 import { googleOauthConsent } from "../browser/flows/oauth-consent.js";
 import { outlookOauthConsent } from "../browser/flows/outlook-oauth-consent.js";
@@ -58,6 +59,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinOauthConsent,
     instagramOauthConsent,
     instagramCreatePost,
+    linkedinCreatePost,
     facebookOauthConsent,
     tiktokOauthConsent,
     xOauthConsent,

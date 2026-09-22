@@ -13,6 +13,12 @@ import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 export const LINKEDIN_ORIGIN = "https://api.linkedin.com";
 /** LinkedIn versions its REST API by month; a version is honoured for a year. */
 export const LINKEDIN_VERSION = "202508";
+/**
+ * Who the composer posts as, by the name it lists (the member, or a Page
+ * this account admins). The API says it with an author URN; the browser
+ * leg can only read names off the author list.
+ */
+export const LINKEDIN_AUTHOR = "LINKEDIN_AUTHOR";
 
 const headers = (leg: ApiLeg, version = LINKEDIN_VERSION) => ({
   authorization: `Bearer ${leg.token}`,
@@ -123,8 +129,12 @@ export const linkedin: SiteApi = {
         return { id: res.headers.get("x-restli-id") ?? "" };
       },
       browser: {
-        workflow: "linkedin-create-post",
-        input: (b) => ({ text: b.commentary, visibility: b.visibility }),
+        flow: "linkedin/create-post",
+        input: (b, env) => ({
+          text: b.commentary,
+          visibility: b.visibility,
+          author: env(LINKEDIN_AUTHOR),
+        }),
       },
     }),
     route({

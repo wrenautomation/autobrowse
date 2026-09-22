@@ -26,6 +26,7 @@ function consentPages(
     wait: async () => {},
     waitForUrl: async () => true,
     nextPage: async () => null,
+    pages: () => [],
     switchTo() {},
     async act(_op, _hints, o) {
       const goal = o?.goal ?? "";

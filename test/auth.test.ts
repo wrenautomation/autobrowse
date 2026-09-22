@@ -445,6 +445,7 @@ describe("sign in via a provider on a site nobody wrote a spec for", () => {
         return true;
       },
       nextPage: async () => null,
+      pages: () => [],
       switchTo() {},
       async act(_op, hints) {
         acts.push(hints);

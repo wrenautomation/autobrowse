@@ -18,6 +18,7 @@ function fakePage(script: { text: string[]; present?: (h: Hints) => boolean; url
     wait: async () => {},
     waitForUrl: async () => true,
     nextPage: async () => null,
+    pages: () => [],
     switchTo() {},
     async act(op, hints) {
       acts.push({ op, hints });

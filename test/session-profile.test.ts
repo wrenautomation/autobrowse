@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { profileOf } from "../src/sites/wire.js";
 import type { Credential, CredentialStore } from "../src/auth/credentials.js";
+import { profileOf } from "../src/sites/wire.js";
 
 const cred = (username: string, extra: Partial<Credential> = {}): Credential =>
   ({ username, password: "x", recoveryCodes: [], passkeys: [], ...extra }) as Credential;

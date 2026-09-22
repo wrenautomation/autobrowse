@@ -25,11 +25,19 @@ import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
 
 /** A copied secret lives on the clipboard for a minute, then is emptied if untouched. */
 const CLIPBOARD_MS = 60_000;
-import type { Settings } from "./config.js";
+
 import { macClipboard } from "./cli-env.js";
+import type { Settings } from "./config.js";
 import { askSecretTwice } from "./prompt.js";
 import { headed } from "./screen.js";
-import { browserFor, browserOptions, credentialsFor, devicesFor, gmailFor, loginFor } from "./services.js";
+import {
+  browserFor,
+  browserOptions,
+  credentialsFor,
+  devicesFor,
+  gmailFor,
+  loginFor,
+} from "./services.js";
 
 const SITES = SITE_LOGINS.map((s) => s.site);
 const KNOWN = `one of ${SITES.join(", ")}, or <site>@<account> for a second account`;
@@ -170,7 +178,10 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       "Change the site's password on the site itself: a new random one, or --ask to type it here; stored sealed, nothing printed",
     )
     .option("--headed", "show the browser")
-    .option("--ask", "type the new password on this terminal (twice, never echoed) instead of drawing one")
+    .option(
+      "--ask",
+      "type the new password on this terminal (twice, never echoed) instead of drawing one",
+    )
     .action(async (site: string, o: { headed?: boolean; ask?: boolean }) => {
       const login = loginNamed(site);
       // Asked for before the browser opens, so a typo costs nothing.

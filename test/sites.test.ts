@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { defineFlow } from "../src/browser/flow.js";
+import { linkedinCreatePost } from "../src/browser/flows/linkedin-create-post.js";
 import { googleOauthConsent } from "../src/browser/flows/oauth-consent.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
@@ -123,26 +124,26 @@ describe("site facade", () => {
   });
 
   it("falls to the browser leg without a token, says which flows are unrecorded, and validates like the API", async () => {
+    // The composer answers the post route; its flow is the one the site names.
+    const composer = fakeBrowser([]);
+    composer.on(linkedinCreatePost, async (i) => {
+      expect(i).toEqual({ text: "hello", visibility: "PUBLIC" });
+      return { url: "https://www.linkedin.com/feed/update/urn:li:activity:9/" };
+    });
     const sites = siteFacade([linkedin], {
       http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
       env: () => undefined,
       sink: memorySink(),
-      runner: fakeBrowser([]),
-      flow: () => null,
+      runner: composer,
+      flow: (n) => (n === "linkedin/create-post" ? (linkedinCreatePost as never) : null),
       compiled: compiledOf({
         "linkedin-whoami": async () => ({ sub: "browser-sub" }),
-        "linkedin-create-post": async (plan) => {
-          expect(plan).toEqual({ text: "hello", visibility: "PUBLIC" });
-          return { id: "urn:li:share:9" };
-        },
       }),
     });
     expect(await sites.call("linkedin", "GET", "/v2/userinfo", {})).toEqual({ sub: "browser-sub" });
     expect(
       await sites.call("linkedin", "POST", "/rest/posts", { author: person, commentary: "hello" }),
-    ).toEqual({
-      id: "urn:li:share:9",
-    });
+    ).toEqual({ url: "https://www.linkedin.com/feed/update/urn:li:activity:9/" });
     await expect(
       sites.call("linkedin", "POST", "/rest/posts", { commentary: "x" }),
     ).rejects.toMatchObject({

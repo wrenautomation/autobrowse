@@ -33,7 +33,9 @@ describe("instagram/create-post", () => {
       },
     });
     fp.html = async () =>
-      shared ? `${RAIL}<a href="/p/NEW/">new</a><a href="/p/OLD/">old</a>` : `${RAIL}<a href="/p/OLD/">old</a>`;
+      shared
+        ? `${RAIL}<a href="/p/NEW/">new</a><a href="/p/OLD/">old</a>`
+        : `${RAIL}<a href="/p/OLD/">old</a>`;
     const out = await instagramCreatePost.run(fp, {
       file: "/tmp/a.png",
       caption: "hello",

@@ -10,6 +10,8 @@ export function fakePage(script: {
   url?: string | (() => string);
   /** Called with the act count after each act, for a script that moves the URL along. */
   onAct?: (n: number) => void;
+  /** What `read` answers for a locator; "" when absent. */
+  read?: (h: Hints) => string;
 }) {
   const acts: Array<{ op: Op; hints: Hints }> = [];
   let i = 0;
@@ -21,9 +23,11 @@ export function fakePage(script: {
     text: async () => script.text[Math.min(i, script.text.length - 1)] ?? "",
     html: async () => "",
     has: async (h) => script.present(h),
+    read: async (h) => script.read?.(h) ?? "",
     wait: async () => {},
     waitForUrl: async () => true,
     nextPage: async () => null,
+    pages: () => [],
     switchTo() {},
     async act(op, hints) {
       acts.push({ op, hints });

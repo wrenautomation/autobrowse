@@ -19,6 +19,7 @@ import { gmailOAuth } from "../sites/gmail.js";
 import { accountEnv } from "../sites/oauth.js";
 import type { OAuthSpec, SetupStep, SiteApi } from "../sites/types.js";
 import { profileOf } from "../sites/wire.js";
+import { youtubeOAuth } from "../sites/youtube.js";
 
 export type NeedKind = "credential" | "keys" | "consent" | "phone" | "mac" | "money" | "decision";
 
@@ -59,6 +60,9 @@ export function consentLoginOf(s: SiteApi): string | null {
 }
 
 const has = (env: NeedsContext["env"], names: readonly string[]) => names.every((n) => env(n));
+
+/** Wren's own Google account: its channel, its Pages, its signups. */
+const WREN_ADDRESS = "william@wrenautomation.com";
 
 /** Needs derived from the sites: a login credential, the developer app's keys, the consent. */
 export function siteNeeds(ctx: NeedsContext): Need[] {
@@ -238,6 +242,21 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
       after: "keys-meta",
     },
     {
+      id: "linkedin-password",
+      kind: "credential",
+      what: "A LinkedIn password for your account (it signs in with Google today)",
+      unlocks:
+        "the LinkedIn API: /oauth/v2/authorization always lands on /uas/login and asks for a password, even with a live session — until then posting goes through the composer",
+      how: [
+        "linkedin.com → Settings → Sign in & security → set or change password (yours to do)",
+        "autobrowse creds password linkedin",
+      ],
+      check: async () => {
+        const cred = await ctx.credentials.get("linkedin");
+        return Boolean(cred && !cred.via);
+      },
+    },
+    {
       id: "virtual-cards-vendor",
       kind: "decision",
       what: "Which virtual-card vendor (Privacy.com, or your bank's)",
@@ -258,8 +277,9 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
       unlocks: "uploads and comments as Wren, not as you",
       how: [
         "autobrowse site setup youtube consent --account william@wrenautomation.com",
-        "if Google walls it with a passkey: autobrowse login google-admin --headed, pass the prompt once, then run the consent again",
+        "if Google blocks it: add that address as a test user on the Cloud project's OAuth consent screen first",
       ],
+      check: async () => Boolean(ctx.env(accountEnv(youtubeOAuth.refreshToken, WREN_ADDRESS))),
     },
     {
       id: "linkedin-page",

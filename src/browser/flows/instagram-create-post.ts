@@ -44,7 +44,11 @@ export const instagramCreatePost = defineFlow<CreatePostInput, { url: string | n
     const before = await postLinks(fp, input.account ?? (await signedInAs(fp)) ?? "");
     // The rail item opens a menu (Post / Live video / Ad); its Post entry
     // carries the icon, so the icon is what names it.
-    await fp.act({ kind: "click" }, { role: "link", name: "New post" }, { goal: "open the create menu" });
+    await fp.act(
+      { kind: "click" },
+      { role: "link", name: "New post" },
+      { goal: "open the create menu" },
+    );
     await fp.act(
       { kind: "click" },
       { css: 'a:has(svg[aria-label="Post"])' },
@@ -92,9 +96,10 @@ export const instagramCreatePost = defineFlow<CreatePostInput, { url: string | n
 /** The handle the rail shows for the signed-in account, or null when the page does not say. */
 async function signedInAs(fp: { html(): Promise<string> }): Promise<string | null> {
   const html = await fp.html();
-  return /href="\/([A-Za-z0-9._]+)\/"[^>]*>\s*<img[^>]+alt="[^"]*'s profile picture/.exec(
-    html,
-  )?.[1] ?? null;
+  return (
+    /href="\/([A-Za-z0-9._]+)\/"[^>]*>\s*<img[^>]+alt="[^"]*'s profile picture/.exec(html)?.[1] ??
+    null
+  );
 }
 
 /** Links to this account's posts on the page, newest first as Instagram lists them. */

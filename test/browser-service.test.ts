@@ -55,6 +55,7 @@ describe("browser service", () => {
       "instagram/create-post",
       "instagram/oauth-consent",
       "instantly/warmup",
+      "linkedin/create-post",
       "linkedin/oauth-consent",
       "outlook/oauth-consent",
       "tiktok/oauth-consent",
