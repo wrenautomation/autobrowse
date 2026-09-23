@@ -35,8 +35,8 @@ carry. Dated 2026-09-22.
 1. **Meta: the card, then the Instagram link.** Done 2026-09-23: Wren's
    Facebook, the Page, the app, the token (14 scopes), ad account
    act_1852812755843751 (named "William Jin", CAD, America/Dawson: rename or
-   change if you want). Yours: a card on it (`meta-ad-account-card`), and the
-   captcha Instagram shows when the Page links it (`instagram-page-link`).
+   change if you want). Instagram linked to the Page (your captcha, thanks).
+   Yours: a card on it (`meta-ad-account-card`).
    Ads that go ACTIVE ask you over the channel; `SPEND_*` sets what runs
    without asking. `leads_retrieval` needs app review; a CTA to the lander
    works without it.

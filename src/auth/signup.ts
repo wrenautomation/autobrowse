@@ -109,17 +109,20 @@ export function signupSecrets(o: SignupSecretsOptions): SecretValues {
 /**
  * Another site's stored login, for its sign-in inside this session (a
  * "Connect Instagram" popup in a Facebook one): `<site>.username`,
- * `<site>.password` and `<site>.code` (the newest code its credential's
- * codes inbox got after `since`, when `codes` is given), each placed only
- * on that site's own hosts. Names this does not own fall through to `rest`.
+ * `<site>.password`, `<site>.code` (the newest code its credential's
+ * codes inbox or our phone got after `since`, when `codes` is given) and
+ * `<site>.phone` / `.phoneLocal` (our phone, for a site that asks one to
+ * text), each placed only on that site's own hosts. Names this does not own
+ * fall through to `rest`.
  */
 export function loginSecrets(
   store: CredentialStore,
   sites: readonly string[],
   rest?: { secrets?: SecretValues; hosts?: (host: string) => boolean },
-  codes?: { source: CodeSource; since: Date },
+  o: { codes?: { source: CodeSource; since: Date }; phone?: string | null } = {},
 ): { secrets: SecretValues; hosts: (host: string, secret: string) => boolean } {
-  const fields = ["username", "password", "code"];
+  const { codes, phone } = o;
+  const fields = ["username", "password", "code", "phone", "phoneLocal"];
   const inboxCodes = new Map<string, SecretValues>();
   const own = (name: string) => {
     const [site, field] = [
@@ -132,6 +135,8 @@ export function loginSecrets(
     secrets: async (name) => {
       const hit = own(name);
       if (!hit) return (await rest?.secrets?.(name)) ?? null;
+      if (hit.field === "phone") return phone ?? null;
+      if (hit.field === "phoneLocal") return phone ? localPhone(phone) : null;
       const cred = await store.get(hit.site);
       if (hit.field !== "code")
         return (hit.field === "username" ? cred?.username : cred?.password) ?? null;

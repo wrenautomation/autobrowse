@@ -43,7 +43,7 @@ export function registerRecordCommands(
     )
     .option(
       "--login <sites>",
-      'other sites whose stored login this session may type, comma separated (a "Connect Instagram" popup): place{secret:"instagram.password"} (also .username, .code from its codes inbox), only on that site\'s hosts',
+      'other sites whose stored login this session may type, comma separated (a "Connect Instagram" popup): place{secret:"instagram.password"} (also .username, .code from its codes inbox or our phone, .phone/.phoneLocal = our phone), only on that site\'s hosts',
     )
     .action(
       async (
@@ -145,7 +145,7 @@ export function registerRecordCommands(
       .filter(Boolean);
     if (!sites.length) return base;
     const { loginSecrets } = await import("../auth/signup.js");
-    const { codesFor, credentialsFor, gmailFor } = await import("./services.js");
+    const { codesFor, credentialsFor, gmailFor, ourPhone } = await import("./services.js");
     const l = loginSecrets(
       credentialsFor(settings),
       sites,
@@ -153,7 +153,10 @@ export function registerRecordCommands(
         ...(base.secrets ? { secrets: base.secrets } : {}),
         ...(base.secretHosts ? { hosts: base.secretHosts } : {}),
       },
-      { source: codesFor(settings, gmailFor(settings)), since: new Date() },
+      {
+        codes: { source: codesFor(settings, gmailFor(settings)), since: new Date() },
+        phone: ourPhone(settings),
+      },
     );
     return { secrets: l.secrets, secretHosts: l.hosts };
   };

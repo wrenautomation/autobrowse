@@ -197,8 +197,13 @@ describe("loginSecrets", () => {
       offers: (kind) => kind === "email",
       inbox: () => null,
     };
-    const l = loginSecrets(store, ["instagram"], undefined, { source, since: new Date(0) });
+    const l = loginSecrets(store, ["instagram"], undefined, {
+      codes: { source, since: new Date(0) },
+      phone: "+15875550100",
+    });
     expect(await l.secrets("instagram.code")).toBe("654321");
+    expect(await l.secrets("instagram.phone")).toBe("+15875550100");
+    expect(await l.secrets("instagram.phoneLocal")).toBe("5875550100");
     expect(asked[0]).toBe("ig@wren.test");
   });
 });
