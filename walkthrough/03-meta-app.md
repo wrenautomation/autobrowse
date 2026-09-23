@@ -1,5 +1,11 @@
 # 3 · Meta app: ads, Pages, Instagram
 
+**State 2026-09-23:** app `Wren Automation` (1584158149862012) made on
+Wren's Facebook profile, consent done (14 scopes granted), Page `Wren
+Automation` reads back (Graph id 1258841687320289). Owed: the Business
+portfolio + ad account (your card), the Instagram professional account
+linked to the Page.
+
 **Goal:** one Meta token on the box that runs ads (Marketing API), posts to
 the Page, and publishes to the Page's Instagram account. Then `wren ads`
 and the content loop use it without you.
@@ -23,12 +29,18 @@ On developers.facebook.com, as that login:
 
 1. My Apps → Create App → use case **Other** → type **Business** → name
    `Wren Automation`, contact email, the Business portfolio.
-2. Add products: **Facebook Login for Business**, **Marketing API**,
-   **Instagram** (Instagram API with Facebook Login).
-3. Facebook Login for Business → Settings → Valid OAuth Redirect URIs:
-   `http://127.0.0.1:9400/oauth/callback`. Development mode allows the
-   loopback URI.
-4. App settings → Basic: the App ID and App Secret.
+2. Use cases: **Create & manage ads**, **Capture & manage ad leads**,
+   **Manage everything on your Page**, **Manage messaging & content on
+   Instagram**. In each, Customize → Permissions → Add every scope
+   `metaOAuth.scopes` names (`src/sites/meta.ts`); a missing one fails the
+   consent with "Invalid Scopes: …".
+3. App settings → Basic → App domains: `wrenautomation.com`.
+4. Facebook Login for Business → Settings → Valid OAuth Redirect URIs:
+   `https://wrenautomation.com/oauth/callback`. Meta locks Enforce HTTPS on
+   and refuses localhost, so not the http loopback other sites use. Nothing
+   serves that URL: the consent's browser answers it and hands back the code.
+5. App settings → Basic: the App ID and App Secret (`keep`, never Show +
+   screenshot).
 
 `site setup meta developer-app` is this as a recorded flow once
 `meta-developer-app` exists (I drive it headed with you the first time:
@@ -48,7 +60,7 @@ pnpm autobrowse site setup meta consent
 The `facebook/oauth-consent` flow opens the dialog in the facebook profile,
 picks the Page and ad account, grants the scopes (`ads_management`,
 `pages_manage_posts`, `instagram_content_publish`, `leads_retrieval`, …),
-lands on the loopback redirect, exchanges the code for the 60-day long-lived
+lands on the redirect (answered in the browser), exchanges the code for the 60-day long-lived
 token, keeps it as `META_ACCESS_TOKEN`. Run it again when it lapses; the
 site's status says so.
 

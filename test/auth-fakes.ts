@@ -25,6 +25,7 @@ export function fakePage(script: {
     has: async (h) => script.present(h),
     read: async (h) => script.read?.(h) ?? "",
     wait: async () => {},
+    answer: async () => {},
     waitForUrl: async () => true,
     nextPage: async () => null,
     pages: () => [],

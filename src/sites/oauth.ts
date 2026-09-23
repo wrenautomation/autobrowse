@@ -8,6 +8,7 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
+import { CONSENT_RECEIVED } from "../browser/flows/oauth-consent.js";
 import { type HttpClient, HttpError } from "../clients/http.js";
 import type { OAuthSpec } from "./types.js";
 
@@ -124,20 +125,74 @@ export interface ConsentInput {
 }
 
 /**
- * The one-time consent: a loopback listener takes the redirect, the flow
- * opens the authorize URL in the site's profile and clicks through, the
- * code is exchanged for tokens. Returns the refresh token to keep.
+ * The code from where the consent landed (`?code=…&state=…`), or null when
+ * the URL is not the redirect. A refusal or a foreign state throws.
+ */
+export function codeFrom(landed: string, redirect: string, state: string): string | null {
+  if (!landed.startsWith(redirect)) return null;
+  const u = new URL(landed);
+  const got = u.searchParams.get("code");
+  if (!got)
+    throw new Error(
+      `consent refused: ${u.searchParams.get("error_description") ?? u.searchParams.get("error_message") ?? u.searchParams.get("error") ?? `no code (params: ${[...u.searchParams.keys()].join(", ") || "none"}; ${u.hash ? "a fragment" : "no fragment"})`}`,
+    );
+  if (u.searchParams.get("state") !== state) throw new Error("consent: state mismatch");
+  return got;
+}
+
+/** A listener on the http loopback redirect: the code it is handed, and how to stop it. */
+function listen(redirect: string, state: string, timeoutMs: number) {
+  let close = () => {};
+  const code = new Promise<string>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      close();
+      reject(new Error("consent: no redirect within the time allowed"));
+    }, timeoutMs);
+    const server = createServer((req, res) => {
+      const u = new URL(req.url ?? "/", redirect);
+      if (u.pathname !== new URL(redirect).pathname) {
+        res.writeHead(404).end();
+        return;
+      }
+      const err = u.searchParams.get("error");
+      res
+        .writeHead(200, { "content-type": "text/plain" })
+        .end(u.searchParams.get("code") ? CONSENT_RECEIVED : `autobrowse: ${err ?? "no code"}`);
+      close();
+      try {
+        const got = codeFrom(u.toString(), redirect, state);
+        if (got) resolve(got);
+      } catch (e) {
+        reject(e);
+      }
+    });
+    close = () => {
+      clearTimeout(timer);
+      server.close();
+    };
+    const at = new URL(redirect);
+    server.listen(Number(at.port), at.hostname);
+  });
+  return { code, close };
+}
+
+/**
+ * The one-time consent: the flow opens the authorize URL in the site's
+ * profile and clicks through; the code comes back in the URL it landed on
+ * (the browser answers the redirect itself), or to a loopback listener on
+ * an http redirect (a person finishing a hand-off). It is exchanged for
+ * tokens. Returns the refresh token to keep.
  */
 export async function runConsent(
   spec: OAuthSpec,
   o: {
     http: HttpClient;
     env: (name: string) => string | undefined;
-    /** Opens the authorize URL in the site's logged-in profile and clicks through to the redirect. */
+    /** Opens the authorize URL in the site's logged-in profile and clicks through to the redirect; answers `{landed}`. */
     open: (input: ConsentInput) => Promise<unknown>;
     /** Which account consents (the chooser's pick; the token is kept under its own name). */
     account?: string | null;
-    /** Loopback port for the redirect; must match the client's registered redirect URI. */
+    /** Loopback port for an http redirect; must match the client's registered redirect URI. */
     port?: number;
     timeoutMs?: number;
   },
@@ -146,37 +201,11 @@ export async function runConsent(
   const secret = o.env(spec.clientSecret);
   if (!id || !secret)
     throw new Error(`consent needs ${spec.clientId} and ${spec.clientSecret} first`);
-  const port = o.port ?? 9400;
-  const redirect = `http://127.0.0.1:${port}/oauth/callback`;
+  const redirect = spec.redirect ?? `http://127.0.0.1:${o.port ?? 9400}/oauth/callback`;
   const state = randomBytes(16).toString("hex");
-  const code = new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      server.close();
-      reject(new Error("consent: no redirect within the time allowed"));
-    }, o.timeoutMs ?? 300_000);
-    const server = createServer((req, res) => {
-      const u = new URL(req.url ?? "/", redirect);
-      if (u.pathname !== "/oauth/callback") {
-        res.writeHead(404).end();
-        return;
-      }
-      const got = u.searchParams.get("code");
-      const err = u.searchParams.get("error");
-      res
-        .writeHead(200, { "content-type": "text/plain" })
-        .end(
-          got
-            ? "autobrowse: consent received, you can close this tab"
-            : `autobrowse: ${err ?? "no code"}`,
-        );
-      clearTimeout(timer);
-      server.close();
-      if (u.searchParams.get("state") !== state) reject(new Error("consent: state mismatch"));
-      else if (got) resolve(got);
-      else reject(new Error(`consent refused: ${err ?? "no code"}`));
-    });
-    server.listen(port, "127.0.0.1");
-  });
+  const listener = redirect.startsWith("http://")
+    ? listen(redirect, state, o.timeoutMs ?? 300_000)
+    : null;
   const url = new URL(spec.authorizeUrl);
   const idParam = spec.clientIdParam ?? "client_id";
   const pkce = spec.pkce ? pkcePair() : null;
@@ -190,17 +219,29 @@ export async function runConsent(
     ...(spec.params ?? {}),
   }))
     url.searchParams.set(k, v);
-  await Promise.all([
-    o.open({ url: url.toString(), ...(o.account ? { account: o.account } : {}) }),
-    code,
-  ]);
+  const landed = o
+    .open({ url: url.toString(), ...(o.account ? { account: o.account } : {}) })
+    .then((out) => {
+      const at = (out as { landed?: unknown } | null)?.landed;
+      return typeof at === "string" ? codeFrom(at, redirect, state) : null;
+    });
+  let code: string;
+  try {
+    const got = listener
+      ? await Promise.race([listener.code, landed.then((c) => c ?? listener.code)])
+      : await landed;
+    if (!got) throw new Error(`consent: the flow did not land on ${redirect}`);
+    code = got;
+  } finally {
+    listener?.close();
+  }
   const client = clientFields(spec, id, secret);
   const body = await tokenCall(
     o.http,
     spec.tokenUrl,
     {
       grant_type: "authorization_code",
-      code: await code,
+      code,
       redirect_uri: redirect,
       ...client.fields,
       ...(pkce ? { code_verifier: pkce.verifier } : {}),

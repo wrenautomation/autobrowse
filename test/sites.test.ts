@@ -284,11 +284,21 @@ describe("site facade", () => {
         http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
         env: (n) => ({ GOOGLE_OAUTH_CLIENT_ID: "cid", GOOGLE_OAUTH_CLIENT_SECRET: "cs" })[n],
         open: async () => {
-          await fetch(`http://127.0.0.1:${port}/oauth/callback?error=access_denied&state=x`);
+          await fetch(`http://127.0.0.1:${port}/oauth/callback?code=c&state=x`);
         },
         port,
       }),
     ).rejects.toThrow(/state mismatch/);
+    await expect(
+      runConsent(o, {
+        http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+        env: (n) => ({ GOOGLE_OAUTH_CLIENT_ID: "cid", GOOGLE_OAUTH_CLIENT_SECRET: "cs" })[n],
+        open: async () => {
+          await fetch(`http://127.0.0.1:${port}/oauth/callback?error=access_denied&state=x`);
+        },
+        port,
+      }),
+    ).rejects.toThrow(/refused: access_denied/);
   });
 
   it("a setup step runs a hand-written flow with the sink, or a compiled workflow with the plan", async () => {

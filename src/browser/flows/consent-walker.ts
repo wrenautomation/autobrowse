@@ -7,7 +7,7 @@
  */
 import { type BrowserFlow, defineFlow } from "../flow.js";
 import type { Hints } from "../locate.js";
-import { type OauthConsentInput, redirectOf } from "./oauth-consent.js";
+import { CONSENT_RECEIVED, type OauthConsentInput, redirectOf } from "./oauth-consent.js";
 
 const SETTLE_MS = 1_500;
 
@@ -31,6 +31,7 @@ export function consentFlow(w: ConsentWalk): BrowserFlow<OauthConsentInput, { la
     async run(fp, input) {
       const redirect = redirectOf(input.url);
       const landed = (u: string) => u.startsWith(redirect);
+      await fp.answer(redirect, CONSENT_RECEIVED);
       await fp.open(w.home);
       await fp.open(input.url, { allowWall: true });
       // Still a login (the session did not carry): let the runner sign in on this very

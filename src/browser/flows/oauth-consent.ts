@@ -5,7 +5,7 @@
  * order Google shows it: the account chooser, the "hasn't verified this
  * app" warning of an app in testing, the scope checkboxes (sensitive scopes
  * start unticked), and the Continue/Allow buttons, until the page is the
- * redirect (our loopback listener answers it). Mapped 2026-09-20.
+ * redirect (the browser answers it; the code rides back in the URL). Mapped 2026-09-20.
  */
 import { defineFlow } from "../flow.js";
 
@@ -22,6 +22,9 @@ const ROUNDS = 12;
 /** Google's re-verification pages, the passkey ceremony and its error among them. */
 const CHALLENGE = /accounts\.google\.com\/(v3\/)?signin\/challenge\//;
 
+/** What the browser shows on the redirect it answers itself. */
+export const CONSENT_RECEIVED = "autobrowse: consent received, you can close this tab";
+
 /** `redirect_uri` from the authorize URL, so the walk knows where it ends. */
 export function redirectOf(authorizeUrl: string): string {
   const r = new URL(authorizeUrl).searchParams.get("redirect_uri");
@@ -37,6 +40,7 @@ export const googleOauthConsent = defineFlow<OauthConsentInput, { landed: string
     const landed = (u: string) => u.startsWith(redirect);
     // Sign in on a plain page first: the consent pages live on accounts.google.com
     // too, and the runner's sign-in would otherwise take each of them for a wall.
+    await fp.answer(redirect, CONSENT_RECEIVED);
     await fp.open(SIGNED_IN_PAGE);
     await fp.open(input.url, { allowWall: true });
     let verified = false;

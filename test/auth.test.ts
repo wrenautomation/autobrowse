@@ -324,6 +324,7 @@ describe("sign in via a provider on a site nobody wrote a spec for", () => {
       wait: async () => {
         at++;
       },
+      answer: async () => {},
       waitForUrl: async () => {
         at++;
         return true;

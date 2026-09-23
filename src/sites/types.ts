@@ -129,6 +129,12 @@ export interface OAuthSpec {
   pkce?: boolean;
   /** How the token endpoint takes the client: form fields (default) or an HTTP Basic header (X). */
   tokenAuth?: "form" | "basic";
+  /**
+   * The redirect URI the client registered, when it cannot be the http loopback
+   * (Meta takes neither http nor localhost). Nothing serves
+   * it: the browser answers it and the code comes back in the landed URL.
+   */
+  redirect?: string;
   /** The leg that opens the authorize URL (`{url}`) in the site's logged-in profile and clicks through. */
   consent: Leg;
 }

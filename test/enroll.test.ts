@@ -28,6 +28,7 @@ function fakePage(script: { text: string[]; html?: string; dialog?: string[] }) 
     html: async () => script.html ?? "",
     has: async () => true,
     wait: async () => {},
+    answer: async () => {},
     waitForUrl: async () => true,
     nextPage: async () => null,
     pages: () => [],

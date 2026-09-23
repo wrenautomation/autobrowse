@@ -86,6 +86,11 @@ export interface FlowPage {
   /** The element's text, trimmed and capped: what a scraping step keeps. */
   read(hints: Hints): Promise<string>;
   wait(ms: number): Promise<void>;
+  /**
+   * Answer requests under `prefix` in the browser itself (an OAuth redirect
+   * nothing serves), so the page lands there and its URL keeps the query.
+   */
+  answer(prefix: string, body: string): Promise<void>;
   /** Resolves when the URL matches, or null at the timeout. */
   waitForUrl(pattern: RegExp | ((url: string) => boolean), timeoutMs: number): Promise<boolean>;
   /** The next page the site opens (an OAuth popup), or null when none comes in time. */
@@ -349,6 +354,13 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
                   .catch(() => false),
           read: async (hints) => (await textOf(locate(active, hints))).slice(0, 2_000),
           wait: (ms) => active.waitForTimeout(ms),
+          answer: (prefix, body) =>
+            session.context
+              .route(
+                (u) => u.toString().startsWith(prefix),
+                (r) => r.fulfill({ status: 200, contentType: "text/plain", body }),
+              )
+              .then(() => {}),
           waitForUrl: (pattern, timeout) =>
             active
               .waitForURL(pattern instanceof RegExp ? pattern : (u) => pattern(u.toString()), {

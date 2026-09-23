@@ -3,6 +3,7 @@ import type { FlowPage } from "../src/browser/flow.js";
 import { googleOauthConsent, redirectOf } from "../src/browser/flows/oauth-consent.js";
 import type { Hints } from "../src/browser/locate.js";
 import { NeedsHuman } from "../src/browser/session.js";
+import { codeFrom } from "../src/sites/oauth.js";
 
 const AUTH =
   "https://accounts.google.com/o/oauth2/v2/auth?client_id=c&redirect_uri=http%3A%2F%2F127.0.0.1%3A9400%2Foauth%2Fcallback&scope=x&state=s";
@@ -24,6 +25,7 @@ function consentPages(
     has: async (h) =>
       h.css?.includes("aria-checked") && ticked ? false : (page().present?.(h) ?? false),
     wait: async () => {},
+    answer: async () => {},
     waitForUrl: async () => true,
     nextPage: async () => null,
     pages: () => [],
@@ -48,6 +50,16 @@ function consentPages(
   };
   return { fp, acts };
 }
+
+describe("the code from the landed url", () => {
+  const r = "https://localhost:9400/oauth/callback";
+  it("reads the code; refuses another state or a refusal; ignores another page", () => {
+    expect(codeFrom(`${r}?code=c&state=s#_=_`, r, "s")).toBe("c");
+    expect(codeFrom("https://www.facebook.com/dialog", r, "s")).toBeNull();
+    expect(() => codeFrom(`${r}?code=c&state=x`, r, "s")).toThrow(/state/);
+    expect(() => codeFrom(`${r}?error=access_denied&state=s`, r, "s")).toThrow(/access_denied/);
+  });
+});
 
 describe("google oauth consent", () => {
   it("reads the redirect off the authorize url", () => {
