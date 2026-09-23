@@ -227,8 +227,15 @@ const toLocatorHints = (h: z.infer<typeof hintsSchema>): LocatorHints => ({
   ...(h.frame ? { frame: h.frame } : {}),
 });
 
+/**
+ * After an act: a page it navigated to loads, then a short wait for the network
+ * to go quiet. Live apps (Facebook, X) poll forever and never reach networkidle,
+ * so waiting for it cost the full cap on every act; the next command's locator
+ * waits for its own control anyway.
+ */
 async function settle(page: Page): Promise<void> {
-  await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => undefined);
+  await page.waitForLoadState("domcontentloaded", { timeout: 8_000 }).catch(() => undefined);
+  await page.waitForLoadState("networkidle", { timeout: 1_500 }).catch(() => undefined);
 }
 
 /**
@@ -490,7 +497,8 @@ async function serve(
         if (!allowed) throw new SecretLeak(`${opts.site} (${c.secret})`, host);
         await gate("fill", c, wait);
         await hands.think(page);
-        await hands.type(find(c), value, { timeout: 10_000 });
+        // A secret arrives whole, as autofill or a password manager puts it; nobody types a minted password.
+        await hands.paste(find(c), value, { timeout: 10_000 });
         journalAct(c, (target) => ({
           kind: "input",
           target,

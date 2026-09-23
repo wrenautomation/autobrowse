@@ -58,6 +58,9 @@ describe("code sources", () => {
     );
     expect(extractCode("Order 12345678 shipped")).toBe("12345678");
     expect(extractCode("nothing")).toBeNull();
+    expect(extractCode("FB-48291 is your Facebook confirmation code")).toBe("48291");
+    expect(extractCode("Your confirmation code: 48291")).toBe("48291");
+    expect(extractCode("Welcome, member since 2026")).toBeNull();
   });
   it("totp waits out a code about to expire", async () => {
     const waits: number[] = [];

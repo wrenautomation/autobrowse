@@ -53,6 +53,24 @@ every store that grows.
 - `fetch` keeps connections (undici); no client builds a connection per
   call.
 
+## Browser acts (2026-09-23, William: "the flow is slow")
+
+Measured on a local page, `HUMAN_PACE`, 26-char address:
+
+- Explore `settle` waited for `networkidle` up to 8 s after every click,
+  press and key. Facebook and X poll forever, so each act paid the full
+  8 s. Now: `domcontentloaded` (a navigation the act started), then
+  `networkidle` capped at 1.5 s. The next command's locator waits for its
+  own control.
+- `type` went through `pressSequentially` per key: a locator resolve,
+  actionability check and focus on every key, ~20% over plan. Now one
+  click focuses, then `page.keyboard.type` per key: 6.1 s for a 5.3 s
+  plan, the rest being the click.
+- `place` (a secret) now `paste`s: click, a hover beat, one `fill`, as
+  autofill or a password manager does. Nobody types a minted password.
+- Kept: `think` (0.35–1.6 s) and the typing plan. That is the pace sites
+  watch for; `settings.pace = "fast"` turns it off.
+
 ## Where to attack (ranked)
 
 1. Restate state for the registry is still one key: 2,000 rows ≈ 400 KB

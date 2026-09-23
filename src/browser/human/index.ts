@@ -13,6 +13,8 @@
  *   type   runs of fast and slow keys, beats between words and after
  *          punctuation, the odd stall mid-word; long text is pasted
  *   press  one key, held down like a key is
+ *   paste  a value that arrives whole, as autofill or a password manager
+ *          puts it: the field clicked, a beat, the text in at once
  *
  * The details live beside this file (typing.ts, mouse.ts, draw.ts) as
  * pure plans with no page in them; this file only plays them. Every click
@@ -82,6 +84,8 @@ export interface Hands {
   /** A control: replace what it holds with `text`. A page: type at the caret. */
   type(target: KeyTarget, text: string, o: ActTimeout): Promise<void>;
   press(target: KeyTarget, key: string, o: ActTimeout): Promise<void>;
+  /** A control: replace what it holds with `text` in one go, as autofill does. */
+  paste(target: Locator, text: string, o: ActTimeout): Promise<void>;
 }
 
 /** Plain Playwright: no pauses, no pointer path. */
@@ -90,6 +94,7 @@ export const instantHands: Hands = {
   click: (target, o) => target.click(o),
   type: (target, text, o) => (isPage(target) ? target.keyboard.type(text) : target.fill(text, o)),
   press: (target, key, o) => (isPage(target) ? target.keyboard.press(key) : target.press(key, o)),
+  paste: (target, text, o) => target.fill(text, o),
 };
 
 /** Where each page's pointer is: Playwright's mouse has no getter. Dies with the page. */
@@ -170,12 +175,18 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
         await page.waitForTimeout(drawMs(pace.think, random));
         return isPage(target) ? target.keyboard.insertText(text) : target.fill(text, o);
       }
+      // The click focused the control: keys go to the page's keyboard from here, not
+      // through the locator, which re-checks and re-focuses the control on every key.
       for (const k of typingPlan(text, pace.typing, random)) {
         // `delay` is how long the key is held: down, wait, up.
-        if (isPage(target)) await target.keyboard.type(k.ch, { delay: k.hold });
-        else await target.pressSequentially(k.ch, { ...o, delay: k.hold });
+        await page.keyboard.type(k.ch, { delay: k.hold });
         if (k.after) await page.waitForTimeout(k.after);
       }
+    },
+    async paste(target, text, o) {
+      await click(target, o);
+      await target.page().waitForTimeout(drawMs(pace.mouse.hover, random));
+      await target.fill(text, o);
     },
     press: (target, key, o) => {
       const delay = drawMs(pace.typing.hold, random);
