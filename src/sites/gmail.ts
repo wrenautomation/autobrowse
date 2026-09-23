@@ -16,7 +16,17 @@ const ME = `${GMAIL_ORIGIN}/gmail/v1/users/me`;
 const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 
 async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok) throw new HttpError("CALL", `${ME}/${what}`, res.status);
+  if (!res.ok) {
+    // Google's reason (rateLimitExceeded, insufficientPermissions, …) says what to do.
+    const err = (res.body as { error?: { errors?: { reason?: string }[]; status?: string } } | null)
+      ?.error;
+    throw new HttpError(
+      "CALL",
+      `${ME}/${what}`,
+      res.status,
+      err?.errors?.[0]?.reason ?? err?.status ?? "",
+    );
+  }
   return res.body as T;
 }
 

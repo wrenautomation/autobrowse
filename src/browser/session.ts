@@ -7,12 +7,15 @@
  */
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
+import type { Browser, BrowserContext, Page } from "playwright";
 import type { HttpClient } from "../clients/http.js";
 import { expandHome } from "../google-auth.js";
 import { geometry, type Identity, learnIdentity, wearIdentity } from "./identity.js";
 import { reapOrphans } from "./reap.js";
 import { type PasskeyRecord, type Passkeys, virtualAuthenticator } from "./webauthn.js";
+
+/** Playwright loads on the first browser, not at process start (~2 s of a CLI's boot). */
+const chromium = async () => (await import("playwright")).chromium;
 
 /** A page needs a person: login, captcha, consent, or a layout nobody planned for. */
 export class NeedsHuman extends Error {
@@ -97,12 +100,12 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
       throw new Error("BROWSER=browserbase needs BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID");
     const contextId = await browserbaseContext(opts.profile ?? site, opts.browserbase);
     const session = await browserbaseSession(opts.browserbase, contextId);
-    browser = await chromium.connectOverCDP(session.connectUrl);
+    browser = await (await chromium()).connectOverCDP(session.connectUrl);
     context = browser.contexts()[0] ?? (await browser.newContext());
   } else if (opts.tier === "cdp") {
     if (!opts.cdpUrl) throw new Error("BROWSER=cdp needs BROWSER_CDP_URL");
     // The app's own context and pages: nothing is launched, nothing closed on our way out.
-    browser = await chromium.connectOverCDP(opts.cdpUrl);
+    browser = await (await chromium()).connectOverCDP(opts.cdpUrl);
     context = browser.contexts()[0] ?? (await browser.newContext());
   } else {
     const profileDir = join(expandHome(opts.profilesDir), opts.profile ?? site);
@@ -185,13 +188,16 @@ async function launchLocal(profileDir: string, opts: BrowserOptions): Promise<Br
   const launch = async (o: ReturnType<typeof base>) => {
     if (opts.channel !== "chromium") {
       try {
-        return await chromium.launchPersistentContext(profileDir, { ...o, channel: "chrome" });
+        return await (await chromium()).launchPersistentContext(profileDir, {
+          ...o,
+          channel: "chrome",
+        });
       } catch (err) {
         if (!/executable doesn't exist|chrome/i.test(err instanceof Error ? err.message : ""))
           throw err;
       }
     }
-    return chromium.launchPersistentContext(profileDir, o);
+    return (await chromium()).launchPersistentContext(profileDir, o);
   };
   const context = await launch(base(headedIdentity?.userAgent ?? null));
   if (!headless) return context;

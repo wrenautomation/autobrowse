@@ -78,7 +78,11 @@ describe("unsubscribe", () => {
         "List-Unsubscribe": "<https://wren.test/u>",
       }),
     ]);
-    const rows = await findSubscriptions(mailbox, { days: 14, keep: ["wrenautomation.com"] });
+    const rows = await findSubscriptions(mailbox, {
+      days: 14,
+      keep: ["wrenautomation.com"],
+      gapMs: 0,
+    });
     expect(rows.map((r) => [r.sender, r.count])).toEqual([
       ["noreply@namecheap.com", 2],
       ["hi@tool.io", 1],
@@ -93,6 +97,24 @@ describe("unsubscribe", () => {
     expect(subscriptionLines(rows)[0]).toMatch(
       /^ {2}2 {2}noreply@namecheap.com\s+one-click 2026-09-22 {2}Sale$/,
     );
+  });
+
+  it("searches all time without days and waits out a rate-limit 403", async () => {
+    const { mailbox, calls } = inbox([
+      msg("1", { From: "a@x.io", "List-Unsubscribe": "<https://x.io/u>" }),
+    ]);
+    let refused = 0;
+    const flaky = {
+      async call(m: "GET" | "POST", path: string, input: Record<string, unknown>) {
+        if (path.endsWith("/1") && refused++ < 2)
+          throw Object.assign(new Error("rate"), { status: 403 });
+        return mailbox.call(m, path, input);
+      },
+    };
+    const rows = await findSubscriptions(flaky, { pauseMs: 1, gapMs: 0 });
+    expect(rows.map((r) => r.sender)).toEqual(["a@x.io"]);
+    expect(calls[0]?.input).toMatchObject({ q: "unsubscribe" });
+    expect(refused).toBe(3);
   });
 
   it("leaves by one-click, falls back to mailto, reports a link without a browser", async () => {

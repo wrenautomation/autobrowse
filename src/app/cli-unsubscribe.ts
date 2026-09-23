@@ -13,7 +13,7 @@ export function registerUnsubscribe(program: Command, local: LocalBackend): void
     .description(
       "Mailing lists the inbox got onto (senders with List-Unsubscribe): list them; --yes leaves them",
     )
-    .option("--days <n>", "how far back", "30")
+    .option("--days <n>", "how far back (default: all time)")
     .option("--account <address>", "which consented Gmail (default: the site's own)")
     .option("--keep <domains>", "comma-separated sender domains never listed")
     .option("--only <senders>", "comma-separated sender addresses to leave (with --yes)")
@@ -21,7 +21,7 @@ export function registerUnsubscribe(program: Command, local: LocalBackend): void
     .option("--no-browser", "never open a link; report it instead")
     .action(
       async (o: {
-        days: string;
+        days?: string;
         account?: string;
         keep?: string;
         only?: string;
@@ -37,7 +37,7 @@ export function registerUnsubscribe(program: Command, local: LocalBackend): void
             sites.call("gmail", method, path, input, account),
         };
         const rows = await findSubscriptions(mailbox, {
-          days: Number(o.days),
+          ...(o.days ? { days: Number(o.days) } : {}),
           keep: o.keep ? o.keep.split(",").map((d) => d.trim()) : [],
         });
         if (rows.length === 0) {

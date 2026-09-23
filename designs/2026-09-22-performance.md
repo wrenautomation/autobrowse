@@ -71,6 +71,22 @@ Measured on a local page, `HUMAN_PACE`, 26-char address:
 - Kept: `think` (0.35–1.6 s) and the typing plan. That is the pace sites
   watch for; `settings.pace = "fast"` turns it off.
 
+## CLI start (2026-09-23)
+
+`pnpm autobrowse --help` took 7.5 s; `needs` 8–14 s. Not the TypeScript:
+a built `dist/` ran as slow as `tsx` (tsx caches its transforms). Two causes.
+
+- Imports at start: `playwright` (its bundled core, ~2 s) came in through
+  one value import in `browser/session.ts`; the S3 client through
+  `shots/s3.ts`. Both now load on first use (`import()`). `--help`: 1.1 s
+  through pnpm, 0.3 s as `node dist/app/cli.js`. pnpm itself is ~0.7 s.
+- SSM round trips: `needs` made 49 sequential calls, 38 of them
+  `DescribeParameters` at the default page of 10, the listing done three
+  times. credvault 0.6.1 asks pages of 50 and reuses one listing for 5 s
+  (a write drops it): 17 calls, 3.6 s.
+
+Left: `getMany` batches (ten names a call) run one after another.
+
 ## Where to attack (ranked)
 
 1. Restate state for the registry is still one key: 2,000 rows ≈ 400 KB

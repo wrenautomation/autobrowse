@@ -69,34 +69,66 @@ const mailtoOf = (u: string): { to: string; subject: string } => {
   return { to: decodeURIComponent(addr ?? ""), subject };
 };
 
+/** Gmail answers a burst with 403/429 (per-user rate): wait and try again. */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function patient<T>(f: () => Promise<T>, pauseMs = 2000): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return await f();
+    } catch (e) {
+      const status = (e as { status?: number }).status;
+      if (i >= 6 || (status !== 403 && status !== 429)) throw e;
+      await sleep(pauseMs * 2 ** i);
+    }
+  }
+}
+
 /**
  * One row per sender that offers a way out, most mail first. `days` bounds
- * the search; `keep` are sender domains never listed (the fleet's own).
+ * the search (none = all time); `keep` are sender domains never listed (the
+ * fleet's own). One fetch at a time, `gapMs` apart, each patient with the
+ * rate limit (Gmail refuses bursts well under its published quota).
  */
 export async function findSubscriptions(
   mailbox: Mailbox,
-  o: { days?: number; keep?: readonly string[]; maxMessages?: number } = {},
+  o: {
+    days?: number;
+    keep?: readonly string[];
+    maxMessages?: number;
+    pauseMs?: number;
+    gapMs?: number;
+  } = {},
 ): Promise<Subscription[]> {
-  const days = o.days ?? 30;
+  const gapMs = o.gapMs ?? 100;
   const keep = new Set((o.keep ?? []).map((d) => d.toLowerCase()));
-  const max = o.maxMessages ?? 500;
+  const max = o.maxMessages ?? 5000;
+  const q = o.days ? `newer_than:${o.days}d unsubscribe` : "unsubscribe";
+  const call = (path: string, input: Record<string, unknown>) =>
+    patient(() => mailbox.call("GET", path, input), o.pauseMs);
   const ids: string[] = [];
   let pageToken: string | undefined;
   do {
-    const page = (await mailbox.call("GET", "/gmail/v1/users/me/messages", {
-      q: `newer_than:${days}d unsubscribe`,
-      maxResults: Math.min(100, max - ids.length),
+    const page = (await call("/gmail/v1/users/me/messages", {
+      q,
+      maxResults: Math.min(500, max - ids.length),
       ...(pageToken ? { pageToken } : {}),
     })) as { messages?: { id: string }[]; nextPageToken?: string };
     for (const m of page.messages ?? []) ids.push(m.id);
     pageToken = page.nextPageToken;
   } while (pageToken && ids.length < max);
 
-  const bySender = new Map<string, Subscription>();
+  const messages: Message[] = [];
   for (const id of ids) {
-    const m = (await mailbox.call("GET", `/gmail/v1/users/me/messages/${encodeURIComponent(id)}`, {
-      format: "metadata",
-    })) as Message;
+    messages.push(
+      (await call(`/gmail/v1/users/me/messages/${encodeURIComponent(id)}`, {
+        format: "metadata",
+      })) as Message,
+    );
+    if (gapMs) await sleep(gapMs);
+  }
+  const bySender = new Map<string, Subscription>();
+  for (const m of messages) {
     const lu = header(m, "List-Unsubscribe");
     if (!lu) continue;
     const { name, address } = parseFrom(header(m, "From"));

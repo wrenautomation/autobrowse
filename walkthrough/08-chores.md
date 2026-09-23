@@ -4,7 +4,8 @@
 put it on, hands-off, without touching mail you did not opt into.
 
 ```sh
-pnpm autobrowse unsubscribe --days 45                    # list: sender, count, path, latest subject
+pnpm autobrowse unsubscribe                              # list, all time: sender, count, path, latest subject
+pnpm autobrowse unsubscribe --days 45                    # only the last 45 days
 pnpm autobrowse unsubscribe --days 45 --keep wrenautomation.com,github.com
 pnpm autobrowse unsubscribe --yes --only news@x.io,hi@tool.io    # leave these
 pnpm autobrowse unsubscribe --yes --keep wrenautomation.com      # leave every listed sender
@@ -14,7 +15,10 @@ pnpm autobrowse unsubscribe --yes --no-browser           # never open a link; re
 What it does (`src/chores/unsubscribe.ts`):
 
 1. Gmail API (`gmail` site, the consented account or `--account`): messages
-   `newer_than:<days>d unsubscribe`, paged; each read as metadata only.
+   `unsubscribe` (all time; `newer_than:<days>d` with `--days`), paged, up
+   to 5,000; each read as metadata only, one at a time 100 ms apart. Gmail
+   refuses bursts with 403 `rateLimitExceeded` well under its quota; each
+   read waits that out (2 s doubling, six tries).
 2. Only senders whose mail carries `List-Unsubscribe` are listed — a
    receipt, a code, a person has none, so they are never touched.
 3. `--yes` leaves each one by the cheapest path that works: **one-click**
