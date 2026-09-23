@@ -32,13 +32,14 @@ carry. Dated 2026-09-22.
    The Mac's AWS CLI session is no longer yours to renew: `pnpm autobrowse
    aws-login --user william --overwrite` does it (default profile now = IAM
    user william, admin; root-only work still needs you).
-1. **`needs do login-facebook`, then `keys-meta`, `consent-meta`, the card**
-   → ads run, Page and Instagram post (`walkthrough/03-meta-app.md`).
-   The developer app: a Business app on developers.facebook.com with
-   Facebook Login for Business, Marketing API and Instagram, redirect
-   `http://127.0.0.1:9400/oauth/callback`. Ads that go ACTIVE ask you over
-   the channel; `SPEND_*` sets what runs without asking. `leads_retrieval`
-   needs app review; a CTA to the lander works without it.
+1. **Meta: the card, then the Instagram link.** Done 2026-09-23: Wren's
+   Facebook, the Page, the app, the token (14 scopes), ad account
+   act_1852812755843751 (named "William Jin", CAD, America/Dawson: rename or
+   change if you want). Yours: a card on it (`meta-ad-account-card`), and the
+   captcha Instagram shows when the Page links it (`instagram-page-link`).
+   Ads that go ACTIVE ask you over the channel; `SPEND_*` sets what runs
+   without asking. `leads_retrieval` needs app review; a CTA to the lander
+   works without it.
 2. **`needs do login-linkedin`** → `site setup linkedin developer-app` is
    recorded with you once (needs a Page: `needs done linkedin-page`), then
    LinkedIn posts go out from the content loop.

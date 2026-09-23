@@ -107,6 +107,50 @@ export function signupSecrets(o: SignupSecretsOptions): SecretValues {
 }
 
 /**
+ * Another site's stored login, for its sign-in inside this session (a
+ * "Connect Instagram" popup in a Facebook one): `<site>.username`,
+ * `<site>.password` and `<site>.code` (the newest code its credential's
+ * codes inbox got after `since`, when `codes` is given), each placed only
+ * on that site's own hosts. Names this does not own fall through to `rest`.
+ */
+export function loginSecrets(
+  store: CredentialStore,
+  sites: readonly string[],
+  rest?: { secrets?: SecretValues; hosts?: (host: string) => boolean },
+  codes?: { source: CodeSource; since: Date },
+): { secrets: SecretValues; hosts: (host: string, secret: string) => boolean } {
+  const fields = ["username", "password", "code"];
+  const inboxCodes = new Map<string, SecretValues>();
+  const own = (name: string) => {
+    const [site, field] = [
+      name.slice(0, name.lastIndexOf(".")),
+      name.slice(name.lastIndexOf(".") + 1),
+    ];
+    return sites.includes(site) && fields.includes(field) ? { site, field } : null;
+  };
+  return {
+    secrets: async (name) => {
+      const hit = own(name);
+      if (!hit) return (await rest?.secrets?.(name)) ?? null;
+      const cred = await store.get(hit.site);
+      if (hit.field !== "code")
+        return (hit.field === "username" ? cred?.username : cred?.password) ?? null;
+      const inbox = cred?.codesInbox;
+      if (!codes || !inbox) return null;
+      // One reader per inbox, so a resend is a new code rather than the one already placed.
+      const read = inboxCodes.get(inbox) ?? codeSecrets(codes.source, inbox, codes.since);
+      inboxCodes.set(inbox, read);
+      return read("code");
+    },
+    hosts: (host, secret) => {
+      const hit = own(secret);
+      if (hit) return signupHosts(hit.site)(host);
+      return rest?.hosts ? rest.hosts(host) : true;
+    },
+  };
+}
+
+/**
  * Where a signup's secrets may be placed: hosts that carry the site's name
  * (`instagram` → www.instagram.com), or the signup URL's own host.
  */

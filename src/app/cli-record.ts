@@ -41,6 +41,10 @@ export function registerRecordCommands(
       "--new-password <address>",
       'give that account (its stored credential, `site` or `site@<label>`) a password of its own, stored before the browser opens; place{secret:"password"} types it',
     )
+    .option(
+      "--login <sites>",
+      'other sites whose stored login this session may type, comma separated (a "Connect Instagram" popup): place{secret:"instagram.password"} (also .username, .code from its codes inbox), only on that site\'s hosts',
+    )
     .action(
       async (
         site: string,
@@ -52,6 +56,7 @@ export function registerRecordCommands(
           codes?: string;
           newPassword?: string;
           signup?: string;
+          login?: string;
         },
       ) => {
         const { tokenFileFor } = await import("../explore/server.js");
@@ -60,7 +65,7 @@ export function registerRecordCommands(
           tokenFile,
           idleMinutes: Number(o.idle),
           signIn: !o.signup,
-          ...(await exploreSecrets(site, o)),
+          ...(await withLogins(await exploreSecrets(site, o), o.login)),
         });
         // The token lives in an owner-only file, not in this output: logs get pasted, files do not.
         console.log(
@@ -124,6 +129,33 @@ export function registerRecordCommands(
       },
       secretHosts: signupHosts(site, o.url ?? null),
     };
+  };
+
+  /** `exploreSecrets` plus other sites' stored logins, each held to its own hosts. */
+  const withLogins = async (
+    base: { secrets?: SecretValues; secretHosts?: (host: string) => boolean },
+    login?: string,
+  ): Promise<{
+    secrets?: SecretValues;
+    secretHosts?: (host: string, secret: string) => boolean;
+  }> => {
+    const sites = (login ?? "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    if (!sites.length) return base;
+    const { loginSecrets } = await import("../auth/signup.js");
+    const { codesFor, credentialsFor, gmailFor } = await import("./services.js");
+    const l = loginSecrets(
+      credentialsFor(settings),
+      sites,
+      {
+        ...(base.secrets ? { secrets: base.secrets } : {}),
+        ...(base.secretHosts ? { hosts: base.secretHosts } : {}),
+      },
+      { source: codesFor(settings, gmailFor(settings)), since: new Date() },
+    );
+    return { secrets: l.secrets, secretHosts: l.hosts };
   };
 
   /** An inbox this system reads codes from, or why not. */

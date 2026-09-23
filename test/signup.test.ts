@@ -5,6 +5,7 @@ import type { CodeSource } from "../src/auth/codes.js";
 import {
   codeSecrets,
   localPhone,
+  loginSecrets,
   mintCredential,
   mintPassword,
   signupGoal,
@@ -161,6 +162,44 @@ describe("signup", () => {
     expect(llm.requests[0]?.prompt).toContain("SECRETS (use place): email, password, code");
     expect(llm.requests[1]?.prompt).toContain("1. place [1] secret password");
     expect(JSON.stringify(llm.requests)).not.toContain("Minted");
+  });
+});
+
+describe("loginSecrets", () => {
+  it("another site's stored login, placed only on that site's hosts", async () => {
+    const store = memoryCredentials();
+    await store.put("instagram", { username: "wren", password: "ig-pw" });
+    const l = loginSecrets(store, ["instagram"], {
+      secrets: async (n) => (n === "code" ? "12345" : null),
+      hosts: (h) => h.includes("facebook"),
+    });
+    expect(await l.secrets("instagram.password")).toBe("ig-pw");
+    expect(await l.secrets("instagram.username")).toBe("wren");
+    expect(await l.secrets("code")).toBe("12345");
+    expect(await l.secrets("tiktok.password")).toBeNull();
+    expect(l.hosts("www.instagram.com", "instagram.password")).toBe(true);
+    expect(l.hosts("business.facebook.com", "instagram.password")).toBe(false);
+    expect(l.hosts("business.facebook.com", "code")).toBe(true);
+    expect(l.hosts("www.instagram.com", "code")).toBe(false);
+    // No code source: .code is not available.
+    expect(await l.secrets("instagram.code")).toBeNull();
+  });
+
+  it("<site>.code: the newest code that login's own inbox got after the session opened", async () => {
+    const store = memoryCredentials();
+    await store.put("instagram", { username: "wren", password: "p", codesInbox: "ig@wren.test" });
+    const asked: string[] = [];
+    const source: CodeSource = {
+      get: async (_q, cred) => {
+        asked.push(cred.codesInbox ?? "");
+        return "654321";
+      },
+      offers: (kind) => kind === "email",
+      inbox: () => null,
+    };
+    const l = loginSecrets(store, ["instagram"], undefined, { source, since: new Date(0) });
+    expect(await l.secrets("instagram.code")).toBe("654321");
+    expect(asked[0]).toBe("ig@wren.test");
   });
 });
 

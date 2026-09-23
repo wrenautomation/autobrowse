@@ -382,11 +382,15 @@ export function signupNeeds(ctx: NeedsContext): Need[] {
     });
   }
   out.push({
-    id: "instagram-professional",
+    id: "instagram-page-link",
     kind: "decision",
-    what: "Make Wren's Instagram a professional (business) account",
-    unlocks: "Instagram publishing through the Meta app",
-    how: ["Instagram → Settings → Account type and tools → Switch to professional account"],
+    what: "Link Wren's Instagram to the Wren Automation Page: Instagram asks a text captcha on the way",
+    unlocks: "Instagram publishing and comments through the Meta app",
+    how: [
+      'autobrowse explore facebook --headed --login instagram --url "https://business.facebook.com/latest/"',
+      "Connect Instagram → Log into Instagram → Continue; the popup takes instagram.username/.password/.code by place; you type the captcha",
+      "autobrowse needs done instagram-page-link",
+    ],
     after: "signup-instagram",
   });
   return out;

@@ -169,8 +169,8 @@ export interface ExploreOptions {
   sink?: SecretSink;
   /** What `place` may fill by name; without it `place` is refused. */
   secrets?: SecretValues;
-  /** Hosts a placed secret may land on; any other host refuses the `place`. Absent: any. */
-  secretHosts?: (host: string) => boolean;
+  /** Hosts a placed secret (by name) may land on; any other host refuses the `place`. Absent: any. */
+  secretHosts?: (host: string, secret: string) => boolean;
   /** Where every `place` is recorded (allowed or refused); never the value. */
   audit?: SecretAudit;
   /**
@@ -484,7 +484,7 @@ async function serve(
             `place: ${c.secret} is not available now (a code: the site's message has not arrived in the inbox this run reads; else no secret has that name)`,
           );
         const host = new URL(page.url()).host;
-        const allowed = opts.secretHosts ? opts.secretHosts(host) : true;
+        const allowed = opts.secretHosts ? opts.secretHosts(host, c.secret) : true;
         await opts.audit?.record({
           at: new Date().toISOString(),
           credential: opts.site,

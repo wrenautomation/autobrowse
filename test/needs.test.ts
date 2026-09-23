@@ -154,12 +154,7 @@ describe("signup needs", () => {
     );
     const rows = await resolveNeeds(signupNeeds(c), {});
     const open = rows.filter((r) => !r.done).map((r) => r.id);
-    expect(open).toEqual([
-      "signup-facebook",
-      "signup-x",
-      "signup-tiktok",
-      "instagram-professional",
-    ]);
+    expect(open).toEqual(["signup-facebook", "signup-x", "signup-tiktok", "instagram-page-link"]);
     expect(rows.find((r) => r.id === "signup-instagram")?.by).toBe("check");
     expect(rows.find((r) => r.id === "signup-x")?.what).toMatch(/phone dialog loops/);
   });
