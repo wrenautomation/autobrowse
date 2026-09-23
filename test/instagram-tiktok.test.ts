@@ -267,11 +267,13 @@ describe("instagram and tiktok consents and OAuth shapes", () => {
     await expect(consent(tiktokOAuth, 9421)).resolves.toEqual({
       refreshToken: "rt",
       accessToken: "short",
+      expiresIn: 3600,
     });
     expect(calls.at(-1)?.body).toContain("client_key=k");
     await expect(consent(instagramOAuth, 9422)).resolves.toEqual({
       refreshToken: "rt",
       accessToken: "long",
+      expiresIn: 5_184_000,
     });
     const long = calls.at(-1);
     expect(long?.method).toBe("GET");

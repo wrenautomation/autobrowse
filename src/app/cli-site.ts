@@ -89,4 +89,17 @@ export function registerSiteCommands(program: Command, local: LocalBackend): voi
       const { made } = await sites.setup(name, step, o.account ?? null, o.profile ?? null);
       console.log(`kept ${made.join(", ")}`);
     });
+  site
+    .command("renew")
+    .description(
+      "Make again every kept token that lapses within 14 days, by the setup step and account that made it (the box runs this daily)",
+    )
+    .option("--dry", "only say what is due")
+    .action(async (o: { dry?: boolean }) => {
+      const sites = local().backend.sites;
+      if (!sites?.renew) throw new Error("no site apis here");
+      const r = await sites.renew({ dry: Boolean(o.dry) });
+      console.log(r.lines.join("\n") || "nothing lapses within 14 days");
+      if (r.results.some((x) => !x.ok)) process.exitCode = 1;
+    });
 }

@@ -5,7 +5,7 @@
  * Everything it reads from the process (env, the HTTP client, the catalog of
  * sites and flows) is an option, so a library caller can hand its own.
  */
-import type { CredentialStore } from "credvault";
+import type { CredentialStore, EnvListing } from "credvault";
 import {
   DEFAULT_PURPOSE,
   type Identity,
@@ -22,6 +22,7 @@ import type { CompiledCatalog } from "../workflows/compiled.js";
 import { runCompiled } from "../workflows/proof.js";
 import { type SiteFacade, siteFacade } from "./facade.js";
 import { SITES } from "./index.js";
+import { nextLapse, renewals, renewDue, renewWording } from "./renew.js";
 import type { SetupStep, SiteApi } from "./types.js";
 
 export interface SiteParts {
@@ -46,6 +47,8 @@ export interface SiteParts {
   approve?: Approver | null;
   /** The person's accounts and their purposes; a call or consent that names none is for the site's purpose. */
   identities?: () => Promise<Identity[]>;
+  /** What the sink holds, with each value's lapse date: turns on `renew`. */
+  kept?: () => Promise<EnvListing[]>;
 }
 
 /** Which identity provider a site's consent signs in with: the consent flow's own site (`google/oauth-consent`). */
@@ -106,12 +109,12 @@ export function sitesFor(p: SiteParts): SiteFacade {
   const made = new Map<string, string>();
   const env = p.env ?? ((name: string) => process.env[name]);
   const flows = p.flows ?? BROWSER_FLOWS;
-  return siteFacade(p.sites ?? SITES, {
+  const facade = siteFacade(p.sites ?? SITES, {
     http: p.http ?? httpClient(),
     env: (name) => made.get(name) ?? env(name),
     sink: {
-      put: async (name, value) => {
-        await p.sink.put(name, value);
+      put: async (name, value, o) => {
+        await p.sink.put(name, value, o);
         made.set(name, value);
       },
     },
@@ -142,4 +145,21 @@ export function sitesFor(p: SiteParts): SiteFacade {
         }
       : {}),
   });
+  const kept = p.kept;
+  if (!kept) return facade;
+  return {
+    ...facade,
+    async renew(o = {}) {
+      const sites = p.sites ?? SITES;
+      const identities = (await p.identities?.()) ?? [];
+      const plan = renewals(sites, identities, await kept());
+      const results = o.dry ? null : await renewDue(facade, plan);
+      return {
+        ...plan,
+        results: results ?? [],
+        lines: renewWording(plan, results),
+        next: nextLapse(sites, identities, await kept()),
+      };
+    },
+  };
 }

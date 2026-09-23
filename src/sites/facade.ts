@@ -11,6 +11,7 @@ import type { AnyWorkflow } from "../engine/workflow.js";
 import type { Approver } from "../gates/payment.js";
 import type { Proof, RunAs } from "../workflows/proof.js";
 import { accessTokens, accountEnv, runConsent } from "./oauth.js";
+import type { RenewReport } from "./renew.js";
 import {
   type Leg,
   legName,
@@ -113,6 +114,12 @@ export interface SiteFacade {
     /** Force the browser profile the step runs in (a second profile for the same account). */
     profile?: string | null,
   ): Promise<{ made: readonly string[] }>;
+  /**
+   * Make again every kept token that lapses within the renew window, by the
+   * setup step and account that made it; `dry` only says which. Absent when
+   * nothing lists what is kept.
+   */
+  renew?(o?: { dry?: boolean }): Promise<RenewReport>;
 }
 
 /** `/rest/socialActions/{urn}/comments` against `/rest/socialActions/urn:li:share:1/comments`. */
@@ -388,6 +395,10 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         ...(deps.oauthPort ? { port: deps.oauthPort } : {}),
       });
       const made: string[] = [];
+      // Kept with its lapse date, so `renew` consents again before it stops working.
+      const expiresAt = got.expiresIn
+        ? { expiresAt: new Date((deps.now?.() ?? Date.now()) + got.expiresIn * 1000).toISOString() }
+        : {};
       // Under the account's name too when the site says who consented (and it is not the one asked
       // for); under the site's own name as well when the policy, not the caller, picked the account.
       const who = spec.identity ? await identityOf(spec.identity, got.accessToken) : null;
@@ -401,7 +412,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         // The access token itself only when nothing mints one (no refresh token came back).
         if (spec.accessToken && !got.refreshToken) {
           const at = accountEnv(spec.accessToken, as);
-          await deps.sink.put(at, got.accessToken);
+          await deps.sink.put(at, got.accessToken, expiresAt);
           made.push(at);
         }
       }

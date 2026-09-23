@@ -17,6 +17,7 @@ import { signupInbox } from "../auth/signup.js";
 import { expandHome } from "../google-auth.js";
 import { gmailOAuth } from "../sites/gmail.js";
 import { accountEnv } from "../sites/oauth.js";
+import { RENEW_WITHIN_MS } from "../sites/renew.js";
 import type { OAuthSpec, SetupStep, SiteApi } from "../sites/types.js";
 import { consentProviderOf, policyAccount, profileOf } from "../sites/wire.js";
 import { youtubeOAuth } from "../sites/youtube.js";
@@ -67,9 +68,6 @@ async function holds(ctx: NeedsContext, name: string): Promise<boolean> {
 }
 const holdsAll = async (ctx: NeedsContext, names: readonly string[]) =>
   (await Promise.all(names.map((n) => holds(ctx, n)))).every(Boolean);
-
-/** A minted token is renewed this long before it lapses. */
-export const RENEW_WITHIN_MS = 14 * 86_400_000;
 
 /** When `name` lapses, if that is within the renew window; null while it is safe or unknown. */
 async function lapsing(ctx: NeedsContext, name: string): Promise<string | null> {
@@ -138,12 +136,13 @@ export function siteNeeds(ctx: NeedsContext): Need[] {
         unlocks: `${s.site} calls as ${as ?? "the site's own account"}`,
         how: [`autobrowse site setup ${s.site} ${spec.name}${as ? ` --account ${as}` : ""}`],
         after: `keys-${s.site}`,
-        // Cleared as calls resolve: the account's token, else the site's own at a provider's site.
+        // Cleared as calls resolve: the account's token, else the site's own at a provider's site;
+        // one inside the renew window reopens it (`site renew` makes it again first).
         check: async () =>
           (
             await Promise.all(
-              [...names, ...(!as || consentProviderOf(s) ? tokenNames : [])].map((n) =>
-                holds(ctx, n),
+              [...names, ...(!as || consentProviderOf(s) ? tokenNames : [])].map(
+                async (n) => (await holds(ctx, n)) && !(await lapsing(ctx, n)),
               ),
             )
           ).some(Boolean),

@@ -255,7 +255,7 @@ export const linkedin: SiteApi = {
       needs: ["LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"],
       how: { oauth: linkedinOAuth },
       summary:
-        "Consent once as the member; the 60-day access token is kept (run again when it lapses)",
+        "Consent once as the member; the 60-day access token is kept with its lapse date and made again 14 days before (`site renew`, daily on the box)",
     },
   ],
 };

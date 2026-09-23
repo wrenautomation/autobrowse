@@ -5,6 +5,7 @@
  * only; never a value.
  */
 
+import { envFileStore } from "credvault";
 import type { Identity, IdentityStore } from "../auth/identities.js";
 import { assignPurpose, PURPOSES } from "../auth/identities.js";
 import { SITE_LOGINS } from "../auth/sites.js";
@@ -24,7 +25,7 @@ import {
   needView,
   resolveNeeds,
 } from "./needs.js";
-import { credentialsFor, envStoreFor, identitiesFor, phoneFor, sinkFor } from "./services.js";
+import { credentialsFor, identitiesFor, phoneFor, sinkFor } from "./services.js";
 
 export interface Owed {
   /** The rows and the kind titles they group under (the UI has no access to the server modules). */
@@ -54,15 +55,12 @@ export function needsContextFor(
     identities: await identitiesFor(settings).list(),
     credentials: credentialsFor(settings, { armed: false }),
     env: (n) => env[n],
-    // Expiry from both places a minted value can live; the shared store may be out of reach offline.
-    kept: once(async () => [
-      ...(await sinkFor(settings).list()),
-      ...(settings.secretSink === "ssm"
-        ? []
-        : await envStoreFor(settings)
-            .list()
-            .catch(() => [])),
-    ]),
+    // The sink lists both places a minted value can live; offline, the local copy alone.
+    kept: once(() =>
+      sinkFor(settings)
+        .list()
+        .catch(() => (settings.secretSink === "ssm" ? [] : envFileStore(settings.envFile).list())),
+    ),
     workspaceDomain: settings.googleWorkspaceDomain?.toLowerCase() ?? null,
     // Each probe spawns a tool; several rows ask, one context answers once.
     phone: (() => {

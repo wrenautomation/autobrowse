@@ -141,7 +141,7 @@ export async function runConsent(
     port?: number;
     timeoutMs?: number;
   },
-): Promise<{ refreshToken: string | null; accessToken: string }> {
+): Promise<{ refreshToken: string | null; accessToken: string; expiresIn: number | null }> {
   const id = o.env(spec.clientId);
   const secret = o.env(spec.clientSecret);
   if (!id || !secret)
@@ -209,6 +209,7 @@ export async function runConsent(
     client.headers,
   );
   let accessToken = body.access_token as string;
+  let expiresIn = body.expires_in ?? null;
   if (spec.longLived) {
     const long = await tokenCall(
       o.http,
@@ -222,6 +223,8 @@ export async function runConsent(
       "GET",
     );
     accessToken = long.access_token as string;
+    expiresIn = long.expires_in ?? null;
   }
-  return { refreshToken: body.refresh_token ?? null, accessToken };
+  // How long the access token lives: a site that keeps no refresh token keeps this date with it.
+  return { refreshToken: body.refresh_token ?? null, accessToken, expiresIn };
 }

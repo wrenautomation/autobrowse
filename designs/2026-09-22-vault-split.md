@@ -115,20 +115,39 @@ w***@wrenautomation.com.
 parameter's description. `list()` reads descriptions without decrypting
 anything. `expiring(list, ms)` returns what lapses within `ms`.
 
+## Minted tokens: durable and renewed (credvault 0.6.0)
+
+Found 2026-09-22: a token minted on the Mac went only to its `.env`. Wren's
+LinkedIn token, its YouTube token and the LinkedIn app keys were not in SSM:
+the box could not use them and a lost laptop lost them. Fixed:
+
+- `syncedEnvStore(local, shared)`: off the box the sink is the `.env` in
+  front of SSM. Every put lands in both. The local copy is written first, so
+  a mint is never lost; a refused SSM write still throws.
+- A consent that keeps an access token (no refresh token) keeps its lapse
+  date from `expires_in` (or the long-lived exchange's).
+- `renewals` maps each lapsing name back to the setup step and account that
+  made it. It never guesses: an account no identity names, or a name no step
+  makes, is reported as "renew by hand". A token under the site's own name
+  and the policy account's is one run.
+- `site renew [--dry]`, `sites/renew` on Restate. wren's `TokenRenewal/box`
+  calls it and wakes the box first. It sleeps until 14 days before the next
+  lapse (at least a day, at most a week) and posts the lines to the channel.
+- `needs` consent rows reopen inside the window too.
+
+Backfilled 2026-09-22: the four Wren names pushed to SSM. The LinkedIn
+token's lapse date came from LinkedIn's introspection endpoint
+(2026-11-21T23:37:30Z), so it renews from 2026-11-07. His personal Gmail
+tokens stay on the Mac only. He decides whether they go to SSM.
+
 ## Where to attack (ranked)
 
-1. **Renewal is not scheduled.** Expiry is now kept, in credvault 0.2
-   (`envFileStore` stores it as a comment; SSM keeps it in the description):
-   - the npm token flow records its 90 days
-   - `env expires <name> <date>` backfills a token minted by hand
-   - `env ls` shows the expiry
-   - the `token-<site>` row in `needs` reopens 14 days before a token lapses,
-     and `needs do token-npm` mints a new one
-
-   Still open: nothing runs `needs do` on its own. It needs a scheduled job
-   (wren's Restate, once a day) that renews every reopened token row that
-   has a setup step. OAuth access tokens stored without a refresh token also
-   do not record `expires_in` yet.
+1. **Renewal needs the stored logins to keep working.** Renewal runs the
+   consent in a browser with the stored credential. If LinkedIn asks for a
+   code or a checkpoint the flow does not know, the run fails. The daily
+   channel line says so, 14 days before the token lapses. Prove one real
+   renewal on the box before 2026-11-07 (`site renew` after
+   `env expires <name> <a date inside 14 days>`).
 2. **Clean API routes still run on the box.** Today only YouTube has a live
    API token. LinkedIn, Meta, X and TikTok wait on credentials or go through
    the browser, so each YouTube metrics read wakes the box for one GET. Do

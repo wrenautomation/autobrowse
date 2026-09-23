@@ -1,7 +1,7 @@
 /**
  * The site facade as the Restate service `sites`, for an orchestrator on the
  * same Restate (wren): `sites/call` is one official-API call, `sites/status`
- * the routes and setup rows, `sites/setup` one setup step. The worker dials
+ * the routes and setup rows, `sites/setup` one setup step, `sites/renew` every token about to lapse. The worker dials
  * Restate, so a call queues while the box is down and answers when it is up:
  * no inbound port, no reachability from the caller's side. A `SiteError` is
  * terminal under its own status; a write runs once (an irreversible post is
@@ -72,6 +72,14 @@ export function sitesService(facade: SiteFacade) {
             ),
           retry,
         );
+      },
+      /** Make again what lapses within the window (a scheduler's daily call); lines say what happened. */
+      renew: async (ctx: restate.Context, raw: unknown) => {
+        const { dry } = parse(z.object({ dry: z.boolean().default(false) }), raw ?? {});
+        if (!facade.renew)
+          throw new restate.TerminalError("nothing lists what is kept here", { errorCode: 501 });
+        const renew = facade.renew.bind(facade);
+        return ctx.run(`sites renew${dry ? " (dry)" : ""}`, () => renew({ dry }), WRITE_RETRY);
       },
       setup: async (ctx: restate.Context, raw: unknown) => {
         const req = parse(setup, raw);

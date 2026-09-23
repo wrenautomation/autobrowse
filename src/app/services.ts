@@ -20,6 +20,7 @@ import {
   ssmCredentialHistory,
   ssmEnvStore,
   syncedCredentials,
+  syncedEnvStore,
 } from "credvault";
 import type { Logger } from "pino";
 import { fileStepLedger, type StepLedger } from "../agent/ledger.js";
@@ -517,14 +518,19 @@ export function paceFor(settings: Settings): Pace | null {
   return settings.pace === "fast" ? null : HUMAN_PACE;
 }
 
-/** Where minted secrets go, and are listed from with their expiry: the env store (SSM) in prod, the env file otherwise. */
+/**
+ * Where minted secrets go, and are listed from with their expiry: the env
+ * store (SSM) in prod; elsewhere the env file in front of it, so a token
+ * minted on the laptop is on the box and survives the laptop.
+ */
 export function sinkFor(
   settings: Settings,
   ssm: SSMClient = lazy(() => new SSMClient({ region: settings.awsRegion })),
 ): EnvStore {
+  const shared = envStoreFor(settings, ssm);
   return settings.secretSink === "ssm"
-    ? envStoreFor(settings, ssm)
-    : envFileStore(settings.envFile);
+    ? shared
+    : syncedEnvStore(envFileStore(settings.envFile), shared);
 }
 
 /**
@@ -823,6 +829,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       credentials: credentialsFor(settings),
       approve: approverFor(settings, gmailFor(settings)),
       identities: () => identitiesFor(settings).list(),
+      kept: () => sink.list(),
     }),
   );
   const late: { doer: Doer | null } = { doer: null };
