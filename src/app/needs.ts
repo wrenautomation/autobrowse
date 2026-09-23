@@ -346,8 +346,12 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
 /** The accounts Wren makes itself, and what stopped the agent when it tried. */
 export const WREN_SIGNUPS: readonly {
   site: string;
+  /** The credential's name, when not the site's (`x` is William's own). */
+  key?: string;
   /** Why the agent's own run handed off, when it did. */
   handoff: string | null;
+  /** The web signup is walled (2026-09-23): only the phone app, with Google as the signup address, gets through. */
+  appOnly?: boolean;
 }[] = [
   { site: "instagram", handoff: null },
   // Wren's own profile (William's real name: Meta disables profiles named after a
@@ -355,13 +359,14 @@ export const WREN_SIGNUPS: readonly {
   { site: "facebook", handoff: null },
   {
     site: "x",
-    handoff:
-      "email signup is refused (X pushes phone or the app); the phone dialog loops on the number, so a headed run past its check is yours",
+    key: "x@wren",
+    handoff: "the web signup hits X's app-only risk wall, headed or not",
+    appOnly: true,
   },
   {
     site: "tiktok",
-    handoff:
-      "the email route fills to the code step, but headless 'Send code' never sends (a silent bot check), so a headed run past it is yours",
+    handoff: "the web signup's 'Send code' never sends (a silent risk check), headed or not",
+    appOnly: true,
   },
 ];
 
@@ -369,16 +374,22 @@ export const WREN_SIGNUPS: readonly {
 export function signupNeeds(ctx: NeedsContext): Need[] {
   const out: Need[] = [];
   for (const w of WREN_SIGNUPS) {
+    const key = w.key ?? w.site;
     out.push({
       id: `signup-${w.site}`,
       kind: "credential",
       what: `Wren's ${w.site} account${w.handoff ? ` (${w.handoff})` : ""}`,
       unlocks: `posting as Wren on ${w.site}`,
-      how: [
-        `autobrowse signup ${w.site} --name "Wren Automation" --handle wrenautomation --headed`,
-        `autobrowse creds push ${w.site}`,
-      ],
-      check: async () => Boolean((await ctx.credentials.get(w.site))?.madeAt),
+      how: w.appOnly
+        ? [
+            `in the ${w.site} phone app: sign up → Continue with Google → the signup address, name "Wren Automation", handle wrenautomation`,
+            `autobrowse creds made ${key}`,
+          ]
+        : [
+            `autobrowse signup ${key} --name "Wren Automation" --handle wrenautomation --headed`,
+            `autobrowse creds push ${key}`,
+          ],
+      check: async () => Boolean((await ctx.credentials.get(key))?.madeAt),
     });
   }
   out.push({

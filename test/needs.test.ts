@@ -148,7 +148,8 @@ describe("signup needs", () => {
       {
         credentials: memoryCredentials({
           instagram: { username: "w@wren.com", password: "p", madeAt: "2026-09-22T00:00:00Z" },
-          x: { username: "w@wren.com", password: "p" },
+          // William's own X: never Wren's, so it never closes signup-x.
+          x: { username: "w@wren.com", password: "p", madeAt: "2026-09-22T00:00:00Z" },
         }),
       },
     );
@@ -156,6 +157,11 @@ describe("signup needs", () => {
     const open = rows.filter((r) => !r.done).map((r) => r.id);
     expect(open).toEqual(["signup-facebook", "signup-x", "signup-tiktok", "instagram-page-link"]);
     expect(rows.find((r) => r.id === "signup-instagram")?.by).toBe("check");
-    expect(rows.find((r) => r.id === "signup-x")?.what).toMatch(/phone dialog loops/);
+    const x = rows.find((r) => r.id === "signup-x");
+    expect(x?.what).toMatch(/app-only/);
+    expect(x?.how).toEqual([
+      expect.stringMatching(/^in the x phone app: .*Continue with Google/),
+      "autobrowse creds made x@wren",
+    ]);
   });
 });

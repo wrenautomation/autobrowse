@@ -18,15 +18,11 @@ carry. Dated 2026-09-23.
 
 ## In order of payoff
 
-0. **AWS port 25 — submitted, unconfirmed; watch the pays inbox** (approved
-   by you 2026-09-22). The "remove email sending limitations" form for
-   `34.233.233.146` (wren-prod-pg, rDNS `probe.wrenautomation.com`) was sent
-   through its `send` gate and the page answered with its own confirmation
-   text — but no case shows in Support Center (Basic plan files these
-   outside it) and no AWS mail has arrived in the pays inbox yet. Nothing
-   more to do until a reply lands; if none does in a few days, refile.
-   Rerun anywhere: `pnpm autobrowse run aws-port25-request <key> --plan
-   '{"contactEmail":…,"elasticIpAddress":…,"reverseDnsRecord":…,"useCaseDescription":…}'`.
+0. **Port 25: AWS said no (2026-09-23); RackNerd instead.** A RackNerd KVM
+   (port 25 open, rDNS self-serve, ~$11–20/yr) replaces the AWS prober.
+   Yours: approve the payment gate, and any ID/phone check RackNerd asks.
+   Then: Docker + mailifier on it, rDNS `probe.wrenautomation.com`,
+   `WREN_SMTP_PROBE_URL` pointed at it, the AWS prober removed.
 1. **Meta: a card on ad account act_1852812755843751**
    (`meta-ad-account-card`). Time zone is America/Toronto (set 2026-09-23),
    CAD. Ads Manager → Billing & payments → Add payment method. Ads that go
@@ -53,19 +49,16 @@ Works. `PHONE_NUMBER` is your iPhone. Twilio's own number
 - `virtual-cards-vendor`: Privacy.com or your bank; the rest is built like
   passwords (placed, origin-bound to the merchant).
 
-## Wren accounts (`autobrowse signup <site>`)
+## Wren accounts
 
-Instagram: left for you are bio, link, phone.
+Instagram: the website link (wrenautomation.com) is phone-app only; Instagram
+web disables the field. Bio and phone later.
 
-`signup x|tiktok --name "Wren Automation" --handle wrenautomation --headed`
-mints the password sealed first, fills the form placing
-email/password/code/phone by name, and hands you the window at a check.
-X: email signup is refused and the phone dialog loops headless, so run it
-headed and pass the check yourself; then `needs do keys-x`. After each:
-`creds push <site>`; finished one by hand → `creds made <site>`. Then the
-housekeeping (name "Wren Automation", photo `assets/brand/wren-pfp.png`)
-is one agent line (`walkthrough/07-accounts.md`); bios, links and stories
-are yours.
+X and TikTok: the web signups hit app-only risk walls, headed or not. In
+each phone app: sign up → Continue with Google → william@wrenautomation.com,
+name "Wren Automation", handle wrenautomation. Then `autobrowse creds made
+x@wren` / `creds made tiktok` (`x` is your own X; never Wren's). The
+housekeeping after (photo `assets/brand/wren-pfp.png`) is one agent line.
 
 ## Not wanted
 
