@@ -15,6 +15,11 @@ describe("credential ingest", () => {
   });
   it("takes the site from the caller for a pasted line", () => {
     expect(parseCredentialLines("a@x.co pw", "instantly")[0]?.site).toBe("instantly");
+    // paste copied as two lines (address, then password) is one credential
+    expect(parseCredentialLines("a@x.co\npw\n", "x@wren")).toMatchObject([
+      { site: "x@wren", cred: { username: "a@x.co", password: "pw" } },
+    ]);
+    expect(() => parseCredentialLines("a@x.co", "x@wren")).toThrow(/\(1 word found\)/);
   });
   it("reports a bad line by number only", () => {
     expect(() => parseCredentialLines("cloudflare onlyuser")).toThrow(/^line 1: expected/);

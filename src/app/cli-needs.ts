@@ -6,7 +6,7 @@
  */
 import type { Command } from "commander";
 import type { CredentialStore } from "credvault";
-import { ingest, parseCredentialLines, takeClipboard } from "../auth/ingest.js";
+import { pasteCredential } from "../auth/ingest.js";
 import type { SiteFacade } from "../sites/facade.js";
 import {
   allNeeds,
@@ -68,9 +68,7 @@ export function registerNeedsCommands(program: Command, deps: () => NeedsCliDeps
       const setup = setupArgs(first);
       if (paste) {
         const site = paste[1] as string;
-        const lines = parseCredentialLines(takeClipboard(), site);
-        if (lines.length !== 1) throw new Error("the clipboard must hold exactly one line");
-        console.log(`stored: ${(await ingest(d.credentials(), lines)).join(", ")}`);
+        console.log(`stored: ${await pasteCredential(d.credentials(), site)} (clipboard emptied)`);
       } else if (setup) {
         const sites = d.sites();
         if (!sites) throw new Error("no site apis here");

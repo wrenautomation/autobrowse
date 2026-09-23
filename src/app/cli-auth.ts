@@ -15,11 +15,11 @@ import {
   isProvider,
   PROVIDERS,
   parseCredentialLines,
+  pasteCredential,
   resolveLogin,
   rotatePasswordFlow,
   SITE_LOGINS,
   sealRecoveryCodesFlow,
-  takeClipboard,
   takeFile,
   viaLogin,
 } from "../auth/index.js";
@@ -261,9 +261,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       "Store what is on the clipboard: `email password [authenticator key]`; the clipboard is emptied after",
     )
     .action(async (site: string) => {
-      const lines = parseCredentialLines(takeClipboard(), site);
-      if (lines.length !== 1) throw new Error("the clipboard must hold exactly one line");
-      console.log(`stored: ${(await ingest(credentialsFor(settings), lines)).join(", ")}`);
+      await pasteCredential(credentialsFor(settings), site);
+      console.log(`stored: ${site} (clipboard emptied)`);
     });
   creds
     .command("import <file>")

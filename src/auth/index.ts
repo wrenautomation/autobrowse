@@ -20,7 +20,13 @@ export {
   registrable,
   SecretLeak,
 } from "./guard.js";
-export { ingest, parseCredentialLines, takeClipboard, takeFile } from "./ingest.js";
+export {
+  ingest,
+  parseCredentialLines,
+  pasteCredential,
+  readClipboard,
+  takeFile,
+} from "./ingest.js";
 export type { PasskeySetupSpec, PasswordChangeSpec } from "./login.js";
 export {
   credentialFor,

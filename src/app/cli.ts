@@ -272,8 +272,15 @@ registerEnvCommands(program, settings, { store: () => envStoreFor(settings) });
 registerDesktopCommands(program, tmpdir());
 
 program.parseAsync().catch((err: unknown) => {
-  console.error(
-    err instanceof Error ? (process.env.AUTOBROWSE_DEBUG ? err.stack : err.message) : String(err),
-  );
+  // Name the command that failed, so a bare "exit code 1" always says why.
+  const command = process.argv
+    .slice(2)
+    .filter((a) => !a.startsWith("-"))
+    .slice(0, 2)
+    .join(" ");
+  const why = err instanceof Error ? err.message : String(err);
+  console.error(`autobrowse ${command} failed: ${why}`);
+  if (process.env.AUTOBROWSE_DEBUG && err instanceof Error) console.error(err.stack);
+  else console.error("(rerun with AUTOBROWSE_DEBUG=1 for the stack)");
   process.exitCode = 1;
 });
