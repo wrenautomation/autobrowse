@@ -317,6 +317,7 @@ export function localParts(settings: Settings, o: { headless?: boolean } = {}): 
       approve: approverFor(settings, gmailFor(settings)),
       identities: () => identitiesFor(settings).list(),
       kept: () => sink.list(),
+      reload: () => sink.all(),
     }),
     credentials: credentialsFor(settings),
     bus: eventBus(),

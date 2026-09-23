@@ -1,11 +1,11 @@
 /** The library seams: each layer on its own, with the caller's own pieces plugged in. */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { defineFlow } from "../src/browser/flow.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import { abilitiesOf, doer, doerFor } from "../src/do/index.js";
-import { accessTokens, SITES, sitesFor, youtube } from "../src/sites/index.js";
+import { accessTokens, meta, SITES, sitesFor, youtube } from "../src/sites/index.js";
 import { fakeBrowser } from "./fakes.js";
 
 const jsonFetch =
@@ -93,6 +93,42 @@ describe("use as a library", () => {
     expect(process.env.GOOGLE_OAUTH_CLIENT_ID).toBeUndefined();
     expect(opened).toEqual([]);
     expect(SITES.length).toBeGreaterThan(1);
+  });
+
+  it("a token minted elsewhere: a miss reads the shared store once and retries", async () => {
+    const seen: string[] = [];
+    let reads = 0;
+    const sites = sitesFor({
+      sites: [meta],
+      env: () => undefined,
+      http: httpClient({
+        fetch: jsonFetch((u, init) => {
+          seen.push(`${new Headers(init?.headers).get("authorization")} ${u.pathname}`);
+          return { data: [] };
+        }),
+      }),
+      catalog: { list: async () => [], get: async () => null, proofs: async () => ({}) },
+      browser: fakeBrowser([]),
+      sink: memorySink(),
+      oauthPort: 9432,
+      reload: async () => {
+        reads++;
+        return reads === 1 ? [] : [{ name: "META_ACCESS_TOKEN", value: "laptop" }];
+      },
+    });
+    // First miss: the store has nothing yet; the next miss within a minute does not read again.
+    await expect(sites.call("meta", "GET", "/me/adaccounts", {})).rejects.toThrow(/no token/);
+    await expect(sites.call("meta", "GET", "/me/adaccounts", {})).rejects.toThrow(/no token/);
+    expect(reads).toBe(1);
+    vi.useFakeTimers({ now: Date.now() + 61_000 });
+    try {
+      expect(await sites.call("meta", "GET", "/me/adaccounts", {})).toEqual({ data: [] });
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(reads).toBe(2);
+    expect(seen.length).toBe(1);
+    expect(seen[0]).toMatch(/^Bearer laptop \/v[\d.]+\/me\/adaccounts$/);
   });
 
   it("the verb over the caller's own legs: no site facade, no agent", async () => {

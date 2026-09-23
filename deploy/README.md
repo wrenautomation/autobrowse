@@ -80,6 +80,8 @@ up after a deploy until `box.sh stop` (or `release`).
   `--from deploy/prod.env`, then redeploy (push, or
   `aws ssm send-command … autobrowse-deploy`). `pnpm autobrowse env ls|get|pull`
   reads them back on any machine with AWS access.
+  A site token minted on the laptop needs no redeploy: the box reads SSM on
+  its first "no token" miss.
 - Recordings are made on a laptop; copy the directory to `/data/recordings`
   (`aws ssm` port forward + `scp` through it, or S3) and compile from the UI.
 - Passkeys cannot ride in env. A site whose credential holds one (google-admin)

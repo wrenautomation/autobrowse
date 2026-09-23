@@ -13,7 +13,7 @@ import { memorySink } from "../src/deps/sink.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
 import { siteFacade } from "../src/sites/facade.js";
 import { SITES } from "../src/sites/index.js";
-import { accessTokens, runConsent } from "../src/sites/oauth.js";
+import { accessTokens } from "../src/sites/oauth.js";
 import { multipart, x, xOAuth } from "../src/sites/x.js";
 import { fakePage } from "./auth-fakes.js";
 

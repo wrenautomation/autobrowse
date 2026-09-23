@@ -3,7 +3,6 @@ import { FACEBOOK_LOGIN_URL, signInToFacebook } from "../src/auth/facebook.js";
 import type { CodeKind, SignInContext } from "../src/auth/login.js";
 import { passwordDomains } from "../src/auth/login.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";
-import type { FlowRunner } from "../src/browser/flow.js";
 import { facebookOauthConsent } from "../src/browser/flows/facebook-oauth-consent.js";
 import type { Hints } from "../src/browser/locate.js";
 import { httpClient } from "../src/clients/http.js";

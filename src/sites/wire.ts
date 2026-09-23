@@ -5,7 +5,7 @@
  * Everything it reads from the process (env, the HTTP client, the catalog of
  * sites and flows) is an option, so a library caller can hand its own.
  */
-import type { CredentialStore, EnvListing } from "credvault";
+import type { CredentialStore, EnvEntry, EnvListing } from "credvault";
 import {
   DEFAULT_PURPOSE,
   type Identity,
@@ -23,7 +23,7 @@ import { runCompiled } from "../workflows/proof.js";
 import { type SiteFacade, siteFacade } from "./facade.js";
 import { SITES } from "./index.js";
 import { nextLapse, renewals, renewDue, renewWording } from "./renew.js";
-import type { SetupStep, SiteApi } from "./types.js";
+import { type SetupStep, type SiteApi, SiteError } from "./types.js";
 
 export interface SiteParts {
   catalog: CompiledCatalog;
@@ -49,7 +49,16 @@ export interface SiteParts {
   identities?: () => Promise<Identity[]>;
   /** What the sink holds, with each value's lapse date: turns on `renew`. */
   kept?: () => Promise<EnvListing[]>;
+  /**
+   * Every entry the shared store holds: a call that finds no token reads it
+   * once and retries, so a token minted on another machine (the laptop) is
+   * seen here (the box) without a restart.
+   */
+  reload?: () => Promise<EnvEntry[]>;
 }
+
+/** How long a store read on a token miss stands before a miss reads again. */
+const RELOAD_EVERY_MS = 60_000;
 
 /** Which identity provider a site's consent signs in with: the consent flow's own site (`google/oauth-consent`). */
 export function consentProviderOf(s: SiteApi): IdentityProvider | null {
@@ -145,10 +154,28 @@ export function sitesFor(p: SiteParts): SiteFacade {
         }
       : {}),
   });
+  const reload = p.reload;
+  let readAt = 0;
+  const call: SiteFacade["call"] = reload
+    ? async (...a) => {
+        try {
+          return await facade.call(...a);
+        } catch (e) {
+          const miss = e instanceof SiteError && e.status === 501 && /no token/.test(e.message);
+          if (!miss || Date.now() - readAt < RELOAD_EVERY_MS) throw e;
+          readAt = Date.now();
+          const entries = await reload().catch(() => null);
+          if (!entries) throw e;
+          for (const { name, value } of entries) if (!env(name)) made.set(name, value);
+          return facade.call(...a);
+        }
+      }
+    : facade.call;
   const kept = p.kept;
-  if (!kept) return facade;
+  if (!kept) return { ...facade, call };
   return {
     ...facade,
+    call,
     async renew(o = {}) {
       const sites = p.sites ?? SITES;
       const identities = (await p.identities?.()) ?? [];

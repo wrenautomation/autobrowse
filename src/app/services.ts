@@ -859,6 +859,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       approve: approverFor(settings, gmailFor(settings)),
       identities: () => identitiesFor(settings).list(),
       kept: () => sink.list(),
+      reload: () => sink.all(),
     }),
   );
   const late: { doer: Doer | null } = { doer: null };
