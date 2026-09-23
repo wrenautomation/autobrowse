@@ -22,3 +22,8 @@ output "ui_forward" {
   description = "The UI, from a laptop, without opening a port."
   value       = "aws ssm start-session --target ${aws_instance.box.id} --document-name AWS-StartPortForwardingSession --parameters '{\"portNumber\":[\"9080\"],\"localPortNumber\":[\"9080\"]}'"
 }
+
+output "shots_bucket" {
+  description = "SHOTS_BUCKET: where screenshots ship (`autobrowse env set SHOTS_BUCKET <it>`)."
+  value       = aws_s3_bucket.shots.bucket
+}

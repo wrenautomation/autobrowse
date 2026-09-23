@@ -10,7 +10,15 @@ import { loadEnvFile, loadSettings } from "./config.js";
 import { cloudAdminUrl, planEndpoint } from "./endpoint.js";
 import { registerDeployment } from "./register.js";
 import { initSentry } from "./sentry.js";
-import { approverFor, budgetOf, buildApp, gmailFor, linqFor, llmFor } from "./services.js";
+import {
+  approverFor,
+  budgetOf,
+  buildApp,
+  gmailFor,
+  linqFor,
+  llmFor,
+  shipperFor,
+} from "./services.js";
 import { statusOf } from "./status.js";
 
 const root = loadEnvFile();
@@ -136,6 +144,23 @@ startUiServer({
   distDir: `${root}/ui/dist`,
   token: settings.uiToken,
 });
+// Screenshots leave this machine every SHOTS_EVERY_MINUTES and before an idle stop. One run at a time.
+const ship = shipperFor(settings);
+let shipping: Promise<void> | null = null;
+const shipShots = (why: string): Promise<void> => {
+  if (!ship) return Promise.resolve();
+  shipping ??= ship()
+    .then((r) => {
+      if (r.shipped || r.refused) log.info({ ...r, unreadable: r.unreadable.length, why }, "shots");
+    })
+    .catch((err) => log.warn({ err: err instanceof Error ? err.message : String(err) }, "shots"))
+    .finally(() => {
+      shipping = null;
+    });
+  return shipping;
+};
+if (ship && settings.shotsEveryMinutes > 0)
+  setInterval(() => void shipShots("timer"), settings.shotsEveryMinutes * 60_000).unref();
 if (settings.idleStopMinutes > 0) {
   const { EC2Client } = await import("@aws-sdk/client-ec2");
   const { ec2Port, instanceIdFromMetadata, selfStopper } = await import("./box.js");
@@ -177,6 +202,7 @@ if (settings.idleStopMinutes > 0) {
     }),
     // What this session did with secrets and money, to the person, before the lights go out.
     beforeStop: async () => {
+      await shipShots("before stop");
       const { ledgerSince, ledgerSummary } = await import("../auth/ledger.js");
       const { auditFor, spendLedgerFor } = await import("./services.js");
       const lines = ledgerSummary(

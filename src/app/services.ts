@@ -1,5 +1,6 @@
 /** Composition root: settings → clients → workflow deps → Restate services. Secrets stay inside the clients. */
 
+import { hostname } from "node:os";
 import { dirname, join } from "node:path";
 import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import {
@@ -101,6 +102,8 @@ import { type BudgetExceeded, type BudgetedLlm, budgetedLlm, fileLedger } from "
 import { type Llm, makeLlm } from "../llm/index.js";
 import { otlpSink, type TraceSink, tracedLlm } from "../llm/trace.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
+import { s3BlobStore } from "../shots/s3.js";
+import { keepArtifact, keepRecording, type ShipReport, shipShots } from "../shots/ship.js";
 import {
   accessTokens,
   accountEnv,
@@ -390,6 +393,32 @@ export function credentialsFor(
     ...(o.notify ? { notify: o.notify } : {}),
     ...(o.by ? { by: o.by } : {}),
   });
+}
+
+/** Ships new screenshots to the bucket; null when no bucket is set (they stay local). */
+export function shipperFor(
+  settings: Settings,
+  o: { dry?: boolean } = {},
+): (() => Promise<ShipReport>) | null {
+  const bucket = settings.shotsBucket;
+  if (!bucket) return null;
+  const artifacts = expandHome(settings.artifactsDir);
+  const store = s3BlobStore({
+    bucket,
+    region: settings.awsRegion,
+    ...(settings.shotsEndpoint ? { endpoint: settings.shotsEndpoint } : {}),
+  });
+  return () =>
+    shipShots({
+      roots: [
+        { name: "artifacts", dir: artifacts, keep: keepArtifact },
+        { name: "recordings", dir: expandHome(settings.recordingsDir), keep: keepRecording },
+      ],
+      store,
+      ledgerFile: join(artifacts, ".shots-shipped.tsv"),
+      machine: settings.shotsMachine ?? hostname().replace(/\.local$/, ""),
+      ...o,
+    });
 }
 
 /** Where every secret use is written: next to the credential file, 0600, one JSON line each. */

@@ -11,6 +11,7 @@ services:
       UI_HOST: 0.0.0.0 # the host side stays loopback; UI_TOKEN in the env is still required
       BROWSER: ${BROWSER:-local}
       BROWSER_CHANNEL: chromium
+      SHOTS_MACHINE: box # first segment of every shot key
     ports:
       - "127.0.0.1:9080:9080"
     volumes:

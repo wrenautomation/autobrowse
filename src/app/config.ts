@@ -49,6 +49,14 @@ const schema = z.object({
   artifactsDir: z.string().min(1).default("~/.config/autobrowse/artifacts"),
   /** Raw Playwright codegen output from `record --flow`; may hold typed secrets, never committed. */
   recordingsDir: z.string().min(1).default("recordings"),
+  /** Bucket screenshots ship to (with their aria and failure JSON); unset = they stay local. */
+  shotsBucket: z.string().min(1).optional(),
+  /** An S3-compatible endpoint instead of S3 (Cloudflare R2). */
+  shotsEndpoint: z.string().url().optional(),
+  /** First key segment: which machine took the shot. The box sets `box`. */
+  shotsMachine: z.string().min(1).optional(),
+  /** A worker ships new shots this often, and before an idle stop; 0 = only then. */
+  shotsEveryMinutes: z.coerce.number().min(0).default(60),
   logLevel: z.string().default("info"),
   /** Where the Restate endpoint listens; the UI is on `uiPort`. */
   restatePort: z.coerce.number().int().default(9081),
@@ -219,6 +227,10 @@ export const ENV_KEYS = {
   pace: "PACE",
   artifactsDir: "ARTIFACTS_DIR",
   recordingsDir: "RECORDINGS_DIR",
+  shotsBucket: "SHOTS_BUCKET",
+  shotsEndpoint: "SHOTS_ENDPOINT",
+  shotsMachine: "SHOTS_MACHINE",
+  shotsEveryMinutes: "SHOTS_EVERY_MINUTES",
   logLevel: "LOG_LEVEL",
   restatePort: "RESTATE_PORT",
   uiPort: "UI_PORT",
