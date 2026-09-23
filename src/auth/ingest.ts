@@ -42,9 +42,30 @@ export function parseCredentialLines(text: string, site?: string): IngestLine[] 
   return out;
 }
 
-/** Store every line; returns the site names stored. */
+/**
+ * Store every line; returns the site names stored. A line sets the login
+ * (address, password, key) and keeps the rest of what the site already holds:
+ * its handle, when the address is the handle's code inbox, when it was made,
+ * recovery codes, passkeys.
+ */
 export async function ingest(store: CredentialStore, lines: IngestLine[]): Promise<string[]> {
-  for (const l of lines) await store.put(l.site, l.cred);
+  for (const l of lines) {
+    const had = await store.get(l.site);
+    if (!had) {
+      await store.put(l.site, l.cred);
+      continue;
+    }
+    const handle = had.codesInbox === l.cred.username && had.username !== l.cred.username;
+    await store.put(l.site, {
+      ...had,
+      ...l.cred,
+      ...(handle ? { username: had.username } : {}),
+      ...(had.password && had.password !== l.cred.password
+        ? { previousPassword: had.password }
+        : {}),
+      totpSecret: l.cred.totpSecret ?? had.totpSecret,
+    });
+  }
   return lines.map((l) => l.site);
 }
 

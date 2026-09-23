@@ -32,6 +32,23 @@ describe("credential ingest", () => {
     expect(await ingest(store, parseCredentialLines("a u p\nb u p"))).toEqual(["a", "b"]);
     expect(await store.list()).toEqual(["a", "b"]);
   });
+  it("a paste over a handle keeps the handle, when it was made, and the old password", async () => {
+    const store = memoryCredentials();
+    await store.put("x@wren", {
+      username: "wren_automation",
+      codesInbox: "a@x.co",
+      password: "old",
+      madeAt: "2026-09-23T00:00:00.000Z",
+    });
+    await ingest(store, parseCredentialLines("a@x.co new", "x@wren"));
+    expect(await store.get("x@wren")).toMatchObject({
+      username: "wren_automation",
+      codesInbox: "a@x.co",
+      password: "new",
+      previousPassword: "old",
+      madeAt: "2026-09-23T00:00:00.000Z",
+    });
+  });
   it("shreds the scratch file after reading it", () => {
     const f = join(mkdtempSync(join(tmpdir(), "ingest-")), "creds.txt");
     writeFileSync(f, "a u p\n");
