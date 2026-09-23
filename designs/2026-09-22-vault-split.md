@@ -135,6 +135,13 @@ the box could not use them and a lost laptop lost them. Fixed:
   lapse (at least a day, at most a week) and posts the lines to the channel.
 - `needs` consent rows reopen inside the window too.
 
+Live 2026-09-23: `wren tokens start` armed `TokenRenewal/box` on Restate
+Cloud (wren's `.env` points at a local Restate; prod calls need the Cloud
+ingress URL). The first pass failed: the box role could not
+`ssm:DescribeParameters`, so it could not read lapse dates. Granted (names
+and descriptions only; the action takes no path scope). The next pass: nothing
+due, next lapse 2026-11-21, next look in 7 days.
+
 Backfilled 2026-09-22: the four Wren names pushed to SSM. The LinkedIn
 token's lapse date came from LinkedIn's introspection endpoint
 (2026-11-21T23:37:30Z), so it renews from 2026-11-07. His personal Gmail
