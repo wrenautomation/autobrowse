@@ -183,8 +183,16 @@ export interface ExploreOptions {
    * shell beside the process reads it instead of a log: see `tokenFileFor`.
    */
   tokenFile?: string;
+  /**
+   * Minutes with no command (and no page load) before the session closes
+   * itself, browser and all; four times that while paused. 0 = never.
+   * A session nobody closed held its browser open for days.
+   */
+  idleMinutes?: number;
   now?: () => number;
 }
+
+export const DEFAULT_IDLE_MINUTES = 30;
 
 /** The token file the CLI uses for a port: `$TMPDIR/autobrowse/explore-<port>.token`. */
 export const tokenFileFor = (port: number): string =>
@@ -416,7 +424,9 @@ async function serve(
     "close",
   ]);
   let chain: Promise<unknown> = Promise.resolve();
+  let lastTouch = now();
   const run = (c: Command, wait = false): Promise<unknown> => {
+    lastTouch = now();
     if (IMMEDIATE.has(c.cmd)) return runOne(c, wait);
     const next = chain.then(() => runOne(c, wait));
     chain = next.catch(() => undefined);
@@ -682,7 +692,22 @@ async function serve(
     writeFileSync(opts.tokenFile, token, { mode: 0o600 });
   }
   page.context().on("close", () => finish());
+  // A page load is a person (or a popup) still at work.
+  page.context().on("page", (p) => p.on("framenavigated", () => (lastTouch = now())));
+  fp.page.on("framenavigated", () => (lastTouch = now()));
+  const idleMs = (opts.idleMinutes ?? DEFAULT_IDLE_MINUTES) * 60_000;
+  const idleCheck =
+    idleMs > 0
+      ? setInterval(
+          () => {
+            if (now() - lastTouch >= (paused ? idleMs * 4 : idleMs)) finish();
+          },
+          Math.min(60_000, idleMs),
+        )
+      : null;
+  idleCheck?.unref();
   void done.then(() => {
+    if (idleCheck) clearInterval(idleCheck);
     server.close();
     if (opts.tokenFile) rmSync(opts.tokenFile, { force: true });
     finishFlow();

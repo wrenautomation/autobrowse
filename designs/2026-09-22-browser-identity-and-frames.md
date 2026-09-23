@@ -89,8 +89,14 @@ untick "sign out all devices" → Submit. The tail is saved as
 3. **The LinkedIn reset is half recorded.** The session restarted at the
    code page, so the recording starts there. Record it end to end once, and
    use it the next time a password is owed.
-4. **Leaked browsers.** Two Chrome processes from earlier sessions
-   (langfuse headless, npm) were still running. Nothing reaps a session
-   whose owner died.
+4. **Leaked browsers: fixed 2026-09-22.** The two "leaked" browsers
+   (langfuse, npm) had live owners: explore servers nobody closed, up 12h
+   and 6h. Now an explore session closes itself after 30 idle minutes
+   (`--idle`, 0 = never; four times that while paused; a page load counts
+   as activity). A browser whose owner died (root handed to init) is
+   stopped before every local launch and by `autobrowse reap [--dry]`. A
+   live owner's browser is never touched. In a container where the worker
+   is init, nothing is reaped. Left open: an agent session's explorer uses
+   the same 30 minutes; a goal that waits longer on a person gets closed.
 5. **The per-OS screen table** is the one hardcoded guess. A Linux box
    with an odd display will still claim 1920x1080 @1.

@@ -11,6 +11,7 @@ import { type Browser, type BrowserContext, chromium, type Page } from "playwrig
 import type { HttpClient } from "../clients/http.js";
 import { expandHome } from "../google-auth.js";
 import { geometry, type Identity, learnIdentity, wearIdentity } from "./identity.js";
+import { reapOrphans } from "./reap.js";
 import { type PasskeyRecord, type Passkeys, virtualAuthenticator } from "./webauthn.js";
 
 /** A page needs a person: login, captcha, consent, or a layout nobody planned for. */
@@ -105,6 +106,8 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
     context = browser.contexts()[0] ?? (await browser.newContext());
   } else {
     const profileDir = join(expandHome(opts.profilesDir), opts.profile ?? site);
+    // A browser left by a dead owner would hold this profile; stop those first.
+    await reapOrphans(expandHome(opts.profilesDir));
     context = await launchLocal(profileDir, opts);
     if (opts.headless === false) keepOutOfTheWay();
     // `navigator.webdriver` is already false (LOCAL_ARGS). No init-script shim: an own

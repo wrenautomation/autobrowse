@@ -238,6 +238,20 @@ registerUnsubscribe(program, local);
 registerAwsCommands(program, local);
 registerLangfuseCommands(program, () => envStoreFor(settings));
 registerShotsCommands(program, settings);
+program
+  .command("reap")
+  .description(
+    "Stop browsers whose owner died (they hold their profile); a live owner's browser is never touched",
+  )
+  .option("--dry", "name them only")
+  .action(async (o: { dry?: boolean }) => {
+    const { reapOrphans } = await import("../browser/reap.js");
+    const { expandHome } = await import("../google-auth.js");
+    const gone = await reapOrphans(expandHome(settings.profilesDir), o.dry ? { dry: true } : {});
+    if (!gone.length) console.log("no orphaned browsers");
+    for (const x of gone)
+      console.log(`${o.dry ? "orphan" : "stopped"} ${x.profile} (pid ${x.pid})`);
+  });
 registerDoCommands(program, local);
 registerAuthCommands(program, settings);
 registerNeedsCommands(program, () => ({

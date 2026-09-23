@@ -96,6 +96,13 @@ data "aws_iam_policy_document" "box" {
     actions   = ["ssm:GetParametersByPath", "ssm:GetParameter"]
     resources = [local.env_store_arn, "${local.env_store_arn}/*"]
   }
+  # Expiry lives in parameter descriptions (renewal reads them). Describe takes no path
+  # scope; it returns names and descriptions, never values.
+  statement {
+    sid       = "ListEnvStore"
+    actions   = ["ssm:DescribeParameters"]
+    resources = ["*"]
+  }
   statement {
     sid       = "MintIntoEnvStore"
     actions   = ["ssm:PutParameter"]

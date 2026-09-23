@@ -28,6 +28,7 @@ export function registerRecordCommands(
     .option("--url <url>", "start here")
     .option("--port <port>", "loopback port", "9090")
     .option("--headed", "show the browser (default: BROWSER_HEADLESS)")
+    .option("--idle <minutes>", "close after this long with no command; 0 = never", "30")
     .option(
       "--codes <inbox>",
       'place{secret:"code"} types the newest code this inbox got after the session opened',
@@ -39,12 +40,20 @@ export function registerRecordCommands(
     .action(
       async (
         site: string,
-        o: { url?: string; port: string; headed?: boolean; codes?: string; newPassword?: string },
+        o: {
+          url?: string;
+          port: string;
+          headed?: boolean;
+          idle: string;
+          codes?: string;
+          newPassword?: string;
+        },
       ) => {
         const { tokenFileFor } = await import("../explore/server.js");
         const tokenFile = tokenFileFor(Number(o.port));
         const ex = await opener(o)(site, Number(o.port), {
           tokenFile,
+          idleMinutes: Number(o.idle),
           ...(await exploreSecrets(site, o)),
         });
         // The token lives in an owner-only file, not in this output: logs get pasted, files do not.
@@ -58,6 +67,7 @@ export function registerRecordCommands(
             body: JSON.stringify({ cmd: "open", url: o.url }),
           });
         await ex.done;
+        console.log(`explore ${site} closed`);
       },
     );
 

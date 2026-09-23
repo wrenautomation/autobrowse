@@ -301,3 +301,33 @@ describe("pause: a person's hand acts land in the journal", () => {
     }
   }, 60_000);
 });
+
+describe("a session nobody closes", () => {
+  it("closes itself after its idle time, browser and all", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "explore-idle-"));
+    const ex = await startExplore({
+      site: "scratch",
+      port: 9950 + Math.floor(Math.random() * 40),
+      recordingsDir: join(dir, "recordings"),
+      idleMinutes: 0.005, // 300 ms
+      browser: {
+        tier: "local",
+        channel: "chromium",
+        profilesDir: join(dir, "profiles"),
+        artifactsDir: join(dir, "artifacts"),
+        headless: true,
+      },
+    });
+    try {
+      const closed = await Promise.race([
+        ex.done.then(() => true),
+        new Promise<boolean>((r) => setTimeout(() => r(false), 5_000)),
+      ]);
+      expect(closed).toBe(true);
+    } finally {
+      await ex.exec({ cmd: "close" }).catch(() => undefined);
+      await new Promise((r) => setTimeout(r, 500));
+      await rm(dir, { recursive: true, force: true, maxRetries: 5 });
+    }
+  }, 30_000);
+});

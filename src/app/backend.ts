@@ -232,7 +232,7 @@ export function explorerOpener(
 ): (
   site: string,
   port: number,
-  extra?: Pick<ExploreOptions, "tokenFile" | "secrets" | "secretHosts">,
+  extra?: Pick<ExploreOptions, "tokenFile" | "secrets" | "secretHosts" | "idleMinutes">,
 ) => Promise<Explorer> {
   const approver: Approver | null = approverFor(settings, gmailFor(settings));
   return async (site, port, extra = {}) =>
