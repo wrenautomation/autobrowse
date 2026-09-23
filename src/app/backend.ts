@@ -232,16 +232,19 @@ export function explorerOpener(
 ): (
   site: string,
   port: number,
-  extra?: Pick<ExploreOptions, "tokenFile" | "secrets" | "secretHosts" | "idleMinutes">,
+  extra?: Pick<ExploreOptions, "tokenFile" | "secrets" | "secretHosts" | "idleMinutes"> & {
+    /** false: a wall on `open` stays a wall (a signup page must not sign in as a stored account). */
+    signIn?: boolean;
+  },
 ) => Promise<Explorer> {
   const approver: Approver | null = approverFor(settings, gmailFor(settings));
-  return async (site, port, extra = {}) =>
+  return async (site, port, { signIn = true, ...extra } = {}) =>
     startExplore({
       site,
       browser: await browserFor(settings, site, screen),
       recordingsDir: expandHome(settings.recordingsDir),
       port,
-      login: loginFor(settings, gmailFor(settings)),
+      ...(signIn ? { login: loginFor(settings, gmailFor(settings)) } : {}),
       audit: auditFor(settings),
       pace: paceFor(settings), // an agent browses at a person's pace: sites watch for the other kind
       sink,

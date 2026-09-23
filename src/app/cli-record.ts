@@ -59,6 +59,7 @@ export function registerRecordCommands(
         const ex = await opener(o)(site, Number(o.port), {
           tokenFile,
           idleMinutes: Number(o.idle),
+          signIn: !o.signup,
           ...(await exploreSecrets(site, o)),
         });
         // The token lives in an owner-only file, not in this output: logs get pasted, files do not.
