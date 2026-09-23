@@ -38,11 +38,15 @@ jobs:
         env: { AUTOBROWSE_INSTANCE_ID: "${{ secrets.INSTANCE_ID }}", BOX_STARTED_BY: deploy }
       - name: deploy on the box
         run: |
-          # Ship the current deploy script first, then run it: an edit to it lands without a rebuild.
+          # Ship the current deploy script and compose file first, then run: an edit to either
+          # lands without a rebuild (first boot's user data is the only other copy).
           python3 - "$GITHUB_SHA" > /tmp/params.json <<'PY'
           import json, sys
           script = open("deploy/scripts/on-box-deploy.sh").read()
+          compose = open("deploy/compose.prod.yml").read()
           cmds = [
+            "cat > /opt/autobrowse/compose.yml.new <<'AUTOBROWSE_COMPOSE_EOF'\n" + compose + "\nAUTOBROWSE_COMPOSE_EOF",
+            "mv /opt/autobrowse/compose.yml.new /opt/autobrowse/compose.yml",
             "cat > /usr/local/bin/autobrowse-deploy.new <<'AUTOBROWSE_DEPLOY_EOF'\n" + script + "\nAUTOBROWSE_DEPLOY_EOF",
             "chmod +x /usr/local/bin/autobrowse-deploy.new && mv /usr/local/bin/autobrowse-deploy.new /usr/local/bin/autobrowse-deploy",
             f"/usr/local/bin/autobrowse-deploy {sys.argv[1]}",

@@ -189,7 +189,9 @@ resource "aws_instance" "box" {
 
   lifecycle {
     # A stopped box reports no public IP; without this, a plan while it sleeps would replace it.
-    ignore_changes = [ami, associate_public_ip_address]
+    # User data runs at first boot only (CI ships compose + the deploy script since), and
+    # started-by is the wake/stop protocol's runtime tag: neither is drift worth a restart.
+    ignore_changes = [ami, associate_public_ip_address, user_data, tags["autobrowse:started-by"]]
   }
 }
 

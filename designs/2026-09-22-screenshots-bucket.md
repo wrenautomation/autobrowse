@@ -46,8 +46,11 @@ policies, left for a separate look.
 
 ## Where to attack (ranked)
 
-1. **Terraform drift.** `tofu plan` wants to change `aws_instance.box`,
-   `box_self` and `ci` in place. Read the diff before any full apply.
+1. ✅ **Terraform drift** (2026-09-23). It was first-boot user data (compose
+   and the deploy script, changed since) and the runtime `started-by` tag;
+   an apply would have restarted the box. Both are ignored now. The real
+   bug under it: CI shipped the deploy script but never the compose file,
+   so compose edits (`SHOTS_MACHINE`) never reached the box. CI ships both.
 2. **Nothing reads the bucket yet.** The evaluator and repairer still read
    local failures. Next: the evaluator reads the bucket so it sees every
    machine's failures.
