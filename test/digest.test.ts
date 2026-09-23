@@ -72,6 +72,19 @@ ${"x".repeat(119)}…
 dialog "Sign in":
  [5]T Email (you@example.com) · [6]R Small✓ · [7]B Next✗`);
   });
+  it("a row named after its contents with other separators keeps no header (Hacker News)", () => {
+    const out = digest(`- table:
+  - row "239 points by pat 2 hours ago | hide | 102 comments":
+    - text: 239 points by
+    - link "pat"
+    - link "2 hours ago"
+    - text: "|"
+    - link "hide"
+    - text: "|"
+    - link "102 comments"`);
+    expect(out.text).not.toContain('row "');
+    expect(out.text).toContain("239 points by · [1]L pat");
+  });
   it("folds a long run of look-alike rows to their leads, and caps the refs", () => {
     const rows = Array.from(
       { length: 12 },

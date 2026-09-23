@@ -303,7 +303,11 @@ export function digest(aria: string, o: DigestOptions = {}): Digest {
       .map((t) => t.replace(/\[\d+\][A-Z]*\d? /g, ""))
       .join(" ")
       .replace(/ · /g, " ");
-    const echoed = n.name ? plain.startsWith(n.name.replace(/…$/, "").slice(0, 40)) : false;
+    // Compared as bare letters and digits: "a | b" and "a · b" are the same words.
+    const bare = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+    const echoed = n.name
+      ? bare(plain).startsWith(bare(n.name.replace(/…$/, "")).slice(0, 40))
+      : false;
     if (!n.name || echoed) {
       if (!STRUCTURE.has(n.role)) return kids;
       const leaves = kids.every((k) => k.kind === "leaf");
@@ -312,9 +316,13 @@ export function digest(aria: string, o: DigestOptions = {}): Digest {
         if (kids.length === 1) return kids;
         const text = kids.map((k) => (k as { text: string }).text).join(" · ");
         if (text.length <= width) return [{ kind: "block", lines: [text] }];
+        // Too long for one line: wrapped, still without a header that only repeats it.
+        return [{ kind: "block", lines: pack(kids, width - depth) }];
       }
       // An unnamed list or table adds nothing but a line: its rows speak for it.
       if (TRANSPARENT.has(n.role)) return kids;
+      // A row or item whose name only repeats what it holds: what it holds.
+      if (echoed && INLINE.has(n.role)) return kids;
     }
     const head = `${n.role}${n.name ? ` "${clip(n.name, 60)}"` : ""}:`;
     const inner = pack(kids, width - depth - 1);
