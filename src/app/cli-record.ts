@@ -325,8 +325,14 @@ export function registerRecordCommands(
           headed?: boolean;
         },
       ) => {
-        const { mintCredential, SIGNUP_SECRETS, signupGoal, signupHosts, signupSecrets } =
-          await import("../auth/signup.js");
+        const {
+          accountKey,
+          mintCredential,
+          SIGNUP_SECRETS,
+          signupGoal,
+          signupHosts,
+          signupSecrets,
+        } = await import("../auth/signup.js");
         const { codesFor, credentialsFor, gmailFor, identitiesFor, ourPhone } = await import(
           "./services.js"
         );
@@ -350,6 +356,9 @@ export function registerRecordCommands(
           throw new Error(
             `${inbox}'s inbox is not readable, so the signup's code would never arrive: site setup gmail consent --account ${inbox} first, or --inbox one that is (autobrowse accounts)`,
           );
+        // `x@wren` names the credential; the site's pages and flows are `x`'s.
+        const key = await accountKey(credentialsFor(settings), site, email);
+        site = site.split("@")[0] ?? site;
         // Look before creating. An address the site already knows needs a
         // password reset, not a second account — and only the site's own mail
         // can tell the two apart, whatever its pages say.
@@ -367,14 +376,20 @@ export function registerRecordCommands(
             `${site} already knows ${email}: reset its password instead (autobrowse login ${site}, or the site's forgot page), or pass --anyway`,
           );
         const account = {
-          site,
+          site: key,
           email,
           ...pick(o, ["inbox", "name", "handle", "birthday"]),
         };
         const cred = await mintCredential(credentialsFor(settings), account);
-        console.log(`stored a new credential for ${site} (creds list); now the signup`);
+        console.log(`stored a new credential as ${key} (creds list); now the signup`);
         if (o.byHand) {
-          await signUpByHand(site, { email, inbox, handle: o.handle ?? null, url: o.url ?? null });
+          await signUpByHand(site, {
+            key,
+            email,
+            inbox,
+            handle: o.handle ?? null,
+            url: o.url ?? null,
+          });
           return;
         }
         // A site whose account is made by a call needs no browser at all.
@@ -394,8 +409,8 @@ export function registerRecordCommands(
             console.log(`kept its token as ${made.token.name} (env list)`);
           }
           const store = credentialsFor(settings);
-          const held = await store.get(site);
-          if (held) await store.put(site, { ...held, madeAt: new Date().toISOString() });
+          const held = await store.get(key);
+          if (held) await store.put(key, { ...held, madeAt: new Date().toISOString() });
           return;
         }
         const phone = ourPhone(settings);
@@ -407,7 +422,7 @@ export function registerRecordCommands(
         });
         const { achieved } = await runAgent(settings, {
           site,
-          goal: signupGoal(account, phone),
+          goal: signupGoal({ ...account, site }, phone),
           url: o.url ?? null,
           inputs: {},
           secrets: {
@@ -423,9 +438,9 @@ export function registerRecordCommands(
         if (achieved) {
           // The account exists now: `needs` stops asking for it.
           const store = credentialsFor(settings);
-          const made = await store.get(site);
-          if (made) await store.put(site, { ...made, madeAt: new Date().toISOString() });
-          console.log(`${site}: account made; copied to the store`);
+          const made = await store.get(key);
+          if (made) await store.put(key, { ...made, madeAt: new Date().toISOString() });
+          console.log(`${key}: account made; copied to the store`);
         }
       },
     );
@@ -439,7 +454,7 @@ export function registerRecordCommands(
    */
   async function signUpByHand(
     site: string,
-    a: { email: string; inbox: string; handle: string | null; url: string | null },
+    a: { key: string; email: string; inbox: string; handle: string | null; url: string | null },
   ): Promise<void> {
     const { SIGNUP_PAGES } = await import("../auth/signup.js");
     const { RESET_FORMS, watchForSiteMail } = await import("../auth/exists.js");
@@ -448,8 +463,8 @@ export function registerRecordCommands(
     const page = a.url ?? SIGNUP_PAGES[site];
     if (!page) throw new Error(`no signup page mapped for ${site}: give --url`);
     const store = credentialsFor(settings);
-    const cred = await store.get(site);
-    if (!cred?.password) throw new Error(`no minted password for ${site}`);
+    const cred = await store.get(a.key);
+    if (!cred?.password) throw new Error(`no minted password for ${a.key}`);
     const since = new Date();
     await macClipboard(cred.password, HAND_CLIPBOARD_MS);
     if (process.platform === "darwin") {
@@ -461,12 +476,14 @@ export function registerRecordCommands(
         `${page} — in your own browser`,
         `  email     ${a.email}`,
         ...(a.handle ? [`  username  ${a.handle}`] : []),
-        `  password  on the clipboard for ${HAND_CLIPBOARD_MS / 60_000} min (creds copy ${site} puts it back)`,
+        `  password  on the clipboard for ${HAND_CLIPBOARD_MS / 60_000} min (creds copy ${a.key} puts it back)`,
       ].join("\n"),
     );
     const form = RESET_FORMS[site];
     if (!form) {
-      console.log(`no sender mapped for ${site}: when you are done, autobrowse creds made ${site}`);
+      console.log(
+        `no sender mapped for ${site}: when you are done, autobrowse creds made ${a.key}`,
+      );
       return;
     }
     console.log(
@@ -481,12 +498,12 @@ export function registerRecordCommands(
     });
     if (!hit)
       throw new Error(
-        `no mail from ${site} yet: finish the signup, then autobrowse creds made ${site}`,
+        `no mail from ${site} yet: finish the signup, then autobrowse creds made ${a.key}`,
       );
     // A site that asked for a username signs in with it; the address stays as the codes inbox.
-    const held = await store.get(site);
+    const held = await store.get(a.key);
     if (held)
-      await store.put(site, {
+      await store.put(a.key, {
         ...held,
         ...(a.handle ? { username: a.handle, codesInbox: a.inbox } : {}),
         madeAt: new Date().toISOString(),

@@ -198,6 +198,40 @@ const passwordLength = (site: string) =>
   Math.min(24, PASSWORD_MAX[site.split("@")[0] ?? site] ?? 24);
 const fits = (site: string, password: string) => password.length <= passwordLength(site);
 
+/** Mail hosts whose addresses name a person, not an organization: their label is the mailbox. */
+const WEBMAIL = /^(gmail|googlemail|outlook|hotmail|live|icloud|me|yahoo|proton|protonmail)\./i;
+
+/**
+ * The credential name an account on `site` lives under, so several people or
+ * brands can hold accounts on one site. `x@wren` given: that. Otherwise the
+ * entry already holding this address (`site` or any `site@<label>`), else
+ * bare `site` while it is free, else `site@<label>` from the address (the
+ * organization's domain, or a webmail mailbox), numbered if even that is taken.
+ */
+export async function accountKey(
+  store: CredentialStore,
+  site: string,
+  email: string,
+): Promise<string> {
+  if (site.includes("@")) return site;
+  const who = email.toLowerCase();
+  const names = [site, ...(await store.list()).filter((n) => n.startsWith(`${site}@`))];
+  const held = await Promise.all(names.map(async (n) => [n, await store.get(n)] as const));
+  const mine = held.find(([, c]) => c?.username.toLowerCase() === who);
+  if (mine) return mine[0];
+  const taken = new Set(held.filter(([, c]) => c).map(([n]) => n));
+  if (!taken.has(site)) return site;
+  const [local = "", domain = ""] = who.split("@");
+  const label = (WEBMAIL.test(domain) ? local : (domain.split(".")[0] ?? local)).replace(
+    /[^a-z0-9]+/g,
+    "",
+  );
+  for (let n = 1; ; n++) {
+    const key = `${site}@${label}${n > 1 ? n : ""}`;
+    if (!taken.has(key)) return key;
+  }
+}
+
 /**
  * Mint the password and store the credential under `site` first. Refuses
  * to overwrite: an account that exists is signed into, not made twice.

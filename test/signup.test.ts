@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { exploreWithAgent } from "../src/agent/explorer.js";
 import type { CodeSource } from "../src/auth/codes.js";
 import {
+  accountKey,
   codeSecrets,
   localPhone,
   loginSecrets,
@@ -228,5 +229,22 @@ describe("codeSecrets", () => {
     expect(await s("code")).toBe("111111");
     expect(await s("code")).toBe("222222");
     expect(src.asked[1]?.getTime()).toBeGreaterThan(src.asked[0]?.getTime() ?? 0);
+  });
+});
+
+describe("accountKey", () => {
+  it("gives each person or brand on a site its own credential name", async () => {
+    const store = memoryCredentials({
+      x: { username: "me@gmail.com", password: "p" },
+      "tiktok@wren": { username: "w@wrenautomation.com", via: "google" },
+    });
+    expect(await accountKey(store, "x", "me@gmail.com")).toBe("x");
+    expect(await accountKey(store, "x", "w@wrenautomation.com")).toBe("x@wrenautomation");
+    expect(await accountKey(store, "x", "Sam.Lee@gmail.com")).toBe("x@samlee");
+    expect(await accountKey(store, "tiktok", "W@wrenautomation.com")).toBe("tiktok@wren");
+    expect(await accountKey(store, "linkedin", "w@wrenautomation.com")).toBe("linkedin");
+    expect(await accountKey(store, "x@wren", "anyone@x.io")).toBe("x@wren");
+    await store.put("x@wrenautomation", { username: "other@wrenautomation.com", password: "q" });
+    expect(await accountKey(store, "x", "w@wrenautomation.com")).toBe("x@wrenautomation2");
   });
 });
