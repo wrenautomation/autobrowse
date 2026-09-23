@@ -350,6 +350,9 @@ export const WREN_SIGNUPS: readonly {
   handoff: string | null;
 }[] = [
   { site: "instagram", handoff: null },
+  // Wren's own profile (William's real name: Meta disables profiles named after a
+  // business); the Wren Automation Page, the Meta app and the ad account hang off it.
+  { site: "facebook", handoff: null },
   {
     site: "x",
     handoff:

@@ -3,7 +3,8 @@
  * URL and waits for a verification code that the signed-in console shows.
  * Mapped 2026-09-22 in explore: the authorize URL lands on "Continue with
  * an active session" with one card per console session (no button role:
- * the card's click handler sits on an ancestor div); the confirmation page
+ * the card's click handler sits on an ancestor div; since 2026-09-23 a card
+ * shows only the user name, no account id); the confirmation page
  * renders the code in a Cloudscape code view whose text is elided, so the
  * "Copy verification code" button is the honest source, read through a
  * clipboard shim. The code never leaves the process: the chore pipes it
@@ -52,10 +53,22 @@ export const awsCliLogin = defineFlow<AwsCliLoginInput, { code: string }>({
       const leaves = [...document.querySelectorAll("div, span")].filter(
         (e) => e.childElementCount === 0 && e.textContent?.trim(),
       );
+      // A card named its account id (2026-09-22); now (2026-09-23) just the user: the
+      // first leaf that is not page chrome (React handlers are not `onclick`, so text decides).
       const leaf = who
         ? leaves.find((e) => e.textContent?.trim() === who)
-        : leaves.find((e) => /^\d{4}-\d{4}-\d{4}$/.test(e.textContent?.trim() ?? ""));
-      if (!leaf) throw new Error("no session card");
+        : (leaves.find((e) => /\b\d{4}-?\d{4}-?\d{4}\b/.test(e.textContent ?? "")) ??
+          leaves.find(
+            (e) =>
+              !/^(english|feedback|privacy|terms)$|new session/i.test(e.textContent?.trim() ?? ""),
+          ));
+      if (!leaf)
+        throw new Error(
+          `no session card among: ${leaves
+            .slice(0, 30)
+            .map((e) => (e.textContent ?? "").trim().replace(/\d/g, "#").slice(0, 40))
+            .join(" | ")}`,
+        );
       let n: El | null = leaf;
       while (n && !n.onclick) n = n.parentElement;
       (n ?? leaf).click();

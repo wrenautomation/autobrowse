@@ -142,6 +142,13 @@ export interface NewAccount {
   birthday?: string;
 }
 
+/** Sites whose signup form caps a password below the minted 24 characters. */
+export const PASSWORD_MAX: Readonly<Record<string, number>> = { tiktok: 20 };
+
+const passwordLength = (site: string) =>
+  Math.min(24, PASSWORD_MAX[site.split("@")[0] ?? site] ?? 24);
+const fits = (site: string, password: string) => password.length <= passwordLength(site);
+
 /**
  * Mint the password and store the credential under `site` first. Refuses
  * to overwrite: an account that exists is signed into, not made twice.
@@ -149,11 +156,20 @@ export interface NewAccount {
 export async function mintCredential(
   store: CredentialStore,
   a: Pick<NewAccount, "site" | "email" | "inbox">,
-  password: string = newPassword(),
+  password: string = newPassword(passwordLength(a.site)),
 ): Promise<Credential> {
   const had = await store.get(a.site);
-  // The same address again is the same attempt (a signup that stalled): its minted password stands.
-  if (had && had.username.toLowerCase() === a.email.toLowerCase() && had.password) return had;
+  const same = had?.username.toLowerCase() === a.email.toLowerCase();
+  // The same address again is the same attempt (a signup that stalled): its minted
+  // password stands, unless the site's form cannot take it, so the account never
+  // got made with it: then a fitting one replaces it (history keeps the old).
+  if (had && same && had.password && (had.madeAt || fits(a.site, had.password))) return had;
+  if (had && same && had.password) {
+    await store.put(a.site, { ...had, password });
+    const cred = await store.get(a.site);
+    if (!cred) throw new Error(`${a.site}: the credential did not store`);
+    return cred;
+  }
   if (had)
     throw new Error(
       `${a.site} already has a stored credential; sign in with it, or store the new account under another name`,

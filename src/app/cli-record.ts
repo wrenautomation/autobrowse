@@ -34,6 +34,10 @@ export function registerRecordCommands(
       'place{secret:"code"} types the newest code this inbox got after the session opened',
     )
     .option(
+      "--signup <address>",
+      "a new account made by hand here: the stored (or minted) credential for that address, our phone and --codes are what place types",
+    )
+    .option(
       "--new-password <address>",
       'give that account (its stored credential, `site` or `site@<label>`) a password of its own, stored before the browser opens; place{secret:"password"} types it',
     )
@@ -47,6 +51,7 @@ export function registerRecordCommands(
           idle: string;
           codes?: string;
           newPassword?: string;
+          signup?: string;
         },
       ) => {
         const { tokenFileFor } = await import("../explore/server.js");
@@ -74,11 +79,31 @@ export function registerRecordCommands(
   /** What `place` may type in an explore session: codes from an inbox, a minted password. */
   const exploreSecrets = async (
     site: string,
-    o: { url?: string; codes?: string; newPassword?: string },
+    o: { url?: string; codes?: string; newPassword?: string; signup?: string },
   ): Promise<{ secrets?: SecretValues; secretHosts?: (host: string) => boolean }> => {
-    if (!o.codes && !o.newPassword) return {};
-    const { codeSecrets, mintPassword, signupHosts } = await import("../auth/signup.js");
-    const { codesFor, credentialsFor, gmailFor } = await import("./services.js");
+    if (!o.codes && !o.newPassword && !o.signup) return {};
+    const { codeSecrets, mintCredential, mintPassword, signupHosts, signupSecrets } = await import(
+      "../auth/signup.js"
+    );
+    const { codesFor, credentialsFor, gmailFor, ourPhone } = await import("./services.js");
+    if (o.signup) {
+      // A stalled attempt at the same address keeps its password: never a second one.
+      const inbox = await readableInbox(o.codes ?? o.signup);
+      const cred = await mintCredential(credentialsFor(settings), {
+        site,
+        email: o.signup,
+        inbox,
+      });
+      return {
+        secrets: signupSecrets({
+          cred,
+          codes: codesFor(settings, gmailFor(settings)),
+          since: new Date(),
+          phone: ourPhone(settings),
+        }),
+        secretHosts: signupHosts(site, o.url ?? null),
+      };
+    }
     const code = o.codes
       ? codeSecrets(
           codesFor(settings, gmailFor(settings)),

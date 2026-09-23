@@ -57,6 +57,18 @@ describe("signup", () => {
     expect(aliased.codesInbox).toBe("will@wren.test");
   });
 
+  it("fits the password to a site's cap; a stalled one that does not fit is replaced", async () => {
+    const store = memoryCredentials({
+      tiktok: { username: "hello@wren.test", password: "x".repeat(24) },
+    });
+    const c = await mintCredential(store, { site: "tiktok", email: "hello@wren.test" });
+    expect(c.password?.length).toBe(20);
+    // Made with it: it stands, whatever its length.
+    await store.put("tiktok", { ...c, password: "y".repeat(24), madeAt: "2026-09-22T00:00:00Z" });
+    const made = await mintCredential(store, { site: "tiktok", email: "hello@wren.test" });
+    expect(made.password).toBe("y".repeat(24));
+  });
+
   it("mints a password only on the named account, only where none was set", async () => {
     const store = memoryCredentials({
       li: { username: "me@personal.test", via: "google" },

@@ -66,9 +66,9 @@ describe("accounts policy", () => {
     expect(await accountForSite([jin, wren], { ...youtube, purpose: "pays" })).toBe(
       "jin@gmail.com",
     );
-    // Own logins (Meta pays): the policy still names the account, never the site's own credential.
-    expect(await accountForSite([jin, wren], meta)).toBe("jin@gmail.com");
-    expect(await accountForSite([jin, wren], { ...meta, purpose: undefined })).toBe("w@wren.com");
+    // Own logins (Meta is Wren's): the policy still names the account, never the site's own credential.
+    expect(await accountForSite([jin, wren], meta)).toBe("w@wren.com");
+    expect(await accountForSite([jin, wren], { ...meta, purpose: "pays" })).toBe("jin@gmail.com");
     expect(await accountForSite([], youtube)).toBeNull();
     const step = youtube.setup.find((s) => s.name === "consent");
     expect(
