@@ -58,7 +58,7 @@ const comments = z.object({
 const reply = z.object({ commentId: id, message: z.string().min(1).max(2200) });
 const webPost = z.object({
   caption: z.string().max(2200).default(""),
-  /** A local image or video file the browser leg uploads. */
+  /** The image or video the browser leg uploads: a path on the box, or a URL it downloads. */
   file: z.string().min(1),
 });
 
@@ -156,6 +156,7 @@ export const instagram: SiteApi = {
       browser: {
         flow: "instagram/create-post",
         input: (i, env) => ({ ...i, account: env(INSTAGRAM_ACCOUNT) }),
+        uploads: "file",
       },
     }),
     route({

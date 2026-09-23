@@ -32,6 +32,8 @@ export type BrowserLeg<I, O> = Leg & {
   input?: (i: I, env: (name: string) => string | undefined) => unknown;
   /** The official response shape from what the leg read; the output itself when absent. */
   output?: (o: unknown) => O;
+  /** The input field holding the file the leg uploads: a URL there is downloaded to a temp file first. */
+  uploads?: string;
 };
 
 /** A hand-written flow by `site/name`, or a compiled workflow by name (what a recording becomes). */

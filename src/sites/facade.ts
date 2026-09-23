@@ -22,6 +22,7 @@ import {
   SiteError,
   type SiteRoute,
 } from "./types.js";
+import { withLocalFile } from "./upload-file.js";
 
 export interface SiteFacadeDeps {
   http: HttpClient;
@@ -339,7 +340,9 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         const input = r.browser.input
           ? r.browser.input(parsed.data as never, deps.env)
           : parsed.data;
-        const out = await run(input);
+        const out = r.browser.uploads
+          ? await withLocalFile(input as Record<string, unknown>, r.browser.uploads, run)
+          : await run(input);
         return r.browser.output ? r.browser.output(out) : out;
       }
       throw new SiteError(501, `${method} ${r.path}: no token for ${name} and no browser leg`);

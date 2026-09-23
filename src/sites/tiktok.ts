@@ -52,7 +52,7 @@ const publishInit = z.object({
 const publishStatus = z.object({ publish_id: z.string().min(1) });
 const webPost = z.object({
   caption: z.string().max(2200).default(""),
-  /** A local video file the browser leg uploads. */
+  /** The video the browser leg uploads: a path on the box, or a URL it downloads. */
   file: z.string().min(1),
 });
 const videoId = z.object({ videoId: z.string().min(1) });
@@ -171,7 +171,7 @@ export const tiktok: SiteApi = {
         "A post from a local video file with a caption, public (no official path for that: the browser leg uploads on tiktok.com)",
       request: webPost,
       irreversible: true,
-      browser: { workflow: "tiktok-create-post" },
+      browser: { workflow: "tiktok-create-post", uploads: "file" },
     }),
     route({
       method: "GET",
