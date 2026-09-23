@@ -2,9 +2,10 @@
 
 **State 2026-09-23:** app `Wren Automation` (1584158149862012) made on
 Wren's Facebook profile, consent done (14 scopes granted), Page `Wren
-Automation` reads back (Graph id 1258841687320289). Owed: the Business
-portfolio + ad account (your card), the Instagram professional account
-linked to the Page.
+Automation` reads back (Graph id 1258841687320289), ad account
+act_1852812755843751 reads back on prod (`wren ads accounts`). Owed: your
+card on it, and the captcha Instagram asks when the Page links it
+(`needs` row `instagram-page-link`).
 
 **Goal:** one Meta token on the box that runs ads (Marketing API), posts to
 the Page, and publishes to the Page's Instagram account. Then `wren ads`
