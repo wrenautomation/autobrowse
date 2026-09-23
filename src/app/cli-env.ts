@@ -51,7 +51,12 @@ export async function macClipboard(text: string, clearAfterMs: number): Promise<
 }
 
 /** Names that describe the machine, not the fleet: a blanket `pull` leaves them alone. */
-export const MACHINE_LOCAL = new Set(["CREDENTIALS_CIPHER", "BROWSER", "BROWSER_HEADLESS"]);
+export const MACHINE_LOCAL = new Set([
+  "CREDENTIALS_CIPHER",
+  "BROWSER",
+  "BROWSER_HEADLESS",
+  "SENTRY_ENVIRONMENT",
+]);
 
 export function registerEnvCommands(program: Command, settings: Settings, deps: EnvCliDeps): void {
   const say = deps.say ?? ((l: string) => console.log(l));
