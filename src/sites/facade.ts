@@ -291,10 +291,13 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       const parsed = r.request.safeParse({ ...query, ...input, ...params });
       if (!parsed.success)
         throw new SiteError(400, parsed.error.issues.map((i) => i.message).join("; "));
-      // Named by the caller, else by the accounts policy; a policy pick still falls back to the site's own token.
+      // Named by the caller, else by the accounts policy. A policy pick falls back to the site's own
+      // token only at a provider's site; a site with its own logins keeps that token for whoever its
+      // own credential is (a person's own LinkedIn), never for the policy's account.
       const chosen = account ?? (await deps.accountFor?.(s)) ?? null;
+      const fallback = !account && chosen && deps.providerOf?.(s);
       const token = r.api
-        ? ((await tokenFor(s, chosen)) ?? (!account && chosen ? await tokenFor(s, null) : null))
+        ? ((await tokenFor(s, chosen)) ?? (fallback ? await tokenFor(s, null) : null))
         : null;
       const amount = r.spends ? r.spends(parsed.data as never) : false;
       if (amount !== false) {

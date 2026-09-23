@@ -18,7 +18,7 @@ import { expandHome } from "../google-auth.js";
 import { gmailOAuth } from "../sites/gmail.js";
 import { accountEnv } from "../sites/oauth.js";
 import type { OAuthSpec, SetupStep, SiteApi } from "../sites/types.js";
-import { profileOf } from "../sites/wire.js";
+import { consentProviderOf, policyAccount, profileOf } from "../sites/wire.js";
 import { youtubeOAuth } from "../sites/youtube.js";
 
 export type NeedKind = "credential" | "keys" | "consent" | "phone" | "mac" | "money" | "decision";
@@ -128,14 +128,25 @@ export function siteNeeds(ctx: NeedsContext): Need[] {
         check: () => holdsAll(ctx, keyNames),
       });
       const tokenNames = [oauth.refreshToken, ...(oauth.accessToken ? [oauth.accessToken] : [])];
+      // As the policy's account for the site, never whoever the site's own credential is.
+      const as = policyAccount(ctx.identities, s, spec);
+      const names = as ? tokenNames.map((n) => accountEnv(n, as)) : tokenNames;
       out.push({
         id: `consent-${s.site}`,
         kind: "consent",
-        what: `${s.site}: a consent (${tokenNames[0]})`,
-        unlocks: `${s.site} calls as the site's own account`,
-        how: [`autobrowse site setup ${s.site} ${spec.name}`],
+        what: `${s.site}: a consent${as ? ` as ${as}` : ""} (${names[0]})`,
+        unlocks: `${s.site} calls as ${as ?? "the site's own account"}`,
+        how: [`autobrowse site setup ${s.site} ${spec.name}${as ? ` --account ${as}` : ""}`],
         after: `keys-${s.site}`,
-        check: async () => (await Promise.all(tokenNames.map((n) => holds(ctx, n)))).some(Boolean),
+        // Cleared as calls resolve: the account's token, else the site's own at a provider's site.
+        check: async () =>
+          (
+            await Promise.all(
+              [...names, ...(!as || consentProviderOf(s) ? tokenNames : [])].map((n) =>
+                holds(ctx, n),
+              ),
+            )
+          ).some(Boolean),
       });
     } else if ("token" in s.auth) {
       const token = s.auth.token;
@@ -262,19 +273,6 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
         "autobrowse needs done meta-ad-account-card",
       ],
       after: "keys-meta",
-    },
-    {
-      id: "linkedin-password",
-      kind: "credential",
-      what: "A LinkedIn password for your account (it signs in with Google today)",
-      unlocks:
-        "the LinkedIn API: /oauth/v2/authorization always lands on /uas/login and asks for a password, even with a live session — until then posting goes through the composer",
-      how: [
-        "autobrowse explore linkedin --url https://www.linkedin.com/passwordReset --headed --codes <its inbox> --new-password <its address>",
-        "  (address → Next → tick the checkbox captcha → place code → place password twice → Submit)",
-      ],
-      // The reset route mints one beside `via`: Google sign-in keeps working.
-      check: async () => Boolean((await ctx.credentials.get("linkedin"))?.password),
     },
     {
       id: "npm-account",

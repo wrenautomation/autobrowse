@@ -95,9 +95,19 @@ Now every state of a credential is kept:
 - `creds restore <site> <n>`: shows what would change; `--yes` writes it,
   itself a new version, so a restore is undone the same way
 
-Consent guard (autobrowse): a named `--account` with no credential of its
-own is refused (409). It used to run in the site's default profile, as
-whoever that is.
+A site's own credential can be a person's own account (`linkedin` is
+William's; Wren's is `linkedin@wren`). So nothing falls to it by default:
+- a named `--account` with no credential of its own is refused (409),
+  never run in the site's default profile
+- sites with their own logins (LinkedIn, Meta, X) follow the accounts
+  policy too: bare `site setup linkedin consent` runs as william@
+- a call the policy routes never borrows the site's own token at such a
+  site; at a provider's site (YouTube, Gmail) it still may
+- `needs` consent rows name the account: `--account <it>`
+
+Checked 2026-09-22: Wren's LinkedIn consent ran as `linkedin@wren` (audit:
+that credential's password, nothing else); `/v2/userinfo` answers
+w***@wrenautomation.com.
 
 ## Expiry
 

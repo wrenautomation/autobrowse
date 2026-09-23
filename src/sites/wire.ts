@@ -11,6 +11,7 @@ import {
   type Identity,
   type IdentityProvider,
   identityAt,
+  identityFor,
 } from "../auth/identities.js";
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import { type HttpClient, httpClient } from "../clients/http.js";
@@ -57,17 +58,30 @@ export function consentProviderOf(s: SiteApi): IdentityProvider | null {
 
 /**
  * The account for a site or step from the person's policy: the one for its
- * purpose at the provider its consent uses; null for a site whose consent is
- * not an identity provider's (LinkedIn, Meta) or when no account is set up.
+ * purpose at the provider its consent uses. A site with its own logins
+ * (LinkedIn, Meta) takes the account for its purpose at any provider, so
+ * Wren's work never falls to whoever the site's own credential is (a
+ * person's own account, once). Null when no account is set up.
  */
 export async function accountForSite(
   identities: readonly Identity[],
   s: SiteApi,
   step?: SetupStep,
 ): Promise<string | null> {
+  return policyAccount(identities, s, step);
+}
+
+/** `accountForSite`, for a caller that cannot wait (the `needs` rows). */
+export function policyAccount(
+  identities: readonly Identity[],
+  s: SiteApi,
+  step?: SetupStep,
+): string | null {
   const at = consentProviderOf(s);
-  if (!at) return null;
-  return identityAt(identities, at, step?.purpose ?? s.purpose ?? DEFAULT_PURPOSE)?.address ?? null;
+  const purpose = step?.purpose ?? s.purpose ?? DEFAULT_PURPOSE;
+  return (
+    (at ? identityAt(identities, at, purpose) : identityFor(identities, purpose))?.address ?? null
+  );
 }
 
 /** The `<site>@<label>` (or `<site>-<label>`) credential name whose username is `account`; the site's own when it matches. */

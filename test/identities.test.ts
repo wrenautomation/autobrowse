@@ -19,7 +19,7 @@ import { googleOauthConsent } from "../src/browser/flows/oauth-consent.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import { siteFacade } from "../src/sites/facade.js";
-import { meta, youtube } from "../src/sites/index.js";
+import { linkedin, meta, youtube } from "../src/sites/index.js";
 import { accountForSite, consentProviderOf } from "../src/sites/wire.js";
 import { fakeBrowser, fakeFetch } from "./fakes.js";
 
@@ -59,14 +59,16 @@ describe("accounts policy", () => {
     await store.save([jin]);
     expect(await store.list()).toEqual([jin]);
   });
-  it("a site's account is the one for its purpose at its consent's provider; other consents get none", async () => {
+  it("a site's account is the one for its purpose, at its consent's provider when it has one", async () => {
     expect(consentProviderOf(youtube)).toBe("google");
     expect(consentProviderOf(meta)).toBeNull();
     expect(await accountForSite([jin, wren], youtube)).toBe("w@wren.com");
     expect(await accountForSite([jin, wren], { ...youtube, purpose: "pays" })).toBe(
       "jin@gmail.com",
     );
-    expect(await accountForSite([jin, wren], meta)).toBeNull();
+    // Own logins (Meta pays): the policy still names the account, never the site's own credential.
+    expect(await accountForSite([jin, wren], meta)).toBe("jin@gmail.com");
+    expect(await accountForSite([jin, wren], { ...meta, purpose: undefined })).toBe("w@wren.com");
     expect(await accountForSite([], youtube)).toBeNull();
     const step = youtube.setup.find((s) => s.name === "consent");
     expect(
@@ -107,6 +109,7 @@ describe("facade with the policy", () => {
       runner: fakeBrowser([]),
       flow: () => null,
       accountFor: async (s, step) => accountForSite([jin, wren], s, step),
+      providerOf: consentProviderOf,
     });
     const q = { part: "statistics", id: "v1" };
     expect(await sites.call("youtube", "GET", "/youtube/v3/videos", q)).toEqual({
@@ -120,6 +123,27 @@ describe("facade with the policy", () => {
     await expect(
       sites.call("youtube", "GET", "/youtube/v3/videos", q, "nobody@x.com"),
     ).rejects.toMatchObject({ status: 501 });
+  });
+  it("a site with its own logins never lends its own token to the policy's account", async () => {
+    const api = fakeFetch(({ headers }) => ({ body: { sub: headers.get("authorization") } }));
+    // The site's own token is a person's own LinkedIn; Wren's work is w@wren.com's.
+    const env: Record<string, string> = { LINKEDIN_ACCESS_TOKEN: "personal" };
+    const sites = siteFacade([linkedin], {
+      http: httpClient({ fetch: api.fetch }),
+      env: (n) => env[n],
+      sink: memorySink(),
+      runner: fakeBrowser([]),
+      flow: () => null,
+      accountFor: async (s, step) => accountForSite([jin, wren], s, step),
+      providerOf: consentProviderOf,
+    });
+    await expect(sites.call("linkedin", "GET", "/v2/userinfo", {})).rejects.toMatchObject({
+      status: 501,
+    });
+    env.LINKEDIN_ACCESS_TOKEN__W_WREN_COM = "wren";
+    expect(await sites.call("linkedin", "GET", "/v2/userinfo", {})).toMatchObject({
+      sub: "Bearer wren",
+    });
   });
   it("a consent with no account runs as the policy's and keeps the token under both names", async () => {
     const port = 9413;
