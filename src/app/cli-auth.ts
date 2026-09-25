@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
 import { credentialSchema } from "credvault";
+import { accountsOn, formatAccounts, pickAccount } from "../auth/accounts.js";
 import {
   enrollPasskeyFlow,
   enrollTotpFlow,
@@ -216,12 +217,13 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       console.log(await runner.run(flow, undefined));
     });
   creds
-    .command("password <site>")
+    .command("password <site> [account]")
     .description(
-      "The password changed on the site (you changed it by hand): type it here, twice, never echoed; only the store is touched, no browser",
+      "The password changed on the site (you changed it by hand): type it here, twice, never echoed; only the store is touched, no browser. Several accounts on the site: name one (label or username)",
     )
-    .action(async (site: string) => {
+    .action(async (given: string, account?: string) => {
       const store = credentialsFor(settings);
+      const site = await pickAccount(credentialsFor(settings, { armed: false }), given, account);
       const cred = await store.get(site);
       if (!cred) throw new Error(`no credential stored for ${site}`);
       const next = await askSecretTwice(`password for ${site}`);
@@ -233,12 +235,13 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       console.log(`${site}: stored; copied to the store`);
     });
   creds
-    .command("copy <site>")
+    .command("copy <site> [account]")
     .description(
-      "One field of a stored credential onto the clipboard (emptied after a minute); nothing is ever printed",
+      "One field of a stored credential onto the clipboard (emptied after a minute); nothing is ever printed. Several accounts on the site: name one (label, username, or part of it); `creds list <site>` shows them",
     )
     .option("--field <what>", "password | username | totp | recovery | previous", "password")
-    .action(async (site: string, o: { field: string }) => {
+    .action(async (given: string, account: string | undefined, o: { field: string }) => {
+      const site = await pickAccount(credentialsFor(settings, { armed: false }), given, account);
       const cred = await credentialsFor(settings).get(site);
       if (!cred) throw new Error(`no credential stored for ${site}`);
       const fields: Record<string, string | undefined> = {
@@ -253,7 +256,9 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       const value = fields[o.field];
       if (!value) throw new Error(`${site} has no ${o.field} stored`);
       await macClipboard(value, CLIPBOARD_MS);
-      console.log(`${site} ${o.field} is on the clipboard for ${CLIPBOARD_MS / 1000}s`);
+      console.log(
+        `${site} (${cred.username}) ${o.field} is on the clipboard for ${CLIPBOARD_MS / 1000}s`,
+      );
     });
   creds
     .command("paste <site>")
@@ -351,18 +356,15 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       console.log("restored");
     });
   creds
-    .command("list")
+    .command("list [platform]")
     .description(
-      "Sites with a stored credential: whose account (address shortened), how it signs in",
+      "Every stored account, grouped by platform: its credential name, username, how it signs in; one platform when named",
     )
-    .action(async () => {
-      const store = credentialsFor(settings, { armed: false });
-      for (const site of await store.list()) {
-        const c = await store.get(site);
-        console.log(
-          `${site}\t${c?.canary ? "CANARY" : `${accountOf(c?.username)}\t${c?.via ? `via ${c.via}` : c?.totpSecret ? "totp" : "no totp"}`}`,
-        );
-      }
+    .action(async (platform?: string) => {
+      const rows = await accountsOn(credentialsFor(settings, { armed: false }), platform);
+      console.log(
+        rows.length ? formatAccounts(rows) : `no credentials${platform ? ` on ${platform}` : ""}`,
+      );
     });
   creds
     .command("canary <name>")
@@ -546,11 +548,4 @@ export function registerAuthCommands(program: Command, settings: Settings): void
         await runner.run(enrollTotpFlow(login, credentialsFor(settings), o.url), undefined),
       );
     });
-}
-
-/** Which account a credential is: a handle whole, an address as its first two letters and domain. */
-export function accountOf(username: string | undefined): string {
-  if (!username) return "(no username)";
-  const at = username.indexOf("@");
-  return at > 0 ? `${username.slice(0, Math.min(2, at))}…${username.slice(at)}` : username;
 }

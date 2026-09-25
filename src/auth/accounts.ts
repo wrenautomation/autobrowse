@@ -137,3 +137,92 @@ export function accountsOf(opts: {
     },
   };
 }
+
+/** `instagram@wren` → `instagram`: the platform a credential name is on. */
+export const platformOf = (name: string): string => name.split("@")[0] ?? name;
+
+/** One stored account on a platform: its credential name and whose it is. */
+export interface PlatformAccount {
+  name: string;
+  username: string;
+  how: string;
+}
+
+/** Every credential on `platform` (`x`, `x@wren`, …), or on every platform when none is given; canaries left out. */
+export async function accountsOn(
+  store: CredentialStore,
+  platform?: string,
+): Promise<PlatformAccount[]> {
+  const names = (await store.list())
+    .filter((n) => !platform || platformOf(n) === platformOf(platform))
+    .sort((a, b) => platformOf(a).localeCompare(platformOf(b)) || a.localeCompare(b));
+  const out: PlatformAccount[] = [];
+  for (const name of names) {
+    const c = await store.get(name);
+    if (!c || c.canary) continue;
+    out.push({
+      name,
+      username: c.username || "(no username)",
+      how: c.via ? `via ${c.via}` : c.totpSecret ? "totp" : "password",
+    });
+  }
+  return out;
+}
+
+/** Accounts grouped under their platform, usernames whole: what `creds list` prints. */
+export function formatAccounts(rows: readonly PlatformAccount[]): string {
+  const w = Math.max(0, ...rows.map((r) => r.name.length));
+  const u = Math.max(0, ...rows.map((r) => r.username.length));
+  const lines: string[] = [];
+  let last = "";
+  for (const r of rows) {
+    const p = platformOf(r.name);
+    if (p !== last) lines.push(p);
+    last = p;
+    lines.push(`  ${r.name.padEnd(w)}  ${r.username.padEnd(u)}  ${r.how}`);
+  }
+  return lines.join("\n");
+}
+
+/**
+ * The one account `which` names on a platform: its credential name
+ * (`x@wren`), its label (`wren`), its username, or a unique part of the
+ * username. `site@label` given: that. Several and nothing to choose by, or
+ * no match: an error listing them, so the caller picks.
+ */
+export async function pickAccount(
+  store: CredentialStore,
+  site: string,
+  which?: string,
+): Promise<string> {
+  const all = await accountsOn(store, site);
+  if (site.includes("@") && !which) {
+    if (all.some((a) => a.name === site)) return site;
+    throw new Error(`no credential ${site}${listed(all)}`);
+  }
+  if (!which) {
+    const only = all.length === 1 ? all[0] : undefined;
+    if (only) return only.name;
+    throw new Error(
+      all.length
+        ? `${all.length} accounts on ${site}; name one (label or username)${listed(all)}`
+        : `no credential stored for ${site}`,
+    );
+  }
+  const w = which.toLowerCase();
+  const tiers: ((a: PlatformAccount) => boolean)[] = [
+    (a) => a.name === which || a.name === `${platformOf(site)}@${w}`,
+    (a) => a.username.toLowerCase() === w,
+    (a) => a.username.toLowerCase().split("@")[0] === w,
+    (a) => a.username.toLowerCase().includes(w),
+  ];
+  for (const t of tiers) {
+    const hit = all.filter(t);
+    if (hit.length === 1 && hit[0]) return hit[0].name;
+    if (hit.length > 1) throw new Error(`${which} matches ${hit.length} accounts${listed(hit)}`);
+  }
+  throw new Error(`no account ${which} on ${platformOf(site)}${listed(all)}`);
+}
+
+const listed = (rows: readonly PlatformAccount[]) =>
+  rows.length ? `:\n${formatAccounts(rows)}` : "";

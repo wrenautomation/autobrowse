@@ -1,6 +1,13 @@
 import { memoryCredentials } from "credvault";
 import { describe, expect, it } from "vitest";
-import { accountsOf, merged, rowOf } from "../src/auth/accounts.js";
+import {
+  accountsOf,
+  accountsOn,
+  formatAccounts,
+  merged,
+  pickAccount,
+  rowOf,
+} from "../src/auth/accounts.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";
 import type { FlowRunner } from "../src/browser/flow.js";
 
@@ -84,5 +91,35 @@ describe("accounts", () => {
     await expect(accountsOf({ store, logins: SITE_LOGINS }).check("instantly")).rejects.toThrow(
       /no browser/,
     );
+  });
+});
+
+describe("accounts on a platform", () => {
+  const store = memoryCredentials({
+    instagram: { username: "wrenautomation", password: "a" },
+    "instagram@william": { username: "william.jin", password: "b" },
+    "x@wren": { username: "x@wrenautomation.com", password: "c" },
+    stripe: { username: "billing@wrenautomation.com", password: "d", canary: true },
+  });
+
+  it("lists each platform's accounts with usernames whole, canaries left out", async () => {
+    const rows = await accountsOn(store);
+    expect(rows.map((r) => r.name)).toEqual(["instagram", "instagram@william", "x@wren"]);
+    expect(formatAccounts(await accountsOn(store, "instagram"))).toBe(
+      "instagram\n  instagram          wrenautomation  password\n  instagram@william  william.jin     password",
+    );
+  });
+
+  it("picks one by name, label, username or a unique part of it; else lists them", async () => {
+    expect(await pickAccount(store, "x")).toBe("x@wren");
+    expect(await pickAccount(store, "instagram@william")).toBe("instagram@william");
+    expect(await pickAccount(store, "instagram", "william")).toBe("instagram@william");
+    expect(await pickAccount(store, "instagram", "wrenautomation")).toBe("instagram");
+    expect(await pickAccount(store, "instagram", "jin")).toBe("instagram@william");
+    await expect(pickAccount(store, "instagram")).rejects.toThrow(
+      /2 accounts on instagram.*\n.*wrenautomation/s,
+    );
+    await expect(pickAccount(store, "instagram", "nobody")).rejects.toThrow(/no account nobody/);
+    await expect(pickAccount(store, "stripe")).rejects.toThrow(/no credential stored/);
   });
 });
