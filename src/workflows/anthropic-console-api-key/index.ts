@@ -1,7 +1,9 @@
 /**
- * Create an Anthropic Console API key with a specified name and no expiration date.
- * Compiled from the recording "anthropic-console-api-key". Edit freely: the outline was the
- * source until this file was written; from here on this file is.
+ * Create an Anthropic Console API key (no expiry), prove it answers, keep it.
+ * From the explore recording "anthropic-console-api-key" (2026-09-20), made
+ * by hand since: the key is found by its shape, not a paragraph index, and is
+ * kept only after `GET /v1/models` (free) accepts it. The key never leaves
+ * the flow: not in the journal, not in a step's result.
  */
 
 import { z } from "zod";
@@ -17,83 +19,110 @@ import {
 
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
-  name: z.string().min(1).describe("Name"), // e.g. "autobrowse-prod"
+  name: z.string().min(1).describe("Key name in the Console, e.g. autobrowse-prod"),
+  keepAs: z
+    .string()
+    .regex(/^[A-Z][A-Z0-9_]*$/)
+    .default("ANTHROPIC_API_KEY")
+    .describe("Env name the key is kept under"),
 });
 export type Plan = z.infer<typeof planSchema>;
 
 export interface Deps {
   browser: FlowRunner;
   sink: SecretSink;
+  /** For the proof call; the global fetch unless given. */
+  fetch?: typeof fetch;
 }
 
-/** What steps pass forward; nothing yet. */
 export type Memo = Record<string, unknown>;
 
 type Step<S extends string> = StepDef<Plan, Deps, Memo, S>;
 
-export interface NavigateToApiKeysInput {
-  name: string;
-  sink: SecretSink;
+const KEY = /sk-ant-api\d{2}-[A-Za-z0-9_-]{20,}/;
+const KEYS_PAGE = "https://platform.claude.com/settings/workspaces/default/keys";
+
+/** The Messages API accepts the key: a models list is free and needs no credits. */
+export async function keyWorks(key: string, f: typeof fetch = fetch): Promise<boolean> {
+  const res = await f("https://api.anthropic.com/v1/models?limit=1", {
+    headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
+  });
+  return res.ok;
 }
 
-const navigateToApiKeysFlow = defineFlow<NavigateToApiKeysInput, void>({
+export interface CreateKeyInput {
+  name: string;
+  keepAs: string;
+  sink: SecretSink;
+  fetch?: typeof fetch;
+}
+
+export const createKeyFlow = defineFlow<CreateKeyInput, void>({
   site: "anthropic",
-  name: "navigate-to-api-keys",
+  name: "create-key",
   async run(fp, input) {
-    await fp.open("https://platform.claude.com/settings/workspaces/default/keys");
+    await fp.open(KEYS_PAGE);
     // The first "Create key" only opens the dialog; the one after the form mints the key.
     await fp.act(
       { kind: "click" },
       { role: "button", name: "Create key" },
-      { goal: "click Create key" },
-    ); // page.getByRole("button", { name: "Create key", exact: true })
+      { goal: "open the form" },
+    );
     await fp.act(
       { kind: "click" },
       { role: "button", name: "Continue with an API key" },
-      { goal: "click Continue with an API key" },
-    ); // page.getByRole("button", { name: "Continue with an API key", exact: true })
+      { goal: "pick an API key" },
+    );
     await fp.act(
       { kind: "fill", value: input.name },
       { role: "textbox", name: "Name" },
-      { goal: "fill Name" },
-    ); // page.getByRole("textbox", { name: "Name", exact: true })
+      { goal: "name it" },
+    );
     await fp.act(
       { kind: "click" },
       { role: "combobox", name: "Expires" },
-      { goal: "click Expires" },
-    ); // page.getByRole("combobox", { name: "Expires", exact: true })
-    await fp.act({ kind: "click" }, { role: "option", name: "Never" }, { goal: "click Never" }); // page.getByRole("option", { name: "Never", exact: true })
+      { goal: "open Expires" },
+    );
+    await fp.act({ kind: "click" }, { role: "option", name: "Never" }, { goal: "never expire" });
     await fp.act(
       { kind: "click" },
       { role: "button", name: "Create key" },
-      { goal: "click Create key", irreversible: true },
-    ); // page.getByRole("button", { name: "Create key", exact: true })
-    await input.sink.put("ANTHROPIC_API_KEY", await fp.read({ css: "[role=dialog] p", nth: 1 })); // page.locator("[role=dialog] p")
-    await fp.act({ kind: "click" }, { role: "button", name: "Done" }, { goal: "click Done" }); // page.getByRole("button", { name: "Done", exact: true })
+      { goal: "mint the key", irreversible: true },
+    );
+    const key = (await fp.read({ css: "[role=dialog]" })).match(KEY)?.[0];
+    if (!key) throw new Error("no sk-ant key on the dialog");
+    if (!(await keyWorks(key, input.fetch)))
+      throw new Error(`the new key "${input.name}" was refused by GET /v1/models; not kept`);
+    await input.sink.put(input.keepAs, key);
+    await fp.act({ kind: "click" }, { role: "button", name: "Done" }, { goal: "close the dialog" });
   },
 });
 
-const navigateToApiKeys: Step<"navigate-to-api-keys"> = {
-  name: "navigate-to-api-keys",
+const createKey: Step<"create-key"> = {
+  name: "create-key",
   irreversible: true,
   async run({ fx, deps, plan, gate }) {
     const answer = gate(
       "send",
-      'Run "navigate-to-api-keys" (Navigate to the API keys settings page.)?',
+      `Create Anthropic API key "${plan.name}" and keep it as ${plan.keepAs}?`,
     );
     if (!answer.approved) return rejected(answer.note ?? "declined");
-    await fx.run("browser navigate-to-api-keys", () =>
-      deps.browser.run(navigateToApiKeysFlow, { name: plan.name, sink: deps.sink }),
+    await fx.run("browser create-key", () =>
+      deps.browser.run(createKeyFlow, {
+        name: plan.name,
+        keepAs: plan.keepAs,
+        sink: deps.sink,
+        ...(deps.fetch ? { fetch: deps.fetch } : {}),
+      }),
     );
-    // Proof: the key works. `sink` holds it; a Messages call with it is the read-back (owed).
-    return done("API key created and kept as ANTHROPIC_API_KEY");
+    return done(`key "${plan.name}" answers GET /v1/models; kept as ${plan.keepAs}`);
   },
 };
 
 export const workflow = defineWorkflow<Deps, Memo>()({
   name: "anthropic-console-api-key",
-  description: "Create an Anthropic Console API key with a specified name and no expiration date.",
+  description: "Create an Anthropic Console API key (no expiry), prove it answers, keep it.",
   plan: planSchema,
-  steps: [navigateToApiKeys],
+  steps: [createKey],
   emptyMemo: () => ({}),
 });
