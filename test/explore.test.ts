@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { compile } from "../src/compiler/index.js";
 import { memorySink } from "../src/deps/sink.js";
 import { fakeDesktop } from "../src/desktop/types.js";
-import { startExplore } from "../src/explore/server.js";
+import { pageChange, startExplore } from "../src/explore/server.js";
 import type { Charge, Receipt } from "../src/money/charges.js";
 import type { Contacts } from "../src/money/profile.js";
 import { parseCardLine } from "../src/money/wallet.js";
@@ -137,7 +137,7 @@ describe("explore mode", () => {
       hints: { role: "textbox", name: "Domain" },
       secret: "minted",
     });
-    expect(placed.body).toEqual({ ok: true, secret: "minted" });
+    expect(placed.body).toMatchObject({ ok: true, secret: "minted" });
     expect(
       (await send({ cmd: "eval", js: "document.querySelector('#d').value" })).body.result,
     ).toBe("Placed-Value-77");
@@ -296,7 +296,7 @@ describe("explore mode", () => {
       { cmd: "place", hints: { role: "textbox", name: "Domain" }, secret: "card.number" },
       true,
     );
-    expect(number.body).toEqual({ ok: true, secret: "card.number" });
+    expect(number.body).toMatchObject({ ok: true, secret: "card.number" });
     expect(asks.at(-1)).toMatch(/^start paying on .*: put main: Visa credit ••4242 exp 09\/30 on /);
     await send({ cmd: "place", hints: { css: "#p" }, secret: "card@main.cvc" }, true);
     expect(asks.filter((a) => a.includes("put main"))).toHaveLength(1);
@@ -315,6 +315,32 @@ describe("explore mode", () => {
     expect(charges.at(-1)?.[0].card).toMatch(/Visa credit ending 4242/);
     expect(charges.at(-1)?.[2]).toEqual({ email: "card-owner@x.co" });
   });
+  it("an act answers what changed on the page; a batch runs in order and stops at the first failure", async () => {
+    const grow = `data:text/html,${encodeURIComponent(
+      `<input id="q" placeholder="Name"><button onclick="this.after(Object.assign(document.createElement('button'),{textContent:'Confirm '+q.value}))">Add</button>`,
+    )}`;
+    const opened = await send({ cmd: "open", url: grow });
+    expect((opened.body.changed as { added: string[] }).added.join("\n")).toMatch(/text=Add/);
+    const one = await send({ cmd: "click", hints: { role: "button", name: "Add" } });
+    expect(one.body.changed).toEqual({ added: ["button text=Confirm"], gone: 0 });
+
+    const both = await send({
+      cmd: "batch",
+      cmds: [
+        { cmd: "fill", hints: { placeholder: "Name" }, value: "Ada" },
+        { cmd: "click", hints: { role: "button", name: "Add" } },
+        { cmd: "click", hints: { role: "button", name: "Nowhere" } },
+        { cmd: "click", hints: { role: "button", name: "Add" } },
+      ],
+    });
+    expect(both.status).toBe(200);
+    expect(both.body.done).toHaveLength(2);
+    expect(both.body.failed).toMatchObject({ at: 2, cmd: "click" });
+    expect(both.body.changed).toEqual({ added: ["button text=Confirm Ada"], gone: 0 });
+
+    const bad = await send({ cmd: "batch", cmds: [{ cmd: "url" }, { cmd: "close" }] });
+    expect(bad.body.error).toMatch(/batch\[1\]: close cannot be batched/);
+  }, 60_000);
 });
 
 describe("pause: a person's hand acts land in the journal", () => {
@@ -397,4 +423,12 @@ describe("a session nobody closes", () => {
       await rm(dir, { recursive: true, force: true, maxRetries: 5 });
     }
   }, 30_000);
+});
+
+describe("pageChange", () => {
+  it("diffs rows as a multiset and caps what it returns", () => {
+    expect(pageChange(["a", "b", "b"], ["b", "c", "c"])).toEqual({ added: ["c", "c"], gone: 2 });
+    const many = Array.from({ length: 45 }, (_, i) => `r${i}`);
+    expect(pageChange([], many)).toMatchObject({ gone: 0, more: 5 });
+  });
 });

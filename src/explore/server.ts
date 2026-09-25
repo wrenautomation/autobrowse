@@ -175,8 +175,61 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   /** An act on the desktop, outside the browser: apps, menus, keys, a root command. */
   z.object({ cmd: z.literal("os"), act: desktopOpSchema }),
   z.object({ cmd: z.literal("close") }),
+  /**
+   * Several commands in one call, in order, stopping at the first that fails.
+   * All are validated before any runs. One page diff for the lot.
+   */
+  z.object({
+    cmd: z.literal("batch"),
+    cmds: z.array(z.record(z.string(), z.unknown())).min(1).max(30),
+  }),
 ]);
 export type Command = z.infer<typeof commandSchema>;
+
+/** Acts whose answer says what changed on the page, so the caller need not look again. */
+const LOOKS = new Set<Command["cmd"]>([
+  "open",
+  "click",
+  "drag",
+  "fill",
+  "place",
+  "select",
+  "upload",
+  "press",
+  "type",
+  "key",
+]);
+/** Session controls and nesting stay out of a batch. */
+const UNBATCHABLE = new Set<Command["cmd"]>(["batch", "close", "pause", "resume", "save"]);
+/** Rows the diff returns; `snapshot` has the rest. */
+const CHANGED_ROWS = 40;
+
+export interface PageChange {
+  /** Interactive elements (one `snapshot` row each) that are new since before the act. */
+  added: string[];
+  /** How many rows went away. */
+  gone: number;
+  /** Added rows past the cap. */
+  more?: number;
+}
+
+/** What an act changed, as a multiset diff of snapshot rows. */
+export function pageChange(before: readonly string[], after: readonly string[]): PageChange {
+  const left = new Map<string, number>();
+  for (const r of before) left.set(r, (left.get(r) ?? 0) + 1);
+  const added: string[] = [];
+  for (const r of after) {
+    const n = left.get(r) ?? 0;
+    if (n) left.set(r, n - 1);
+    else added.push(r);
+  }
+  const gone = [...left.values()].reduce((a, b) => a + b, 0);
+  return {
+    added: added.slice(0, CHANGED_ROWS),
+    gone,
+    ...(added.length > CHANGED_ROWS ? { more: added.length - CHANGED_ROWS } : {}),
+  };
+}
 
 /** An action minus what the journal fills in, per union member. */
 type Journaled = Action extends infer A ? (A extends Action ? Omit<A, "t" | "url"> : never) : never;
@@ -629,7 +682,21 @@ async function serve(
     chain = next.catch(() => undefined);
     return next;
   };
+  /** The page's interactive elements, masked: what a diff compares. */
+  const rows = async () =>
+    (await snapshotPage(page, 150))
+      .split("\n")
+      .filter(Boolean)
+      .map((r) => redactText(r));
   const runOne = async (c: Command, wait: boolean): Promise<unknown> => {
+    page = fp.page;
+    if (!LOOKS.has(c.cmd)) return act(c, wait);
+    const before = await rows();
+    const out = await act(c, wait);
+    page = fp.page;
+    return { ...(out as object), changed: pageChange(before, await rows()) };
+  };
+  const act = async (c: Command, wait: boolean): Promise<unknown> => {
     page = fp.page;
     switch (c.cmd) {
       case "open": {
@@ -849,6 +916,32 @@ async function serve(
         };
         const dir = await saveRecording(opts.recordingsDir, rec);
         return { dir, actions: actions.length };
+      }
+      case "batch": {
+        const cmds = c.cmds.map((raw, i) => {
+          const one = commandSchema.safeParse(raw);
+          if (!one.success) throw new Error(`batch[${i}]: ${one.error.message}`);
+          if (UNBATCHABLE.has(one.data.cmd))
+            throw new Error(`batch[${i}]: ${one.data.cmd} cannot be batched`);
+          return one.data;
+        });
+        const before = await rows();
+        const done: unknown[] = [];
+        const answer = async (extra: object) => {
+          page = fp.page;
+          return { done, ...extra, url: page.url(), changed: pageChange(before, await rows()) };
+        };
+        for (const [i, one] of cmds.entries()) {
+          try {
+            done.push(await act(one, wait));
+          } catch (err) {
+            // A payment gate answers the whole call, as it does a single act.
+            if (err instanceof PaymentGate) throw err;
+            const error = err instanceof Error ? err.message.split("\n")[0] : String(err);
+            return answer({ failed: { at: i, cmd: one.cmd, error } });
+          }
+        }
+        return answer({});
       }
       case "close":
         queueMicrotask(() => finish());

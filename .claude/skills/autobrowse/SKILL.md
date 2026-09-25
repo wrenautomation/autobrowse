@@ -50,6 +50,8 @@ Act (journaled):
 - `{"cmd":"note","text":"…"}` — a comment in the journal.
 - `{"cmd":"eval","js":"…"}` — last resort when hints cannot reach it; not journaled as a click, so the recording will miss it.
 
+- `{"cmd":"batch","cmds":[{…},{…}]}` — up to 30 commands in order, one answer, one `changed` for the lot. No `close`, `pause`, `resume`, `save` or nested batch.
+
 Session:
 - `{"cmd":"pause"}` / `{"cmd":"resume"}` — a person acts by hand in between; those acts land in the journal too.
 - `{"cmd":"journal","last":5}` — what is recorded so far (`total` and the newest `last`; omit `last` for all).
@@ -64,11 +66,15 @@ what exists; `workflows <name>` and `site route <site> <METHOD> <path>` print th
 
 ## How to work
 
-1. `start.sh <site> <url>`; then `url`, then `aria` (add `limit` on big pages).
-2. One act, then look again. Prefer `role`+`name`; fall back to `css`+`nth`.
-3. Errors come back as `{"error","url"}`; a failed act is not journaled. Change the hints, do not repeat.
-4. Secrets: use `keep`. Never `raw:true` on a page showing a key. Never echo a value, never put one in a URL or a message.
-5. Done: `note` what was achieved, `save` with a kebab name, `stop.sh`.
+Every look costs tokens. Look once, then let the acts tell you what changed.
+
+1. `start.sh <site> <url>`. The `open` answer already lists the page's controls (`changed.added`).
+2. Look with `snapshot` (one line per control). Use `aria` with `hints` to scope it, or a `limit`, only when the snapshot is not enough.
+3. Every act answers `changed`: `added` (new controls, up to 40), `gone` (a count), `more` (added rows past 40). Read that; do not look again after each act.
+4. Several acts you are sure of (fill a form, then submit) go in one `{"cmd":"batch","cmds":[…]}`. It stops at the first failure: `failed: {at, cmd, error}`, with `done` holding what ran. Keep a paying click out of a batch; send it alone.
+5. Prefer `role`+`name`; fall back to `css`+`nth`. Errors come back as `{"error","url"}`; a failed act is not journaled. Change the hints, do not repeat.
+6. Secrets: use `keep`. Never `raw:true` on a page showing a key. Never echo a value, never put one in a URL or a message.
+7. Done: `note` what was achieved, `save` with a kebab name, `stop.sh`.
 
 Money is William's call. A billing field (card, CVC, tax id, billing address) or a button that
 spends (Buy, Pay, Subscribe, Add funds, Start trial) is gated: the session texts him and `cmd.sh`
