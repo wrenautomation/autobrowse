@@ -168,6 +168,23 @@ export function registerEnvCommands(program: Command, settings: Settings, deps: 
     });
 
   env
+    .command("set <name>")
+    .description(
+      "One new value into the store without a file: --clipboard takes what is copied; otherwise piped stdin, or a hidden prompt",
+    )
+    .option("--clipboard", "read the value from the clipboard (macOS)")
+    .action(async (name: string, o: { clipboard?: boolean }) => {
+      if (!/^[A-Z][A-Z0-9_]*$/.test(name)) throw new Error(`not an env name: ${name}`);
+      const value = (o.clipboard ? await pasteboard() : await secretInput(name)).trim();
+      if (!value) throw new Error("empty value; nothing stored");
+      if (/[\r\n]/.test(value) && !value.startsWith("{"))
+        throw new Error("the value has line breaks; copy just the key");
+      await deps.store().put(name, value);
+      say(`set ${name} (${value.length} chars)`);
+      say("the box reads the store on its next deploy (push to main)");
+    });
+
+  env
     .command("expires <name> <when>")
     .description(
       "Record when a value lapses (an ISO date, or `none`) without printing it: for a token minted by hand, or before expiry was kept",
@@ -188,6 +205,47 @@ export function registerEnvCommands(program: Command, settings: Settings, deps: 
     .action(async (name: string) => {
       say((await deps.store().remove(name)) ? `removed ${name}` : `${name} was not in the store`);
     });
+}
+
+/** What is on the macOS clipboard. */
+function pasteboard(): Promise<string> {
+  if (process.platform !== "darwin") throw new Error("--clipboard needs macOS; pipe it in instead");
+  return new Promise((res, rej) =>
+    execFile("pbpaste", (err, stdout) => (err ? rej(err) : res(stdout))),
+  );
+}
+
+/** Piped stdin, or a prompt that echoes nothing. */
+async function secretInput(name: string): Promise<string> {
+  const { stdin, stderr } = process;
+  if (!stdin.isTTY) {
+    let text = "";
+    for await (const chunk of stdin) text += chunk;
+    return text;
+  }
+  stderr.write(`${name} (hidden): `);
+  stdin.setRawMode(true);
+  stdin.resume();
+  stdin.setEncoding("utf8");
+  return new Promise((res, rej) => {
+    let text = "";
+    const done = (err?: Error) => {
+      stdin.setRawMode(false);
+      stdin.pause();
+      stdin.off("data", onData);
+      stderr.write("\n");
+      err ? rej(err) : res(text);
+    };
+    const onData = (s: string) => {
+      for (const ch of s) {
+        if (ch === "\r" || ch === "\n") return done();
+        if (ch === "\u0003") return done(new Error("cancelled"));
+        if (ch === "\u007f") text = text.slice(0, -1);
+        else text += ch;
+      }
+    };
+    stdin.on("data", onData);
+  });
 }
 
 async function writeSecretFile(path: string, text: string): Promise<void> {

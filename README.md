@@ -147,7 +147,8 @@ a row; it is work.
   SecureString per name under `/autobrowse/config` (KMS at rest, IAM at
   the door, every read in CloudTrail; no extra vendor). `autobrowse env
   push TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN` sends local `.env` keys up;
-  `env push --from deploy/prod.env` sends a whole file; the box reads the
+  `env push --from deploy/prod.env` sends a whole file; `env set NAME
+  --clipboard` stores a new one straight from the clipboard; the box reads the
   store on every deploy. Back down on any machine with AWS access: `env
   get NAME` puts one value on the clipboard for a minute (Universal
   Clipboard carries it to a phone), `env pull` merges all of them into a

@@ -248,7 +248,7 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
       what: "A Twilio number (TWILIO_NUMBER), if the phone link is not wanted",
       unlocks: "SMS codes without this Mac",
       how: [
-        "Twilio console → upgrade → buy a number; TWILIO_NUMBER in .env; autobrowse env push TWILIO_NUMBER",
+        "Twilio console → upgrade → buy a number; copy it; autobrowse env set TWILIO_NUMBER --clipboard",
       ],
       check: () => holds(ctx, "TWILIO_NUMBER"),
     },
@@ -258,7 +258,7 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
       what: "An Instantly API key (scopes accounts:all)",
       unlocks: "new inboxes join warmup on their own: the domain workflow's warmup step",
       how: [
-        "app.instantly.ai → Settings → Integrations → API Keys → Create; INSTANTLY_API_KEY in .env; autobrowse env push INSTANTLY_API_KEY",
+        "app.instantly.ai → Settings → Integrations → API Keys → Create; copy it; autobrowse env set INSTANTLY_API_KEY --clipboard",
       ],
       check: () => holds(ctx, "INSTANTLY_API_KEY"),
     },

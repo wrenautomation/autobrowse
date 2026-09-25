@@ -329,7 +329,7 @@ export const photo: Step<"photo"> = {
 };
 
 const NO_INSTANTLY_KEY =
-  "no INSTANTLY_API_KEY: make one in Instantly (Settings → Integrations → API Keys, scopes accounts:all), add it to the environment and `autobrowse env push INSTANTLY_API_KEY`, then approve";
+  "no INSTANTLY_API_KEY: make one in Instantly (Settings → Integrations → API Keys, scopes accounts:all), add it to the environment and `autobrowse env set INSTANTLY_API_KEY --clipboard`, then approve";
 
 /**
  * Warmup in Instantly (warmup only; sends go through wren). Instantly's
