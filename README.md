@@ -492,6 +492,11 @@ pnpm autobrowse site route youtube POST /upload/youtube/v3/videos   # one route'
 pnpm autobrowse site check                    # one who-am-I call per site: is each token alive
 pnpm autobrowse read https://firm.test --max 4000   # a page as plain text, no browser
 pnpm autobrowse search fee-only RIA Austin -n 5     # web search: exa, brave, then duckduckgo
+pnpm autobrowse maps "ria in austin tx" --max-minutes 10   # Google Maps listings as a CSV (Docker); wren --format google-maps
+pnpm autobrowse doctor                        # which read/search/maps backends and site tokens work now
+pnpm autobrowse site call linkedin GET "/search/results/people?keywords=ria%20founder%20austin&pages=2"   # as Wren's LinkedIn
+pnpm autobrowse site call linkedin GET "/in/<vanity>?experience=true"   # one profile, every role
+pnpm autobrowse site call linkedin GET "/company/<handle>/people?keywords=founder"
 pnpm autobrowse site setup youtube oauth-client   # a browser flow on Cloud Console keeps the client id/secret
 pnpm autobrowse site setup youtube consent        # OAuth consent in the logged-in profile; refresh token kept
 pnpm autobrowse site setup gmail consent --account will@x.dev   # another account's inbox: token under its own name

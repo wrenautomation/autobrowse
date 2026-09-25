@@ -258,7 +258,7 @@ registerSiteCommands(program, local);
 registerUnsubscribe(program, local);
 registerAwsCommands(program, local);
 registerLangfuseCommands(program, () => envStoreFor(settings));
-registerReachCommands(program, () => envStoreFor(settings));
+registerReachCommands(program, () => envStoreFor(settings), local);
 registerShotsCommands(program, settings);
 program
   .command("reap")

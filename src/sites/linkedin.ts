@@ -76,6 +76,31 @@ const initUpload = z.object({
   initializeUploadRequest: z.object({ owner: urn }),
 });
 
+const vanity = z
+  .string()
+  .regex(/^[A-Za-z0-9_%-]{2,100}$/, "a profile handle (the part after /in/)");
+const peopleSearch = z.object({
+  keywords: z.string().min(1),
+  page: z.coerce.number().int().min(1).max(100).default(1),
+  pages: z.coerce.number().int().min(1).max(10).default(1),
+  network: z
+    .preprocess((v) => (typeof v === "string" ? v.split(",") : v), z.array(z.enum(["F", "S", "O"])))
+    .optional(),
+});
+const profile = z.object({
+  vanity,
+  experience: z.preprocess((v) => v === true || v === "true", z.boolean()).default(false),
+});
+const companyPeople = z.object({
+  company: z
+    .string()
+    .regex(/^[A-Za-z0-9_%-]{2,100}$/, "a company handle (the part after /company/)"),
+  keywords: z.string().optional(),
+  max: z.coerce.number().int().min(1).max(200).default(30),
+});
+const connect = z.object({ vanity, note: z.string().min(1).max(200).optional() });
+const message = z.object({ vanity, text: z.string().min(1).max(8000) });
+
 async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
   if (!res.ok) throw new HttpError("CALL", `${LINKEDIN_ORIGIN}/${what}`, res.status);
   return res.body as T;
@@ -237,6 +262,45 @@ export const linkedin: SiteApi = {
           }),
           "rest/images",
         ),
+    }),
+    // No API sells these to anyone but partners: the paths are linkedin.com's own pages.
+    route({
+      method: "GET",
+      path: "/search/results/people",
+      summary:
+        "People search (`keywords`, `page`, `pages`, `network` F/S/O): name, headline, location, the role that matched, profile handle",
+      request: peopleSearch,
+      browser: { flow: "linkedin/search-people" },
+    }),
+    route({
+      method: "GET",
+      path: "/in/{vanity}",
+      summary: "One profile: headline, location, about; `experience=true` adds every role as text",
+      request: profile,
+      browser: { flow: "linkedin/profile" },
+    }),
+    route({
+      method: "GET",
+      path: "/company/{company}/people",
+      summary: "A company's people (`keywords` narrows: founder, partner; `max`, default 30)",
+      request: companyPeople,
+      browser: { flow: "linkedin/company-people" },
+    }),
+    route({
+      method: "POST",
+      path: "/in/{vanity}/connect",
+      summary: "Invite to connect, with an optional note (200 characters; five notes a month free)",
+      request: connect,
+      irreversible: true,
+      browser: { flow: "linkedin/connect" },
+    }),
+    route({
+      method: "POST",
+      path: "/in/{vanity}/message",
+      summary: "Message a 1st-degree connection (anyone else is InMail, which needs Premium)",
+      request: message,
+      irreversible: true,
+      browser: { flow: "linkedin/message" },
     }),
   ],
   setup: [

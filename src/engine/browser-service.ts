@@ -19,6 +19,13 @@ import { instagramOauthConsent } from "../browser/flows/instagram-oauth-consent.
 import { instantlyWarmup } from "../browser/flows/instantly-warmup.js";
 import { linkedinCreatePost } from "../browser/flows/linkedin-create-post.js";
 import { linkedinOauthConsent } from "../browser/flows/linkedin-oauth-consent.js";
+import {
+  linkedinCompanyPeople,
+  linkedinConnect,
+  linkedinMessage,
+  linkedinProfile,
+  linkedinSearchPeople,
+} from "../browser/flows/linkedin-reach.js";
 import { npmGranularToken } from "../browser/flows/npm-granular-token.js";
 import { npmTrustedPublisher } from "../browser/flows/npm-trusted-publisher.js";
 import { googleOauthConsent } from "../browser/flows/oauth-consent.js";
@@ -63,6 +70,11 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     instagramOauthConsent,
     instagramCreatePost,
     linkedinCreatePost,
+    linkedinSearchPeople,
+    linkedinProfile,
+    linkedinCompanyPeople,
+    linkedinConnect,
+    linkedinMessage,
     resetMailProbe,
     npmGranularToken,
     npmTrustedPublisher,

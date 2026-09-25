@@ -70,6 +70,18 @@ pnpm -s autobrowse search fee-only RIA Austin -n 5  # exa, brave, then duckduckg
 `--via fetch` forces a backend; `--json` for machine use. Open a browser only for a page
 behind a login or one that renders nothing without scripts.
 
+Lead lists and LinkedIn (reads run as Wren's LinkedIn by the accounts policy, never William's):
+
+```
+pnpm -s autobrowse maps "ria in austin tx" --max-minutes 10          # Maps listings → CSV for wren
+pnpm -s autobrowse site call linkedin GET "/search/results/people?keywords=ria%20founder&pages=2"
+pnpm -s autobrowse site call linkedin GET "/in/<vanity>?experience=true"
+pnpm -s autobrowse site call linkedin GET "/company/<handle>/people?keywords=founder&max=30"
+pnpm -s autobrowse doctor                                            # what works right now
+```
+
+`POST /in/<vanity>/connect` and `/message` send: never without William's yes.
+
 ## Before exploring
 
 Something may already do it. `pnpm autobrowse workflows` and `pnpm autobrowse site status <site>` list

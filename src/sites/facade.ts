@@ -372,8 +372,14 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         // The same account the API leg would have used: its profile, so a browser
         // leg posts as the site's own identity and never as whoever the default
         // profile happens to be signed in as.
-        const at = deps.providerOf?.(s) ?? null;
-        const profile = chosen && at ? await deps.profileFor?.(at, chosen) : null;
+        // A site with its own logins (LinkedIn) keeps the account in its own `site@label` profile.
+        const at = deps.providerOf?.(s) ?? s.site;
+        const profile = chosen ? await deps.profileFor?.(at, chosen) : null;
+        if (chosen && at === s.site && deps.profileFor && !profile)
+          throw new SiteError(
+            409,
+            `${method} ${r.path}: no ${s.site} profile signs in as the chosen account (autobrowse accounts); creds paste ${s.site}@<label> with its username`,
+          );
         const run = await legOf(r.browser, profile, at);
         if (!run)
           throw new SiteError(
