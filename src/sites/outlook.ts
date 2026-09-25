@@ -94,6 +94,7 @@ export const outlookOAuth: OAuthSpec = {
 export const outlook: SiteApi = {
   site: "outlook",
   origin: OUTLOOK_ORIGIN,
+  probe: { path: "/me" },
   auth: { oauth: outlookOAuth },
   routes: [
     route({

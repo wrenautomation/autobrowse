@@ -204,6 +204,7 @@ export const xOAuth: OAuthSpec = {
 export const x: SiteApi = {
   site: "x",
   origin: X_ORIGIN,
+  probe: { path: "/2/users/me" },
   auth: { oauth: xOAuth },
   routes: [
     route({

@@ -98,6 +98,7 @@ export interface SiteRow {
   authed: boolean;
   routes: RouteRow[];
   setup: SetupRow[];
+  probe?: SiteApi["probe"];
 }
 
 export interface SiteFacade {
@@ -125,6 +126,42 @@ export interface SiteFacade {
    * nothing lists what is kept.
    */
   renew?(o?: { dry?: boolean }): Promise<RenewReport>;
+}
+
+export interface CheckRow {
+  site: string;
+  ok: boolean;
+  ms?: number;
+  /** Why not: no probe, no token, or the API's answer. */
+  why?: string;
+}
+
+/** One who-am-I call on the API leg: proves the token works, not just that one is kept. */
+export async function checkSite(
+  f: Pick<SiteFacade, "call">,
+  row: SiteRow,
+  account: string | null = null,
+  now: () => number = Date.now,
+): Promise<CheckRow> {
+  const probe = row.probe;
+  if (!probe) return { site: row.site, ok: false, why: "no probe" };
+  const r = row.routes.find((x) => x.method === "GET" && matchPath(x.path, probe.path));
+  if (r?.via !== "api")
+    return { site: row.site, ok: false, why: r?.missing ?? "probe has no api leg" };
+  const t = now();
+  try {
+    await f.call(row.site, "GET", probe.path, probe.input ?? {}, account);
+    return { site: row.site, ok: true, ms: now() - t };
+  } catch (e) {
+    const status = e instanceof SiteError ? `${e.status} ` : "";
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      site: row.site,
+      ok: false,
+      ms: now() - t,
+      why: `${status}${msg}`.replace(/\s+/g, " ").slice(0, 100),
+    };
+  }
 }
 
 /** `/rest/socialActions/{urn}/comments` against `/rest/socialActions/urn:li:share:1/comments`. */
@@ -283,6 +320,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     authed: hasToken(s),
     routes: await Promise.all(s.routes.map((r) => routeRow(s, r))),
     setup: await Promise.all(s.setup.map(setupRow)),
+    ...(s.probe ? { probe: s.probe } : {}),
   });
   return {
     list: () => Promise.all(sites.map(status)),

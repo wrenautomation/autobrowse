@@ -1,4 +1,6 @@
 export {
+  type CheckRow,
+  checkSite,
   matchPath,
   type RouteRow,
   type SetupRow,

@@ -153,6 +153,8 @@ export interface SiteApi {
    * `default` otherwise. A step can say its own.
    */
   purpose?: string;
+  /** A cheap who-am-I read on the API leg (a concrete GET path): `site check` calls it to prove the token works. */
+  probe?: { path: string; input?: Record<string, unknown> };
 }
 
 export class SiteError extends Error {

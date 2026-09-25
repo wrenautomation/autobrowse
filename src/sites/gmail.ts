@@ -67,6 +67,7 @@ const send = z.object({
 export const gmail: SiteApi = {
   site: "gmail",
   origin: GMAIL_ORIGIN,
+  probe: { path: "/gmail/v1/users/me/profile" },
   auth: { oauth: gmailOAuth },
   routes: [
     route({

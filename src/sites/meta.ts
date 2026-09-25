@@ -287,6 +287,7 @@ export const metaOAuth: OAuthSpec = {
 export const meta: SiteApi = {
   site: "meta",
   origin: META_ORIGIN,
+  probe: { path: "/me" },
   auth: { oauth: metaOAuth },
   // The app, the Page and the ad account live on Wren's own Facebook (the default
   // account, william@): only the card on the ad account is the person's.

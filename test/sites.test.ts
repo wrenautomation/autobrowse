@@ -7,12 +7,14 @@ import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import {
   accessTokens,
+  checkSite,
   linkedin,
   matchPath,
   route,
   runConsent,
   type SiteApi,
   SiteError,
+  type SiteRow,
   siteFacade,
   youtube,
 } from "../src/sites/index.js";
@@ -504,5 +506,50 @@ describe("site facade", () => {
       ["browser", undefined],
       ["none", "workflow x-nothing not recorded"],
     ]);
+  });
+});
+
+describe("checkSite", () => {
+  const row = (via: "api" | "none", probe = true): SiteRow => ({
+    site: "demo",
+    origin: "https://api.demo.test",
+    authed: via === "api",
+    routes: [
+      {
+        method: "GET",
+        path: "/users/{id}",
+        summary: "who",
+        via,
+        ...(via === "none" ? { missing: "no token for demo" } : {}),
+        irreversible: false,
+        spends: false,
+        request: {},
+      },
+    ],
+    setup: [],
+    ...(probe ? { probe: { path: "/users/me", input: { f: 1 } } } : {}),
+  });
+  let t = 0;
+  const now = () => (t += 5);
+
+  it("calls the probe on the api leg and times it", async () => {
+    const calls: unknown[] = [];
+    const f = { call: async (...a: unknown[]) => calls.push(a) };
+    expect(await checkSite(f, row("api"), "me@x", now)).toEqual({ site: "demo", ok: true, ms: 5 });
+    expect(calls).toEqual([["demo", "GET", "/users/me", { f: 1 }, "me@x"]]);
+  });
+
+  it("says why not: no probe, no token, or the API's answer", async () => {
+    const f = {
+      call: async () => {
+        throw new SiteError(401, "token\n expired");
+      },
+    };
+    expect((await checkSite(f, row("api", false))).why).toBe("no probe");
+    expect((await checkSite(f, row("none"))).why).toBe("no token for demo");
+    expect(await checkSite(f, row("api"), null, now)).toMatchObject({
+      ok: false,
+      why: "401 token expired",
+    });
   });
 });

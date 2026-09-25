@@ -2,10 +2,10 @@
  * `autobrowse site`: the site APIs from the terminal, on the same Backend
  * the HTTP face serves. `site` lists them, `site <name>` says what answers
  * and what setup is left, `site <name> call` is one official call, `site
- * <name> setup <step>` makes a key or token.
+ * <name> setup <step>` makes a key or token, `site check` proves each token live.
  */
 import type { Command } from "commander";
-import type { Method } from "../sites/index.js";
+import { checkSite, type Method } from "../sites/index.js";
 import type { LocalBackend } from "./backend.js";
 import { readJson } from "./cli-json.js";
 
@@ -39,6 +39,18 @@ export function registerSiteCommands(program: Command, local: LocalBackend): voi
         console.log(
           `  setup ${st.name.padEnd(14)} ${st.done ? "done" : st.blockedOn.length ? `blocked on ${st.blockedOn.join(", ")}` : st.unrecorded ? `flow ${st.unrecorded} not recorded` : "ready"}  → ${st.makes.join(", ")}`,
         );
+    });
+  site
+    .command("check [site]")
+    .description("Prove each site's token with one who-am-I call; every site by default")
+    .option("--account <address>", "as that consented account")
+    .action(async (name: string | undefined, o: { account?: string }) => {
+      const sites = local().backend.sites;
+      if (!sites) throw new Error("no site apis here");
+      const rows = name ? [await sites.status(name)] : await sites.list();
+      const checks = await Promise.all(rows.map((r) => checkSite(sites, r, o.account ?? null)));
+      for (const c of checks) console.log(`${c.site.padEnd(10)} ${c.ok ? `ok ${c.ms}ms` : c.why}`);
+      if (name && !checks[0]?.ok) process.exitCode = 1;
     });
   site
     .command("route <site> <method> <path>")

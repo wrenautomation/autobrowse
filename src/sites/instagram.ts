@@ -100,6 +100,7 @@ export const instagramOAuth: OAuthSpec = {
 export const instagram: SiteApi = {
   site: "instagram",
   origin: INSTAGRAM_ORIGIN,
+  probe: { path: "/me" },
   auth: { oauth: instagramOAuth },
   routes: [
     route({

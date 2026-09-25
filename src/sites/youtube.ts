@@ -151,6 +151,7 @@ export const youtubeOAuth: OAuthSpec = {
 export const youtube: SiteApi = {
   site: "youtube",
   origin: YOUTUBE_ORIGIN,
+  probe: { path: "/youtube/v3/channels", input: { part: "id", mine: true } },
   auth: { oauth: youtubeOAuth },
   routes: [
     route({

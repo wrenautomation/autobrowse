@@ -64,6 +64,7 @@ export async function createRegistryUser(
 export const npm: SiteApi = {
   site: "npm",
   origin: NPM_REGISTRY,
+  probe: { path: "/-/whoami" },
   auth: { token: NPM_TOKEN },
   routes: [
     route({

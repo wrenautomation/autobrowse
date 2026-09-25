@@ -40,6 +40,7 @@ const query = (i: Record<string, unknown>): string => {
 export const langfuse: SiteApi = {
   site: "langfuse",
   origin: LANGFUSE_ORIGIN,
+  probe: { path: "/api/public/projects" },
   auth: { token: "LANGFUSE_BASIC_AUTH" },
   routes: [
     route({

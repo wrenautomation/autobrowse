@@ -84,6 +84,7 @@ export const tiktokOAuth: OAuthSpec = {
 export const tiktok: SiteApi = {
   site: "tiktok",
   origin: TIKTOK_ORIGIN,
+  probe: { path: "/v2/user/info/" },
   auth: { oauth: tiktokOAuth },
   routes: [
     route({

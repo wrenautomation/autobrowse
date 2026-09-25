@@ -95,6 +95,7 @@ export const linkedinOAuth: OAuthSpec = {
 export const linkedin: SiteApi = {
   site: "linkedin",
   origin: LINKEDIN_ORIGIN,
+  probe: { path: "/v2/userinfo" },
   auth: { oauth: linkedinOAuth },
   routes: [
     route({
