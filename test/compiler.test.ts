@@ -196,6 +196,7 @@ describe("url fields", () => {
     o.fields.push({ key: "project", label: "Project id", example: "p1" });
     const src = render(o).files["index.ts"] ?? "";
     expect(src).toContain(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the generated source, not a template here
       "await fp.open(`https://x.test/apis?project=${encodeURIComponent(input.project)}`);",
     );
     expect(src).toContain("project: plan.project");

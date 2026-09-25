@@ -24,7 +24,7 @@ export async function unlockWithPasskey(fp: FlowPage, button: Hints): Promise<bo
 
 /** The codes on the current page, deduped, in page order. */
 export function codesOn(text: string, codes: RegExp): string[] {
-  return [...new Set(text.match(new RegExp(codes.source, codes.flags.replace("g", "") + "g")))];
+  return [...new Set(text.match(new RegExp(codes.source, `${codes.flags.replace("g", "")}g`)))];
 }
 
 /** Open the recovery page, unlock it, and return the codes it lists. */

@@ -33,7 +33,9 @@ const facade: SiteFacade = {
   },
   setup: async () => ({ made: ["LINKEDIN_ACCESS_TOKEN"] }),
 };
-const h = (sitesService(facade) as unknown as { service: Record<string, Function> }).service;
+const h = (
+  sitesService(facade) as unknown as { service: Record<string, (...args: never) => unknown> }
+).service;
 
 describe("sites service", () => {
   it("a read retries, a write runs once; the input passes through", async () => {

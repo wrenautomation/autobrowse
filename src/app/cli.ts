@@ -30,7 +30,7 @@ import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
 import { fileDone } from "./needs.js";
 import { DONE_FILE, needsContextFor } from "./owed.js";
-import { credentialsFor, envStoreFor, identitiesFor, phoneFor, WORKFLOWS } from "./services.js";
+import { credentialsFor, envStoreFor, identitiesFor, WORKFLOWS } from "./services.js";
 
 loadEnvFile();
 const settings = loadSettings();

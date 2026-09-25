@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { askLine } from "../src/gates/ask.js";
 import { paymentAmount } from "../src/gates/payment.js";
 import {
+  type Amount,
   amountIn,
   memorySpendLedger,
   NO_AUTO_SPEND,
@@ -29,7 +30,7 @@ describe("amountIn", () => {
         what: 'press "Buy"',
         url: "https://x.test/b",
         site: "x",
-        amount: amountIn("$20")!,
+        amount: amountIn("$20") as Amount,
       }),
     ).toBe(
       'autobrowse on x wants to press "Buy" (20.00 USD) at https://x.test/b. Reply yes or no.',
@@ -42,7 +43,7 @@ describe("policedApprover", () => {
     what: `press "${text}", which spends`,
     url: `https://${site}.test/billing`,
     site,
-    ...(amountIn(text) ? { amount: amountIn(text)! } : {}),
+    ...((a) => (a ? { amount: a } : {}))(amountIn(text)),
   });
   const policy: SpendPolicy = {
     allow: ["anthropic"],
