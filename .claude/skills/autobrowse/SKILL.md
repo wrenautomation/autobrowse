@@ -1,6 +1,6 @@
 ---
 name: autobrowse
-description: Drive a signed-in browser or this Mac's desktop through autobrowse's explore session (set up an API key on a site, map a page, do a chore, fix a failing flow) so the acts are journaled and compile into a workflow. Use for any browser or OS task in this repo instead of Playwright or manual steps.
+description: Research the web (read a page, search) and drive a signed-in browser or this Mac's desktop through autobrowse's explore session (set up an API key on a site, map a page, do a chore, fix a failing flow) so the acts are journaled and compile into a workflow. Use for any browser or OS task in this repo instead of Playwright or manual steps.
 ---
 
 # autobrowse explore, from Claude Code
@@ -57,6 +57,18 @@ Session:
 - `{"cmd":"journal","last":5}` — what is recorded so far (`total` and the newest `last`; omit `last` for all).
 - `{"cmd":"save","name":"site-what-it-does"}` — writes `recordings/<name>/`. Then `pnpm autobrowse compile <name>`.
 - `{"cmd":"close"}`.
+
+## Reading and searching (no browser)
+
+A public page or a search needs no session. These cost a fraction of a browser's tokens:
+
+```
+pnpm -s autobrowse read <url> --max 4000          # page as plain text (jina, then a plain fetch)
+pnpm -s autobrowse search fee-only RIA Austin -n 5  # exa, brave, then duckduckgo: the first set up
+```
+
+`--via fetch` forces a backend; `--json` for machine use. Open a browser only for a page
+behind a login or one that renders nothing without scripts.
 
 ## Before exploring
 

@@ -21,6 +21,7 @@ import { registerEnvCommands } from "./cli-env.js";
 import { readJson } from "./cli-json.js";
 import { registerLangfuseCommands } from "./cli-langfuse.js";
 import { registerNeedsCommands } from "./cli-needs.js";
+import { registerReachCommands } from "./cli-reach.js";
 import { registerRecordCommands } from "./cli-record.js";
 import { registerShotsCommands } from "./cli-shots.js";
 import { registerSiteCommands } from "./cli-site.js";
@@ -257,6 +258,7 @@ registerSiteCommands(program, local);
 registerUnsubscribe(program, local);
 registerAwsCommands(program, local);
 registerLangfuseCommands(program, () => envStoreFor(settings));
+registerReachCommands(program, () => envStoreFor(settings));
 registerShotsCommands(program, settings);
 program
   .command("reap")

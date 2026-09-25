@@ -490,6 +490,8 @@ pnpm autobrowse site                        # sites, token state, setup left
 pnpm autobrowse site status linkedin        # every route: api | browser | none (why)
 pnpm autobrowse site route youtube POST /upload/youtube/v3/videos   # one route's inputs; --template for a body file
 pnpm autobrowse site check                    # one who-am-I call per site: is each token alive
+pnpm autobrowse read https://firm.test --max 4000   # a page as plain text, no browser
+pnpm autobrowse search fee-only RIA Austin -n 5     # web search: exa, brave, then duckduckgo
 pnpm autobrowse site setup youtube oauth-client   # a browser flow on Cloud Console keeps the client id/secret
 pnpm autobrowse site setup youtube consent        # OAuth consent in the logged-in profile; refresh token kept
 pnpm autobrowse site setup gmail consent --account will@x.dev   # another account's inbox: token under its own name
