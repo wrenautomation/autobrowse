@@ -174,7 +174,8 @@ describe("explore mode", () => {
     // `?wait=1` holds the request until the answer: one request, the act done on a yes.
     expect((await send(buy, true)).status).toBe(200);
     expect((await send({ cmd: "eval", js: "document.title" })).body.result).toBe("clicked");
-    expect(asks).toEqual(['press "Buy now", which spends', 'press "Buy now", which spends']); // once per answer; the missing "Purchase" asked nobody
+    expect(asks).toHaveLength(2); // once per answer (the no, then the yes); the missing "Purchase" asked nobody
+    expect(asks[1]).toMatch(/^start paying on .*: press "Buy now", which spends \(one yes covers/);
     // The yes-and-click is a charge: told with the page it landed on as the receipt.
     expect(charges).toHaveLength(1);
     expect(charges[0]?.[0]).toMatchObject({
@@ -186,14 +187,13 @@ describe("explore mode", () => {
     expect(charges[0]?.[1].text).toContain("Buy now");
     expect(charges[0]?.[1].text).not.toContain("sk-ant-minted"); // masked like any transcript
     expect(charges[0]?.[1].png?.length).toBeGreaterThan(100);
-    // A css-only click is judged by the button's own words: "Checkout" asks but is no charge;
-    // "Complete Order" (an input's value) asks and is one.
+    // A css-only click is judged by the button's own words: "Checkout" is no charge, "Complete
+    // Order" (an input's value) is one; the yes above covers both (one yes per payment flow).
     expect((await send({ cmd: "click", hints: { css: "#co" } }, true)).status).toBe(200);
-    expect(asks.at(-1)).toMatch(/spends/);
     expect(charges).toHaveLength(1);
     expect((await send({ cmd: "click", hints: { css: "#done" } }, true)).status).toBe(200);
     expect((await send({ cmd: "eval", js: "document.title" })).body.result).toBe("ordered");
-    expect(asks).toHaveLength(4);
+    expect(asks).toHaveLength(2);
     expect(charges).toHaveLength(2);
 
     // A popup (an OAuth window) is listed and switched to; closing it returns to the main page.
@@ -246,7 +246,9 @@ describe("explore mode", () => {
     answer = true;
     expect((await send(osBuy, true)).status).toBe(200);
     expect(desktop.acts.at(-1)).toMatchObject({ op: "click", name: "Buy" });
-    expect(asks.at(-1)).toMatch(/^press "Buy", which spends in \w+$/);
+    expect(asks.at(-1)).toMatch(
+      /^start paying on app:\w+: press "Buy", which spends in \w+ \(one yes/,
+    );
 
     const saved = await send({ cmd: "save", name: "buy" });
     expect(saved.body.actions).toBe(14); // the ordering test's open is journaled too
@@ -285,7 +287,8 @@ describe("explore mode", () => {
   }, 60_000);
 
   it("puts a card on a page after one yes per card and host", async () => {
-    await send({ cmd: "open", url: PAGE });
+    // (a new flow: the first test's yes covers PAGE itself)
+    await send({ cmd: "open", url: `${PAGE}#card` });
     answer = true;
     // A card field: one yes per card and host, then each field lands; the value never crosses the socket.
     const number = await send(
@@ -293,9 +296,9 @@ describe("explore mode", () => {
       true,
     );
     expect(number.body).toEqual({ ok: true, secret: "card.number" });
-    expect(asks.at(-1)).toBe("put main: Visa credit ••4242 exp 09/30 on ");
+    expect(asks.at(-1)).toMatch(/^start paying on .*: put main: Visa credit ••4242 exp 09\/30 on /);
     await send({ cmd: "place", hints: { css: "#p" }, secret: "card@main.cvc" }, true);
-    expect(asks.filter((a) => a.startsWith("put main"))).toHaveLength(1);
+    expect(asks.filter((a) => a.includes("put main"))).toHaveLength(1);
     expect((await send({ cmd: "eval", js: "[d.value, p.value].join(' ')" })).body.result).toBe(
       "4242424242424242 321",
     );

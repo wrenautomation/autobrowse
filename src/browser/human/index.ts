@@ -102,7 +102,8 @@ const isPage = (t: KeyTarget): t is Page => "keyboard" in t;
 export interface Hands {
   /** Read the page before acting. */
   think(page: Page): Promise<void>;
-  click(target: Locator, o: ActTimeout): Promise<void>;
+  /** `at`: a point inside the control (a canvas, a captcha picture), from its top-left. */
+  click(target: Locator, o: ActTimeout & { at?: Point }): Promise<void>;
   /** A control: replace what it holds with `text`. A page: type at the caret. */
   type(target: KeyTarget, text: string, o: ActTimeout): Promise<void>;
   press(target: KeyTarget, key: string, o: ActTimeout): Promise<void>;
@@ -113,7 +114,7 @@ export interface Hands {
 /** Plain Playwright: no pauses, no pointer path. */
 export const instantHands: Hands = {
   think: async () => {},
-  click: (target, o) => target.click(o),
+  click: (target, { at, ...o }) => target.click({ ...o, ...(at ? { position: at } : {}) }),
   type: (target, text, o) => (isPage(target) ? target.keyboard.type(text) : target.fill(text, o)),
   press: (target, key, o) => (isPage(target) ? target.keyboard.press(key) : target.press(key, o)),
   paste: (target, text, o) => target.fill(text, o),
@@ -204,15 +205,15 @@ async function wheelTo(target: Locator, o: ActTimeout, pace: Pace, random: Rando
 export function handsFor(pace: Pace | null, random: Random = Math.random): Hands {
   if (!pace) return instantHands;
 
-  const click = async (target: Locator, o: ActTimeout) => {
+  const click = async (target: Locator, { at, ...o }: ActTimeout & { at?: Point }) => {
     const page = target.page();
     await wheelTo(target, o, pace, random).catch(() => undefined);
     const box = await target
       .scrollIntoViewIfNeeded(o)
       .then(() => target.boundingBox(o))
       .catch(() => null);
-    if (!box) return target.click(o);
-    const aim = aimPoint(box, random);
+    if (!box) return target.click({ ...o, ...(at ? { position: at } : {}) });
+    const aim = at ? { x: box.x + at.x, y: box.y + at.y } : aimPoint(box, random);
     await glide(page, aim, Math.min(box.width, box.height), pace, random).catch(() => undefined);
     await page.waitForTimeout(drawMs(pace.mouse.hover, random));
     // Playwright's click at that spot: it checks the control is still there and uncovered,

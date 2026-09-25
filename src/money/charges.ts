@@ -74,6 +74,15 @@ const DECLINED =
 const CHARGED =
   /\b(thank(s| you) for (your )?(order|purchase|payment|subscribing)|order (is )?(confirmed|complete|placed|received)|order (number|#|no\.?)|payment (successful|received|complete|confirmed|accepted)|you('ve| have) been charged|(successfully|has been) (paid|charged|purchased|subscribed)|transaction (approved|complete)|receipt (number|#)|invoice (number|#)|purchase (complete|confirmed))\b/i;
 
+/** A page still asking for money: the click only led to the next step (RackNerd's "Complete Order" lands on an unpaid invoice). */
+const UNPAID = /\b(unpaid|balance due|amount due|payment due)\b/i;
+const STILL_ASKING = /\b(enter (new )?card|card number|submit payment|pay now)\b/i;
+
+/** Not a charge yet: the page says unpaid, or reads as neither paid nor refused and still asks to pay. */
+export function stillAsking(text: string): boolean {
+  return UNPAID.test(text) || (receiptOutcome(text) === "unclear" && STILL_ASKING.test(text));
+}
+
 /** What the landing page says: one side only, else unclear. */
 export function receiptOutcome(text: string): Outcome {
   const no = DECLINED.test(text);

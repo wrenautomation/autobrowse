@@ -7,6 +7,7 @@ import {
   type Invoice,
   receiptOutcome,
   reportCharge,
+  stillAsking,
 } from "../src/money/charges.js";
 
 const CHARGE: Charge = {
@@ -133,5 +134,14 @@ describe("charges", () => {
     expect(raw).toContain('Content-Disposition: attachment; filename="r.png"');
     expect(raw).toContain(Buffer.alloc(100, 1).toString("base64").slice(0, 76));
     expect(raw.endsWith(`--${b}--`)).toBe(true);
+  });
+});
+
+describe("still asking", () => {
+  it("an unpaid invoice or a card form is the next step, not a charge", () => {
+    expect(stillAsking("Invoice #25429776 UNPAID Pay Now Total $21.99")).toBe(true);
+    expect(stillAsking("Enter New Card Information Below Card Number Submit Payment")).toBe(true);
+    expect(stillAsking("Thank you for your order. Invoice #123 Pay now")).toBe(false);
+    expect(stillAsking("Your plan is active")).toBe(false);
   });
 });

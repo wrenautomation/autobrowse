@@ -52,7 +52,7 @@ import {
   paymentGate,
 } from "../gates/payment.js";
 import type { Amount } from "../gates/spend.js";
-import { type Charge, type Receipt, receiptOutcome } from "../money/charges.js";
+import { type Charge, type Receipt, receiptOutcome, stillAsking } from "../money/charges.js";
 import { ADDRESS_FIELDS, type Address } from "../money/profile.js";
 import {
   type Card,
@@ -93,9 +93,17 @@ const hintsSchema = z.object({
 /** What an act points at: the same hints a flow uses (`css` and `nth` included). */
 const targetSchema = z.object({ hints: hintsSchema });
 
+/** How long one yes to pay on a host lasts. */
+const FLOW_MS = 30 * 60_000;
+
 export const commandSchema = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("open"), url: z.string().url() }),
-  targetSchema.extend({ cmd: z.literal("click"), goal: z.string().optional() }),
+  targetSchema.extend({
+    cmd: z.literal("click"),
+    goal: z.string().optional(),
+    /** A point inside the element from its top-left (a canvas, a captcha picture). */
+    at: z.object({ x: z.number(), y: z.number() }).optional(),
+  }),
   targetSchema.extend({ cmd: z.literal("fill"), value: z.string(), goal: z.string().optional() }),
   /** Fill a field with a named secret the caller holds (a minted password, a code from the inbox); the value never crosses the socket. */
   targetSchema.extend({
@@ -402,19 +410,35 @@ async function serve(
    * process the caller waits.
    */
   const approvals = opts.approve ? new PendingApprovals(opts.approve) : null;
+  /**
+   * One yes per payment flow (William, 2026-09-25: "only ask one yes or no
+   * for whether you want to start the payment flow and pay, not repeated
+   * questions"): a yes on a host covers every money act there (billing
+   * fields, the card, checkout, pay) for FLOW_MS. A no is asked again.
+   */
+  const flowYes = new Map<string, number>();
   const decide = async (
-    key: string,
+    _key: string,
     what: string,
     url: string,
     wait: boolean,
     amount: Amount | null = null,
   ) => {
     if (!approvals) throw new PaymentGate(what, "no-approver");
+    // A web page's flow is its host; a data: page or a desktop app is its own.
+    const host = URL.canParse(url) ? new URL(url).host || url : url;
+    if ((flowYes.get(host) ?? 0) > Date.now()) return;
     await approvals.decide(
-      key,
-      { what, url, site: opts.site, ...(amount ? { amount } : {}) },
+      `pay ${host}`,
+      {
+        what: `start paying on ${host.length > 60 ? "this page" : host}: ${what} (one yes covers the card and the pay clicks here for ${FLOW_MS / 60_000} min)`,
+        url,
+        site: opts.site,
+        ...(amount ? { amount } : {}),
+      },
       wait,
     );
+    flowYes.set(host, Date.now() + FLOW_MS);
   };
   /** Instant for a console; a person's hands when an agent drives (`pace`). */
   const hands = handsFor(opts.pace ?? null);
@@ -517,6 +541,8 @@ async function serve(
   const reportSpend = async (spent: { what: string; amount: Amount | null }) => {
     if (!opts.charges) return [];
     const whole = await pageText();
+    // The next step of a checkout, not a charge: nothing to tell (three false texts, 2026-09-25).
+    if (stillAsking(whole)) return [];
     const text = redactText(whole).slice(0, 6_000);
     const png = await page.screenshot({ fullPage: true, timeout: 15_000 }).catch(() => undefined);
     const host = new URL(page.url()).host;
@@ -602,7 +628,7 @@ async function serve(
       case "click": {
         const spent = await gate("click", c, wait);
         await hands.think(page);
-        await hands.click(find(c), { timeout: 10_000 });
+        await hands.click(find(c), { timeout: 10_000, ...(c.at ? { at: c.at } : {}) });
         await settle(page);
         journalAct(c, (target) => ({ kind: "click", target }));
         // A receipt only for the click that takes money; checkout or "add a card" only led there.

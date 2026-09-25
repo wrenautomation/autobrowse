@@ -408,7 +408,7 @@ export function cardField(card: Card, field: string, billing?: Address): string 
 
 /** `card.number` → default card, `number`; `card@debit.cvc` → card `debit`, `cvc`. Null: not a card secret. */
 export function cardSecret(name: string): { label: string | null; field: string } | null {
-  const m = /^card(?:@([a-z0-9-]+))?\.([A-Za-z]+)$/.exec(name);
+  const m = /^card(?:@([a-z0-9-]+))?\.([A-Za-z][A-Za-z0-9]*)$/.exec(name);
   return m ? { label: m[1] ?? null, field: m[2] as string } : null;
 }
 
