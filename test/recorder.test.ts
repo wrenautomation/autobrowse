@@ -104,6 +104,10 @@ describe("recordBrowser", () => {
     expect(redactAria('- textbox "DSN URL": https://x.y/1')).toBe(
       '- textbox "DSN URL": <redacted>',
     );
+    // A card's expiry is a secret like its number (Meta's "MM/YY" leaked 2026-09-25).
+    for (const name of ["MM/YY", "Expiry", "Expiration date", "Exp", "CVC", "Name on card"])
+      expect(redactAria(`- textbox "${name}": 01/30`)).toBe(`- textbox "${name}": <redacted>`);
+    expect(redactAria('- textbox "Export name": q3')).toBe('- textbox "Export name": q3');
   });
 
   it("masks a filled password field in an aria tree, whatever the value looks like", () => {

@@ -3,7 +3,7 @@
  * names that say secret) and the value (token shapes). Either one masks.
  */
 const SECRET_FIELD =
-  /pass(word|wd|phrase)?|secret|token|api[-_ ]?key|private|credential|otp|code|pin|ssn|cvv|card|\bdsn\b/i;
+  /pass(word|wd|phrase)?|secret|token|api[-_ ]?key|private|credential|otp|code|pin|ssn|cvv|cvc|card|\bdsn\b|\bexp(iry|iration)?\b|mm\s*\/\s*yy|valid thru|name on/i;
 
 const SECRET_VALUES: RegExp[] = [
   /\bAKIA[0-9A-Z]{16}\b/, // AWS access key id
