@@ -104,7 +104,7 @@ const GOOGLE_PASSKEY_SETUP: PasskeySetupSpec = {
 };
 
 /** Google re-asks for the password on security pages; answer on the spot. */
-const GOOGLE_SIGN_IN_HERE = { at: /accounts\.google\.com/, run: signInToGoogle };
+const GOOGLE_SIGN_IN_HERE = { at: /^https:\/\/accounts\.google\.com\//, run: signInToGoogle };
 
 /** A Google Account page, not its signed-out `/intro/` twin. */
 const GOOGLE_SIGNED_IN = /^https:\/\/myaccount\.google\.com\/(?!intro(\/|\?|$))/;
