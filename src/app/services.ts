@@ -281,9 +281,9 @@ function flushAtExit(s: TraceSink): void {
 const LLM_TIMEOUT_MS = 180_000;
 
 /** Captcha walls solved before they go to a person: checkboxes always, pictures when the model can see. */
-export function captchaFor(settings: Settings): { eyes: Eyes | null } {
+export function captchaFor(settings: Settings): { eyes: Eyes | null; attempts: number } {
   const llm = llmFor(settings);
-  return { eyes: llm ? eyesOf(llm) : null };
+  return { eyes: llm ? eyesOf(llm) : null, attempts: settings.captchaAttempts };
 }
 
 export function llmFor(
@@ -901,7 +901,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       pace: paceFor(settings),
       repairer: rememberingRepairer(memory, llm ? llmRepairer(llm) : noRepairer),
       login: loginFor(settings, gmail),
-      captcha: { eyes: llm ? eyesOf(llm) : null },
+      captcha: { eyes: llm ? eyesOf(llm) : null, attempts: settings.captchaAttempts },
       repairIrreversible: !guards.has("irreversible"),
       onRepair: (r) =>
         log.warn(

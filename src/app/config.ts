@@ -86,6 +86,8 @@ const schema = z.object({
   cohereApiKey: z.string().optional(),
   /** Tokens (in + out) every model call may spend per UTC day, all processes together; 0 = no cap. */
   llmDailyTokens: z.coerce.number().int().min(0).default(3_000_000),
+  /** Tries at a captcha before it is handed to you; 0 = hand it over at once. */
+  captchaAttempts: z.coerce.number().int().min(0).default(3),
   /** Memory between runs (repairs that worked, hand-off notes). `none` keeps it in-process. */
   memory: z.enum(["backboard", "none"]).default("none"),
   backboardApiKey: z.string().min(1).optional(),
@@ -267,6 +269,7 @@ export const ENV_KEYS = {
   openaiBaseUrl: "OPENAI_BASE_URL",
   cohereApiKey: "COHERE_API_KEY",
   llmDailyTokens: "LLM_DAILY_TOKENS",
+  captchaAttempts: "CAPTCHA_ATTEMPTS",
   memory: "MEMORY",
   backboardApiKey: "BACKBOARD_API_KEY",
   backboardAssistant: "BACKBOARD_ASSISTANT",

@@ -200,9 +200,10 @@ export interface RunnerOptions {
   /**
    * A captcha wall is solved before it goes to a person: checkboxes by the
    * hands alone, pictures when `eyes` is given (a model that sees). Absent =
-   * every captcha is a person's.
+   * every captcha is a person's. `attempts` whole solves before that
+   * (`CAPTCHA_ATTEMPTS`, default 3; 0 = straight to a person).
    */
-  captcha?: { eyes: Eyes | null };
+  captcha?: { eyes: Eyes | null; attempts?: number };
   /** Repair misses on irreversible acts too (the `irreversible` guard is off). */
   repairIrreversible?: boolean;
   /** Every repair, tried or not, so the flow's source can be fixed for good. */
@@ -447,7 +448,22 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               signingIn = false;
             }
           },
-          captcha: () => solveCaptcha(active, { hands, eyes: runner.captcha?.eyes ?? null }),
+          async captcha() {
+            const eyes = runner.captcha?.eyes ?? null;
+            const attempts = runner.captcha?.attempts ?? 3;
+            let got: CaptchaOutcome = {
+              solved: false,
+              kind: null,
+              vendor: null,
+              reason: "captcha attempts are 0 (CAPTCHA_ATTEMPTS)",
+            };
+            for (let n = 1; n <= attempts; n++) {
+              got = await solveCaptcha(active, { hands, eyes });
+              // Nothing there, or a picture with no eyes: another try would say the same.
+              if (got.solved || !got.kind || (!eyes && got.kind !== "checkbox")) break;
+            }
+            return got;
+          },
           human(reason) {
             throw new NeedsHuman(`${flow.site}: ${reason}`);
           },

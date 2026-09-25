@@ -382,6 +382,34 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       );
     });
   creds
+    .command("totp-share <sites...>")
+    .description(
+      "Put each account's authenticator in Apple Passwords (iCloud syncs it to your iPhone, iPad and Macs): the same seed autobrowse signs in with, never shown",
+    )
+    .action(async (siteArgs: string[]) => {
+      if (process.platform !== "darwin")
+        throw new Error("totp-share opens Apple Passwords (macOS)");
+      const store = credentialsFor(settings);
+      const { execFile } = await import("node:child_process");
+      for (const site of siteArgs.map((a) => accountSite(a))) {
+        const cred = await store.get(site);
+        if (!cred?.totpSecret) {
+          console.log(`${site}: no authenticator yet (autobrowse enroll-totp ${site})`);
+          continue;
+        }
+        const issuer = (site.split("@")[0] ?? site).replace(/^./, (c) => c.toUpperCase());
+        const uri = `otpauth://totp/${encodeURIComponent(`${issuer}:${cred.username}`)}?secret=${cred.totpSecret}&issuer=${encodeURIComponent(issuer)}`;
+        // Passwords asks which saved login it belongs to; the seed goes nowhere else.
+        await new Promise<void>((res, rej) =>
+          execFile("open", [uri], (err) =>
+            err ? rej(new Error(`open failed for ${site}`)) : res(),
+          ),
+        );
+        console.log(`${site}: opened in Passwords; pick the login it belongs to`);
+        await new Promise((r) => setTimeout(r, 1_500));
+      }
+    });
+  creds
     .command("list [platform]")
     .description(
       "Every stored account, grouped by platform: its credential name, username, how it signs in; one platform when named",
@@ -593,21 +621,25 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     });
 
   program
-    .command("enroll-totp <site>")
+    .command("enroll-totp <sites...>")
     .description(
       "Turn on an authenticator for the site ourselves: read the seed off its setup page, store it sealed, confirm with a generated code",
     )
     .option("--url <url>", "the two-factor setup page, when the site's walk is not known")
     .option("--headed", "show the browser")
-    .action(async (siteArg: string, o: { url?: string; headed?: boolean }) => {
-      const site = accountSite(siteArg);
-      const login = resolveLogin(SITE_LOGINS, site) ?? { site };
+    .action(async (siteArgs: string[], o: { url?: string; headed?: boolean }) => {
       const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
         login: loginFor(settings, gmailFor(settings)),
         captcha: captchaFor(settings),
       });
-      console.log(
-        await runner.run(enrollTotpFlow(login, credentialsFor(settings), o.url), undefined),
-      );
+      // One account at a time; one failing does not stop the rest.
+      for (const site of siteArgs.map((a) => accountSite(a))) {
+        const login = resolveLogin(SITE_LOGINS, site) ?? { site };
+        const got = await runner
+          .run(enrollTotpFlow(login, credentialsFor(settings), o.url), undefined)
+          .then(String)
+          .catch((err: unknown) => `failed: ${err instanceof Error ? err.message : String(err)}`);
+        console.log(siteArgs.length > 1 ? `${site}: ${got}` : got);
+      }
     });
 }

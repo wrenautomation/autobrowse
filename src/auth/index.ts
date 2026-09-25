@@ -4,6 +4,7 @@ export {
   type CodeSource,
   codeSources,
   extractCode,
+  inboxLock,
   type Message,
   type MessageReader,
   messageSource,

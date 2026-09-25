@@ -46,7 +46,7 @@ compiled irreversible step opens one) is always asked: `approve <workflow>
 <key> send`. What stays human: hardware keys, adding a payment method,
 a captcha the solver cannot read (`src/browser/captcha`: checkboxes by a
 human click, squares, letters and sliders by the configured model when it
-sees).
+sees; `CAPTCHA_ATTEMPTS` tries, default 3, before it is yours).
 
 **The bar for asking.** Try it first. `NEEDS-WILLIAM.md` and the `needs`
 rows are only for what a machine cannot hold: your password or passkey,
@@ -280,6 +280,8 @@ pnpm autobrowse login cloudflare               # signs in by itself: password or
 pnpm autobrowse workspace-logo logo.png   # the org logo across Gmail/Calendar/Drive (320×132 PNG < 30 KB)
 pnpm autobrowse profile-photo pfp.gif --as google@wren   # an account's round picture in Gmail; a GIF stays animated
 pnpm autobrowse enroll-totp cloudflare --url https://dash.cloudflare.com/profile/authentication  # reads the seed, stores it, confirms
+pnpm autobrowse enroll-totp will@a.com william@a.com  # several Google accounts, one after another
+pnpm autobrowse creds totp-share will@a.com           # same authenticator into Apple Passwords (all your devices)
 pnpm autobrowse run bootstrap cloudflare --plan '{"provider":"cloudflare"}'   # mints CLOUDFLARE_ACCOUNT_ID + API token into .env (--plan: JSON, a file, or -)
 # map a page by hand or by model: one open browser, one command at a time (token printed at start)
 pnpm autobrowse explore cloudflare --url https://dash.cloudflare.com/profile/api-tokens

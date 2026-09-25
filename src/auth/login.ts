@@ -12,7 +12,7 @@ import type { Credential, CredentialStore, SecretAudit } from "credvault";
 import type { FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
 import { wallOf } from "../browser/session.js";
-import type { CodeKind, CodeSource } from "./codes.js";
+import { type CodeKind, type CodeSource, inboxLock } from "./codes.js";
 import { guardedPage, hostUnder, registrable } from "./guard.js";
 import { type IdentityProvider, type Provider, providerOf, registerProvider } from "./providers.js";
 
@@ -25,6 +25,12 @@ export interface SignInContext {
    * so a text meant for another account on the same phone is never taken.
    */
   code(kind: CodeKind, hint?: string, after?: Date): Promise<string>;
+  /**
+   * Run `fn` (ask for a code, read it, type it) while no other sign-in on
+   * this machine asks the same inbox: codes that look alike stay apart.
+   * Absent: `fn` runs at once (`serially`).
+   */
+  serial?<T>(kind: CodeKind, fn: () => Promise<T>): Promise<T>;
   /** Whether a code of this kind can be had, so the sign-in picks that step on the page. */
   offers(kind: CodeKind): boolean;
   /** Where that code would land, to match against a page that masks numbers ("•••-••82"). */
@@ -435,6 +441,11 @@ const choice = (text: string): Hints => ({
   css: `:is(a,button,[role=link],[role=button]):not([aria-disabled="true"]):has-text("${text}")`,
 });
 
+/** `fn` under the context's inbox lock when it has one. */
+export function serially<T>(ctx: SignInContext, kind: CodeKind, fn: () => Promise<T>): Promise<T> {
+  return ctx.serial ? ctx.serial(kind, fn) : fn();
+}
+
 async function googleSecondStep(ctx: SignInContext): Promise<void> {
   const { fp } = ctx;
   const site = "google";
@@ -508,7 +519,8 @@ async function googleSecondStep(ctx: SignInContext): Promise<void> {
     if (await fp.has({ text: "/wrong code/i" }))
       throw new LoginFailed(site, "Google said the texted code was wrong");
   };
-  if (canText && (await fp.has(phoneBox, RENDER_MS))) return answer(await textOurs());
+  if (canText && (await fp.has(phoneBox, RENDER_MS)))
+    return serially(ctx, "sms", async () => answer(await textOurs()));
   await toSelection(fp);
   // Google lists every phone it knows, masked to the last two digits, and
   // greys out one it was given minutes ago ("for your security"). Only a
@@ -525,13 +537,14 @@ async function googleSecondStep(ctx: SignInContext): Promise<void> {
       : ctx.offers("sms") && (await fp.has(unmasked))
         ? unmasked
         : null;
-  if (sms) {
-    const asked = new Date();
-    await fp.act({ kind: "click" }, sms, { goal: "have Google text the code" });
-    await fp.wait(SETTLE_MS);
-    if (canText && (await fp.has(phoneBox, RENDER_MS))) return answer(await textOurs());
-    return answer(asked);
-  }
+  if (sms)
+    return serially(ctx, "sms", async () => {
+      const asked = new Date();
+      await fp.act({ kind: "click" }, sms, { goal: "have Google text the code" });
+      await fp.wait(SETTLE_MS);
+      if (canText && (await fp.has(phoneBox, RENDER_MS))) return answer(await textOurs());
+      return answer(asked);
+    });
   if (ctx.notify && (await fp.has(choice("Tap Yes on your phone")))) {
     const before = fp.url();
     await fp.act({ kind: "click" }, choice("Tap Yes on your phone"), {
@@ -754,6 +767,8 @@ export interface SignInParts {
   notify?: (text: string) => Promise<void>;
   /** Only codes that arrived after this count; now unless said. */
   since?: Date;
+  /** One ask per inbox at a time; `inboxLock` (a lock dir in tmp) unless said. */
+  lockInbox?: (inbox: string) => Promise<() => Promise<void>>;
   /** The credential's store name (`google@will`); the site's when absent. */
   credential?: string;
   /** Domains a credential's password may be typed on; the page refuses it elsewhere. Absent: unbound. */
@@ -801,6 +816,16 @@ export function signInContext(p: SignInParts): SignInContext {
     },
     offers: (kind) => p.codes.offers(kind, cred),
     inbox: (kind) => p.codes.inbox(kind, cred),
+    async serial(kind, fn) {
+      const inbox = p.codes.inbox(kind, cred);
+      if (!inbox) return fn();
+      const release = await (p.lockInbox ?? inboxLock)(inbox);
+      try {
+        return await fn();
+      } finally {
+        await release();
+      }
+    },
     ...(p.notify ? { notify: p.notify } : {}),
     async credFor(other, account) {
       const c = await p.credentials.get(other);

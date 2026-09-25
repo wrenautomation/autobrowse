@@ -145,3 +145,53 @@ export const noCodes: CodeSource = {
   offers: () => false,
   inbox: () => null,
 };
+
+export interface InboxLockOptions {
+  dir?: string;
+  /** A holder older than this is gone (a crashed sign-in); its lock is taken over. */
+  staleMs?: number;
+  /** How long to queue behind another sign-in before giving up. */
+  waitMs?: number;
+  pollMs?: number;
+}
+
+/**
+ * One ask at a time per inbox, across every process on this machine. A
+ * texted "G-123456" names no account: two sign-ins asking the same phone at
+ * once cannot tell their codes apart, so the second waits until the first
+ * has asked, read and typed. Resolves to the release.
+ */
+export async function inboxLock(
+  inbox: string,
+  o: InboxLockOptions = {},
+): Promise<() => Promise<void>> {
+  const { mkdir, rm, stat, writeFile } = await import("node:fs/promises");
+  const { createHash } = await import("node:crypto");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const staleMs = o.staleMs ?? 5 * 60_000;
+  const waitMs = o.waitMs ?? 10 * 60_000;
+  const pollMs = o.pollMs ?? 1_000;
+  const root = o.dir ?? join(tmpdir(), "autobrowse-code-locks");
+  await mkdir(root, { recursive: true, mode: 0o700 });
+  const key = createHash("sha256").update(inbox.toLowerCase()).digest("hex").slice(0, 16);
+  const path = join(root, key);
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    try {
+      await mkdir(path); // atomic: exactly one process gets it
+      await writeFile(join(path, "pid"), String(process.pid));
+      return () => rm(path, { recursive: true, force: true });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      const age = Date.now() - ((await stat(path).catch(() => null))?.mtimeMs ?? 0);
+      if (age > staleMs) {
+        await rm(path, { recursive: true, force: true });
+        continue;
+      }
+      if (Date.now() >= deadline)
+        throw new Error("another sign-in has held this inbox's codes for too long");
+      await new Promise((r) => setTimeout(r, pollMs));
+    }
+  }
+}

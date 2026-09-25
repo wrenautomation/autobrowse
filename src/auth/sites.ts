@@ -18,6 +18,7 @@ import {
   passwordOf,
   type SignInContext,
   type SiteLogin,
+  serially,
   signInToGoogle,
   type TotpSetupSpec,
 } from "./login.js";
@@ -330,24 +331,32 @@ const twilio: SiteLogin = {
       at: /login\.twilio\.com\/u\/mfa-sms-challenge/,
       async run(ctx) {
         const { fp } = ctx;
-        // A code sent for an earlier attempt is older than this sign-in: ask for a fresh one.
-        await fp.act(
-          { kind: "click" },
-          { role: "button", name: "/^resend$/i" },
-          { goal: "have Twilio text a fresh code" },
-        );
-        const code = await ctx.code("sms", "twilio");
-        await fp.act(
-          { kind: "click" },
-          { id: "rememberBrowser" },
-          { goal: "remember this browser" },
-        );
-        await fp.act({ kind: "fill", value: code }, { id: "code" }, { goal: "enter the SMS code" });
-        await fp.act(
-          { kind: "click" },
-          { role: "button", name: "/^continue$/i" },
-          { goal: "submit the code" },
-        );
+        // One sign-in at a time asks the phone: a texted code names no account.
+        await serially(ctx, "sms", async () => {
+          // A code sent for an earlier attempt is older than this sign-in: ask for a fresh one.
+          const asked = new Date();
+          await fp.act(
+            { kind: "click" },
+            { role: "button", name: "/^resend$/i" },
+            { goal: "have Twilio text a fresh code" },
+          );
+          const code = await ctx.code("sms", "twilio", asked);
+          await fp.act(
+            { kind: "click" },
+            { id: "rememberBrowser" },
+            { goal: "remember this browser" },
+          );
+          await fp.act(
+            { kind: "fill", value: code },
+            { id: "code" },
+            { goal: "enter the SMS code" },
+          );
+          await fp.act(
+            { kind: "click" },
+            { role: "button", name: "/^continue$/i" },
+            { goal: "submit the code" },
+          );
+        });
       },
     },
   }),

@@ -11,6 +11,7 @@ import {
   credentialFor,
   extractCode,
   formLogin,
+  inboxLock,
   LoginFailed,
   landAfterOauth,
   loginProvider,
@@ -141,6 +142,26 @@ describe("code sources", () => {
     const req = { site: "google", kind: "sms" as const, since: new Date(0) };
     expect(await src.get(req, cred)).toBe("111111");
     expect(await src.get(req, cred)).toBeNull();
+  });
+  it("asks on one inbox queue: the second waits for the first to let go", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "locks-"));
+    const order: string[] = [];
+    const first = await inboxLock("+15555550182", { dir, pollMs: 5 });
+    const second = inboxLock("+1 555 555 0182".replace(/ /g, ""), { dir, pollMs: 5 }).then(
+      (release) => {
+        order.push("second");
+        return release;
+      },
+    );
+    await new Promise((r) => setTimeout(r, 30));
+    order.push("first done");
+    await first();
+    await (await second)();
+    expect(order).toEqual(["first done", "second"]);
+    // A holder that died long ago is taken over.
+    await inboxLock("+15555550182", { dir });
+    const again = await inboxLock("+15555550182", { dir, staleMs: -1 });
+    await again();
   });
   it("first source with an answer wins", async () => {
     const src = codeSources(
