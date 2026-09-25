@@ -26,6 +26,7 @@ later steps need, the gate answers, the open gate, paused, generation.
 | inboxes | create users; password → credential `google@{email}` (SSM + local copy) | Directory API | | yes |
 | signatures | send-as signature | Gmail API as each user, retried while the mailbox provisions | | |
 | authenticator | enroll TOTP; seed → the same credential | browser as `google@{email}` | Google says the authenticator is on | |
+| photo | the plan's `photoUrl` as each inbox's profile picture (skipped without one) | browser as `google@{email}` | editor closes after Save | |
 | warmup | Instantly OAuth session → Google consent as the inbox → warmup on | Instantly API + browser | session `success`, warmup job `success` | |
 | roster | append `[[senders]]` to SSM roster, dispatch wren deploy, wait | SSM + GitHub API | deploy run succeeded | yes |
 | loops | `SendScheduler/{addr}/start`, `InboxScheduler/{addr}/start` | wren ingress | `running: true` | yes |
@@ -150,6 +151,14 @@ ones, like wren. Not needed until a run is unattended.
   the poll are one journaled unit (the session lives 10 minutes); a rerun
   asks Instantly first, so an inbox is never connected twice. Unproven
   until the first real inbox.
+- 2026-09-25 Profile pictures: an animated GIF uploaded on the account's
+  own page stays animated (Google serves a 24-frame GIF at 60, 96 and 400
+  px; proven on william@wrenautomation.com). Gmail's list shows frame 0,
+  an opened mail plays it, so frame 0 is the plain mark and the motion is
+  small. The Directory API photo path is not used: it is the admin's
+  upload and not known to keep frames. Asset:
+  `lander/public/brand/wren-pfp-animated.gif` (served on the site, so a
+  plan's `photoUrl` can point at it).
 - 2026-09-19 Gates are state + self-chained steps, not awakeables: a
   parked invocation blocked `pause`/`reset` and held the key for days.
 - 2026-09-19 Recording-first for browser flows; Stagehand not adopted.

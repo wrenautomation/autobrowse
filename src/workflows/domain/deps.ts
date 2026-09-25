@@ -21,6 +21,8 @@ export interface DomainDeps {
    * profile in from it, so no inbox ever needs a person to log in.
    */
   credentials: CredentialStore;
+  /** A URL's bytes in a local file, for a browser upload; the file's path. */
+  download: (url: string) => Promise<string>;
   /** Instantly with its API key, or null while no key is set. */
   instantly: () => Promise<InstantlyClient | null>;
   dmarcRua: string | null;

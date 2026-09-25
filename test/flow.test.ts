@@ -220,6 +220,24 @@ describe("runFlow", () => {
     ]);
   });
 
+  it("puts the plan's picture on each inbox, in the inbox's own profile", async () => {
+    const deps = fakeDeps({ cloudflare: fakeCloudflare({ registered: true, zone: "z1" }) });
+    const sites: string[] = [];
+    const run = deps.browser.run.bind(deps.browser);
+    deps.browser.run = async (flow, input) => {
+      sites.push(`${flow.site}/${flow.name}`);
+      return run(flow, input);
+    };
+    const { fx } = fakeEffects();
+    const out = await runFlow(fx, deps, plan({ photoUrl: "https://x.test/brand/pfp.gif" }));
+    expect(out.status).toBe("done");
+    expect(deps.calls.filter((c) => c.startsWith("photo"))).toEqual([
+      "photo /tmp/pfp.gif",
+      "photo /tmp/pfp.gif",
+    ]);
+    expect(sites).toContain("google@hello@wren-new.test/profile-photo");
+  });
+
   it("a password reset keeps the inbox's authenticator and skips enrolling it again", async () => {
     const deps = fakeDeps({ cloudflare: fakeCloudflare({ registered: true, zone: "z1" }) });
     await deps.google.createUser({

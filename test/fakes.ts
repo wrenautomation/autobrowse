@@ -1,6 +1,7 @@
 import type { Credential } from "credvault";
 import type { BrowserFlow, FlowRunner } from "../src/browser/flow.js";
 import { googleDkimGenerate, googleDkimStart } from "../src/browser/flows/google-dkim.js";
+import { googleProfilePhoto } from "../src/browser/flows/google-profile-photo.js";
 import { googleOauthConsent } from "../src/browser/flows/oauth-consent.js";
 import { NeedsHuman } from "../src/browser/session.js";
 import type { CloudflareClient, DnsRecord, Registration } from "../src/clients/cloudflare.js";
@@ -71,6 +72,10 @@ export function fakeBrowser(calls: string[]) {
   runner.on(googleDkimStart, async () => {
     calls.push("dkimStart");
     return "started";
+  });
+  runner.on(googleProfilePhoto, async ({ file }) => {
+    calls.push(`photo ${file}`);
+    return "picture saved";
   });
   runner.on({ site: "google", name: "enroll-totp", run: async () => "" }, async () => {
     calls.push("authenticator");
@@ -265,6 +270,7 @@ export function fakeDeps(
         return [...creds.keys()];
       },
     },
+    download: async (url) => `/tmp/${url.split("/").pop()}`,
     instantly: async () => instantly,
     pollMs: 0,
     dmarcRua: "dmarc@fleet.test",

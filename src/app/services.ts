@@ -1,7 +1,8 @@
 /** Composition root: settings → clients → workflow deps → Restate services. Secrets stay inside the clients. */
 
-import { hostname } from "node:os";
-import { dirname, join } from "node:path";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { hostname, tmpdir } from "node:os";
+import { basename, dirname, join } from "node:path";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import {
   aesGcmCipher,
@@ -64,7 +65,7 @@ import {
 import { cloudflare, verifyCloudflareToken } from "../clients/cloudflare.js";
 import { type GmailUserClient, gmailClient } from "../clients/gmail.js";
 import { googleAdmin } from "../clients/google-admin.js";
-import { type HttpClient, httpClient } from "../clients/http.js";
+import { type HttpClient, httpClient, safeUrl } from "../clients/http.js";
 import { instantly } from "../clients/instantly.js";
 import { type LinqClient, linqClient } from "../clients/linq.js";
 import { ssmRosterStore } from "../clients/roster.js";
@@ -929,6 +930,14 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     }),
     browser,
     credentials: credentialsFor(settings),
+    download: async (url) => {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`download ${safeUrl(url)}: HTTP ${r.status}`);
+      const dir = mkdtempSync(join(tmpdir(), "autobrowse-dl-"));
+      const file = join(dir, basename(new URL(url).pathname) || "file");
+      writeFileSync(file, Buffer.from(await r.arrayBuffer()));
+      return file;
+    },
     instantly: async () => {
       const apiKey =
         process.env.INSTANTLY_API_KEY ||

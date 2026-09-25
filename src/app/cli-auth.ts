@@ -503,6 +503,21 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     });
 
   program
+    .command("profile-photo <file>")
+    .description(
+      "Set a Google account's profile picture (the round one beside its name in Gmail); a GIF stays animated",
+    )
+    .option("--as <site>", "the account's profile: google@<label>", "google")
+    .option("--headed", "show the browser")
+    .action(async (file: string, o: { as: string; headed?: boolean }) => {
+      const { googleProfilePhoto } = await import("../browser/flows/google-profile-photo.js");
+      const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
+        login: loginFor(settings, gmailFor(settings)),
+      });
+      console.log(await runner.run({ ...googleProfilePhoto, site: o.as }, { file: resolve(file) }));
+    });
+
+  program
     .command("enroll-passkey <site>")
     .description(
       "Create a passkey on the site with our own authenticator and keep it; sign-ins then need no password or code",

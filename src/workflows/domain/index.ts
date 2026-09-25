@@ -25,6 +25,7 @@ export const domainWorkflow = defineWorkflow<DomainDeps, s.DomainMemo>()({
     s.inboxes,
     s.signatures,
     s.authenticator,
+    s.photo,
     s.warmup,
     s.roster,
     s.loops,

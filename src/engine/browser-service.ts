@@ -12,6 +12,7 @@ import { z } from "zod";
 import { type BrowserFlow, FlowFailed, type FlowRunner } from "../browser/flow.js";
 import { facebookOauthConsent } from "../browser/flows/facebook-oauth-consent.js";
 import { googleDkimGenerate, googleDkimStart } from "../browser/flows/google-dkim.js";
+import { googleProfilePhoto } from "../browser/flows/google-profile-photo.js";
 import { googleWorkspaceLogo } from "../browser/flows/google-workspace-logo.js";
 import { instagramCreatePost } from "../browser/flows/instagram-create-post.js";
 import { instagramOauthConsent } from "../browser/flows/instagram-oauth-consent.js";
@@ -61,6 +62,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     googleDkimGenerate,
     googleDkimStart,
     googleWorkspaceLogo,
+    googleProfilePhoto,
     googleOauthConsent,
     linkedinOauthConsent,
     instagramOauthConsent,

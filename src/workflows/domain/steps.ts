@@ -13,6 +13,7 @@ import {
   googleDkimGenerate,
   googleDkimStart,
 } from "../../browser/flows/google-dkim.js";
+import { googleProfilePhoto } from "../../browser/flows/google-profile-photo.js";
 import { googleOauthConsent } from "../../browser/flows/oauth-consent.js";
 import { NeedsHuman } from "../../browser/session.js";
 import type { DnsRecord, DomainQuote } from "../../clients/cloudflare.js";
@@ -301,6 +302,25 @@ export const authenticator: Step<"authenticator"> = {
         const login = resolveLogin(SITE_LOGINS, site);
         if (!login) throw new Error("no google login spec");
         return deps.browser.run(enrollTotpFlow(login, deps.credentials), undefined);
+      });
+      outcomes.push(`${email} ${o}`);
+    }
+    return done(outcomes.join(", "));
+  },
+};
+
+/** The plan's picture on each inbox, uploaded in the inbox's own profile (no API keeps a GIF animated). */
+export const photo: Step<"photo"> = {
+  name: "photo",
+  async run({ fx, deps, plan }) {
+    const url = plan.photoUrl;
+    if (!url) return skipped("no photoUrl in the plan");
+    const outcomes: string[] = [];
+    for (const inbox of plan.inboxes) {
+      const email = inboxAddress(plan, inbox);
+      const o = await fx.run(`photo ${email}`, async () => {
+        const file = await deps.download(url);
+        return deps.browser.run({ ...googleProfilePhoto, site: inboxSite(email) }, { file });
       });
       outcomes.push(`${email} ${o}`);
     }

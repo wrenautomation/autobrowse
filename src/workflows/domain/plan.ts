@@ -21,6 +21,11 @@ export const planSchema = z.object({
     .string()
     .default("")
     .describe("Signature HTML for Gmail send-as; wren carries its own in the roster"),
+  photoUrl: z
+    .string()
+    .url()
+    .optional()
+    .describe("Each inbox's profile picture (PNG/JPEG/GIF; a GIF stays animated in Gmail)"),
   buy: z
     .boolean()
     .default(true)
@@ -28,7 +33,7 @@ export const planSchema = z.object({
   warmup: z
     .boolean()
     .default(true)
-    .describe("Enrol the inboxes in warmup (browser + human consent)"),
+    .describe("Enrol the inboxes in Instantly warmup (API + the inbox's own consent)"),
   handoff: z.boolean().default(true).describe("Hand the inboxes to wren: roster + loops"),
   /** Plan every step, do nothing irreversible; stops before the first one. */
   dryRun: z.boolean().default(false),

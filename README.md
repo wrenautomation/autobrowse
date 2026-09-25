@@ -247,11 +247,11 @@ a row; it is work.
 
 - **Domain** (`designs/2026-09-19-domain-flow.md`): check → buy → zone →
   Workspace → verify → mail DNS → DKIM → inboxes → signatures →
-  authenticator → warmup (Instantly API) → roster → loops. Gated at the
+  authenticator → photo → warmup (Instantly API) → roster → loops. Gated at the
   purchase. Each inbox is credential + profile `google@<email>`.
 - **Hand-written legs** (`src/browser/flows/`, callable as the Restate
   `browser` service's `flow`): `google-admin/dkim-*`,
-  `google-admin/workspace-logo`, `google/oauth-consent`,
+  `google-admin/workspace-logo`, `google/profile-photo`, `google/oauth-consent`,
   `linkedin/oauth-consent`, `instagram/oauth-consent`, `tiktok/oauth-consent`,
   `outlook/oauth-consent`, `google/youtube-community-post`.
 - **Compiled from recordings** (`src/workflows/`): `bootstrap` (mints the
@@ -275,6 +275,7 @@ pnpm ui:dev                     # SPA with hot reload on :5173, proxied to :9080
 pnpm autobrowse setup                          # asks once for what is missing (hidden input, sealed store)
 pnpm autobrowse login cloudflare               # signs in by itself: password or the Google button, TOTP/email/SMS code
 pnpm autobrowse workspace-logo logo.png   # the org logo across Gmail/Calendar/Drive (320×132 PNG < 30 KB)
+pnpm autobrowse profile-photo pfp.gif --as google@wren   # an account's round picture in Gmail; a GIF stays animated
 pnpm autobrowse enroll-totp cloudflare --url https://dash.cloudflare.com/profile/authentication  # reads the seed, stores it, confirms
 pnpm autobrowse run bootstrap cloudflare --plan '{"provider":"cloudflare"}'   # mints CLOUDFLARE_ACCOUNT_ID + API token into .env (--plan: JSON, a file, or -)
 # map a page by hand or by model: one open browser, one command at a time (token printed at start)
