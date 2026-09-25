@@ -495,7 +495,9 @@ pnpm autobrowse search fee-only RIA Austin -n 5     # web search: exa, brave, th
 pnpm autobrowse maps "ria in austin tx" --max-minutes 10   # Google Maps listings as a CSV (Docker); wren --format google-maps
 pnpm autobrowse doctor                        # which read/search/maps backends and site tokens work now
 pnpm autobrowse site call linkedin GET "/search/results/people?keywords=ria%20founder%20austin&pages=2"   # as Wren's LinkedIn
-pnpm autobrowse site call linkedin GET "/in/<vanity>?experience=true"   # one profile, every role
+pnpm autobrowse site call linkedin GET "/in/<vanity>?company=true"   # one profile, every role, current employer's page
+pnpm autobrowse site call linkedin GET "/company/<handle>"   # website, size, industry, HQ, phone
+pnpm autobrowse people ria founder austin --pages 2 --enrich   # lead CSV, resumable; wren email import-people <file> --format linkedin --niche <niche>
 pnpm autobrowse site call linkedin GET "/company/<handle>/people?keywords=founder"
 pnpm autobrowse site setup youtube oauth-client   # a browser flow on Cloud Console keeps the client id/secret
 pnpm autobrowse site setup youtube consent        # OAuth consent in the logged-in profile; refresh token kept

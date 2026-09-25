@@ -87,14 +87,18 @@ const peopleSearch = z.object({
     .preprocess((v) => (typeof v === "string" ? v.split(",") : v), z.array(z.enum(["F", "S", "O"])))
     .optional(),
 });
+const flag = z.preprocess((v) => v === true || v === "true", z.boolean()).default(false);
 const profile = z.object({
   vanity,
-  experience: z.preprocess((v) => v === true || v === "true", z.boolean()).default(false),
+  experience: flag,
+  company: flag,
+  prefer: z.string().max(300).optional(),
 });
+const handle = z
+  .string()
+  .regex(/^[A-Za-z0-9_%-]{2,100}$/, "a company handle or id (the part after /company/)");
 const companyPeople = z.object({
-  company: z
-    .string()
-    .regex(/^[A-Za-z0-9_%-]{2,100}$/, "a company handle (the part after /company/)"),
+  company: handle,
   keywords: z.string().optional(),
   max: z.coerce.number().int().min(1).max(200).default(30),
 });
@@ -275,9 +279,17 @@ export const linkedin: SiteApi = {
     route({
       method: "GET",
       path: "/in/{vanity}",
-      summary: "One profile: headline, location, about; `experience=true` adds every role as text",
+      summary:
+        "One profile: headline, location, about; `experience=true` adds every role, `company=true` also the current employer's page (website, size)",
       request: profile,
       browser: { flow: "linkedin/profile" },
+    }),
+    route({
+      method: "GET",
+      path: "/company/{company}",
+      summary: "A company's About page: website, phone, industry, size, headquarters, founded",
+      request: z.object({ company: handle }),
+      browser: { flow: "linkedin/company" },
     }),
     route({
       method: "GET",

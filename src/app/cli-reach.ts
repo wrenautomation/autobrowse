@@ -1,13 +1,16 @@
 /**
- * `autobrowse read` and `autobrowse search`: the open web for research,
- * lean enough for an agent to call per lead. Keys come from the
+ * Research and lead lists: `read` and `search` (the open web, lean enough
+ * for an agent to call per lead), `maps` (Google Maps listings), `people`
+ * (LinkedIn), `doctor` (what answers now). Keys come from the
  * environment, then the env store; a backend without one is skipped.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Command } from "commander";
 import type { EnvStore } from "credvault";
+import type { Person, Profile } from "../browser/flows/linkedin-reach.js";
+import { writeLeads } from "../reach/linkedin-leads.js";
 import { csvRows, ensureMapsServer, mapsReady, mapsScrape, stopMapsServer } from "../reach/maps.js";
 import { type Env, READ_ORDER, readPage, SEARCH_ORDER, search } from "../reach/web.js";
 import { checkSite } from "../sites/index.js";
@@ -123,6 +126,86 @@ export function registerReachCommands(
         } finally {
           if (started && !o.keep) await stopMapsServer();
         }
+      },
+    );
+  program
+    .command("people [keywords...]")
+    .description(
+      "LinkedIn people as a lead CSV for wren (as Wren's LinkedIn); resumable: a re-run skips who is already in --out",
+    )
+    .option("--company <handle>", "a company's people instead of a search (keywords narrow them)")
+    .option("--pages <n>", "search result pages, 10 people each", "1")
+    .option("--network <degrees>", "F, S, O (1st, 2nd, 3rd+), comma list")
+    .option("--enrich", "open each profile and its current employer's page: title, website, size")
+    .option("--max <n>", "at most this many people", "50")
+    .option("--out <file>", "the CSV (appended to when it exists)")
+    .action(
+      async (
+        words: string[],
+        o: {
+          company?: string;
+          pages: string;
+          network?: string;
+          enrich?: boolean;
+          max: string;
+          out?: string;
+        },
+      ) => {
+        const sites = local().backend.sites;
+        if (!sites) throw new Error("no site apis here");
+        const keywords = words.join(" ");
+        if (!keywords && !o.company) throw new Error("keywords, or --company <handle>");
+        const max = Number(o.max) || 50;
+        const q = (params: Record<string, string>) => new URLSearchParams(params).toString();
+        const people = async (): Promise<Person[]> => {
+          const out = o.company
+            ? await sites.call(
+                "linkedin",
+                "GET",
+                `/company/${encodeURIComponent(o.company)}/people?${q({ ...(keywords ? { keywords } : {}), max: String(max) })}`,
+                {},
+              )
+            : await sites.call(
+                "linkedin",
+                "GET",
+                `/search/results/people?${q({ keywords, pages: o.pages, ...(o.network ? { network: o.network } : {}) })}`,
+                {},
+              );
+          return (out as { people: Person[] }).people;
+        };
+        const slug = (o.company ?? keywords)
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .slice(0, 40);
+        const file = resolve(o.out ?? `linkedin-${slug}.csv`);
+        const { written, skipped } = await writeLeads(
+          {
+            people,
+            ...(o.enrich
+              ? {
+                  enrich: async (p: Person) =>
+                    (await sites.call(
+                      "linkedin",
+                      "GET",
+                      `/in/${encodeURIComponent(p.vanity)}?${q({ company: "true", ...(p.current ? { prefer: p.current } : {}) })}`,
+                      {},
+                    )) as Profile,
+                }
+              : {}),
+            existing: existsSync(file) ? readFileSync(file, "utf8") : null,
+            append: (t) => appendFileSync(file, t),
+            // A person's pace between profiles: LinkedIn watches for bursts.
+            pause: () => new Promise((r) => setTimeout(r, 4_000 + Math.random() * 6_000)),
+            onRow: (r, n) =>
+              console.error(
+                `${n}. ${r.full_name} · ${r.title} · ${r.company_name || "?"} ${r.website}`,
+              ),
+            onMiss: (v, why) => console.error(`   ${v}: not enriched (${why.slice(0, 120)})`),
+          },
+          max,
+        );
+        console.log(`${written} people → ${file}${skipped ? ` (${skipped} already there)` : ""}`);
+        console.log(`into wren: wren email import-people ${file} --format linkedin`);
       },
     );
 }

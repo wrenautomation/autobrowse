@@ -1,15 +1,21 @@
 import { describe, expect, it } from "vitest";
 import type { FlowRunner } from "../src/browser/flow.js";
 import {
+  companyOf,
   linkedinConnect,
+  type Person,
+  type Profile,
   personOf,
+  pickRole,
   profileOf,
+  rolesOf,
   searchUrl,
 } from "../src/browser/flows/linkedin-reach.js";
 import type { Hints } from "../src/browser/locate.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
+import { LEAD_COLUMNS, writeLeads } from "../src/reach/linkedin-leads.js";
 import { siteFacade } from "../src/sites/facade.js";
 import { linkedin } from "../src/sites/linkedin.js";
 import { fakePage } from "./auth-fakes.js";
@@ -163,5 +169,148 @@ describe("linkedin reach: routes", () => {
       }),
     ).rejects.toMatchObject({ status: 400 });
     expect(seen).toEqual([]);
+  });
+});
+
+describe("linkedin reach: roles, company, leads", () => {
+  it("experience entries: single roles, and a company's grouped roles under its header", () => {
+    const roles = rolesOf(
+      [
+        {
+          lines: [
+            "Chief Executive Officer",
+            "Skyline Wealth Strategies LLC · Full-time",
+            "Apr 2023 - Sep 2026 · 3 yrs 6 mos",
+            "Austin, Texas, United States · On-site",
+          ],
+          href: "https://www.linkedin.com/company/81997192/?x=1",
+        },
+        {
+          lines: ["AIG Retirement Services", "5 yrs 2 mos"],
+          href: "https://www.linkedin.com/company/19057362/",
+        },
+        {
+          lines: [
+            "Vice President, Field Development",
+            "Full-time",
+            "Nov 2018 - Jul 2021 · 2 yrs 9 mos",
+            "Houston, Texas Area",
+          ],
+          href: "https://www.linkedin.com/company/19057362/",
+        },
+      ],
+      new Date(2026, 8, 25),
+    );
+    expect(roles).toEqual([
+      {
+        title: "Chief Executive Officer",
+        company: "Skyline Wealth Strategies LLC",
+        companyUrl: "https://www.linkedin.com/company/81997192/",
+        dates: "Apr 2023 - Sep 2026",
+        location: "Austin, Texas, United States",
+        current: true,
+      },
+      {
+        title: "Vice President, Field Development",
+        company: "AIG Retirement Services",
+        companyUrl: "https://www.linkedin.com/company/19057362/",
+        dates: "Nov 2018 - Jul 2021",
+        location: "Houston, Texas Area",
+        current: false,
+      },
+    ]);
+  });
+
+  it("an About page: the handle it redirected to, first line of each value", () => {
+    expect(
+      companyOf(
+        "https://www.linkedin.com/company/skyline-wealth-strategies-llc/about/",
+        "Skyline Wealth Strategies LLC ",
+        {
+          Website: "http://www.skylinewealth.com",
+          Phone: "512-555-0100\nPhone number is 512-555-0100",
+          "Company size": "2-10 employees",
+          Headquarters: "Austin, Texas",
+        },
+      ),
+    ).toEqual({
+      name: "Skyline Wealth Strategies LLC",
+      handle: "skyline-wealth-strategies-llc",
+      url: "https://www.linkedin.com/company/skyline-wealth-strategies-llc/",
+      website: "http://www.skylinewealth.com",
+      phone: "512-555-0100",
+      size: "2-10 employees",
+      headquarters: "Austin, Texas",
+    });
+  });
+
+  it("leads: header once, enriched rows, a miss still written, a re-run skips who is there", async () => {
+    const a: Person = {
+      name: "Ann Lee",
+      vanity: "ann-lee",
+      url: "https://www.linkedin.com/in/ann-lee/",
+      current: "Founder at Lee Wealth",
+      headline: "CFP",
+    };
+    const b: Person = {
+      name: "Bo Diaz",
+      vanity: "bo-diaz",
+      url: "https://www.linkedin.com/in/bo-diaz/",
+      headline: "Advisor",
+    };
+    let file = "";
+    const misses: string[] = [];
+    const deps = (existing: string | null) => ({
+      people: async () => [a, b],
+      enrich: async ({ vanity: v }: Person): Promise<Profile> => {
+        if (v === "bo-diaz") throw new Error("no profile");
+        return {
+          name: "Ann Lee",
+          vanity: v,
+          url: a.url,
+          company: {
+            name: "Lee Wealth, LLC",
+            handle: "lee-wealth",
+            url: "https://www.linkedin.com/company/lee-wealth/",
+            website: "https://leewealth.test",
+          },
+        };
+      },
+      existing,
+      append: (t: string) => {
+        file += t;
+      },
+      onMiss: (v: string) => misses.push(v),
+    });
+    expect(await writeLeads(deps(null), 10)).toEqual({ written: 2, skipped: 0 });
+    const lines = file.trim().split("\n");
+    expect(lines[0]).toBe(LEAD_COLUMNS.join(","));
+    expect(lines[1]).toBe(
+      'Ann Lee,Founder,"Lee Wealth, LLC",https://leewealth.test,,https://www.linkedin.com/in/ann-lee/,CFP,https://www.linkedin.com/company/lee-wealth/,,,,,linkedin',
+    );
+    expect(lines[2]).toMatch(/^Bo Diaz,Advisor,,,/);
+    expect(misses).toEqual(["bo-diaz"]);
+    expect(await writeLeads(deps(file), 10)).toEqual({ written: 0, skipped: 2 });
+  });
+});
+
+describe("linkedin reach: which role", () => {
+  const role = (title: string, company: string, current: boolean) => ({
+    title,
+    company,
+    companyUrl: `https://www.linkedin.com/company/${company.length}/`,
+    current,
+  });
+  it("the current role the headline names beats the first current one", () => {
+    const roles = [
+      role("Hospitalist", "St. David's HealthCare", true),
+      role("Founder and CEO", "Austin Regenerative Therapy", true),
+      role("Resident", "UT Health", false),
+    ];
+    expect(
+      pickRole(roles, [undefined, "Founder and CEO at Austin Regenerative Therapy"])?.title,
+    ).toBe("Founder and CEO");
+    expect(pickRole(roles, [])?.title).toBe("Hospitalist");
+    expect(pickRole([role("Resident", "UT Health", false)], [])?.title).toBe("Resident");
   });
 });

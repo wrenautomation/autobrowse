@@ -26,10 +26,12 @@ import type { Hints } from "../locate.js";
 interface El {
   innerText: string;
   href: string;
+  nextElementSibling: El | null;
   querySelector(sel: string): El | null;
   querySelectorAll(sel: string): Iterable<El>;
 }
 declare const document: El;
+declare const location: { href: string };
 
 const WEB = "https://www.linkedin.com";
 const RENDER_MS = 15_000;
@@ -201,8 +203,38 @@ export const linkedinSearchPeople = defineFlow<
 
 export interface ProfileInput {
   vanity: string;
-  /** Also read the experience page: every role, as text. */
+  /** Also read the experience page: every role, structured. */
   experience?: boolean;
+  /** Also read the current employer's page (website, size, industry); implies experience. */
+  company?: boolean;
+  /** Text naming the role that matters (a search row's "Current: …"): picks among current roles. */
+  prefer?: string;
+}
+
+/** One role off the experience page. */
+export interface Role {
+  title: string;
+  company: string;
+  /** `https://www.linkedin.com/company/<id>/`: the handle the company route takes. */
+  companyUrl: string;
+  /** "Apr 2023 - Present", as LinkedIn writes it. */
+  dates?: string;
+  location?: string;
+  current: boolean;
+}
+
+/** A company's About page. */
+export interface Company {
+  name: string;
+  /** The `/company/<handle>/` it lives at (a numeric id redirects to it). */
+  handle: string;
+  url: string;
+  website?: string;
+  phone?: string;
+  industry?: string;
+  size?: string;
+  headquarters?: string;
+  founded?: string;
 }
 
 export interface Profile {
@@ -214,11 +246,10 @@ export interface Profile {
   location?: string;
   connections?: string;
   about?: string;
-  /** The experience page's text, capped: titles, companies, dates, as LinkedIn lays them out. */
-  experience?: string;
+  roles?: Role[];
+  /** The current role's company, read from its own page. */
+  company?: Company;
 }
-
-const EXPERIENCE_MAX = 4_000;
 
 /** The top card's lines as a profile: name, headline, location sit above "Contact info". */
 export function profileOf(vanity: string, top: string, about: string | null): Profile {
@@ -254,6 +285,111 @@ export function profileOf(vanity: string, top: string, about: string | null): Pr
   return out;
 }
 
+/** An experience entry: its lines and the company it links to. */
+export interface RoleAnchor {
+  lines: string[];
+  href: string;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "Nov 2024 - Present · 1 yr 11 mos", "2019 - 2021". */
+const RANGE = /^((?:[A-Z][a-z]{2} )?\d{4})\s+-\s+(Present|(?:[A-Z][a-z]{2} )?\d{4})/;
+const DURATION_ONLY = /^(\d+ yrs?( \d+ mos?)?|\d+ mos?|less than a year)$/i;
+
+/**
+ * Experience entries as roles. One company's several roles come as a header
+ * entry (company, total time) followed by entries that link the same company
+ * and carry only title, type, dates. A role ending this month reads current:
+ * LinkedIn writes an ongoing role's end as the month it renders.
+ */
+export function rolesOf(anchors: RoleAnchor[], now = new Date()): Role[] {
+  const thisMonth = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+  const grouped = new Map<string, string>();
+  const roles: Role[] = [];
+  for (const { lines, href } of anchors) {
+    const companyUrl = href.split("?")[0] ?? href;
+    const [first, second] = lines;
+    if (!first) continue;
+    if (lines.length <= 2 && second && DURATION_ONLY.test(second)) {
+      grouped.set(companyUrl, first);
+      continue;
+    }
+    const dates = lines.find((l) => RANGE.test(l));
+    const range = dates ? RANGE.exec(dates) : null;
+    const company = grouped.get(companyUrl) ?? second?.split(" · ")[0] ?? "";
+    if (!company || RANGE.test(company)) continue;
+    const role: Role = {
+      title: first,
+      company,
+      companyUrl,
+      current: Boolean(range && (range[2] === "Present" || range[2] === thisMonth)),
+    };
+    if (dates) role.dates = dates.split(" · ")[0] ?? dates;
+    const at = dates ? lines.indexOf(dates) : -1;
+    const location = at >= 0 ? lines[at + 1]?.split(" · ")[0] : undefined;
+    if (location && !DURATION_ONLY.test(location)) role.location = location;
+    if (!roles.some((r) => r.title === role.title && r.companyUrl === role.companyUrl))
+      roles.push(role);
+  }
+  return roles;
+}
+
+/** The About page's term/value pairs as a company. */
+export function companyOf(
+  url: string,
+  name: string,
+  fields: Record<string, string>,
+): Company | null {
+  const handle = /\/company\/([^/?#]+)/.exec(url)?.[1];
+  if (!handle || !name) return null;
+  const first = (k: string) => fields[k]?.split("\n")[0]?.trim() || undefined;
+  const out: Company = { name: name.trim(), handle, url: `${WEB}/company/${handle}/` };
+  const pairs: Array<[keyof Company, string]> = [
+    ["website", "Website"],
+    ["phone", "Phone"],
+    ["industry", "Industry"],
+    ["size", "Company size"],
+    ["headquarters", "Headquarters"],
+    ["founded", "Founded"],
+  ];
+  for (const [k, label] of pairs) {
+    const v = first(label);
+    if (v) out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * The role a lead is about: a current one whose company the hints name (the
+ * search row's matched role, the headline), else the first current one,
+ * else the latest. A hospitalist who founded a clinic is the clinic's founder.
+ */
+export function pickRole(roles: Role[], hints: Array<string | undefined>): Role | undefined {
+  const current = roles.filter((r) => r.current);
+  const pool = current.length ? current : roles;
+  const said = hints.filter(Boolean).map((h) => (h as string).toLowerCase());
+  return pool.find((r) => said.some((h) => h.includes(r.company.toLowerCase()))) ?? pool[0];
+}
+
+async function readCompany(fp: FlowPage, handle: string): Promise<Company | null> {
+  const id = /\/company\/([^/?#]+)/.exec(handle)?.[1] ?? handle;
+  await go(fp, `${WEB}/company/${encodeURIComponent(id)}/about/`);
+  if (!(await fp.has({ css: "main h1" }, RENDER_MS))) return null;
+  const { url, name, fields } = await fp.page.evaluate(() => {
+    const fields: Record<string, string> = {};
+    for (const dt of document.querySelectorAll("main dt")) {
+      const dd = dt.nextElementSibling;
+      if (dd) fields[dt.innerText.trim()] = dd.innerText.trim();
+    }
+    return {
+      url: location.href,
+      name: document.querySelector("main h1")?.innerText ?? "",
+      fields,
+    };
+  });
+  return companyOf(url, name, fields);
+}
+
 export const linkedinProfile = defineFlow<ProfileInput, Profile>({
   site: "linkedin",
   name: "profile",
@@ -270,16 +406,39 @@ export const linkedinProfile = defineFlow<ProfileInput, Profile>({
     });
     const out = profileOf(input.vanity, top, about);
     if (!out.name) return fp.human(`the profile at ${fp.url()} read no name`);
-    if (input.experience) {
+    if (input.experience || input.company) {
       await go(fp, `${WEB}/in/${encodeURIComponent(input.vanity)}/details/experience/`);
-      if (await fp.has({ css: "main" }, RENDER_MS)) {
+      if (await fp.has({ css: "main a[href*='/company/']" }, RENDER_MS)) {
         await fp.wait(SETTLE_MS);
-        const text = await fp.page.evaluate(() => document.querySelector("main")?.innerText ?? "");
-        const body = text.replace(/^\s*experience\s*/i, "").trim();
-        if (body) out.experience = body.slice(0, EXPERIENCE_MAX);
+        const anchors = await fp.page.evaluate(() =>
+          [...document.querySelectorAll("main a[href*='/company/']")]
+            .map((a) => ({
+              lines: a.innerText
+                .split("\n")
+                .map((l) => l.trim())
+                .filter(Boolean),
+              href: a.href,
+            }))
+            .filter((a) => a.lines.length),
+        );
+        out.roles = rolesOf(anchors);
       }
     }
+    const current = out.roles && pickRole(out.roles, [input.prefer, out.headline]);
+    if (input.company && current) {
+      const company = await readCompany(fp, current.companyUrl);
+      if (company) out.company = company;
+    }
     return out;
+  },
+});
+
+export const linkedinCompany = defineFlow<{ company: string }, Company>({
+  site: "linkedin",
+  name: "company",
+  async run(fp, input) {
+    const company = await readCompany(fp, input.company);
+    return company ?? fp.human(`no company page for ${input.company} (${fp.url()})`);
   },
 });
 

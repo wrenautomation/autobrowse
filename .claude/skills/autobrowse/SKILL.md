@@ -75,7 +75,10 @@ Lead lists and LinkedIn (reads run as Wren's LinkedIn by the accounts policy, ne
 ```
 pnpm -s autobrowse maps "ria in austin tx" --max-minutes 10          # Maps listings → CSV for wren
 pnpm -s autobrowse site call linkedin GET "/search/results/people?keywords=ria%20founder&pages=2"
-pnpm -s autobrowse site call linkedin GET "/in/<vanity>?experience=true"
+pnpm -s autobrowse people ria founder austin --pages 2 --enrich       # LinkedIn leads CSV → wren --format linkedin; re-run resumes
+pnpm -s autobrowse people founder --company <handle> --enrich            # a firm's people, keywords narrow
+pnpm -s autobrowse site call linkedin GET "/in/<vanity>?company=true"   # roles + current employer's page
+pnpm -s autobrowse site call linkedin GET "/company/<handle>"           # website, size, industry, HQ, phone
 pnpm -s autobrowse site call linkedin GET "/company/<handle>/people?keywords=founder&max=30"
 pnpm -s autobrowse doctor                                            # what works right now
 ```

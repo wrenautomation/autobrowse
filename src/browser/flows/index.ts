@@ -13,12 +13,15 @@ export {
 } from "./linkedin-create-post.js";
 export { linkedinOauthConsent } from "./linkedin-oauth-consent.js";
 export {
+  type Company as LinkedInCompany,
+  linkedinCompany,
   linkedinCompanyPeople,
   linkedinConnect,
   linkedinMessage,
   linkedinProfile,
   linkedinSearchPeople,
   type Person,
+  type Profile as LinkedInProfile,
 } from "./linkedin-reach.js";
 export {
   type GranularTokenInput,

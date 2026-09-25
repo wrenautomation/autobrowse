@@ -20,6 +20,7 @@ import { instantlyWarmup } from "../browser/flows/instantly-warmup.js";
 import { linkedinCreatePost } from "../browser/flows/linkedin-create-post.js";
 import { linkedinOauthConsent } from "../browser/flows/linkedin-oauth-consent.js";
 import {
+  linkedinCompany,
   linkedinCompanyPeople,
   linkedinConnect,
   linkedinMessage,
@@ -72,6 +73,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinCreatePost,
     linkedinSearchPeople,
     linkedinProfile,
+    linkedinCompany,
     linkedinCompanyPeople,
     linkedinConnect,
     linkedinMessage,
