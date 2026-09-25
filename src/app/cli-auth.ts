@@ -9,6 +9,7 @@ import { resolve } from "node:path";
 import type { Command } from "commander";
 import { credentialSchema } from "credvault";
 import { accountsOn, formatAccounts, pickAccount } from "../auth/accounts.js";
+import { accountSite } from "../auth/identities.js";
 import {
   enrollPasskeyFlow,
   enrollTotpFlow,
@@ -46,7 +47,7 @@ import {
 /** `william@wrenautomation.com` → `w***@wrenautomation.com`: whose, without the address in a log. */
 const maskAddress = (u: string) => u.replace(/^(.)[^@]*@/, "$1***@");
 const SITES = SITE_LOGINS.map((s) => s.site);
-const KNOWN = `one of ${SITES.join(", ")}, or <site>@<account> for a second account`;
+const KNOWN = `one of ${SITES.join(", ")}, <site>@<label> for a second account, or an address (will@a.com) for its own Google account`;
 
 /** A site name (or `site@account`) as a login, or a clear error. */
 function loginNamed(site: string) {
@@ -96,7 +97,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .description(
       'Store a credential from stdin JSON: {"username","password","totpSecret"?,"codesInbox"?}',
     )
-    .action(async (site: string) => {
+    .action(async (siteArg: string) => {
+      const site = accountSite(siteArg);
       const raw = JSON.parse(readFileSync(0, "utf8"));
       const parsed = credentialSchema.safeParse(raw);
       if (!parsed.success) {
@@ -158,7 +160,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .description(
       "The account behind a minted signup credential exists now (you finished the signup by hand): `needs` stops asking for it",
     )
-    .action(async (site: string) => {
+    .action(async (siteArg: string) => {
+      const site = accountSite(siteArg);
       const store = credentialsFor(settings);
       const cred = await store.get(site);
       if (!cred)
@@ -171,7 +174,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .description(
       "The site signs in with a handle, not the address (npm): the stored username becomes it, and codes are still read from the address's inbox",
     )
-    .action(async (site: string, name: string) => {
+    .action(async (siteArg: string, name: string) => {
+      const site = accountSite(siteArg);
       const store = credentialsFor(settings);
       const cred = await store.get(site);
       if (!cred) throw new Error(`no credential stored for ${site}`);
@@ -187,7 +191,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .description(
       "The account's sign-in address changed on the site: the stored username follows it, and its codes are read from that inbox",
     )
-    .action(async (site: string, address: string) => {
+    .action(async (siteArg: string, address: string) => {
+      const site = accountSite(siteArg);
       const store = credentialsFor(settings);
       const cred = await store.get(site);
       if (!cred) throw new Error(`no credential stored for ${site}`);
@@ -204,7 +209,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       "--ask",
       "type the new password on this terminal (twice, never echoed) instead of drawing one",
     )
-    .action(async (site: string, o: { headed?: boolean; ask?: boolean }) => {
+    .action(async (siteArg: string, o: { headed?: boolean; ask?: boolean }) => {
+      const site = accountSite(siteArg);
       const login = loginNamed(site);
       // Asked for before the browser opens, so a typo costs nothing.
       const chosen = o.ask ? await askSecretTwice(`new password for ${site}`) : null;
@@ -265,7 +271,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .description(
       "Store what is on the clipboard: `email password [authenticator key]`; the clipboard is emptied after",
     )
-    .action(async (site: string) => {
+    .action(async (siteArg: string) => {
+      const site = accountSite(siteArg);
       await pasteCredential(credentialsFor(settings), site);
       console.log(`stored: ${site} (clipboard emptied)`);
     });
@@ -284,7 +291,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       "This machine's stored credentials into the env store (SSM) as AUTOBROWSE_CRED_<SITE>_*, every field; writes already land there, so this repairs a missed one; --all for every site; nothing printed",
     )
     .option("--all", "every stored site (canaries never travel)")
-    .action(async (sites: string[], o: { all?: boolean }) => {
+    .action(async (siteArgs: string[], o: { all?: boolean }) => {
+      const sites = siteArgs.map((a) => accountSite(a));
       if (sites.length === 0 && !o.all) throw new Error("name sites, or --all");
       const { pushCredentials } = await import("credvault");
       const { credentialHistoryFor, envStoreFor } = await import("./services.js");
@@ -304,7 +312,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       "Credentials from the env store into this machine's sealed file (reads fill it on their own; this fills it all at once, e.g. before going offline); a site already here is kept unless --overwrite; passkeys here are never dropped",
     )
     .option("--overwrite", "replace what is here with the store's copy")
-    .action(async (sites: string[], o: { overwrite?: boolean }) => {
+    .action(async (siteArgs: string[], o: { overwrite?: boolean }) => {
+      const sites = siteArgs.map((a) => accountSite(a));
       const { pullCredentials } = await import("credvault");
       const { envStoreFor } = await import("./services.js");
       const r = await pullCredentials(
@@ -323,7 +332,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .description(
       "Every state the site's credential has had (a version per change, kept in SSM): when, whose, which fields changed; never values",
     )
-    .action(async (site: string) => {
+    .action(async (siteArg: string) => {
+      const site = accountSite(siteArg);
       const { credentialHistoryFor } = await import("./services.js");
       const versions = await credentialHistoryFor(settings).versions(site);
       if (!versions.length) console.log(`no history for ${site} yet (it starts at the next write)`);
@@ -338,7 +348,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       "Put a kept version of the site's credential back, here and in SSM (itself a new version, so it can be undone too); shows what would change, --yes writes",
     )
     .option("--yes", "write it")
-    .action(async (site: string, version: string, o: { yes?: boolean }) => {
+    .action(async (siteArg: string, version: string, o: { yes?: boolean }) => {
+      const site = accountSite(siteArg);
       const { changedFields } = await import("credvault");
       const { credentialHistoryFor } = await import("./services.js");
       const n = Number(version);
@@ -354,6 +365,19 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       if (!o.yes) return console.log("nothing written; --yes to write");
       await store.put(site, kept);
       console.log("restored");
+    });
+  creds
+    .command("rm <site>")
+    .description(
+      "Forget a stored credential, here and in the shared store (an address means its Google account); its history stays, so `creds restore` brings it back",
+    )
+    .action(async (siteArg: string) => {
+      const site = accountSite(siteArg);
+      const store = credentialsFor(settings, { armed: false });
+      if (!store.remove) throw new Error("this credential store cannot forget");
+      console.log(
+        (await store.remove(site)) ? `forgot ${site}` : `no credential stored for ${site}`,
+      );
     });
   creds
     .command("list [platform]")
@@ -464,7 +488,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       `Sign in to a site with the stored credential (headless). With --headed and no credential, a person logs in and closes the window. Sites: ${KNOWN}, or any site stored with \`creds via\``,
     )
     .option("--headed", "show the browser")
-    .action(async (site: string, o: { headed?: boolean }) => {
+    .action(async (siteArg: string, o: { headed?: boolean }) => {
+      const site = accountSite(siteArg);
       const login = await loginOrVia(settings, site);
       const opts = await browserFor(settings, site, o.headed ? headed : undefined);
       const credName = login.credential ?? site;
@@ -507,14 +532,23 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .description(
       "Set a Google account's profile picture (the round one beside its name in Gmail); a GIF stays animated",
     )
-    .option("--as <site>", "the account's profile: google@<label>", "google")
+    .option(
+      "--as <account>",
+      "whose picture: an address (will@a.com) or a profile (google@wren)",
+      "google",
+    )
     .option("--headed", "show the browser")
     .action(async (file: string, o: { as: string; headed?: boolean }) => {
       const { googleProfilePhoto } = await import("../browser/flows/google-profile-photo.js");
       const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
         login: loginFor(settings, gmailFor(settings)),
       });
-      console.log(await runner.run({ ...googleProfilePhoto, site: o.as }, { file: resolve(file) }));
+      console.log(
+        await runner.run(
+          { ...googleProfilePhoto, site: accountSite(o.as) },
+          { file: resolve(file) },
+        ),
+      );
     });
 
   program
@@ -523,7 +557,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       "Create a passkey on the site with our own authenticator and keep it; sign-ins then need no password or code",
     )
     .option("--headed", "show the browser")
-    .action(async (site: string, o: { headed?: boolean }) => {
+    .action(async (siteArg: string, o: { headed?: boolean }) => {
+      const site = accountSite(siteArg);
       const login = loginNamed(site);
       const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
         login: loginFor(settings, gmailFor(settings)),
@@ -537,7 +572,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       "Read the account's recovery codes off the site's recovery page and seal them with the credential; prints only how many",
     )
     .option("--headed", "show the browser")
-    .action(async (site: string, o: { headed?: boolean }) => {
+    .action(async (siteArg: string, o: { headed?: boolean }) => {
+      const site = accountSite(siteArg);
       const login = loginNamed(site);
       const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
         login: loginFor(settings, gmailFor(settings)),
@@ -554,7 +590,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     )
     .option("--url <url>", "the two-factor setup page, when the site's walk is not known")
     .option("--headed", "show the browser")
-    .action(async (site: string, o: { url?: string; headed?: boolean }) => {
+    .action(async (siteArg: string, o: { url?: string; headed?: boolean }) => {
+      const site = accountSite(siteArg);
       const login = resolveLogin(SITE_LOGINS, site) ?? { site };
       const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
         login: loginFor(settings, gmailFor(settings)),

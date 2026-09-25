@@ -5,11 +5,13 @@ import { memoryCredentials } from "credvault";
 import { describe, expect, it } from "vitest";
 import { formatReadiness, readiness } from "../src/app/cli-accounts.js";
 import {
+  accountSite,
   assignPurpose,
   fileIdentities,
   formatIdentities,
   identityAt,
   identityFor,
+  inGroup,
   parseIdentities,
   withIdentity,
   withoutIdentity,
@@ -52,6 +54,27 @@ describe("accounts policy", () => {
     expect(all.find((i) => i.address === jin.address)?.for).toEqual(["pays"]);
     expect(() => assignPurpose(all, "x", "nobody@x.com")).toThrow(/accounts add/);
     expect(withoutIdentity(all, "JIN@gmail.com").map((i) => i.address)).toEqual(["w@wren.com"]);
+  });
+  it("a group word is shared by many accounts, kept in place; the code's purposes stay one account's", () => {
+    const s1 = { address: "will@a.com", at: "google" as const, for: ["sends"] };
+    const s2 = { address: "william@a.com", at: "google" as const, for: ["sends"] };
+    let all = withIdentity(withIdentity([jin, wren], s1), s2);
+    expect(inGroup(all, "sends").map((i) => i.address)).toEqual(["will@a.com", "william@a.com"]);
+    all = withIdentity(all, { ...s1, for: ["sends", "pays"] });
+    expect(all.map((i) => i.address)).toEqual([
+      "jin@gmail.com",
+      "w@wren.com",
+      "will@a.com",
+      "william@a.com",
+    ]);
+    expect(inGroup(all, "sends")).toHaveLength(2);
+    expect(identityFor(all, "pays")?.address).toBe("will@a.com");
+  });
+  it("an address typed for an account is its own Google profile; a site name stays", () => {
+    expect(accountSite("Will@Wren-Automation.com")).toBe("google@will@wren-automation.com");
+    expect(accountSite("google@wren")).toBe("google@wren");
+    expect(accountSite("google@will@a.com")).toBe("google@will@a.com");
+    expect(accountSite("linkedin")).toBe("linkedin");
   });
   it("the file store keeps addresses and purposes, never anything else", async () => {
     const store = fileIdentities(join(mkdtempSync(join(tmpdir(), "ids-")), "accounts.json"));

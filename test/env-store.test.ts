@@ -13,6 +13,7 @@ describe("autobrowse env", () => {
     const store = memoryEnvStore(initial);
     const said: string[] = [];
     let printed = "";
+    let pasted = "";
     const copied: string[] = [];
     const program = new Command().exitOverride();
     registerEnvCommands(program, { envFile: join(dir, ".env") } as Settings, {
@@ -24,9 +25,13 @@ describe("autobrowse env", () => {
       clipboard: async (t) => {
         copied.push(t);
       },
+      paste: async () => pasted,
     });
     const run = (...args: string[]) => program.parseAsync(["node", "autobrowse", "env", ...args]);
-    return { dir, store, said, copied, run, printed: () => printed };
+    const paste = (t: string) => {
+      pasted = t;
+    };
+    return { dir, store, said, copied, run, paste, printed: () => printed };
   };
 
   it("lists names only, copies one value, prints on request", async () => {
@@ -91,5 +96,27 @@ describe("autobrowse env", () => {
     await t.run("rm", "X");
     expect(t.store.values.X).toBeUndefined();
     expect(t.said.at(-1)).toBe("removed X");
+  });
+  it("sets a new value from the clipboard into the store and .env, cleaned of a pasted line or quotes", async () => {
+    const t = setup({});
+    t.paste("  INSTANTLY_API_KEY='k1'\n");
+    await t.run("set", "INSTANTLY_API_KEY", "--clipboard");
+    expect(await t.store.get("INSTANTLY_API_KEY")).toBe("k1");
+    expect(readFileSync(join(t.dir, ".env"), "utf8")).toMatch(/^INSTANTLY_API_KEY=k1$/m);
+    expect(t.said.join("\n")).not.toContain("k1");
+    t.paste("");
+    await expect(t.run("set", "X", "--clipboard")).rejects.toThrow(/empty/);
+    t.paste("a\nb");
+    await expect(t.run("set", "X", "--clipboard")).rejects.toThrow(/line breaks/);
+    await expect(t.run("set", "lower", "--clipboard")).rejects.toThrow(/not an env name/);
+    t.paste("k2");
+    await t.run("set", "ONLY_THERE", "--clipboard", "--store-only");
+    expect(readFileSync(join(t.dir, ".env"), "utf8")).not.toContain("ONLY_THERE");
+  });
+  it("a push of a name only in the store says so; one in neither place is an error", async () => {
+    const t = setup({ ONLY_THERE: "v" });
+    await t.run("push", "ONLY_THERE");
+    expect(t.said.join("\n")).toMatch(/already in the store/);
+    await expect(t.run("push", "NOWHERE")).rejects.toThrow(/not in .* or the store: NOWHERE/);
   });
 });

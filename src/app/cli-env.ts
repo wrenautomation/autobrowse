@@ -27,6 +27,8 @@ export interface EnvCliDeps {
   clipboard?: (text: string, clearAfterMs: number) => Promise<void>;
   say?: (line: string) => void;
   out?: (text: string) => void;
+  /** What is on the clipboard, for `set --clipboard`. */
+  paste?: () => Promise<string>;
 }
 
 const CLEAR_MS = 60_000;
@@ -155,15 +157,28 @@ export function registerEnvCommands(program: Command, settings: Settings, deps: 
       if (!names.length && !o.from)
         throw new Error("name what to push, or --from <file> to push every key in a file");
       const file = resolve(expandHome(o.from ?? settings.envFile));
-      const entries = parseDotenv(readFileSync(file, "utf8"), (p) =>
-        existsSync(expandHome(p)) ? readFileSync(expandHome(p), "utf8") : null,
-      );
+      if (o.from && !existsSync(file)) throw new Error(`no such file: ${file}`);
+      // No .env on this machine yet: every named value has to be in the store already.
+      const entries = existsSync(file)
+        ? parseDotenv(readFileSync(file, "utf8"), (p) =>
+            existsSync(expandHome(p)) ? readFileSync(expandHome(p), "utf8") : null,
+          )
+        : [];
       const chosen = names.length ? entries.filter((e) => names.includes(e.name)) : entries;
       const missing = names.filter((n) => !chosen.some((e) => e.name === n));
-      if (missing.length) throw new Error(`not in ${file}: ${missing.join(", ")}`);
       const store = deps.store();
+      if (missing.length) {
+        // Not in the file but already in the store (`env set` put it there): nothing to push.
+        const there = new Set((await store.list()).map((r) => r.name));
+        const absent = missing.filter((n) => !there.has(n));
+        if (absent.length)
+          throw new Error(
+            `not in ${file} or the store: ${absent.join(", ")} (a new one: autobrowse env set NAME --clipboard)`,
+          );
+        say(`already in the store, not in ${file}: ${missing.join(", ")}`);
+      }
       for (const e of chosen) await store.put(e.name, e.value);
-      say(`pushed ${chosen.length}: ${chosen.map((e) => e.name).join(", ")}`);
+      if (chosen.length) say(`pushed ${chosen.length}: ${chosen.map((e) => e.name).join(", ")}`);
       say("the box reads the store on its next deploy (push to main)");
     });
 
@@ -173,14 +188,23 @@ export function registerEnvCommands(program: Command, settings: Settings, deps: 
       "One new value into the store without a file: --clipboard takes what is copied; otherwise piped stdin, or a hidden prompt",
     )
     .option("--clipboard", "read the value from the clipboard (macOS)")
-    .action(async (name: string, o: { clipboard?: boolean }) => {
+    .option("--out <file>", "env file that gets it too (merged, 0600)", settings.envFile)
+    .option("--store-only", "the store alone, not the local env file")
+    .action(async (name: string, o: { clipboard?: boolean; out: string; storeOnly?: boolean }) => {
       if (!/^[A-Z][A-Z0-9_]*$/.test(name)) throw new Error(`not an env name: ${name}`);
-      const value = (o.clipboard ? await pasteboard() : await secretInput(name)).trim();
-      if (!value) throw new Error("empty value; nothing stored");
-      if (/[\r\n]/.test(value) && !value.startsWith("{"))
-        throw new Error("the value has line breaks; copy just the key");
+      const value = cleanValue(
+        name,
+        o.clipboard ? await (deps.paste ?? pasteboard)() : await secretInput(name),
+      );
       await deps.store().put(name, value);
-      say(`set ${name} (${value.length} chars)`);
+      say(`set ${name} in the store (${value.length} chars)`);
+      if (!o.storeOnly) {
+        const file = resolve(expandHome(o.out));
+        await mkdir(dirname(file), { recursive: true });
+        const current = existsSync(file) ? await readFile(file, "utf8") : "";
+        await writeSecretFile(file, upsertDotenv(current, [{ name, value }]));
+        say(`and in ${file}`);
+      }
       say("the box reads the store on its next deploy (push to main)");
     });
 
@@ -205,6 +229,22 @@ export function registerEnvCommands(program: Command, settings: Settings, deps: 
     .action(async (name: string) => {
       say((await deps.store().remove(name)) ? `removed ${name}` : `${name} was not in the store`);
     });
+}
+
+/**
+ * A pasted value as it is meant: blank edges gone, a whole `NAME=value`
+ * line or surrounding quotes cut down to the value. A multi-line value is
+ * only taken when it is JSON (a service-account key).
+ */
+export function cleanValue(name: string, raw: string): string {
+  let v = raw.trim();
+  const line = new RegExp(`^(export\\s+)?${name}=`);
+  if (line.test(v)) v = v.replace(line, "").trim();
+  if (/^(['"]).*\1$/s.test(v)) v = v.slice(1, -1);
+  if (!v) throw new Error("empty value; nothing stored");
+  if (/[\r\n]/.test(v) && !/^[{[]/.test(v))
+    throw new Error("the value has line breaks; copy just the value");
+  return v;
 }
 
 /** What is on the macOS clipboard. */

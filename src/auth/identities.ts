@@ -18,12 +18,23 @@ export type IdentityProvider = (typeof IDENTITY_PROVIDERS)[number];
 
 /** The purpose every account falls back to when none names the one asked for. */
 export const DEFAULT_PURPOSE = "default";
-/** Purposes the code asks for; any other word is fine too. */
+/**
+ * Purposes the code asks for, each held by one account at a time. Any other
+ * word (`sends`, `personal`) is a group: as many accounts as you like hold it.
+ */
 export const PURPOSES = {
   default: "everything not named below",
   pays: "anything with a card or credits: developer consoles that bill, ad accounts, model credits",
   signup: "new accounts are made with this address and its inbox reads their codes",
 } as const;
+
+/** One account at a time holds it (the code asks for "the" account for it). */
+export const isExclusive = (purpose: string): boolean => Object.hasOwn(PURPOSES, purpose);
+
+/** Every account in a group (`sends`), in the order they were added. */
+export function inGroup(all: readonly Identity[], purpose: string): Identity[] {
+  return all.filter((i) => i.for.includes(purpose));
+}
 
 export const identitySchema = z.object({
   address: z.string().trim().email(),
@@ -39,6 +50,16 @@ export interface IdentityStore {
 }
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * What a person types for an account, as its credential and profile name:
+ * a bare address (`will@a.com`) is that address's own Google account,
+ * `google@will@a.com`; a site or `site@label` (`google@wren`) stays as it is.
+ */
+export function accountSite(nameOrAddress: string, at: IdentityProvider = "google"): string {
+  const v = nameOrAddress.trim();
+  return /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(v) ? `${at}@${v.toLowerCase()}` : v;
+}
 
 /** The account for a purpose: the one that names it, else the default one, else null. */
 export function identityFor(all: readonly Identity[], purpose: string): Identity | null {
@@ -92,19 +113,24 @@ export function formatIdentities(all: readonly Identity[]): string {
     .join(";");
 }
 
-/** Add or change one; a purpose held by another account moves here. */
+/** Add or change one, in place; an exclusive purpose (pays, default, signup) another account held moves here. */
 export function withIdentity(all: readonly Identity[], id: Identity): Identity[] {
-  const others = all
-    .filter((i) => !same(i.address, id.address))
-    .map((i) => ({ ...i, for: i.for.filter((p) => !id.for.includes(p)) }));
-  return [...others, id];
+  const moved = (i: Identity) => ({
+    ...i,
+    for: i.for.filter((p) => !(isExclusive(p) && id.for.includes(p))),
+  });
+  const at = all.findIndex((i) => same(i.address, id.address));
+  const rest = all.map(moved);
+  if (at < 0) return [...rest, id];
+  rest[at] = id;
+  return rest;
 }
 
 export function withoutIdentity(all: readonly Identity[], address: string): Identity[] {
   return all.filter((i) => !same(i.address, address));
 }
 
-/** Give a purpose to an account it must already be in the list. */
+/** Give a purpose to an account already in the list (an exclusive one moves from whoever had it). */
 export function assignPurpose(
   all: readonly Identity[],
   purpose: string,

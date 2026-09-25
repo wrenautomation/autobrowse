@@ -105,6 +105,10 @@ export async function profileOf(
   const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
   const own = await credentials.get(site);
   if (own && same(own.username, account)) return site;
+  // An inbox that is its own account: `google@will@a.com`.
+  const named = `${site}@${account.trim().toLowerCase()}`;
+  const byName = await credentials.get(named);
+  if (byName && same(byName.username, account)) return named;
   for (const name of await credentials.list()) {
     if (!name.startsWith(`${site}@`) && !name.startsWith(`${site}-`)) continue;
     const c = await credentials.get(name);

@@ -286,6 +286,9 @@ pnpm autobrowse agent google "open Personal info and report the display name" --
 pnpm autobrowse repair ~/.config/autobrowse/artifacts/google-x-2026-….failure.json   # agent picks up where a flow stopped
 pnpm autobrowse creds paste google@ops            # a second account: `email password [key]` on the clipboard (or the UI's Accounts page)
 pnpm autobrowse accounts add ops@x.com --for pays  # which of your accounts is for what (pays, default, signup); consents, signups, `via` read it
+pnpm autobrowse accounts add a@x.com b@x.com --for sends  # any other word is a group: many accounts share it
+pnpm autobrowse accounts list --for sends     # one group, with each account's credential and inbox
+pnpm autobrowse creds rm will@x.com           # forget a credential (an address = its Google account); creds restore brings it back
 pnpm autobrowse accounts                          # each account's purposes and readiness (credential, inbox, tokens); names only
 pnpm autobrowse needs                             # what only you can give (logins, keys, consents, phone, money, decisions), each with its check + command
                                                   # (the UI has the same list on its Needs page, and the account policy on Accounts)

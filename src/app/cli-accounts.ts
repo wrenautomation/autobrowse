@@ -13,6 +13,8 @@ import {
   type Identity,
   type IdentityStore,
   identitySchema,
+  inGroup,
+  isExclusive,
   PURPOSES,
   withIdentity,
   withoutIdentity,
@@ -73,8 +75,9 @@ export async function readiness(deps: AccountsCliDeps, id: Identity): Promise<Ac
 export function formatReadiness(rows: AccountReadiness[]): string {
   if (!rows.length)
     return [
-      "no accounts yet: autobrowse accounts add <address> --for pays|default|signup",
+      "no accounts yet: autobrowse accounts add <address...> --for pays|default|signup|<group>",
       ...Object.entries(PURPOSES).map(([k, v]) => `  ${k.padEnd(8)} ${v}`),
+      "  <group>  any other word (sends): as many accounts as you like",
     ].join("\n");
   const w = Math.max(...rows.map((r) => r.address.length));
   return rows
@@ -100,47 +103,90 @@ export function registerAccountsCommands(program: Command, deps: () => AccountsC
     );
   accounts
     .command("list", { isDefault: true })
-    .description("Each account, its purposes, and how ready it is; nothing secret")
-    .action(async () => {
+    .description(
+      "Each account, its purposes, and how ready it is; nothing secret. --for <purpose> shows one group",
+    )
+    .option("--for <purpose>", "only the accounts for this (sends, pays, …)")
+    .action(async (o: { for?: string }) => {
       const d = deps();
+      const all = await d.identities.list();
+      const shown = o.for ? inGroup(all, o.for) : all;
       const rows = [];
-      for (const id of await d.identities.list()) rows.push(await readiness(d, id));
+      for (const id of shown) rows.push(await readiness(d, id));
+      if (o.for && !rows.length) return console.log(`no account is for ${o.for}`);
       console.log(formatReadiness(rows));
+      if (o.for) console.log(`${rows.length} for ${o.for}`);
     });
   accounts
-    .command("add <address>")
-    .description("Add or change an account; a purpose another account had moves here")
-    .option("--for <purposes>", "comma-separated: pays, default, signup, or your own word", "")
+    .command("add <addresses...>")
+    .description(
+      "Add or change accounts, several at once (a group of senders); pays, default and signup move to the account named, any other purpose is shared",
+    )
+    .option(
+      "--for <purposes>",
+      "comma-separated: pays, default, signup, or your own group word",
+      "",
+    )
     .option("--at <provider>", `where it signs in: ${IDENTITY_PROVIDERS.join("|")}`, "google")
     .option("--note <text>", "what it is, in your words")
-    .action(async (address: string, o: { for: string; at: string; note?: string }) => {
+    .action(async (addresses: string[], o: { for: string; at: string; note?: string }) => {
       const d = deps();
-      const id = identitySchema.parse({
-        address,
-        at: o.at,
-        for: o.for
-          .split(",")
-          .map((p) => p.trim())
-          .filter(Boolean),
-        ...(o.note ? { note: o.note } : {}),
-      });
-      const all = withIdentity(await d.identities.list(), id);
+      const purposes = o.for
+        .split(",")
+        .map((p) => p.trim())
+        .filter(Boolean);
+      const sole = purposes.filter(isExclusive);
+      if (sole.length && addresses.length > 1)
+        throw new Error(`${sole.join(", ")} is one account's: add one address for it`);
+      const bad = addresses.filter((a) => !identitySchema.shape.address.safeParse(a).success);
+      if (bad.length) throw new Error(`not an email address: ${bad.join(", ")}`);
+      let all = await d.identities.list();
+      for (const address of addresses) {
+        const had = all.find((i) => i.address.toLowerCase() === address.trim().toLowerCase());
+        const id = identitySchema.parse({
+          address,
+          at: o.at,
+          // Adding a purpose keeps the ones it had; a note replaces.
+          for: [...new Set([...(had?.for ?? []), ...purposes])],
+          ...(o.note ? { note: o.note } : had?.note ? { note: had.note } : {}),
+        });
+        all = withIdentity(all, id);
+        console.log(`${id.address}: for ${id.for.join(",") || "(nothing yet)"}`);
+      }
       await d.identities.save(all);
-      console.log(`${id.address}: for ${id.for.join(",") || "(nothing yet)"}`);
       if (!all.some((i) => i.for.includes(DEFAULT_PURPOSE)))
         console.log(`no account is the default yet: accounts use default <address>`);
     });
   accounts
     .command("use <purpose> <address>")
-    .description("Give a purpose to an account already listed (taking it from whichever had it)")
+    .description(
+      "Give a purpose to an account already listed (pays, default and signup move from whichever had it)",
+    )
     .action(async (purpose: string, address: string) => {
       const d = deps();
       await d.identities.save(assignPurpose(await d.identities.list(), purpose, address));
       console.log(`${purpose} → ${address}`);
     });
   accounts
+    .command("drop <purpose> <address>")
+    .description("Take one purpose off an account; the account stays")
+    .action(async (purpose: string, address: string) => {
+      const d = deps();
+      const all = await d.identities.list();
+      const id = all.find((i) => i.address.toLowerCase() === address.trim().toLowerCase());
+      if (!id) throw new Error(`no account ${address}`);
+      await d.identities.save(
+        withIdentity(all, { ...id, for: id.for.filter((p) => p !== purpose) }),
+      );
+      console.log(
+        `${id.address}: for ${id.for.filter((p) => p !== purpose).join(",") || "(nothing)"}`,
+      );
+    });
+  accounts
     .command("remove <address>")
-    .description("Forget an account (its credential and tokens stay where they are)")
+    .description(
+      "Forget an account (its credential and tokens stay where they are: creds rm <address> for the credential)",
+    )
     .action(async (address: string) => {
       const d = deps();
       await d.identities.save(withoutIdentity(await d.identities.list(), address));
