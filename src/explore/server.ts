@@ -53,6 +53,7 @@ import {
 } from "../gates/payment.js";
 import type { Amount } from "../gates/spend.js";
 import { type Charge, type Receipt, receiptOutcome } from "../money/charges.js";
+import { ADDRESS_FIELDS, type Address } from "../money/profile.js";
 import {
   type Card,
   cardEnding,
@@ -186,7 +187,11 @@ export interface ExploreOptions {
    * (or `card@<label>.<field>`) picks the card for this host, and a person says
    * yes once per card and host before any of it lands. Absent: refused.
    */
-  cards?: (o: { host: string; label: string | null; subscription: boolean }) => Promise<Card>;
+  cards?: (o: {
+    host: string;
+    label: string | null;
+    subscription: boolean;
+  }) => Promise<Card & { billing?: Address }>;
   /**
    * Which card each host was given: written when a card is placed, read when a
    * site charges the card it keeps, so every charge names its card's ending.
@@ -469,17 +474,17 @@ async function serve(
         by: `place ${c.secret}`,
         allowed,
       });
-    let card: Card;
+    let card: Card & { billing?: Address };
     try {
       card = await opts.cards({ host, label: want.label, subscription: recurring });
     } catch (err) {
       await audit(false);
       throw err;
     }
-    const value = cardField(card, want.field);
+    const value = cardField(card, want.field, card.billing);
     if (!value)
       throw new Error(
-        `place: ${c.secret}: ${card.label} has no ${want.field} (fields: number, exp, expMonth, expYear, expYY, cvc, name, postal)`,
+        `place: ${c.secret}: ${card.label} has no ${want.field} (fields: number, exp, expMonth, expYear, expYY, cvc, name, postal; from its owner's profile: ${ADDRESS_FIELDS.join(", ")})`,
       );
     const key = `${card.label}@${host}`;
     if (!cardsYes.has(key)) {

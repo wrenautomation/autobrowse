@@ -24,6 +24,7 @@ import {
 } from "@aws-sdk/client-ssm";
 import type { Cipher } from "credvault";
 import { z } from "zod";
+import { type Address, addressField } from "./profile.js";
 
 export const cardSchema = z.object({
   label: z.string().regex(/^[a-z0-9-]+$/, "label: lowercase letters, digits, dashes"),
@@ -34,6 +35,8 @@ export const cardSchema = z.object({
   expYear: z.number().int().min(2000).max(2100),
   cvc: z.string().regex(/^\d{3,4}$/),
   postal: z.string().optional(),
+  /** The profile it bills to (`autobrowse profile`); absent: the only profile. */
+  owner: z.string().optional(),
   addedAt: z.string(),
 });
 export type Card = z.infer<typeof cardSchema>;
@@ -378,7 +381,7 @@ export function backedUpWallet(
 }
 
 /** The fields `place` may ask for, by name after `card.` (or `card@<label>.`). */
-export function cardField(card: Card, field: string): string | null {
+export function cardField(card: Card, field: string, billing?: Address): string | null {
   const mm = String(card.expMonth).padStart(2, "0");
   const yy = String(card.expYear).slice(-2);
   switch (field) {
@@ -397,9 +400,9 @@ export function cardField(card: Card, field: string): string | null {
     case "name":
       return card.holder;
     case "postal":
-      return card.postal ?? null;
+      return card.postal ?? billing?.postal ?? null;
     default:
-      return null;
+      return addressField(billing, field);
   }
 }
 

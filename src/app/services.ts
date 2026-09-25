@@ -600,17 +600,37 @@ export async function walletFor(
   );
 }
 
+/** The person's own details, sealed beside the wallet (same keychain item), backed up to SSM /wallet/profiles. */
+export async function profilesFor(
+  settings: Settings,
+  ssm: SSMClient = lazy(() => new SSMClient({ region: settings.awsRegion })),
+) {
+  if (process.platform !== "darwin") throw new Error("profiles live on the Mac only");
+  const { backedUpProfiles, fileProfiles, ssmProfiles } = await import("../money/profile.js");
+  return backedUpProfiles(
+    fileProfiles(
+      join(dirname(expandHome(settings.walletFile)), "profiles.sealed"),
+      aesGcmCipher(keychainKey(WALLET_KEYCHAIN)),
+    ),
+    ssmProfiles(ssm),
+  );
+}
+
 /** Explore's card picker: the Mac's wallet under WALLET_DEBIT_HOSTS; elsewhere none (card places are refused). */
 export function cardsFor(settings: Settings): ExploreOptions["cards"] {
   if (process.platform !== "darwin") return undefined;
   return async ({ host, label, subscription }) => {
     const { pickCard } = await import("../money/wallet.js");
-    return pickCard(await walletFor(settings), {
+    const { ownerOf } = await import("../money/profile.js");
+    const card = await pickCard(await walletFor(settings), {
       host,
       label,
       subscription,
       policy: { debitHosts: settings.walletDebitHosts },
     });
+    // The billing address is the owner's: a checkout's address fields come from the profile.
+    const owner = ownerOf(await (await profilesFor(settings)).list(), card.owner);
+    return { ...card, ...(owner?.address ? { billing: owner.address } : {}) };
   };
 }
 

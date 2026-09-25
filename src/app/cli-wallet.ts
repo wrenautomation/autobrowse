@@ -11,6 +11,7 @@ import {
   type CardFields,
   cardBrand,
   cardChecks,
+  cardEnding,
   cardFromFields,
   defaultLabel,
   describeCard,
@@ -19,9 +20,67 @@ import {
 } from "../money/wallet.js";
 import type { Settings } from "./config.js";
 import { askSecret } from "./prompt.js";
-import { walletFor } from "./services.js";
+import { profilesFor, walletFor } from "./services.js";
 
 export function registerWalletCommands(program: Command, settings: Settings): void {
+  const profile = program
+    .command("profile")
+    .description(
+      "Who you are and where your cards bill: sealed beside the wallet, backed up to SSM",
+    );
+  profile
+    .command("list")
+    .description("Every profile, with the cards that bill to it")
+    .action(async () => {
+      const { describeProfile, ownerOf } = await import("../money/profile.js");
+      const all = await (await profilesFor(settings)).list();
+      const cards = await (await walletFor(settings)).list();
+      if (!all.length) return console.log("no profiles (autobrowse profile set <id> --name …)");
+      for (const p of all) {
+        const own = cards.filter((c) => ownerOf(all, c.owner)?.id === p.id).map(cardEnding);
+        console.log(`${describeProfile(p)}\n  cards: ${own.join("; ") || "none"}`);
+      }
+    });
+  profile
+    .command("set <id>")
+    .description("Create or change a profile; only the options given change")
+    .option("--name <name>")
+    .option("--birthday <yyyy-mm-dd>")
+    .option("--gender <g>")
+    .option("--line1 <street>")
+    .option("--line2 <unit>")
+    .option("--city <city>")
+    .option("--region <name>", "spelled out: Alberta")
+    .option("--region-code <code>", "abbreviated: AB")
+    .option("--postal <code>")
+    .option("--country <cc>", "two letters: CA")
+    .action(async (id: string, o: Record<string, string | undefined>) => {
+      const { describeProfile, profileSchema, addressSchema } = await import("../money/profile.js");
+      const store = await profilesFor(settings);
+      const was = (await store.list()).find((p) => p.id === id);
+      const def = <T extends object>(x: T) =>
+        Object.fromEntries(Object.entries(x).filter(([, v]) => v !== undefined)) as Partial<T>;
+      const addr = def({
+        line1: o.line1,
+        line2: o.line2,
+        city: o.city,
+        region: o.region,
+        regionCode: o.regionCode,
+        postal: o.postal,
+        country: o.country,
+      });
+      const next = profileSchema.parse({
+        ...was,
+        id,
+        ...def({ name: o.name ?? was?.name, birthday: o.birthday, gender: o.gender }),
+        ...(Object.keys(addr).length || was?.address
+          ? { address: addressSchema.parse({ ...was?.address, ...addr }) }
+          : {}),
+      });
+      await store.put(next);
+      console.log(`saved ${describeProfile(next)}`);
+    });
+
   const wallet = program
     .command("wallet")
     .description("William's cards: credit pays, debit only where WALLET_DEBIT_HOSTS allows");
@@ -73,6 +132,18 @@ export function registerWalletCommands(program: Command, settings: Settings): vo
     .action(async () => {
       const labels = await (await walletFor(settings)).backup();
       console.log(labels.length ? `backed up ${labels.join(", ")}` : "the wallet is empty");
+    });
+  wallet
+    .command("own <label> <profile>")
+    .description(
+      "Say which profile a card bills to (its address fills a checkout's billing fields)",
+    )
+    .action(async (label: string, profile: string) => {
+      const w = await walletFor(settings);
+      const card = await w.get(label);
+      if (!card) throw new Error(`no card ${label}`);
+      await w.put({ ...card, owner: profile });
+      console.log(`${label} bills to ${profile}`);
     });
   wallet
     .command("history <label>")

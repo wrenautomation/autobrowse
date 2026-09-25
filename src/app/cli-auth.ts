@@ -352,13 +352,15 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     });
   creds
     .command("list")
-    .description("Sites with a stored credential (names only)")
+    .description(
+      "Sites with a stored credential: whose account (address shortened), how it signs in",
+    )
     .action(async () => {
       const store = credentialsFor(settings, { armed: false });
       for (const site of await store.list()) {
         const c = await store.get(site);
         console.log(
-          `${site}\t${c?.canary ? "CANARY" : c?.via ? `via ${c.via}` : c?.totpSecret ? "totp" : "no totp"}`,
+          `${site}\t${c?.canary ? "CANARY" : `${accountOf(c?.username)}\t${c?.via ? `via ${c.via}` : c?.totpSecret ? "totp" : "no totp"}`}`,
         );
       }
     });
@@ -544,4 +546,11 @@ export function registerAuthCommands(program: Command, settings: Settings): void
         await runner.run(enrollTotpFlow(login, credentialsFor(settings), o.url), undefined),
       );
     });
+}
+
+/** Which account a credential is: a handle whole, an address as its first two letters and domain. */
+export function accountOf(username: string | undefined): string {
+  if (!username) return "(no username)";
+  const at = username.indexOf("@");
+  return at > 0 ? `${username.slice(0, Math.min(2, at))}…${username.slice(at)}` : username;
 }

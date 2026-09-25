@@ -9,6 +9,7 @@ import {
 } from "@aws-sdk/client-ssm";
 import { plainCipher } from "credvault";
 import { describe, expect, it } from "vitest";
+import { backedUpProfiles, fileProfiles, ownerOf, type Profile } from "../src/money/profile.js";
 import {
   backedUpWallet,
   type Card,
@@ -212,5 +213,45 @@ describe("wallet stores", () => {
     expect(bad({ postal: "hello" })).toThrow(/postal/);
     // An error names the field, never the value.
     expect(bad({ cvc: "98765" })).not.toThrow(/98765/);
+  });
+});
+
+describe("profiles", () => {
+  const home = {
+    line1: "1 Main St",
+    city: "Edmonton",
+    region: "Alberta",
+    regionCode: "AB",
+    postal: "T6R 0K9",
+    country: "CA",
+  };
+  it("a card's billing fields come from its owner's address; its own postal wins", () => {
+    const c = card("visa", "credit");
+    expect(cardField(c, "city", home)).toBe("Edmonton");
+    expect(cardField(c, "region", home)).toBe("Alberta");
+    expect(cardField(c, "countryName", home)).toBe("Canada");
+    expect(cardField({ ...c, postal: undefined }, "postal", home)).toBe("T6R 0K9");
+    expect(cardField({ ...c, postal: "M5V2T6" }, "postal", home)).toBe("M5V2T6");
+    expect(cardField(c, "city")).toBeNull();
+  });
+  it("a card bills to its owner, else the only profile", () => {
+    const a = { id: "william", name: "W" };
+    const b = { id: "wren", name: "Wren" };
+    expect(ownerOf([a], undefined)?.id).toBe("william");
+    expect(ownerOf([a, b], undefined)).toBeNull();
+    expect(ownerOf([a, b], "wren")?.id).toBe("wren");
+  });
+  it("the file is sealed and backed up; an empty Mac fills from the backup", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "profiles-"));
+    const backup = {
+      all: [] as Profile[],
+      list: async () => backup.all,
+      put: async (p: Profile) => void backup.all.push(p),
+    };
+    const w = backedUpProfiles(fileProfiles(join(dir, "a.sealed"), plainCipher), backup);
+    await w.put({ id: "william", name: "W", address: home });
+    expect(backup.all).toHaveLength(1);
+    const fresh = backedUpProfiles(fileProfiles(join(dir, "b.sealed"), plainCipher), backup);
+    expect((await fresh.list())[0]?.address?.city).toBe("Edmonton");
   });
 });
