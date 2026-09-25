@@ -15,7 +15,16 @@ export const PAYMENT_FIELD =
 
 /** A button that spends or commits to spend. */
 export const PAYMENT_ACTION =
-  /\b(buy|pay(ment)? now|pay|purchase|subscribe|checkout|check out|place (your )?order|add funds|add credits|top up|confirm (payment|purchase|order)|start (free |your )?trial|add (a )?(payment method|card))\b/i;
+  /\b(buy|pay(ment)? now|pay|purchase|subscribe|checkout|check out|place (your )?order|complete (your )?(order|purchase|payment|checkout)|submit (order|payment)|finish (order|purchase)|order now|add funds|add credits|top up|confirm (payment|purchase|order)|confirm and pay|start (free |your )?trial|add (a )?(payment method|card))\b/i;
+
+/** The gated clicks that take money now; the rest (checkout, add a card, a trial) only lead to one. */
+export const CHARGE_ACTION =
+  /\b(buy|pay(ment)? now|pay|purchase|subscribe|place (your )?order|complete (your )?(order|purchase|payment|checkout)|submit (order|payment)|finish (order|purchase)|order now|add funds|add credits|top up|confirm (payment|purchase|order)|confirm and pay)\b/i;
+
+/** Whether this click charges (a receipt follows) rather than leads to a charge. */
+export function chargesNow(hints: Hints): boolean {
+  return CHARGE_ACTION.test(words(hints));
+}
 
 export type GatedAct = "fill" | "select" | "click";
 

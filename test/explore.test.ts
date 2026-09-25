@@ -21,7 +21,7 @@ const desktop = fakeDesktop([
 ]);
 
 const PAGE = `data:text/html,${encodeURIComponent(
-  `<label>Domain <input id="d"></label><label>Password <input type="password" id="p"></label><button id="go" onclick="document.title='clicked'">Buy now</button><p id="key">sk-ant-minted-key-1234567890abcdefghijklmnopqrstuvwxyz</p>`,
+  `<label>Domain <input id="d"></label><label>Password <input type="password" id="p"></label><button id="go" onclick="document.title='clicked'">Buy now</button><button id="co" onclick="document.title='checkout'">Checkout</button><input type="submit" id="done" value="Complete Order" onclick="event.preventDefault();document.title='ordered'"><p id="key">sk-ant-minted-key-1234567890abcdefghijklmnopqrstuvwxyz</p>`,
 )}`;
 
 describe("explore mode", () => {
@@ -186,6 +186,15 @@ describe("explore mode", () => {
     expect(charges[0]?.[1].text).toContain("Buy now");
     expect(charges[0]?.[1].text).not.toContain("sk-ant-minted"); // masked like any transcript
     expect(charges[0]?.[1].png?.length).toBeGreaterThan(100);
+    // A css-only click is judged by the button's own words: "Checkout" asks but is no charge;
+    // "Complete Order" (an input's value) asks and is one.
+    expect((await send({ cmd: "click", hints: { css: "#co" } }, true)).status).toBe(200);
+    expect(asks.at(-1)).toMatch(/spends/);
+    expect(charges).toHaveLength(1);
+    expect((await send({ cmd: "click", hints: { css: "#done" } }, true)).status).toBe(200);
+    expect((await send({ cmd: "eval", js: "document.title" })).body.result).toBe("ordered");
+    expect(asks).toHaveLength(4);
+    expect(charges).toHaveLength(2);
 
     // A popup (an OAuth window) is listed and switched to; closing it returns to the main page.
     await send({ cmd: "eval", js: 'window.open("about:blank", "pop")' });
@@ -240,7 +249,7 @@ describe("explore mode", () => {
     expect(asks.at(-1)).toMatch(/^press "Buy", which spends in \w+$/);
 
     const saved = await send({ cmd: "save", name: "buy" });
-    expect(saved.body.actions).toBe(12); // the ordering test's open is journaled too
+    expect(saved.body.actions).toBe(14); // the ordering test's open is journaled too
     const rec = await loadRecording(join(dir, "recordings"), "buy");
     // (the page's own data: URL holds the fixture; the acts must not)
     expect(JSON.stringify(rec.actions.map(({ url: _u, ...a }) => a))).not.toContain(
@@ -254,13 +263,15 @@ describe("explore mode", () => {
       "input",
       "input",
       "click",
+      "click",
+      "click",
       "keep",
       "desktop",
       "desktop",
       "desktop",
       "desktop",
     ]);
-    const typed = rec.actions[9];
+    const typed = rec.actions[11];
     expect(
       typed.kind === "desktop" && typed.redacted && typed.op.op === "type" && typed.op.text,
     ).toBe("<redacted>");

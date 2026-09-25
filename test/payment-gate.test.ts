@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { askLine, askOverChannel } from "../src/gates/ask.js";
-import { amountNear, paymentGate, totalIn } from "../src/gates/payment.js";
+import { amountNear, chargesNow, paymentGate, totalIn } from "../src/gates/payment.js";
 
 describe("paymentGate", () => {
   it("gates billing fields and spending buttons, nothing else", () => {
@@ -17,6 +17,15 @@ describe("paymentGate", () => {
     expect(paymentGate("click", { role: "link", name: "Upgrade" })).toBeNull(); // a page, not a charge
     expect(paymentGate("fill", { role: "textbox", name: "Name" })).toBeNull();
     expect(paymentGate("fill", { role: "textbox", name: "Project name" })).toBeNull();
+  });
+
+  it("gates the final order button; only a charging click is a charge", () => {
+    expect(paymentGate("click", { css: "#btn", text: "Complete Order" })).toMatch(/spends/);
+    expect(chargesNow({ text: "Complete Order" })).toBe(true);
+    expect(chargesNow({ role: "button", name: "Pay now" })).toBe(true);
+    expect(chargesNow({ role: "button", name: "Checkout" })).toBe(false);
+    expect(chargesNow({ role: "button", name: "Add payment method" })).toBe(false);
+    expect(chargesNow({ role: "button", name: "Start free trial" })).toBe(false);
   });
 });
 

@@ -45,6 +45,7 @@ import {
 import {
   type Approver,
   amountNear,
+  chargesNow,
   PaymentGate,
   PendingApprovals,
   paymentAmount,
@@ -398,7 +399,27 @@ async function serve(
   /** Instant for a console; a person's hands when an agent drives (`pace`). */
   const hands = handsFor(opts.pace ?? null);
   const gate = async (act: "fill" | "select" | "click", t: Target, wait: boolean) => {
-    const what = paymentGate(act, t.hints as Hints);
+    // A click is judged by what the button says too: `#checkout` or `.btn` alone names nothing.
+    const said =
+      act === "click"
+        ? await find(t)
+            .first()
+            .evaluate(
+              (e) =>
+                (e as { innerText?: string }).innerText ||
+                (e as { value?: string }).value ||
+                e.getAttribute("aria-label") ||
+                "",
+              undefined,
+              { timeout: 10_000 },
+            )
+            .catch(() => "")
+        : "";
+    const hints = {
+      ...(t.hints as Hints),
+      ...(said.trim() ? { text: `${t.hints.text ?? ""} ${said.trim().slice(0, 200)}` } : {}),
+    };
+    const what = paymentGate(act, hints);
     if (!what) return null;
     // A miss is a miss, not a question: the element must be there before anyone is asked.
     await find(t).first().waitFor({ state: "visible", timeout: 10_000 });
@@ -408,7 +429,7 @@ async function serve(
         ? (paymentAmount(t.hints as Hints) ?? (await amountNear(find(t).first())))
         : null;
     await decide(`${act} ${JSON.stringify(t.hints)}`, what, page.url(), wait, amount);
-    return { what, amount };
+    return { what, amount, charges: chargesNow(hints) };
   };
   /** Card-and-host pairs a person said yes to this session; the card last placed, for the receipt. */
   const cardsYes = new Set<string>();
@@ -552,7 +573,8 @@ async function serve(
         await hands.click(find(c), { timeout: 10_000 });
         await settle(page);
         journalAct(c, (target) => ({ kind: "click", target }));
-        if (spent) return { url: page.url(), told: await reportSpend(spent) };
+        // A receipt only for the click that takes money; checkout or "add a card" only led there.
+        if (spent?.charges) return { url: page.url(), told: await reportSpend(spent) };
         return { url: page.url() };
       }
       case "fill": {
