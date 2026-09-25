@@ -7,9 +7,12 @@
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { Command } from "commander";
+import { cloudflare } from "../clients/cloudflare.js";
+import { httpClient } from "../clients/http.js";
 import type { GateName } from "../engine/effects.js";
 import { cursorOf } from "../engine/rows.js";
 import { summarize } from "../engine/run.js";
+import { DEFAULT_TLDS, domainIdeas } from "../workflows/domain/ideas.js";
 import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
 import { localBackend, proofsOf, workflowsOf } from "./backend.js";
 import { registerAccountsCommands } from "./cli-accounts.js";
@@ -203,6 +206,34 @@ program
       console.log(`started domain/${domain}; watch: autobrowse status domain ${domain}`);
     },
   );
+
+program
+  .command("domains <words...>")
+  .description(
+    "Sending-domain ideas: the brand's spellings × extensions, with Cloudflare's price; buy one with `domain <name>`",
+  )
+  .option("--tld <list>", "extensions, comma list", DEFAULT_TLDS.join(","))
+  .option("--max <usd>", "hide free ones that cost more than this a year")
+  .option("--all", "also list the ones someone else holds or Cloudflare cannot sell")
+  .action(async (words: string[], o: { tld: string; max?: string; all?: boolean }) => {
+    if (!settings.cloudflareApiToken || !settings.cloudflareAccountId)
+      throw new Error("CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID: autobrowse env pull");
+    const cf = cloudflare({
+      apiToken: settings.cloudflareApiToken,
+      accountId: settings.cloudflareAccountId,
+      http: httpClient(),
+    });
+    const max = o.max ? Number(o.max) : Number.POSITIVE_INFINITY;
+    const quotes = await cf.check(domainIdeas(words, o.tld.split(",")));
+    for (const q of quotes) {
+      if (q.registrable) {
+        if (Number(q.price) <= max)
+          console.log(`free   $${q.price?.padEnd(6)} renews $${q.renewal?.padEnd(6)} ${q.name}`);
+      } else if (q.reason === "domain_unavailable" && (await cf.registered(q.name)))
+        console.log(`ours                               ${q.name}`);
+      else if (o.all) console.log(`${(q.reason ?? "no").padEnd(34)} ${q.name}`);
+    }
+  });
 
 for (const verb of ["approve", "reject"] as const) {
   program

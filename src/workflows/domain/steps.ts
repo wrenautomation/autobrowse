@@ -5,7 +5,6 @@
  * afterwards where one exists.
  */
 import { randomBytes } from "node:crypto";
-import { cloudflareBuy } from "../../browser/flows/cloudflare-buy.js";
 import {
   type DkimRecord,
   googleDkimGenerate,
@@ -13,8 +12,7 @@ import {
 } from "../../browser/flows/google-dkim.js";
 import { instantlyWarmup } from "../../browser/flows/instantly-warmup.js";
 import { NeedsHuman } from "../../browser/session.js";
-import type { DnsRecord } from "../../clients/cloudflare.js";
-import type { Availability } from "../../clients/rdap.js";
+import type { DnsRecord, DomainQuote } from "../../clients/cloudflare.js";
 import { appendEntries } from "../../clients/roster.js";
 import type { Effects } from "../../engine/effects.js";
 import { done, rejected, type StepDef, skipped } from "../../engine/workflow.js";
@@ -23,7 +21,8 @@ import { inboxAddress, type Plan } from "./plan.js";
 
 /** Everything the steps learn that later steps need. Never a password: those go from generation to the secret store inside one journaled step. */
 export interface DomainMemo {
-  availability?: Availability;
+  /** Cloudflare's answer for a domain nobody here owns yet: free or not, and the price. */
+  quote?: DomainQuote;
   owned?: boolean;
   zoneId?: string;
   verificationToken?: string;
@@ -42,16 +41,17 @@ export const check: Step<"check"> = {
       deps.cloudflare.registered(plan.domain),
     );
     memo.owned = owned;
-    if (owned) {
-      memo.availability = "taken";
-      return done("already registered in this Cloudflare account");
-    }
-    const availability = await fx.run("rdap", () => deps.availability(plan.domain));
-    memo.availability = availability;
-    if (availability === "taken") throw new Error(`${plan.domain} is registered by someone else`);
-    if (availability === "unknown")
-      throw new Error(`RDAP could not say whether ${plan.domain} is free`);
-    return done("available");
+    if (owned) return done("already registered in this Cloudflare account");
+    const [quote] = await fx.run("cloudflare check", () => deps.cloudflare.check([plan.domain]));
+    if (!quote) throw new Error(`Cloudflare did not answer for ${plan.domain}`);
+    memo.quote = quote;
+    if (!quote.registrable)
+      throw new Error(
+        quote.reason === "domain_unavailable"
+          ? `${plan.domain} is registered by someone else`
+          : `Cloudflare cannot register ${plan.domain}: ${quote.reason ?? "no reason given"}`,
+      );
+    return done(`available at $${quote.price ?? "?"} (renews $${quote.renewal ?? "?"})`);
   },
 };
 
@@ -61,22 +61,38 @@ export const buy: Step<"buy"> = {
   async run({ fx, deps, plan, memo, gate }) {
     if (memo.owned) return skipped("already owned");
     if (!plan.buy) throw new Error(`${plan.domain} is not owned and buy=false`);
+    const q = memo.quote;
     const answer = gate(
       "purchase",
-      `Buy ${plan.domain} at Cloudflare Registrar (renews yearly at the registrar's cost price)?`,
+      `Buy ${plan.domain} at Cloudflare Registrar for $${q?.price ?? "?"} (renews $${q?.renewal ?? "?"}/yr), on the account's default card?`,
     );
     if (!answer.approved) return rejected(answer.note ?? "purchase declined");
-    const bought = await fx.run("cloudflare buy", () =>
-      deps.browser.run(cloudflareBuy, { domain: plan.domain }),
-    );
-    // The dashboard said yes; the API is the proof.
+    // A rerun after a crash must never buy twice: a registration already
+    // started is followed, not repeated.
+    const started =
+      (await fx.run("registration so far", () => deps.cloudflare.registration(plan.domain))) ??
+      (await fx.run("cloudflare register", () => deps.cloudflare.register(plan.domain)));
+    let state = started;
+    for (let waited = 0; !state.completed && waited < 10 * 60_000; waited += 15_000) {
+      await fx.sleep(15_000);
+      state = await fx.run(`registration ${waited}`, async () => {
+        const s = await deps.cloudflare.registration(plan.domain);
+        return s ?? { state: "in_progress", completed: false };
+      });
+    }
+    if (state.state !== "succeeded")
+      throw new NeedsHuman(
+        `registration of ${plan.domain} is ${state.state}; see Domain Registration on the Cloudflare dashboard`,
+      );
     const registered = await fx.run("cloudflare registered after buy", () =>
       deps.cloudflare.registered(plan.domain),
     );
     if (!registered)
-      throw new NeedsHuman(`checkout finished but the Registrar API does not list ${plan.domain}`);
+      throw new NeedsHuman(
+        `registration succeeded but the Registrar API does not list ${plan.domain}`,
+      );
     memo.owned = true;
-    return done(`bought${bought.priceText ? ` (${bought.priceText})` : ""}`);
+    return done(`bought for $${q?.price ?? "?"}`);
   },
 };
 

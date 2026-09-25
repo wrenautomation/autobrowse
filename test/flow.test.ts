@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { cloudflareBuy } from "../src/browser/flows/cloudflare-buy.js";
 import { googleDkimGenerate } from "../src/browser/flows/google-dkim.js";
 import { KEYS, nextStep, runFlow as run } from "../src/engine/run.js";
 import { domainWorkflow, parseInboxSpec, parsePlan } from "../src/workflows/domain/index.js";
@@ -33,7 +32,7 @@ describe("runFlow", () => {
     expect(out.status).toBe("done");
     expect(asked).toEqual(["purchase"]);
     expect(Object.keys(out.results)).toEqual([...STEPS]);
-    expect(out.results.buy?.detail).toBe("bought ($10.11)");
+    expect(out.results.buy?.detail).toBe("bought for $10.44");
     expect(deps.calls).toEqual([
       "buy wren-new.test",
       "addDomain wren-new.test",
@@ -88,7 +87,7 @@ describe("runFlow", () => {
   });
 
   it("refuses a domain someone else holds", async () => {
-    const deps = fakeDeps({ availability: async () => "taken" });
+    const deps = fakeDeps({ cloudflare: fakeCloudflare({ unavailable: "domain_unavailable" }) });
     const { fx } = fakeEffects();
     const out = await runFlow(fx, deps, plan());
     expect(out.status).toBe("failed");
@@ -152,14 +151,17 @@ describe("runFlow", () => {
     expect(out.results["dkim-generate"]).toMatchObject({ status: "rejected", detail: "later" });
   });
 
-  it("a purchase that the Registrar API does not confirm asks a person", async () => {
-    const deps = fakeDeps();
-    deps.browser.on(cloudflareBuy, async () => ({ priceText: null }));
+  it("a registration that does not succeed asks a person, and a rerun never buys twice", async () => {
+    const cf = fakeCloudflare({ registers: "action_required" });
+    const deps = fakeDeps({ cloudflare: cf });
     const { fx } = fakeEffects();
     const { answer } = scriptedAnswers({ purchase: [{}] });
     const out = await runFlow(fx, deps, plan(), answer);
     expect(out.status).toBe("waiting");
-    expect(out.results.buy?.detail).toMatch(/does not list/);
+    expect(out.results.buy?.detail).toMatch(/action_required/);
+    const again = await runFlow(fx, deps, plan(), scriptedAnswers({ human: [{}] }).answer);
+    expect(again.status).toBe("waiting");
+    expect(cf.purchases).toEqual(["wren-new.test"]);
   });
 
   it("resumes after a failure without redoing finished steps", async () => {

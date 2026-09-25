@@ -1,7 +1,7 @@
 /**
  * Cloudflare: registrar of record and authoritative DNS for every fleet
- * domain. The API covers zones and records; it does not sell domains, so
- * buying is a browser flow (`browser/cloudflare-buy.ts`).
+ * domain. Zones, records, and (Registrar API, beta since 2026-04) the
+ * price check and the purchase itself, at cost.
  */
 import { type HttpClient, safeUrl } from "./http.js";
 
@@ -16,7 +16,29 @@ export interface DnsRecord {
   ttl?: number;
 }
 
+/** What Cloudflare would charge for a domain, from its registry check. Costs are USD strings ("8.50"). */
+export interface DomainQuote {
+  name: string;
+  registrable: boolean;
+  /** Why not, when not: `domain_unavailable`, an unsupported extension, … */
+  reason?: string;
+  price?: string;
+  renewal?: string;
+}
+
+/** A registration's state: `in_progress` until `succeeded`, `failed`, `action_required` or `blocked`. */
+export interface Registration {
+  state: string;
+  completed: boolean;
+}
+
 export interface CloudflareClient {
+  /** Registry-fresh availability and price, 20 names a request. */
+  check(domains: string[]): Promise<DomainQuote[]>;
+  /** Buy it at cost (WHOIS redaction on). Irreversible: charges the account's default card. */
+  register(domain: string): Promise<Registration>;
+  /** The registration started for this domain, or null when none was. */
+  registration(domain: string): Promise<Registration | null>;
   /** The zone id, or null when Cloudflare does not host the domain. */
   zoneId(domain: string): Promise<string | null>;
   /** Registered in this account (through Cloudflare Registrar)? */
@@ -97,6 +119,52 @@ export function cloudflare(opts: {
         `/zones?name=${encodeURIComponent(domain)}`,
       );
       return zones.find((z) => z.name === domain)?.id ?? null;
+    },
+    async check(domains) {
+      const out: DomainQuote[] = [];
+      for (let i = 0; i < domains.length; i += 20) {
+        const r = await call<{
+          domains: Array<{
+            name: string;
+            registrable: boolean;
+            reason?: string;
+            pricing?: { registration_cost?: string; renewal_cost?: string };
+          }>;
+        }>("POST", `/accounts/${opts.accountId}/registrar/domain-check`, {
+          domains: domains.slice(i, i + 20),
+        });
+        for (const d of r.domains)
+          out.push({
+            name: d.name,
+            registrable: d.registrable,
+            ...(d.reason ? { reason: d.reason } : {}),
+            ...(d.pricing?.registration_cost ? { price: d.pricing.registration_cost } : {}),
+            ...(d.pricing?.renewal_cost ? { renewal: d.pricing.renewal_cost } : {}),
+          });
+      }
+      return out;
+    },
+    async register(domain) {
+      const r = await call<Registration>(
+        "POST",
+        `/accounts/${opts.accountId}/registrar/registrations`,
+        {
+          domain_name: domain,
+        },
+      );
+      return { state: r.state, completed: r.completed };
+    },
+    async registration(domain) {
+      try {
+        const r = await call<Registration>(
+          "GET",
+          `/accounts/${opts.accountId}/registrar/registrations/${encodeURIComponent(domain)}/registration-status`,
+        );
+        return { state: r.state, completed: r.completed };
+      } catch (err) {
+        if (err instanceof CloudflareError && err.status === 404) return null;
+        throw err;
+      }
     },
     async registered(domain) {
       try {

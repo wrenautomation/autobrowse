@@ -1,5 +1,4 @@
 /** The hand-written browser legs, and the walker most OAuth consents are made of. */
-export { cloudflareBuy } from "./cloudflare-buy.js";
 export { type ConsentWalk, consentFlow } from "./consent-walker.js";
 export { facebookOauthConsent } from "./facebook-oauth-consent.js";
 export { googleDkimGenerate, googleDkimStart } from "./google-dkim.js";

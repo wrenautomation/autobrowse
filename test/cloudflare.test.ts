@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cloudflare } from "../src/clients/cloudflare.js";
 import { httpClient } from "../src/clients/http.js";
+import { domainIdeas } from "../src/workflows/domain/ideas.js";
 
 /** A tiny Cloudflare: one zone, records in memory, the envelope shape of the real API. */
 function fakeApi() {
@@ -45,6 +46,21 @@ function fakeApi() {
       const r = records.find((x) => x.id === put[1]);
       if (r) r.content = body.content;
       return ok(r);
+    }
+    if (u.pathname === "/client/v4/accounts/acc/registrar/domain-check" && method === "POST") {
+      const { domains } = JSON.parse(String(init?.body)) as { domains: string[] };
+      return ok({
+        domains: domains.map((name) =>
+          name.startsWith("taken")
+            ? { name, registrable: false, reason: "domain_unavailable", tier: "standard" }
+            : {
+                name,
+                registrable: true,
+                tier: "standard",
+                pricing: { currency: "USD", registration_cost: "8.50", renewal_cost: "11.20" },
+              },
+        ),
+      });
     }
     if (u.pathname.startsWith("/client/v4/accounts/acc/registrar/domains/")) {
       return new Response(
@@ -116,5 +132,49 @@ describe("cloudflare client", () => {
     expect(api.calls.every((c) => !c.includes("t="))).toBe(true);
     // The zone name is looked up once, not once per record.
     expect(api.calls.filter((c) => c === "GET /client/v4/zones/z1")).toHaveLength(1);
+  });
+
+  it("checks prices 20 names a request and says why a name is not for sale", async () => {
+    const api = fakeApi();
+    const cf = cloudflare({
+      apiToken: "t",
+      accountId: "acc",
+      http: httpClient({ fetch: api.fetchImpl }),
+    });
+    const names = ["taken.test", ...Array.from({ length: 21 }, (_, i) => `free${i}.test`)];
+    const quotes = await cf.check(names);
+    expect(quotes).toHaveLength(22);
+    expect(quotes[0]).toEqual({
+      name: "taken.test",
+      registrable: false,
+      reason: "domain_unavailable",
+    });
+    expect(quotes[1]).toEqual({
+      name: "free0.test",
+      registrable: true,
+      price: "8.50",
+      renewal: "11.20",
+    });
+    expect(api.calls.filter((c) => c.endsWith("/domain-check"))).toHaveLength(2);
+  });
+});
+
+describe("domainIdeas", () => {
+  it("spells the brand joined, hyphenated, plural and suffixed, per extension", () => {
+    expect(domainIdeas(["Wren", "automation"], ["com"])).toEqual([
+      "wrenautomation.com",
+      "wrenautomations.com",
+      "wren-automation.com",
+      "wren-automations.com",
+      "wrenautomationhq.com",
+      "wrenautomationteam.com",
+    ]);
+    expect(domainIdeas(["acme"], [".io"])).toEqual([
+      "acme.io",
+      "acmes.io",
+      "acmehq.io",
+      "acmeteam.io",
+    ]);
+    expect(domainIdeas([])).toEqual([]);
   });
 });

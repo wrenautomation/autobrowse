@@ -14,8 +14,8 @@ later steps need, the gate answers, the open gate, paused, generation.
 
 | step | does | how | proof | irreversible |
 |---|---|---|---|---|
-| check | owned here? free? | Registrar API; RDAP (404 = free) | | |
-| buy | purchase | **gate `purchase`** → browser (no purchase API) | Registrar API lists it | yes |
+| check | owned here? free? price? | Registrar API `domain-check` | | |
+| buy | purchase | **gate `purchase`** (shows the price) → Registrar API `registrations`, polled | Registrar API lists it | yes |
 | zone | Cloudflare zone id (create if missing) | API | | |
 | workspace-domain | add as secondary domain | Directory API | | |
 | verify-domain | Site Verification token → TXT → poll (10 min) | API + Cloudflare API | | |
@@ -61,7 +61,7 @@ between checks). So `pause`, `reset`, `approve` never wait on the run.
   under `ARTIFACTS_DIR`, attaches them to `NeedsHuman` or wraps the error
   in `FlowFailed`. Flows call `fp.open(url)` (refuses walls) and
   `fp.human(reason)`.
-- `flows/`: `cloudflare-buy`, `google-dkim` (generate, start),
+- `flows/`: `google-dkim` (generate, start),
   `instantly-warmup`. Written from the dashboards on 2026-09-19,
   **unverified until the first real run**. `record --flow` exists to
   replace guesses with recordings.
@@ -123,6 +123,15 @@ ones, like wren. Not needed until a run is unattended.
   Manual-by-default was proposed and declined.
 - 2026-09-19 Separate repo; thin coupling to wren.
 - 2026-09-19 Cloudflare stays registrar + DNS; purchase is a browser flow.
+- 2026-09-25 Purchase moved to Cloudflare's Registrar API (beta since
+  2026-04): price in the gate, no dashboard guessing, RDAP dropped. A rerun
+  follows a registration already started and never buys twice. The
+  guessed `cloudflare/buy` flow is gone. Unproven until the first buy: that
+  the token's "Registrar: Domains Admin" covers `registrations` (a 403 fails
+  the step, nothing is charged).
+- 2026-09-25 `autobrowse domains <brand words>`: the brand's spellings
+  (joined, hyphen, plural, hq/team) × com/net/org/co/io, each marked ours,
+  free with price, or (`--all`) why not. No .us (needs US nexus).
 - 2026-09-19 Instantly consent is a hand-off: it is the inbox's own Google
   session giving OAuth consent.
 - 2026-09-19 Passwords go generation → Directory → SSM inside one step.

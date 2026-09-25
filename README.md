@@ -249,7 +249,7 @@ a row; it is work.
   Workspace → verify → mail DNS → DKIM → inboxes → signatures → warmup →
   roster → loops. Gated at the purchase; hands off at logins/consent.
 - **Hand-written legs** (`src/browser/flows/`, callable as the Restate
-  `browser` service's `flow`): `cloudflare/buy`, `google-admin/dkim-*`,
+  `browser` service's `flow`): `google-admin/dkim-*`,
   `google-admin/workspace-logo`, `instantly/warmup`, `google/oauth-consent`,
   `linkedin/oauth-consent`, `instagram/oauth-consent`, `tiktok/oauth-consent`,
   `outlook/oauth-consent`, `google/youtube-community-post`.
@@ -301,6 +301,7 @@ pnpm autobrowse compile buy-domain --no-llm --from-outline
 pnpm autobrowse compile buy-domain --finish     # …then a model finishes it until tsc and its test pass
 pnpm autobrowse finish buy-domain --brief "the Buy button charges the card"
 
+pnpm autobrowse domains wren automation --max 15   # sending-domain ideas: ours / free at $price, from Cloudflare
 pnpm autobrowse domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin --dry-run
 pnpm autobrowse domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin
 pnpm autobrowse workflows                      # what this worker can run

@@ -1,9 +1,8 @@
 import type { BrowserFlow, FlowRunner } from "../src/browser/flow.js";
-import { cloudflareBuy } from "../src/browser/flows/cloudflare-buy.js";
 import { googleDkimGenerate, googleDkimStart } from "../src/browser/flows/google-dkim.js";
 import { instantlyWarmup } from "../src/browser/flows/instantly-warmup.js";
 import { NeedsHuman } from "../src/browser/session.js";
-import type { CloudflareClient, DnsRecord } from "../src/clients/cloudflare.js";
+import type { CloudflareClient, DnsRecord, Registration } from "../src/clients/cloudflare.js";
 import type { GateAnswer, GateName } from "../src/engine/effects.js";
 import type { RunEvent } from "../src/engine/events.js";
 import { memoryEffects } from "../src/engine/memory.js";
@@ -63,10 +62,6 @@ export function fakeBrowser(calls: string[]) {
       return (await h(input)) as never;
     },
   };
-  runner.on(cloudflareBuy, async ({ domain }) => {
-    calls.push(`buy ${domain}`);
-    return { priceText: "$10.11" };
-  });
   runner.on(googleDkimGenerate, async () => {
     calls.push("dkimGenerate");
     return { name: "google._domainkey", value: "v=DKIM1; k=rsa; p=abc" };
@@ -82,12 +77,43 @@ export function fakeBrowser(calls: string[]) {
   return runner;
 }
 
-export function fakeCloudflare(opts: { registered?: boolean; zone?: string | null } = {}) {
+export function fakeCloudflare(
+  opts: {
+    registered?: boolean;
+    zone?: string | null;
+    /** Why Cloudflare will not sell it; absent: it will, for $10.44. */
+    unavailable?: string;
+    /** Where a registration ends; default succeeded. */
+    registers?: string;
+  } = {},
+) {
   const records: Array<DnsRecord & { id: string }> = [];
+  const registrations = new Map<string, Registration>();
   let zone = opts.zone === undefined ? null : opts.zone;
-  const client: CloudflareClient & { records: typeof records; created: string[] } = {
+  const client: CloudflareClient & {
+    records: typeof records;
+    created: string[];
+    purchases: string[];
+  } = {
     records,
     created: [],
+    purchases: [],
+    async check(domains) {
+      return domains.map((name) =>
+        opts.unavailable
+          ? { name, registrable: false, reason: opts.unavailable }
+          : { name, registrable: true, price: "10.44", renewal: "10.44" },
+      );
+    },
+    async register(domain) {
+      client.purchases.push(domain);
+      const r = { state: opts.registers ?? "succeeded", completed: true };
+      registrations.set(domain, r);
+      return r;
+    },
+    async registration(domain) {
+      return registrations.get(domain) ?? null;
+    },
     async zoneId() {
       return zone;
     },
@@ -144,6 +170,12 @@ export function fakeDeps(
     rosterText: () => roster,
     cloudflare: {
       ...cloudflare,
+      register: async (d) => {
+        calls.push(`buy ${d}`);
+        const r = await cloudflare.register(d);
+        if (r.state === "succeeded") bought.add(d);
+        return r;
+      },
       // A purchase shows up in the Registrar API afterwards.
       registered: async (d) => {
         if (deps.failCheckWith && deps.failCheckTimes-- > 0) throw deps.failCheckWith;
@@ -210,7 +242,6 @@ export function fakeDeps(
         return { send: true, inbox: true };
       },
     },
-    availability: async () => "available",
     browser: fakeBrowser(calls),
     secrets: {
       async put(name) {
@@ -221,11 +252,6 @@ export function fakeDeps(
     dnsWaitMs: 0,
     ...over,
   };
-  deps.browser.on(cloudflareBuy, async ({ domain }) => {
-    calls.push(`buy ${domain}`);
-    bought.add(domain);
-    return { priceText: "$10.11" };
-  });
   return deps;
 }
 

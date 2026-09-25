@@ -10,7 +10,6 @@
 import * as restate from "@restatedev/restate-sdk";
 import { z } from "zod";
 import { type BrowserFlow, FlowFailed, type FlowRunner } from "../browser/flow.js";
-import { cloudflareBuy } from "../browser/flows/cloudflare-buy.js";
 import { facebookOauthConsent } from "../browser/flows/facebook-oauth-consent.js";
 import { googleDkimGenerate, googleDkimStart } from "../browser/flows/google-dkim.js";
 import { googleWorkspaceLogo } from "../browser/flows/google-workspace-logo.js";
@@ -61,7 +60,6 @@ export type FlowCatalog = Record<string, BrowserFlow<never, unknown>>;
 /** The hand-written legs by `site/name`; more join through `catalog`. */
 export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
   [
-    cloudflareBuy,
     googleDkimGenerate,
     googleDkimStart,
     instantlyWarmup,
@@ -125,7 +123,6 @@ export function browserService(deps: BrowserServiceDeps) {
   return restate.service({
     name: BROWSER_SERVICE,
     handlers: {
-      buy: (ctx: restate.Context, raw: unknown) => leg(cloudflareBuy)(ctx, domain.parse(raw)),
       dkimGenerate: (ctx: restate.Context, raw: unknown) =>
         leg(googleDkimGenerate)(ctx, domain.parse(raw)),
       dkimStart: (ctx: restate.Context, raw: unknown) =>

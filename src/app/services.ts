@@ -66,7 +66,6 @@ import { type GmailUserClient, gmailClient } from "../clients/gmail.js";
 import { googleAdmin } from "../clients/google-admin.js";
 import { type HttpClient, httpClient } from "../clients/http.js";
 import { type LinqClient, linqClient } from "../clients/linq.js";
-import { domainAvailability } from "../clients/rdap.js";
 import { ssmRosterStore } from "../clients/roster.js";
 import { twilioReader } from "../clients/twilio.js";
 import { wrenClient } from "../clients/wren.js";
@@ -927,7 +926,6 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       repo: settings.wrenRepo,
       http,
     }),
-    availability: (domain) => domainAvailability(http, domain),
     browser,
     secrets: {
       put: async (name, value) => {

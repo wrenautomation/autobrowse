@@ -98,7 +98,7 @@ describe("domain run object", () => {
       (s) => s.outcome?.status === "done",
     );
     expect(finished.gate).toBeNull();
-    expect(finished.outcome?.results.buy?.detail).toBe("bought ($10.11)");
+    expect(finished.outcome?.results.buy?.detail).toBe("bought for $10.44");
     expect(finished.outcome?.results.loops?.status).toBe("done");
     expect(host.subjects()).toContain("fresh.test: done");
     expect(deps.calls).toContain("buy fresh.test");
