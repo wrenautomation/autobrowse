@@ -60,6 +60,9 @@ describe("charges", () => {
     expect(receiptOutcome("Thank you for your order! Order number 4411")).toBe("charged");
     expect(receiptOutcome("Your card was declined. Try another card.")).toBe("declined");
     expect(receiptOutcome("Payment failed: insufficient funds")).toBe("declined");
+    expect(receiptOutcome("Your purchase couldn’t be completed. Check your card details")).toBe(
+      "declined",
+    );
     expect(receiptOutcome("Loading…")).toBe("unclear");
     expect(receiptOutcome("Order confirmed. If a payment was declined we email you")).toBe(
       "unclear",

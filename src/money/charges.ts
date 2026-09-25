@@ -70,7 +70,7 @@ export interface ChargeDeps {
 }
 
 const DECLINED =
-  /\b(declined|payment (has )?failed|transaction failed|insufficient funds|(was|could) not (be )?(processed|approved|completed|charged|authori[sz]ed)|unable to (process|charge|complete)|try (another|a different) (card|payment)|card (was )?(rejected|refused)|payment (was )?unsuccessful|do not honou?r)\b/i;
+  /\b(declined|payment (has )?failed|transaction failed|insufficient funds|(was|could) ?n[o'’]t (be )?(processed|approved|completed|charged|authori[sz]ed)|unable to (process|charge|complete)|try (another|a different) (card|payment)|card (was )?(rejected|refused)|payment (was )?unsuccessful|do not honou?r)\b/i;
 const CHARGED =
   /\b(thank(s| you) for (your )?(order|purchase|payment|subscribing)|order (is )?(confirmed|complete|placed|received)|order (number|#|no\.?)|payment (successful|received|complete|confirmed|accepted)|you('ve| have) been charged|(successfully|has been) (paid|charged|purchased|subscribed)|transaction (approved|complete)|receipt (number|#)|invoice (number|#)|purchase (complete|confirmed))\b/i;
 

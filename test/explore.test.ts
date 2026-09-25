@@ -22,7 +22,7 @@ const desktop = fakeDesktop([
 ]);
 
 const PAGE = `data:text/html,${encodeURIComponent(
-  `<label>Domain <input id="d"></label><label>Password <input type="password" id="p"></label><button id="go" onclick="document.title='clicked'">Buy now</button><button id="co" onclick="document.title='checkout'">Checkout</button><input type="submit" id="done" value="Complete Order" onclick="event.preventDefault();document.title='ordered'"><p id="key">sk-ant-minted-key-1234567890abcdefghijklmnopqrstuvwxyz</p>`,
+  `<label>Domain <input id="d"></label><label>Password <input type="password" id="p"></label><button id="go" onclick="document.title='clicked';this.after(Object.assign(document.createElement('p'),{textContent:'Payment successful'}))">Buy now</button><button id="co" onclick="document.title='checkout'">Checkout</button><input type="submit" id="done" value="Complete Order" onclick="event.preventDefault();document.title='ordered'"><p id="key">sk-ant-minted-key-1234567890abcdefghijklmnopqrstuvwxyz</p>`,
 )}`;
 
 describe("explore mode", () => {
@@ -183,7 +183,7 @@ describe("explore mode", () => {
       site: "scratch",
       what: 'press "Buy now", which spends',
       card: "the card the site keeps (ending not known here)",
-      outcome: "unclear", // the test page says neither paid nor declined
+      outcome: "charged", // the page says paid; an unclear page is told nothing
     });
     expect(charges[0]?.[1].text).toContain("Buy now");
     expect(charges[0]?.[1].text).not.toContain("sk-ant-minted"); // masked like any transcript

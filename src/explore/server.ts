@@ -95,6 +95,8 @@ const targetSchema = z.object({ hints: hintsSchema });
 
 /** How long one yes to pay on a host lasts. */
 const FLOW_MS = 30 * 60_000;
+/** How long a spending click's page gets to say paid or declined before it counts as no charge. */
+const SETTLE_MS = Number(process.env.EXPLORE_CHARGE_SETTLE_MS ?? 60_000);
 
 export const commandSchema = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("open"), url: z.string().url() }),
@@ -546,9 +548,19 @@ async function serve(
   /** After a yes and the click: the page it landed on is the receipt. A failed report never fails the click. */
   const reportSpend = async (spent: { what: string; amount: Amount | null }) => {
     if (!opts.charges) return [];
-    const whole = await pageText();
-    // The next step of a checkout, not a charge: nothing to tell (three false texts, 2026-09-25).
-    if (stillAsking(whole)) return [];
+    // Told only once the page says paid or declined: a click that opened a form, or a
+    // payment still processing (a captcha, a bank check), is not a charge (five false texts, 2026-09-25).
+    let whole = await pageText();
+    for (
+      let waited = 0;
+      receiptOutcome(whole) === "unclear" && waited < SETTLE_MS;
+      waited += 3_000
+    ) {
+      if (stillAsking(whole)) return [];
+      await page.waitForTimeout(3_000);
+      whole = await pageText();
+    }
+    if (receiptOutcome(whole) === "unclear" || stillAsking(whole)) return [];
     const text = redactText(whole).slice(0, 6_000);
     const png = await page.screenshot({ fullPage: true, timeout: 15_000 }).catch(() => undefined);
     const host = new URL(page.url()).host;
