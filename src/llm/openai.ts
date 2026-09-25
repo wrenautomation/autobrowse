@@ -19,6 +19,9 @@ interface ChatResponse {
   message?: string;
 }
 
+/** A provider's 400 naming its output cap: "max tokens must be less than or equal to 8192". */
+const OUTPUT_CAP = /(?:less than or equal to|at most|maximum (?:value )?(?:is|of))\s*(\d{3,7})/i;
+
 export function openaiLlm(opts: {
   apiKey: string;
   model: string;
@@ -26,24 +29,35 @@ export function openaiLlm(opts: {
   baseUrl?: string;
 }): Llm {
   const url = `${(opts.baseUrl ?? "https://api.openai.com/v1").replace(/\/$/, "")}/chat/completions`;
+  /** The model's output cap, learned from the first 400 that names it; asks above it are clamped. */
+  let cap = Number.POSITIVE_INFINITY;
+  const post = (req: LlmRequest) =>
+    opts.http.json<ChatResponse>(url, {
+      method: "POST",
+      headers: { authorization: `Bearer ${opts.apiKey}` },
+      body: {
+        model: opts.model,
+        max_tokens: Math.min(req.maxTokens ?? 2048, cap),
+        ...(req.json ? { response_format: { type: "json_object" } } : {}),
+        messages: [
+          { role: "system", content: req.system },
+          { role: "user", content: req.prompt },
+        ],
+      },
+    });
+  const reason = (r: { body: ChatResponse | null }) =>
+    (r.body?.error?.message ?? r.body?.message ?? "").slice(0, 200);
   return {
     id: `openai/${opts.model}`,
     async complete(req: LlmRequest): Promise<LlmReply> {
-      const r = await opts.http.json<ChatResponse>(url, {
-        method: "POST",
-        headers: { authorization: `Bearer ${opts.apiKey}` },
-        body: {
-          model: opts.model,
-          max_tokens: req.maxTokens ?? 2048,
-          ...(req.json ? { response_format: { type: "json_object" } } : {}),
-          messages: [
-            { role: "system", content: req.system },
-            { role: "user", content: req.prompt },
-          ],
-        },
-      });
+      let r = await post(req);
+      const capped = r.status === 400 ? OUTPUT_CAP.exec(reason(r)) : null;
+      if (capped && Number(capped[1]) < (req.maxTokens ?? 2048)) {
+        cap = Number(capped[1]);
+        r = await post(req);
+      }
       if (!r.ok || !r.body) {
-        const why = (r.body?.error?.message ?? r.body?.message ?? "").slice(0, 200);
+        const why = reason(r);
         throw new Error(`openai: HTTP ${r.status}${why ? ` ${why}` : ""}`);
       }
       const choice = r.body.choices[0];

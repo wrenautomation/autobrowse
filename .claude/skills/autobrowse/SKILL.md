@@ -56,6 +56,12 @@ Session:
 - `{"cmd":"save","name":"site-what-it-does"}` — writes `recordings/<name>/`. Then `pnpm autobrowse compile <name>`.
 - `{"cmd":"close"}`.
 
+## Before exploring
+
+Something may already do it. `pnpm autobrowse workflows` and `pnpm autobrowse site status <site>` list
+what exists; `workflows <name>` and `site route <site> <METHOD> <path>` print the inputs (add
+`--template` for a JSON file to fill in and pass as `--plan file.json` / `--body file.json`).
+
 ## How to work
 
 1. `start.sh <site> <url>`; then `url`, then `aria` (add `limit` on big pages).

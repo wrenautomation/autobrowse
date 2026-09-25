@@ -6,6 +6,7 @@
  * directory it claims. Reads are open when no token is set (local use);
  * with a token, everything needs it.
  */
+
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { Readable } from "node:stream";
@@ -31,6 +32,7 @@ import { outlineSchema } from "../compiler/index.js";
 import { DoError } from "../do/doer.js";
 import type { GateName } from "../engine/effects.js";
 import type { RunEvent } from "../engine/events.js";
+import { jsonSchemaOf } from "../engine/inputs.js";
 import type { RunRow } from "../engine/registry.js";
 import { cursorOf, LIST_LIMIT, type ListQuery } from "../engine/rows.js";
 import { commandSchema } from "../explore/server.js";
@@ -181,7 +183,7 @@ export function api(deps: ApiDeps): Hono {
         name: w.name,
         description: w.description,
         steps: w.steps.map((s) => ({ name: s.name, irreversible: s.irreversible ?? false })),
-        plan: z.toJSONSchema(w.plan, { io: "input", unrepresentable: "any" }),
+        plan: jsonSchemaOf(w.plan),
         // Hand-written flows are proven by their tests; compiled ones by one run after compiling.
         proof: w.name in proven ? (proven[w.name] ?? null) : undefined,
       })),

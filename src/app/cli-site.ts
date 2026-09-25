@@ -41,6 +41,30 @@ export function registerSiteCommands(program: Command, local: LocalBackend): voi
         );
     });
   site
+    .command("route <site> <method> <path>")
+    .description(
+      "What one route takes: its fields, or with --template a body to fill in for `site call --body file.json`",
+    )
+    .option("--template", "print a request to fill in")
+    .action(async (name: string, method: string, path: string, o: { template?: boolean }) => {
+      const sites = local().backend.sites;
+      if (!sites) throw new Error("no site apis here");
+      const { inputLines, inputsOfJson, templateOf } = await import("../engine/inputs.js");
+      const s = await sites.status(name);
+      const r = s.routes.find((x) => x.method === method.toUpperCase() && x.path === path);
+      if (!r)
+        throw new Error(
+          `no ${method.toUpperCase()} ${path} on ${name}; see \`site status ${name}\``,
+        );
+      if (o.template) return console.log(JSON.stringify(templateOf(r.request), null, 2));
+      console.log(
+        `${r.method} ${r.path}: ${r.summary}${r.irreversible ? "  (irreversible)" : ""}${r.spends ? "  (spends)" : ""}`,
+      );
+      console.log(`answers via ${r.via}${r.missing ? `: ${r.missing}` : ""}`);
+      console.log("inputs:");
+      for (const line of inputLines(inputsOfJson(r.request))) console.log(line);
+    });
+  site
     .command("call <site> <method> <path>")
     .description(
       "One call as the official API takes it; `--body` is inline JSON, a file, or - for stdin",

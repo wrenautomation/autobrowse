@@ -20,13 +20,26 @@ export const CLOUDFLARE_PERMISSIONS: TokenPermission[] = [
 ];
 
 export const bootstrapPlan = z.object({
-  provider: z.literal("cloudflare"),
-  tokenName: z.string().min(1).default("autobrowse"),
+  provider: z.literal("cloudflare").describe("Whose credentials to mint"),
+  tokenName: z
+    .string()
+    .min(1)
+    .default("autobrowse")
+    .describe("The API token's name on the dashboard"),
   permissions: z
-    .array(z.object({ scope: z.string(), name: z.string(), level: z.string() }))
-    .default(CLOUDFLARE_PERMISSIONS),
-  /** Mint a new token even when one is already configured. */
-  force: z.boolean().default(false),
+    .array(
+      z.object({
+        scope: z.string().describe("Account or Zone"),
+        name: z.string().describe("The permission, as the dashboard lists it"),
+        level: z.string().describe("Read, Edit or Admin"),
+      }),
+    )
+    .default(CLOUDFLARE_PERMISSIONS)
+    .describe("One row per permission on the token"),
+  force: z
+    .boolean()
+    .default(false)
+    .describe("Mint a new token even when one is already configured"),
   dryRun: z.boolean().default(false),
 });
 export type BootstrapPlan = z.infer<typeof bootstrapPlan>;

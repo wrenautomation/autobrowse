@@ -304,6 +304,8 @@ pnpm autobrowse finish buy-domain --brief "the Buy button charges the card"
 pnpm autobrowse domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin --dry-run
 pnpm autobrowse domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin
 pnpm autobrowse workflows                      # what this worker can run
+pnpm autobrowse workflows bootstrap            # its steps (! = irreversible) and every input: type, default, what it is
+pnpm autobrowse workflows bootstrap --template > plan.json   # fill in, then: run bootstrap cf --plan plan.json
 pnpm autobrowse runs --limit 20                # the registry, newest first (--before <cursor> pages)
 pnpm autobrowse status domain wren-six.com     # every run is <workflow> <key>
 pnpm autobrowse approve domain wren-six.com purchase
@@ -486,6 +488,7 @@ domain-wide delegation stays the path for those).
 ```sh
 pnpm autobrowse site                        # sites, token state, setup left
 pnpm autobrowse site status linkedin        # every route: api | browser | none (why)
+pnpm autobrowse site route youtube POST /upload/youtube/v3/videos   # one route's inputs; --template for a body file
 pnpm autobrowse site setup youtube oauth-client   # a browser flow on Cloud Console keeps the client id/secret
 pnpm autobrowse site setup youtube consent        # OAuth consent in the logged-in profile; refresh token kept
 pnpm autobrowse site setup gmail consent --account will@x.dev   # another account's inbox: token under its own name

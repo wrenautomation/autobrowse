@@ -4,9 +4,11 @@
  * token is in hand, else through the browser leg. Setup: which keys the
  * site still lacks and the step that makes each.
  */
+
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import type { HttpClient } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
+import { type JsonSchema, jsonSchemaOf } from "../engine/inputs.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import type { Approver } from "../gates/payment.js";
 import type { Proof, RunAs } from "../workflows/proof.js";
@@ -77,6 +79,8 @@ export interface RouteRow {
   irreversible: boolean;
   /** Can commit money: gated on the person before the API leg. */
   spends: boolean;
+  /** What the request takes, as JSON Schema: body for writes, query + path params for reads. */
+  request: JsonSchema;
 }
 
 export interface SetupRow extends Pick<SetupStep, "name" | "makes" | "needs" | "summary"> {
@@ -242,6 +246,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       summary: r.summary,
       irreversible: r.irreversible ?? false,
       spends: Boolean(r.spends),
+      request: jsonSchemaOf(r.request),
     };
     if (r.api && hasToken(s)) return { ...base, via: "api" };
     if (r.browser) {

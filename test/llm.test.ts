@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import type { HttpClient } from "../src/clients/http.js";
 import { fakeLlm } from "../src/llm/fake.js";
+import { openaiLlm } from "../src/llm/openai.js";
 import { completeJson, extractJson, LlmOutputInvalid } from "../src/llm/types.js";
 
 describe("extractJson", () => {
@@ -25,5 +27,36 @@ describe("completeJson", () => {
     await expect(completeJson(bad, schema, { system: "s", prompt: "p" })).rejects.toBeInstanceOf(
       LlmOutputInvalid,
     );
+  });
+});
+
+describe("openaiLlm", () => {
+  it("learns the model's output cap from its 400 and asks within it from then on", async () => {
+    const asked: number[] = [];
+    const http = {
+      json: async (_url: string, req: { body: { max_tokens: number } }) => {
+        asked.push(req.body.max_tokens);
+        return req.body.max_tokens > 8192
+          ? {
+              status: 400,
+              ok: false,
+              body: {
+                error: {
+                  message:
+                    "max tokens must be less than or equal to 8192, the maximum output length for this model - received 20000.",
+                },
+              },
+            }
+          : {
+              status: 200,
+              ok: true,
+              body: { model: "m", choices: [{ message: { content: "hi" } }] },
+            };
+      },
+    } as unknown as HttpClient;
+    const llm = openaiLlm({ apiKey: "k", model: "m", http });
+    expect((await llm.complete({ system: "s", prompt: "p", maxTokens: 20_000 })).text).toBe("hi");
+    await llm.complete({ system: "s", prompt: "p", maxTokens: 20_000 });
+    expect(asked).toEqual([20_000, 8192, 8192]);
   });
 });

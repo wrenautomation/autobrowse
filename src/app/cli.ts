@@ -64,12 +64,31 @@ async function patient<T>(call: PromiseLike<T>, afterMs = 10_000): Promise<T> {
 const program = new Command("autobrowse").showHelpAfterError();
 
 program
-  .command("workflows")
-  .description("What this worker can run")
-  .action(async () => {
+  .command("workflows [name]")
+  .description(
+    "What this worker can run; with a name, its steps and the inputs its plan takes (`!` = irreversible)",
+  )
+  .option(
+    "--template",
+    "print a plan to fill in and pass back as `run <name> <key> --plan file.json`",
+  )
+  .action(async (name: string | undefined, o: { template?: boolean }) => {
     const { proofLine } = await import("../workflows/proof.js");
     const { backend } = local();
     const [workflows, proofs] = await Promise.all([workflowsOf(backend), proofsOf(backend)]);
+    if (name) {
+      const { inputLines, inputsOf, templateOf } = await import("../engine/inputs.js");
+      const w = workflows.find((x) => x.name === name);
+      if (!w) throw new Error(`no workflow ${name}; see \`autobrowse workflows\``);
+      if (o.template) return console.log(JSON.stringify(templateOf(w.plan), null, 2));
+      console.log(`${w.name}: ${w.description}`);
+      console.log(
+        `steps: ${w.steps.map((s) => `${s.name}${s.irreversible ? "!" : ""}`).join(" → ")}`,
+      );
+      console.log("inputs:");
+      for (const line of inputLines(inputsOf(w.plan))) console.log(line);
+      return;
+    }
     for (const w of workflows) {
       const proof = proofs[w.name];
       const note = proof ? proofLine(proof) : w.name in proofs ? "draft" : "hand-written";
