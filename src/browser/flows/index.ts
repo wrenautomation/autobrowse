@@ -5,7 +5,6 @@ export { googleDkimGenerate, googleDkimStart } from "./google-dkim.js";
 export { googleWorkspaceLogo } from "./google-workspace-logo.js";
 export { type CreatePostInput, instagramCreatePost } from "./instagram-create-post.js";
 export { instagramOauthConsent } from "./instagram-oauth-consent.js";
-export { instantlyWarmup } from "./instantly-warmup.js";
 export {
   type CreatePostInput as LinkedInCreatePostInput,
   linkedinCreatePost,

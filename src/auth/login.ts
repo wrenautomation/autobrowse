@@ -370,6 +370,18 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
     await fp.wait(SETTLE_MS);
     text = await fp.text();
   }
+  // A Workspace user's first sign-in: "Welcome to your new account", the
+  // terms, and "I understand" (speedbump/gaplustos).
+  if (/speedbump\/gaplustos/.test(fp.url()) || /welcome to your new account/i.test(text)) {
+    await fp.act(
+      { kind: "click" },
+      { role: "button", name: "/i understand/i" },
+      { goal: "accept the new account's terms" },
+    );
+    await fp.waitForUrl((u) => !/speedbump/.test(u), 15_000);
+    await fp.wait(SETTLE_MS);
+    text = await fp.text();
+  }
   if (/verify it.s you|confirm your recovery|tap yes on your/i.test(text))
     throw new LoginFailed(site, "Google asked for a second step this tool cannot answer");
   // The OAuth consent ("Google will allow x.com to access this info about you",

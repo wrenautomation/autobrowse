@@ -54,7 +54,6 @@ describe("browser service", () => {
       "google/youtube-community-post",
       "instagram/create-post",
       "instagram/oauth-consent",
-      "instantly/warmup",
       "linkedin/company",
       "linkedin/company-people",
       "linkedin/connect",

@@ -2,7 +2,7 @@
 
 import { hostname } from "node:os";
 import { dirname, join } from "node:path";
-import { PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
+import { SSMClient } from "@aws-sdk/client-ssm";
 import {
   aesGcmCipher,
   type CanaryOptions,
@@ -65,6 +65,7 @@ import { cloudflare, verifyCloudflareToken } from "../clients/cloudflare.js";
 import { type GmailUserClient, gmailClient } from "../clients/gmail.js";
 import { googleAdmin } from "../clients/google-admin.js";
 import { type HttpClient, httpClient } from "../clients/http.js";
+import { instantly } from "../clients/instantly.js";
 import { type LinqClient, linqClient } from "../clients/linq.js";
 import { ssmRosterStore } from "../clients/roster.js";
 import { twilioReader } from "../clients/twilio.js";
@@ -927,17 +928,14 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       http,
     }),
     browser,
-    secrets: {
-      put: async (name, value) => {
-        await ssm.send(
-          new PutParameterCommand({
-            Name: name,
-            Value: value,
-            Type: "SecureString",
-            Overwrite: true,
-          }),
-        );
-      },
+    credentials: credentialsFor(settings),
+    instantly: async () => {
+      const apiKey =
+        process.env.INSTANTLY_API_KEY ||
+        (await envStoreFor(settings, ssm)
+          .get("INSTANTLY_API_KEY")
+          .catch(() => null));
+      return apiKey ? instantly({ apiKey, http }) : null;
     },
     dmarcRua: settings.dmarcRua ?? null,
   };

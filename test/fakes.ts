@@ -1,8 +1,10 @@
+import type { Credential } from "credvault";
 import type { BrowserFlow, FlowRunner } from "../src/browser/flow.js";
 import { googleDkimGenerate, googleDkimStart } from "../src/browser/flows/google-dkim.js";
-import { instantlyWarmup } from "../src/browser/flows/instantly-warmup.js";
+import { googleOauthConsent } from "../src/browser/flows/oauth-consent.js";
 import { NeedsHuman } from "../src/browser/session.js";
 import type { CloudflareClient, DnsRecord, Registration } from "../src/clients/cloudflare.js";
+import type { InstantlyAccount, InstantlyClient } from "../src/clients/instantly.js";
 import type { GateAnswer, GateName } from "../src/engine/effects.js";
 import type { RunEvent } from "../src/engine/events.js";
 import { memoryEffects } from "../src/engine/memory.js";
@@ -70,9 +72,9 @@ export function fakeBrowser(calls: string[]) {
     calls.push("dkimStart");
     return "started";
   });
-  runner.on(instantlyWarmup, async ({ email }) => {
-    calls.push(`warmup ${email}`);
-    return "enrolled";
+  runner.on({ site: "google", name: "enroll-totp", run: async () => "" }, async () => {
+    calls.push("authenticator");
+    return "TOTP enrolled";
   });
   return runner;
 }
@@ -155,6 +157,14 @@ export function fakeDeps(
     '# roster\n[[senders]]\naddress = "old@fleet.test"\ndisplay_name = "Old"\nniches = "all"\n';
   const bought = new Set<string>();
   const cloudflare = over.cloudflare ?? fakeCloudflare();
+  const creds = new Map<string, Credential>();
+  const instantly = fakeInstantly(calls);
+  const browser = fakeBrowser(calls);
+  browser.on(googleOauthConsent, async ({ account }) => {
+    calls.push(`consent ${account}`);
+    instantly.consent(account ?? "");
+    return { landed: "https://api.instantly.ai/callback" };
+  });
   const deps: Deps & {
     /** Thrown by the next `cloudflare.registered` calls, to exercise the host's error handling. */
     failCheckWith: Error | null;
@@ -242,17 +252,65 @@ export function fakeDeps(
         return { send: true, inbox: true };
       },
     },
-    browser: fakeBrowser(calls),
-    secrets: {
-      async put(name) {
-        calls.push(`secret ${name}`);
+    browser,
+    credentials: {
+      async get(site) {
+        return creds.get(site) ?? null;
+      },
+      async put(site, cred) {
+        calls.push(`credential ${site}`);
+        creds.set(site, { recoveryCodes: [], passkeys: [], ...cred });
+      },
+      async list() {
+        return [...creds.keys()];
       },
     },
+    instantly: async () => instantly,
+    pollMs: 0,
     dmarcRua: "dmarc@fleet.test",
     dnsWaitMs: 0,
     ...over,
   };
   return deps;
+}
+
+/** Instantly: accounts appear once Google's consent went through for them. */
+export function fakeInstantly(calls: string[]) {
+  const accounts = new Map<string, InstantlyAccount>();
+  let consented: string | null = null;
+  const client: InstantlyClient & { accounts: typeof accounts; consent: (email: string) => void } =
+    {
+      accounts,
+      consent: (email) => {
+        consented = email;
+      },
+      async account(email) {
+        return accounts.get(email) ?? null;
+      },
+      async oauthInit() {
+        return {
+          sessionId: "s1",
+          authUrl: "https://accounts.google.com/o/oauth2/auth?redirect_uri=x",
+        };
+      },
+      async oauthStatus() {
+        if (!consented) return { status: "pending" };
+        accounts.set(consented, { email: consented, status: 1, warmupStatus: 0 });
+        return { status: "success", email: consented };
+      },
+      async enableWarmup(emails) {
+        calls.push(`warmup ${emails.join(",")}`);
+        for (const e of emails) {
+          const a = accounts.get(e);
+          if (a) a.warmupStatus = 1;
+        }
+        return "job1";
+      },
+      async job() {
+        return "success";
+      },
+    };
+  return client;
 }
 
 export { NeedsHuman };

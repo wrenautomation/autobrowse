@@ -40,12 +40,16 @@ describe("runFlow", () => {
       "dkimGenerate",
       "dkimStart",
       "createUser will@wren-new.test",
-      "secret /autobrowse/inboxes/will@wren-new.test/password",
+      "credential google@will@wren-new.test",
       "createUser hello@wren-new.test",
-      "secret /autobrowse/inboxes/hello@wren-new.test/password",
+      "credential google@hello@wren-new.test",
       "signature will@wren-new.test",
       "signature hello@wren-new.test",
+      "authenticator",
+      "authenticator",
+      "consent will@wren-new.test",
       "warmup will@wren-new.test",
+      "consent hello@wren-new.test",
       "warmup hello@wren-new.test",
       "roster write",
       "redeploy",
@@ -188,6 +192,55 @@ describe("runFlow", () => {
     );
     expect((state.get(KEYS.results) as Record<string, { status: string }>).inboxes.status).toBe(
       "done",
+    );
+  });
+
+  it("warmup without an Instantly key asks a person; an inbox already warming is left alone", async () => {
+    const deps = fakeDeps({ cloudflare: fakeCloudflare({ registered: true, zone: "z1" }) });
+    const instantly = await deps.instantly();
+    deps.instantly = async () => null;
+    const { fx } = fakeEffects();
+    const first = await runFlow(fx, deps, plan());
+    expect(first.status).toBe("waiting");
+    expect(first.results.warmup?.detail).toMatch(/INSTANTLY_API_KEY/);
+    deps.instantly = async () => instantly;
+    instantly?.accounts.set("will@wren-new.test", {
+      email: "will@wren-new.test",
+      status: 1,
+      warmupStatus: 1,
+    });
+    const before = deps.calls.length;
+    const second = await runFlow(fx, deps, plan(), scriptedAnswers({ human: [{}] }).answer);
+    expect(second.status).toBe("done");
+    expect(second.results.warmup?.detail).toBe(
+      "will@wren-new.test already warming, hello@wren-new.test connected, warming",
+    );
+    expect(deps.calls.slice(before).filter((c) => c.startsWith("consent"))).toEqual([
+      "consent hello@wren-new.test",
+    ]);
+  });
+
+  it("a password reset keeps the inbox's authenticator and skips enrolling it again", async () => {
+    const deps = fakeDeps({ cloudflare: fakeCloudflare({ registered: true, zone: "z1" }) });
+    await deps.google.createUser({
+      primaryEmail: "will@wren-new.test",
+      givenName: "W",
+      familyName: "J",
+      password: "old",
+    });
+    await deps.credentials.put("google@will@wren-new.test", {
+      username: "will@wren-new.test",
+      password: "old",
+      totpSecret: "JBSWY3DPEHPK3PXP",
+    });
+    const { fx } = fakeEffects();
+    const out = await runFlow(fx, deps, plan(), scriptedAnswers({ password: [{}] }).answer);
+    expect(out.status).toBe("done");
+    const cred = await deps.credentials.get("google@will@wren-new.test");
+    expect(cred).toMatchObject({ totpSecret: "JBSWY3DPEHPK3PXP", previousPassword: "old" });
+    expect(cred?.password).not.toBe("old");
+    expect(out.results.authenticator?.detail).toBe(
+      "will@wren-new.test already, hello@wren-new.test TOTP enrolled",
     );
   });
 

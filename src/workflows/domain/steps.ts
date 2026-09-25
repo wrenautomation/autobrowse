@@ -5,12 +5,15 @@
  * afterwards where one exists.
  */
 import { randomBytes } from "node:crypto";
+import { enrollTotpFlow } from "../../auth/enroll.js";
+import { resolveLogin } from "../../auth/login.js";
+import { SITE_LOGINS } from "../../auth/sites.js";
 import {
   type DkimRecord,
   googleDkimGenerate,
   googleDkimStart,
 } from "../../browser/flows/google-dkim.js";
-import { instantlyWarmup } from "../../browser/flows/instantly-warmup.js";
+import { googleOauthConsent } from "../../browser/flows/oauth-consent.js";
 import { NeedsHuman } from "../../browser/session.js";
 import type { DnsRecord, DomainQuote } from "../../clients/cloudflare.js";
 import { appendEntries } from "../../clients/roster.js";
@@ -19,7 +22,7 @@ import { done, rejected, type StepDef, skipped } from "../../engine/workflow.js"
 import type { DomainDeps } from "./deps.js";
 import { inboxAddress, type Plan } from "./plan.js";
 
-/** Everything the steps learn that later steps need. Never a password: those go from generation to the secret store inside one journaled step. */
+/** Everything the steps learn that later steps need. Never a password: those go from generation to the credential store inside one journaled step. */
 export interface DomainMemo {
   /** Cloudflare's answer for a domain nobody here owns yet: free or not, and the price. */
   quote?: DomainQuote;
@@ -30,7 +33,8 @@ export interface DomainMemo {
   rosterAdded?: string[];
 }
 
-export const SECRET_PREFIX = "/autobrowse/inboxes";
+/** An inbox's credential and browser profile: `google@<email>`. */
+export const inboxSite = (email: string) => `google@${email}`;
 
 type Step<S extends string> = StepDef<Plan, DomainDeps, DomainMemo, S>;
 
@@ -226,15 +230,16 @@ export const inboxes: Step<"inboxes"> = {
     if (existing.length > 0) {
       const answer = gate(
         "password",
-        `Reset the password of ${existing.join(", ")} to a new random one (stored in the secret store)?`,
+        `Reset the password of ${existing.join(", ")} to a new random one (stored as google@<inbox>)?`,
       );
       if (!answer.approved) return rejected(answer.note ?? "password reset declined");
     }
     for (const inbox of plan.inboxes) {
       const email = inboxAddress(plan, inbox);
       // One journaled step per inbox: the password exists only inside it and
-      // in the secret store. A rerun of an unfinished step resets the
-      // password, so the store is never left holding a stale one.
+      // in the credential store. A rerun of an unfinished step resets the
+      // password, so the store is never left holding a stale one. A reset
+      // keeps the authenticator seed: Google keeps the authenticator too.
       const o = await fx.run(`inbox ${email}`, async () => {
         const password = randomBytes(18).toString("base64url");
         const existing = await deps.google.getUser(email);
@@ -246,7 +251,14 @@ export const inboxes: Step<"inboxes"> = {
             familyName: inbox.familyName,
             password,
           });
-        await deps.secrets.put(`${SECRET_PREFIX}/${email}/password`, password);
+        const site = inboxSite(email);
+        const had = await deps.credentials.get(site);
+        await deps.credentials.put(site, {
+          ...had,
+          username: email,
+          password,
+          ...(had?.password ? { previousPassword: had.password } : {}),
+        });
         return existing ? "password reset" : "created";
       });
       outcomes.push(`${email} ${o}`);
@@ -272,14 +284,82 @@ export const signatures: Step<"signatures"> = {
   },
 };
 
+/**
+ * Each inbox gets an authenticator: Google asks a new sign-in (a new box,
+ * a new IP) to prove itself, and a code we make answers where a phone
+ * would otherwise be needed.
+ */
+export const authenticator: Step<"authenticator"> = {
+  name: "authenticator",
+  async run({ fx, deps, plan }) {
+    const outcomes: string[] = [];
+    for (const inbox of plan.inboxes) {
+      const email = inboxAddress(plan, inbox);
+      const site = inboxSite(email);
+      const o = await fx.run(`authenticator ${email}`, async () => {
+        if ((await deps.credentials.get(site))?.totpSecret) return "already";
+        const login = resolveLogin(SITE_LOGINS, site);
+        if (!login) throw new Error("no google login spec");
+        return deps.browser.run(enrollTotpFlow(login, deps.credentials), undefined);
+      });
+      outcomes.push(`${email} ${o}`);
+    }
+    return done(outcomes.join(", "));
+  },
+};
+
+const NO_INSTANTLY_KEY =
+  "no INSTANTLY_API_KEY: make one in Instantly (Settings → Integrations → API Keys, scopes accounts:all), add it to the environment and `autobrowse env push INSTANTLY_API_KEY`, then approve";
+
+/**
+ * Warmup in Instantly (warmup only; sends go through wren). Instantly's
+ * OAuth session API gives Google's consent URL; the inbox's own profile
+ * consents; Instantly reports the account; warmup goes on. No Instantly
+ * login and no dashboard.
+ */
 export const warmup: Step<"warmup"> = {
   name: "warmup",
   async run({ fx, deps, plan }) {
     if (!plan.warmup) return skipped("warmup=false");
+    const instantly = await deps.instantly();
+    if (!instantly) throw new NeedsHuman(`warmup: ${NO_INSTANTLY_KEY}`);
+    const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const every = deps.pollMs ?? 5_000;
     const outcomes: string[] = [];
     for (const inbox of plan.inboxes) {
       const email = inboxAddress(plan, inbox);
-      const o = await fx.run(`warmup ${email}`, () => deps.browser.run(instantlyWarmup, { email }));
+      // One journaled unit per inbox: Instantly's session lives 10 minutes,
+      // so init, consent and the status poll cannot straddle a suspension.
+      // A rerun asks Instantly first, so an inbox is never connected twice.
+      const o = await fx.run(`warmup ${email}`, async () => {
+        const have = await instantly.account(email);
+        if (have && have.warmupStatus === 1) return "already warming";
+        if (!have) {
+          const { sessionId, authUrl } = await instantly.oauthInit();
+          await deps.browser.run(
+            { ...googleOauthConsent, site: inboxSite(email) },
+            { url: authUrl, account: email, passThrough: true },
+          );
+          for (let i = 0; ; i++) {
+            const s = await instantly.oauthStatus(sessionId);
+            if (s.status === "success") break;
+            if (s.status === "error")
+              throw new NeedsHuman(`Instantly refused ${email}: ${s.error} ${s.description}`);
+            if (s.status === "expired" || i >= 24)
+              throw new Error(`Instantly's session for ${email} ended before Google's consent`);
+            await pause(every);
+          }
+        }
+        const job = await instantly.enableWarmup([email]);
+        for (let i = 0; i < 12; i++) {
+          const state = await instantly.job(job);
+          if (state === "success") return have ? "warmup turned on" : "connected, warming";
+          if (state === "failed")
+            throw new Error(`Instantly could not turn warmup on for ${email}`);
+          await pause(every);
+        }
+        return have ? "warmup asked for" : "connected, warmup asked for";
+      });
       outcomes.push(`${email} ${o}`);
     }
     return done(outcomes.join(", "));

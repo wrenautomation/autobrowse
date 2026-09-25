@@ -23,9 +23,10 @@ later steps need, the gate answers, the open gate, paused, generation.
 | dkim-generate | generate the key | browser: admin console (no API) | value matches `v=DKIM1;` | |
 | dkim-dns | `google._domainkey` TXT | Cloudflare API | | |
 | dkim-start | wait 2 min, "Start authentication" | browser | console shows "Authenticating email" | |
-| inboxes | create users; password → SSM `/autobrowse/inboxes/{email}/password` | Directory API | | yes |
+| inboxes | create users; password → credential `google@{email}` (SSM + local copy) | Directory API | | yes |
 | signatures | send-as signature | Gmail API as each user, retried while the mailbox provisions | | |
-| warmup | in Instantly? else **hand off** the add + consent | browser | listed on the accounts page | |
+| authenticator | enroll TOTP; seed → the same credential | browser as `google@{email}` | Google says the authenticator is on | |
+| warmup | Instantly OAuth session → Google consent as the inbox → warmup on | Instantly API + browser | session `success`, warmup job `success` | |
 | roster | append `[[senders]]` to SSM roster, dispatch wren deploy, wait | SSM + GitHub API | deploy run succeeded | yes |
 | loops | `SendScheduler/{addr}/start`, `InboxScheduler/{addr}/start` | wren ingress | `running: true` | yes |
 
@@ -61,8 +62,9 @@ between checks). So `pause`, `reset`, `approve` never wait on the run.
   under `ARTIFACTS_DIR`, attaches them to `NeedsHuman` or wraps the error
   in `FlowFailed`. Flows call `fp.open(url)` (refuses walls) and
   `fp.human(reason)`.
-- `flows/`: `google-dkim` (generate, start),
-  `instantly-warmup`. Written from the dashboards on 2026-09-19,
+- `flows/`: `google-dkim` (generate, start); the inbox steps reuse
+  `google/oauth-consent` (pass-through) and `enroll-totp`, run in the
+  inbox's own profile. Written from the dashboards on 2026-09-19,
   **unverified until the first real run**. `record --flow` exists to
   replace guesses with recordings.
 
@@ -105,8 +107,9 @@ layer when a recorded selector drifts, behind the same `BrowserFlow` type.
 `gmail.settings.basic`, `gmail.send`), `GOOGLE_ADMIN_USER` (a super admin),
 `CLOUDFLARE_API_TOKEN` (Zone:Edit, DNS:Edit, Registrar:Read),
 `CLOUDFLARE_ACCOUNT_ID`, `GITHUB_TOKEN` (actions:write on wren), AWS creds
-with SSM read/write on `/wren/prod/senders_config` and
-`/autobrowse/inboxes/*`. Passwords never enter the journal or the memo:
+with SSM read/write on `/wren/prod/senders_config` and the credential
+store, `INSTANTLY_API_KEY` (scopes accounts:all; env or env store; the
+warmup step asks a person while it is missing). Passwords never enter the journal or the memo:
 generated, applied and stored inside one journaled step. Raw recordings
 (`RECORDINGS_DIR`) may hold typed secrets and are gitignored.
 
@@ -133,8 +136,20 @@ ones, like wren. Not needed until a run is unattended.
   (joined, hyphen, plural, hq/team) × com/net/org/co/io, each marked ours,
   free with price, or (`--all`) why not. No .us (needs US nexus).
 - 2026-09-19 Instantly consent is a hand-off: it is the inbox's own Google
-  session giving OAuth consent.
+  session giving OAuth consent. Superseded 2026-09-25.
 - 2026-09-19 Passwords go generation → Directory → SSM inside one step.
+- 2026-09-25 Each inbox is a first-class account: credential and browser
+  profile `google@<email>`, password then TOTP seed, so the runner signs
+  it in anywhere with nobody. Google's first-sign-in terms page ("I
+  understand") is answered in `signInToGoogle`. No backup codes: we are
+  the Workspace admin and can reset.
+- 2026-09-25 Warmup through Instantly's OAuth session API
+  (`/oauth/google/init` → consent → `/oauth/session/status`), not the
+  dashboard: no Instantly login, one API key. The consent runs
+  pass-through so Instantly's callback sees the code. Init, consent and
+  the poll are one journaled unit (the session lives 10 minutes); a rerun
+  asks Instantly first, so an inbox is never connected twice. Unproven
+  until the first real inbox.
 - 2026-09-19 Gates are state + self-chained steps, not awakeables: a
   parked invocation blocked `pause`/`reset` and held the key for days.
 - 2026-09-19 Recording-first for browser flows; Stagehand not adopted.

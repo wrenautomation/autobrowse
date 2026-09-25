@@ -14,7 +14,15 @@ export interface OauthConsentInput {
   url: string;
   /** Which account to pick in the chooser; the signed-in one when absent. */
   account?: string;
+  /**
+   * The redirect belongs to someone else (Instantly's callback), which
+   * must see the code: let it through, and the walk ends once the page
+   * leaves Google. Absent: the browser answers the redirect itself.
+   */
+  passThrough?: boolean;
 }
+
+const onGoogle = (u: string) => /^https:\/\/([a-z0-9-]+\.)*google\.com(\/|$)/i.test(u);
 
 const SIGNED_IN_PAGE = "https://myaccount.google.com/";
 const SETTLE_MS = 1_500;
@@ -37,10 +45,11 @@ export const googleOauthConsent = defineFlow<OauthConsentInput, { landed: string
   name: "oauth-consent",
   async run(fp, input) {
     const redirect = redirectOf(input.url);
-    const landed = (u: string) => u.startsWith(redirect);
+    const landed = (u: string) =>
+      u.startsWith(redirect) || (!!input.passThrough && /^https?:/.test(u) && !onGoogle(u));
     // Sign in on a plain page first: the consent pages live on accounts.google.com
     // too, and the runner's sign-in would otherwise take each of them for a wall.
-    await fp.answer(redirect, CONSENT_RECEIVED);
+    if (!input.passThrough) await fp.answer(redirect, CONSENT_RECEIVED);
     await fp.open(SIGNED_IN_PAGE);
     await fp.open(input.url, { allowWall: true });
     let verified = false;

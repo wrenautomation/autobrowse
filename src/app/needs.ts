@@ -253,6 +253,16 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
       check: () => holds(ctx, "TWILIO_NUMBER"),
     },
     {
+      id: "instantly-key",
+      kind: "keys",
+      what: "An Instantly API key (scopes accounts:all)",
+      unlocks: "new inboxes join warmup on their own: the domain workflow's warmup step",
+      how: [
+        "app.instantly.ai → Settings → Integrations → API Keys → Create; INSTANTLY_API_KEY in .env; autobrowse env push INSTANTLY_API_KEY",
+      ],
+      check: () => holds(ctx, "INSTANTLY_API_KEY"),
+    },
+    {
       id: "anthropic-credits",
       kind: "money",
       what: "Anthropic API credits ($5 min)",

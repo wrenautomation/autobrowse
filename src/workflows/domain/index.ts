@@ -24,6 +24,7 @@ export const domainWorkflow = defineWorkflow<DomainDeps, s.DomainMemo>()({
     s.dkimStart,
     s.inboxes,
     s.signatures,
+    s.authenticator,
     s.warmup,
     s.roster,
     s.loops,
@@ -34,4 +35,4 @@ export const domainWorkflow = defineWorkflow<DomainDeps, s.DomainMemo>()({
 export type DomainWorkflow = typeof domainWorkflow;
 export type { DomainDeps } from "./deps.js";
 export { inboxAddress, type Plan, type PlanInput, parseInboxSpec, parsePlan } from "./plan.js";
-export { SECRET_PREFIX } from "./steps.js";
+export { inboxSite } from "./steps.js";

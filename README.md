@@ -246,11 +246,12 @@ a row; it is work.
 ## Flows built
 
 - **Domain** (`designs/2026-09-19-domain-flow.md`): check → buy → zone →
-  Workspace → verify → mail DNS → DKIM → inboxes → signatures → warmup →
-  roster → loops. Gated at the purchase; hands off at logins/consent.
+  Workspace → verify → mail DNS → DKIM → inboxes → signatures →
+  authenticator → warmup (Instantly API) → roster → loops. Gated at the
+  purchase. Each inbox is credential + profile `google@<email>`.
 - **Hand-written legs** (`src/browser/flows/`, callable as the Restate
   `browser` service's `flow`): `google-admin/dkim-*`,
-  `google-admin/workspace-logo`, `instantly/warmup`, `google/oauth-consent`,
+  `google-admin/workspace-logo`, `google/oauth-consent`,
   `linkedin/oauth-consent`, `instagram/oauth-consent`, `tiktok/oauth-consent`,
   `outlook/oauth-consent`, `google/youtube-community-post`.
 - **Compiled from recordings** (`src/workflows/`): `bootstrap` (mints the

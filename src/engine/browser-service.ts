@@ -1,7 +1,7 @@
 /**
  * The browser legs as one Restate service, for an orchestrator that owns
- * the API steps (wren): `browser/buy`, `browser/dkimGenerate`,
- * `browser/dkimStart`, `browser/warmup`, `browser/workspaceLogo`, and
+ * the API steps (wren): `browser/dkimGenerate`,
+ * `browser/dkimStart`, `browser/workspaceLogo`, and
  * `browser/flow` for any compiled flow by name. Each call is one journaled
  * effect; a person needed or a broken flow is a terminal error with the
  * artifacts in its message, the same codes the run objects use. The
@@ -15,7 +15,6 @@ import { googleDkimGenerate, googleDkimStart } from "../browser/flows/google-dki
 import { googleWorkspaceLogo } from "../browser/flows/google-workspace-logo.js";
 import { instagramCreatePost } from "../browser/flows/instagram-create-post.js";
 import { instagramOauthConsent } from "../browser/flows/instagram-oauth-consent.js";
-import { instantlyWarmup } from "../browser/flows/instantly-warmup.js";
 import { linkedinCreatePost } from "../browser/flows/linkedin-create-post.js";
 import { linkedinOauthConsent } from "../browser/flows/linkedin-oauth-consent.js";
 import {
@@ -47,7 +46,6 @@ const RETRY = {
 };
 
 const domain = z.object({ domain: z.string().min(3) });
-const email = z.object({ email: z.string().email() });
 const file = z.object({ file: z.string().min(1) });
 const named = z.object({
   name: z.string().regex(/^[a-z][a-z0-9-]+(\/[a-z][a-z0-9-]+)?$/),
@@ -62,7 +60,6 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
   [
     googleDkimGenerate,
     googleDkimStart,
-    instantlyWarmup,
     googleWorkspaceLogo,
     googleOauthConsent,
     linkedinOauthConsent,
@@ -127,7 +124,6 @@ export function browserService(deps: BrowserServiceDeps) {
         leg(googleDkimGenerate)(ctx, domain.parse(raw)),
       dkimStart: (ctx: restate.Context, raw: unknown) =>
         leg(googleDkimStart)(ctx, domain.parse(raw)),
-      warmup: (ctx: restate.Context, raw: unknown) => leg(instantlyWarmup)(ctx, email.parse(raw)),
       workspaceLogo: (ctx: restate.Context, raw: unknown) =>
         leg(googleWorkspaceLogo)(ctx, file.parse(raw)),
       /** Any flow in the catalog by name; the input is the flow's own. */
