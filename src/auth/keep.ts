@@ -5,6 +5,8 @@
  * what is already stored under the old one.
  */
 export const KEYCHAIN = { service: "autobrowse" } as const;
+/** The wallet's own key: opening credentials never opens cards. */
+export const WALLET_KEYCHAIN = { service: "autobrowse-wallet" } as const;
 export const CRED_ENV = { prefix: "AUTOBROWSE_CRED_" } as const;
 /** Compiled workflows ask for `cardCvv` → `AUTOBROWSE_CARD_CVV`. */
 export const SECRET_ENV_PREFIX = "AUTOBROWSE_";

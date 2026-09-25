@@ -25,6 +25,7 @@ import { registerRecordCommands } from "./cli-record.js";
 import { registerShotsCommands } from "./cli-shots.js";
 import { registerSiteCommands } from "./cli-site.js";
 import { registerUnsubscribe } from "./cli-unsubscribe.js";
+import { registerWalletCommands } from "./cli-wallet.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
 import { fileDone } from "./needs.js";
@@ -270,6 +271,7 @@ registerAccountsCommands(program, () => ({
 }));
 registerEnvCommands(program, settings, { store: () => envStoreFor(settings) });
 registerDesktopCommands(program, tmpdir());
+registerWalletCommands(program, settings);
 
 program.parseAsync().catch((err: unknown) => {
   // Name the command that failed, so a bare "exit code 1" always says why.

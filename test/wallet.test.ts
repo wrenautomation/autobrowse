@@ -1,0 +1,174 @@
+import { mkdtempSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  DeleteParameterCommand,
+  GetParametersByPathCommand,
+  ParameterNotFound,
+  PutParameterCommand,
+} from "@aws-sdk/client-ssm";
+import { plainCipher } from "credvault";
+import { describe, expect, it } from "vitest";
+import {
+  backedUpWallet,
+  type Card,
+  cardField,
+  cardSecret,
+  describeCard,
+  fileWallet,
+  luhn,
+  memoryWallet,
+  parseCardLine,
+  pickCard,
+  ssmWallet,
+} from "../src/money/wallet.js";
+
+// Public test numbers (Stripe's), never a real card.
+const VISA = "4242424242424242";
+const MC = "5555555555554444";
+const NOW = new Date("2026-09-25T12:00:00Z");
+const card = (label: string, kind: Card["kind"], number = VISA): Card =>
+  parseCardLine(`${number} 09/28 123`, { label, kind, now: NOW });
+
+describe("wallet cards", () => {
+  it("parses a clipboard line, spaced number, postal and name", () => {
+    const c = parseCardLine("4242 4242 4242 4242 7/2029 1234 m5v 2t6 Jane Q Doe", {
+      label: "visa",
+      kind: "credit",
+      now: NOW,
+    });
+    expect(c).toMatchObject({
+      number: VISA,
+      expMonth: 7,
+      expYear: 2029,
+      cvc: "1234",
+      postal: "M5V2T6",
+      holder: "Jane Q Doe",
+    });
+    expect(card("c", "credit").holder).toBe("William Jin");
+    expect(
+      parseCardLine(`${VISA} 09/28 123 Jane Doe`, { label: "c", kind: "credit", now: NOW }),
+    ).toMatchObject({ holder: "Jane Doe" });
+    expect(
+      parseCardLine(`${VISA} 09/28 123 Jane Doe`, { label: "c", kind: "credit", now: NOW }).postal,
+    ).toBeUndefined();
+  });
+  it("errors name the part, never the value", () => {
+    const bad = (t: string) => () => parseCardLine(t, { label: "c", kind: "credit", now: NOW });
+    expect(bad("4242424242424241 09/28 123")).toThrow(/check digit/);
+    expect(bad("4242424242424242 08/26 123")).toThrow(/expired/);
+    expect(bad("4242424242424242")).toThrow(/^expected/);
+    for (const t of ["4242424242424241 09/28 123", "4242424242424242 08/26 999"])
+      expect(() => bad(t)()).toThrow(
+        expect.not.objectContaining({ message: expect.stringMatching(/4242|999/) }),
+      );
+  });
+  it("describes with brand, kind, last 4, expiry only", () => {
+    expect(describeCard(card("main", "credit"))).toBe("main: Visa credit ••4242 exp 09/28");
+    expect(luhn(MC)).toBe(true);
+  });
+  it("names the fields place may ask for", () => {
+    const c = card("main", "credit");
+    expect(
+      ["number", "exp", "expMonth", "expYear", "expYY", "cvc", "name"].map((f) => cardField(c, f)),
+    ).toEqual([VISA, "09/28", "09", "2028", "28", "123", "William Jin"]);
+    expect(cardField(c, "pin")).toBeNull();
+    expect(cardSecret("card.cvc")).toEqual({ label: null, field: "cvc" });
+    expect(cardSecret("card@debit.number")).toEqual({ label: "debit", field: "number" });
+    expect(cardSecret("x.password")).toBeNull();
+  });
+});
+
+describe("pickCard", () => {
+  const w = memoryWallet([card("debit", "debit", MC), card("visa", "credit")]);
+  const policy = { debitHosts: ["td.com"] };
+  it("credit by default, even with debit listed first", async () => {
+    expect(
+      (await pickCard(w, { host: "shop.com", label: null, subscription: false, policy })).label,
+    ).toBe("visa");
+  });
+  it("debit only on a listed host, never for a subscription", async () => {
+    const debit = (host: string, subscription: boolean) =>
+      pickCard(w, { host, label: "debit", subscription, policy });
+    expect((await debit("easyweb.td.com", false)).label).toBe("debit");
+    await expect(debit("shop.com", false)).rejects.toThrow(/not in WALLET_DEBIT_HOSTS/);
+    await expect(debit("td.com", true)).rejects.toThrow(/never for a subscription/);
+  });
+  it("no credit card is a clear error", async () => {
+    await expect(
+      pickCard(memoryWallet([]), { host: "a.com", label: null, subscription: false, policy }),
+    ).rejects.toThrow(/wallet add/);
+  });
+});
+
+/** SSM as a map: puts, path reads with paging, deletes. */
+function fakeSsm() {
+  const params = new Map<string, string>();
+  const types: string[] = [];
+  return {
+    params,
+    types,
+    // biome-ignore lint/suspicious/noExplicitAny: each command's own output shape
+    async send(cmd: unknown): Promise<any> {
+      if (cmd instanceof PutParameterCommand) {
+        types.push(cmd.input.Type ?? "");
+        params.set(cmd.input.Name ?? "", cmd.input.Value ?? "");
+        return {};
+      }
+      if (cmd instanceof GetParametersByPathCommand) {
+        const all = [...params].filter(([k]) => k.startsWith(`${cmd.input.Path}/`));
+        const from = Number(cmd.input.NextToken ?? 0);
+        return {
+          Parameters: all.slice(from, from + 1).map(([Name, Value]) => ({ Name, Value })),
+          NextToken: from + 1 < all.length ? String(from + 1) : undefined,
+        };
+      }
+      if (cmd instanceof DeleteParameterCommand) {
+        if (!params.delete(cmd.input.Name ?? ""))
+          throw new ParameterNotFound({ message: "gone", $metadata: {} });
+        return {};
+      }
+      throw new Error("unexpected command");
+    },
+  };
+}
+
+describe("wallet stores", () => {
+  it("the file is 0600 and round-trips", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "wallet-")), "wallet.sealed");
+    const f = fileWallet(path, plainCipher);
+    await f.put(card("visa", "credit"));
+    await f.put(card("debit", "debit", MC));
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect((await f.list()).map((c) => c.label)).toEqual(["visa", "debit"]);
+    expect(await f.remove("visa")).toBe(true);
+    expect(await f.remove("visa")).toBe(false);
+  });
+  it("every change is backed up to SSM /wallet as a SecureString; restore brings it back", async () => {
+    const ssm = fakeSsm();
+    const w = backedUpWallet(memoryWallet(), ssmWallet(ssm));
+    await w.put(card("visa", "credit"));
+    await w.put(card("debit", "debit", MC));
+    expect([...ssm.params.keys()]).toEqual(["/wallet/cards/visa", "/wallet/cards/debit"]);
+    expect(ssm.types).toEqual(["SecureString", "SecureString"]);
+    await w.remove("debit");
+    expect([...ssm.params.keys()]).toEqual(["/wallet/cards/visa"]);
+    const fresh = backedUpWallet(memoryWallet(), ssmWallet(ssm));
+    expect(await fresh.restore()).toEqual(["visa"]);
+    expect((await fresh.get("visa"))?.number).toBe(VISA);
+  });
+  it("a failed backup says the Mac has it and how to rerun, without values", async () => {
+    const broken = {
+      ...memoryWallet(),
+      put: async () => {
+        throw Object.assign(new Error(VISA), { name: "ExpiredToken" });
+      },
+    };
+    const local = memoryWallet();
+    const w = backedUpWallet(local, broken);
+    const err = await w.put(card("visa", "credit")).catch((e: Error) => e);
+    expect((err as Error).message).toMatch(/visa: changed on this Mac.*aws-login.*ExpiredToken/);
+    expect((err as Error).message).not.toContain(VISA);
+    expect(await local.get("visa")).not.toBeNull();
+  });
+});

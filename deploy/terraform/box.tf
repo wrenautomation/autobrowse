@@ -91,6 +91,22 @@ data "aws_kms_alias" "ssm" {
 }
 
 data "aws_iam_policy_document" "box" {
+  # The wallet's backup (/wallet): William's cards, off every machine role. The managed
+  # SSM core policy grants GetParameter on "*" and this role decrypts with the SSM key,
+  # so without this Deny a shell on the box could read a card.
+  statement {
+    sid    = "NeverTheWallet"
+    effect = "Deny"
+    actions = [
+      "ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath",
+      "ssm:GetParameterHistory", "ssm:PutParameter", "ssm:DeleteParameter",
+      "ssm:DeleteParameters", "ssm:LabelParameterVersion",
+    ]
+    resources = [
+      "arn:aws:ssm:${var.region}:${data.aws_caller_identity.me.account_id}:parameter/wallet",
+      "arn:aws:ssm:${var.region}:${data.aws_caller_identity.me.account_id}:parameter/wallet/*",
+    ]
+  }
   statement {
     sid       = "ReadEnvStore"
     actions   = ["ssm:GetParametersByPath", "ssm:GetParameter"]

@@ -42,7 +42,7 @@ import {
   SITE_LOGINS,
   totpSource,
 } from "../auth/index.js";
-import { CRED_ENV, ENV_STORE_PREFIX, KEYCHAIN } from "../auth/keep.js";
+import { CRED_ENV, ENV_STORE_PREFIX, KEYCHAIN, WALLET_KEYCHAIN } from "../auth/keep.js";
 import type { FlowRunner } from "../browser/flow.js";
 import { flowRunner } from "../browser/flow.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
@@ -573,6 +573,23 @@ export function credentialHistoryFor(
   ssm: SSMClient = lazy(() => new SSMClient({ region: settings.awsRegion })),
 ): CredentialHistory {
   return ssmCredentialHistory(ssm, `${ENV_STORE_PREFIX}/history`);
+}
+
+/**
+ * The wallet: the sealed file here (its own keychain item, so a credential
+ * read never opens it), backed up to SSM /wallet on every change. macOS only:
+ * a machine without the keychain has no cards.
+ */
+export async function walletFor(
+  settings: Settings,
+  ssm: SSMClient = lazy(() => new SSMClient({ region: settings.awsRegion })),
+) {
+  if (process.platform !== "darwin") throw new Error("the wallet lives on the Mac only");
+  const { backedUpWallet, fileWallet, ssmWallet } = await import("../money/wallet.js");
+  return backedUpWallet(
+    fileWallet(expandHome(settings.walletFile), aesGcmCipher(keychainKey(WALLET_KEYCHAIN))),
+    ssmWallet(ssm),
+  );
 }
 
 /** The store `autobrowse env` and prod's sink share: SSM under /autobrowse/config. */

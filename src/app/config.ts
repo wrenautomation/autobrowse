@@ -141,6 +141,18 @@ const schema = z.object({
     .transform((v) => v === "true" || v === "1"),
   /** Site credentials for automated sign-in; 0600 JSON. Env (`AUTOBROWSE_CRED_*`) is read first. */
   credentialsFile: z.string().min(1).default("~/.config/autobrowse/credentials.json"),
+  /** William's cards, sealed with their own keychain key; backed up to SSM /wallet (no machine role reads it). */
+  walletFile: z.string().min(1).default("~/.config/autobrowse/wallet.sealed"),
+  /** Hosts a debit card may pay on (banking, government), comma separated; empty = debit never. */
+  walletDebitHosts: z
+    .string()
+    .default("")
+    .transform((v) =>
+      v
+        .split(",")
+        .map((h) => h.trim().toLowerCase())
+        .filter(Boolean),
+    ),
   /** How the credential file is sealed: keychain (macOS, default there), none (containers; credentials come from env). */
   credentialsCipher: z
     .enum(["keychain", "none"])
@@ -273,6 +285,8 @@ export const ENV_KEYS = {
   autoBuild: "AUTO_BUILD",
   autoHeal: "AUTO_HEAL",
   credentialsFile: "CREDENTIALS_FILE",
+  walletFile: "WALLET_FILE",
+  walletDebitHosts: "WALLET_DEBIT_HOSTS",
   credentialsCipher: "CREDENTIALS_CIPHER",
   credentialsShared: "CREDENTIALS_SHARED",
   codesInbox: "CODES_INBOX",
