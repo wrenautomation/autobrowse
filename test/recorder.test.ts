@@ -108,6 +108,32 @@ describe("recordBrowser", () => {
     for (const name of ["MM/YY", "Expiry", "Expiration date", "Exp", "CVC", "Name on card"])
       expect(redactAria(`- textbox "${name}": 01/30`)).toBe(`- textbox "${name}": <redacted>`);
     expect(redactAria('- textbox "Export name": q3')).toBe('- textbox "Export name": q3');
+    // Stripe repeats a field's value on a child line (a whole card leaked that way 2026-09-25).
+    const stripe = [
+      '- iframe "payment":',
+      '  - textbox "Card number": 4242',
+      "    - text: 4242 4242 4242 4242",
+      '  - textbox "Security code":',
+      "    - /placeholder: CVC",
+      '    - text: "321"',
+      '  - textbox "City":',
+      "    - text: Edmonton",
+    ].join("\n");
+    expect(redactAria(stripe)).toBe(
+      [
+        '- iframe "payment":',
+        '  - textbox "Card number": <redacted>',
+        "    - <redacted>",
+        '  - textbox "Security code":',
+        "    - /placeholder: CVC",
+        "    - <redacted>",
+        '  - textbox "City":',
+        "    - text: Edmonton",
+      ].join("\n"),
+    );
+    // A card number anywhere in text; a long order id is not one.
+    expect(redactText("paid with 4242-4242-4242-4242 today")).toBe("paid with <redacted> today");
+    expect(redactText("order 1234567890123")).toBe("order 1234567890123");
   });
 
   it("masks a filled password field in an aria tree, whatever the value looks like", () => {

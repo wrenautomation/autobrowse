@@ -109,6 +109,16 @@ export interface Hands {
   press(target: KeyTarget, key: string, o: ActTimeout): Promise<void>;
   /** A control: replace what it holds with `text` in one go, as autofill does. */
   paste(target: Locator, text: string, o: ActTimeout): Promise<void>;
+  /** Press at `from`, carry to `to`, let go: points inside the control from its top-left (a slider, a captcha piece). */
+  drag(target: Locator, from: Point, to: Point, o: ActTimeout): Promise<void>;
+}
+
+/** A control's box on the page, or a clear error: a drag needs real coordinates. */
+async function boxOf(target: Locator, o: ActTimeout) {
+  await target.scrollIntoViewIfNeeded(o).catch(() => undefined);
+  const box = await target.boundingBox(o);
+  if (!box) throw new Error("drag: the control has no box on screen");
+  return box;
 }
 
 /** Plain Playwright: no pauses, no pointer path. */
@@ -118,6 +128,14 @@ export const instantHands: Hands = {
   type: (target, text, o) => (isPage(target) ? target.keyboard.type(text) : target.fill(text, o)),
   press: (target, key, o) => (isPage(target) ? target.keyboard.press(key) : target.press(key, o)),
   paste: (target, text, o) => target.fill(text, o),
+  async drag(target, from, to, o) {
+    const { mouse } = target.page();
+    const box = await boxOf(target, o);
+    await mouse.move(box.x + from.x, box.y + from.y);
+    await mouse.down();
+    await mouse.move(box.x + to.x, box.y + to.y, { steps: 12 });
+    await mouse.up();
+  },
 };
 
 /** Where each page's pointer is: Playwright's mouse has no getter. Dies with the page. */
@@ -247,6 +265,20 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
       await page.waitForTimeout(ms);
     },
     click,
+    async drag(target, from, to, o) {
+      const page = target.page();
+      const box = await boxOf(target, o);
+      const size = Math.min(box.width, box.height);
+      const start = { x: box.x + from.x, y: box.y + from.y };
+      const end = { x: box.x + to.x, y: box.y + to.y };
+      await glide(page, start, size, pace, random);
+      await page.waitForTimeout(drawMs(pace.mouse.hover, random));
+      await page.mouse.down();
+      await page.waitForTimeout(drawMs(pace.mouse.hold, random));
+      await glide(page, end, size, pace, random);
+      await page.waitForTimeout(drawMs(pace.mouse.hover, random));
+      await page.mouse.up();
+    },
     async type(target, text, o) {
       const page = isPage(target) ? target : target.page();
       if (!isPage(target)) {

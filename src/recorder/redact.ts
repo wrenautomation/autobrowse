@@ -33,24 +33,60 @@ export function looksLikeSecretValue(value: string): boolean {
   return SECRET_VALUES.some((re) => re.test(value));
 }
 
-/** Mask secret-shaped substrings in free text (a terminal transcript). */
+/** 13-19 digits, spaced or dashed as a card prints them. */
+const CARD_RUN = /\b\d(?:[ -]?\d){12,18}\b/g;
+
+/** Luhn over the digits: a card number, not an order id that happens to be long. */
+function luhnValid(digits: string): boolean {
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let d = Number(digits[digits.length - 1 - i]);
+    if (i % 2 === 1) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
+
+/** Mask secret-shaped substrings in free text (a terminal transcript), and anything that reads as a card number. */
 export function redactText(text: string): string {
   let out = text;
   for (const re of SECRET_VALUES)
     out = out.replace(new RegExp(re.source, `${re.flags}g`), REDACTED);
-  return out;
+  return out.replace(CARD_RUN, (run) => (luhnValid(run.replace(/\D/g, "")) ? REDACTED : run));
 }
+
+const FIELD_LINE = /^(\s*)-\s*(?:'|")?(?:textbox|searchbox|combobox)\s+"([^"]*)"[^:\n]*:/;
 
 /**
  * An aria snapshot line for a filled field reads `- textbox "Enter your
- * password": <value>`. Masked when the field is secret by name, whatever
- * the value looks like: a password is not token-shaped. Then the usual
- * text pass for values that are.
+ * password": <value>`, and Stripe's frames repeat the value on a child
+ * `- text:` line. A field secret by name is masked whatever the value
+ * looks like (a password is not token-shaped): its own value and every
+ * child line's, but its placeholder. Then the usual text pass.
  */
 export function redactAria(tree: string): string {
-  const masked = tree.replace(
-    /^(\s*-\s*(?:'|")?(?:textbox|searchbox|combobox)\s+"([^"]*)"[^:\n]*):\s+(?!\n)(.+)$/gm,
-    (line, head: string, name: string) => (SECRET_FIELD.test(name) ? `${head}: ${REDACTED}` : line),
-  );
-  return redactText(masked);
+  const out: string[] = [];
+  let secretAt = -1;
+  for (const line of tree.split("\n")) {
+    const indent = line.length - line.trimStart().length;
+    if (secretAt >= 0 && indent > secretAt) {
+      out.push(
+        /^\s*-\s*\/placeholder:/.test(line) ? line : `${line.slice(0, indent)}- ${REDACTED}`,
+      );
+      continue;
+    }
+    secretAt = -1;
+    const m = FIELD_LINE.exec(line);
+    if (m && SECRET_FIELD.test(m[2] ?? "")) {
+      secretAt = (m[1] ?? "").length;
+      const head = m[0];
+      out.push(line.slice(head.length).trim() ? `${head} ${REDACTED}` : line);
+      continue;
+    }
+    out.push(line);
+  }
+  return redactText(out.join("\n"));
 }

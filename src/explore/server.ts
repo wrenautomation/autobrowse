@@ -105,6 +105,12 @@ export const commandSchema = z.discriminatedUnion("cmd", [
     at: z.object({ x: z.number(), y: z.number() }).optional(),
   }),
   targetSchema.extend({ cmd: z.literal("fill"), value: z.string(), goal: z.string().optional() }),
+  /** Press at `from`, carry to `to` (points inside the element from its top-left): a slider, a captcha piece. */
+  targetSchema.extend({
+    cmd: z.literal("drag"),
+    from: z.object({ x: z.number(), y: z.number() }),
+    to: z.object({ x: z.number(), y: z.number() }),
+  }),
   /** Fill a field with a named secret the caller holds (a minted password, a code from the inbox); the value never crosses the socket. */
   targetSchema.extend({
     cmd: z.literal("place"),
@@ -634,6 +640,12 @@ async function serve(
         journalAct(c, (target) => ({ kind: "click", target }));
         // A receipt only for the click that takes money; checkout or "add a card" only led there.
         if (spent?.charges) return { url: page.url(), told: await reportSpend(spent) };
+        return { url: page.url() };
+      }
+      case "drag": {
+        await hands.think(page);
+        await hands.drag(find(c), c.from, c.to, { timeout: 10_000 });
+        await settle(page);
         return { url: page.url() };
       }
       case "fill": {
