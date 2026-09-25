@@ -41,6 +41,34 @@ describe("claudeCodeLlm", () => {
     );
     expect(llm.id).toBe("claude-code:sonnet");
   });
+  it("a picture rides in a stream-json message; the answer is the result line", async () => {
+    const calls: Array<{ args: string[]; stdin: string }> = [];
+    const llm = claudeCodeLlm({
+      model: "sonnet",
+      run: async (args, stdin) => {
+        calls.push({ args, stdin });
+        return [
+          JSON.stringify({ type: "system", subtype: "init" }),
+          JSON.stringify({ type: "result", is_error: false, result: '{"squares":[2]}' }),
+        ].join("\n");
+      },
+    });
+    const reply = await llm.complete({
+      system: "s",
+      prompt: "which?",
+      images: [{ mediaType: "image/png", data: "iVBO" }],
+    });
+    expect(reply.text).toBe('{"squares":[2]}');
+    const [c] = calls;
+    expect(c?.args.slice(0, 3)).toEqual(["-p", "--output-format", "stream-json"]);
+    expect(c?.args).toContain("--verbose");
+    expect(c?.args[c.args.indexOf("--input-format") + 1]).toBe("stream-json");
+    const msg = JSON.parse(c?.stdin ?? "{}");
+    expect(msg.message.content).toEqual([
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBO" } },
+      { type: "text", text: "which?" },
+    ]);
+  });
   it("surfaces an error result and non-JSON output", async () => {
     const bad = claudeCodeLlm({
       model: "sonnet",

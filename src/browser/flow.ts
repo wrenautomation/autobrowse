@@ -17,6 +17,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "playwright";
 import { expandHome } from "../google-auth.js";
 import { redactAria, redactText } from "../recorder/redact.js";
+import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js";
 import { type Hands, HUMAN_PACE, handsFor, instantHands, type Pace } from "./human/index.js";
 import { type Hints, locate, textOf } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
@@ -113,6 +114,12 @@ export interface FlowPage {
     site?: Site,
     account?: string,
   ): Promise<"signed-in" | "no-credential" | "unknown-site" | "no-login">;
+  /**
+   * Solve the captcha the page shows with the runner's hands and eyes
+   * (`browser/captcha`): a checkbox always, a picture one when the runner
+   * has eyes. Never throws for an unsolved one; the outcome says why.
+   */
+  captcha(): Promise<CaptchaOutcome>;
   /** Stop here and ask a person. */
   human(reason: string): never;
 }
@@ -190,6 +197,12 @@ export interface RunnerOptions {
     /** Whose sign-in it is, when the caller knows: picks the `<site>@<label>` credential for it. */
     account?: string,
   ) => Promise<"signed-in" | "no-credential" | "unknown-site">;
+  /**
+   * A captcha wall is solved before it goes to a person: checkboxes by the
+   * hands alone, pictures when `eyes` is given (a model that sees). Absent =
+   * every captcha is a person's.
+   */
+  captcha?: { eyes: Eyes | null };
   /** Repair misses on irreversible acts too (the `irreversible` guard is off). */
   repairIrreversible?: boolean;
   /** Every repair, tried or not, so the flow's source can be fixed for good. */
@@ -307,6 +320,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           .then(() => true)
           .catch(() => false);
         let signingIn = false;
+        let triedCaptcha = false;
         let active = session.page;
         const fp: FlowPage = {
           get page() {
@@ -323,6 +337,18 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               const wall = await looksLikeWall(session.page);
               if (!wall) return;
               const after = attempt > 1 ? " after signing in" : "";
+              if (wall.kind === "captcha" && runner.captcha && !triedCaptcha) {
+                triedCaptcha = true;
+                const got = await fp.captcha();
+                if (got.solved) {
+                  // A checkbox wall lets the page through on its own (Cloudflare reloads it).
+                  await session.page
+                    .waitForLoadState("networkidle", { timeout: SETTLE_MS })
+                    .catch(() => undefined);
+                  continue;
+                }
+                throw new NeedsHuman(`${flow.site}: captcha (${got.reason})${after}`);
+              }
               if (wall.kind === "captcha" || !runner.login || signingIn || attempt > 2)
                 throw new NeedsHuman(`${flow.site}: ${wall.detail}${after}`);
               signingIn = true;
@@ -421,6 +447,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               signingIn = false;
             }
           },
+          captcha: () => solveCaptcha(active, { hands, eyes: runner.captcha?.eyes ?? null }),
           human(reason) {
             throw new NeedsHuman(`${flow.site}: ${reason}`);
           },

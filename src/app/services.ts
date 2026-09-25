@@ -47,6 +47,8 @@ import {
   totpSource,
 } from "../auth/index.js";
 import { CRED_ENV, ENV_STORE_PREFIX, KEYCHAIN, WALLET_KEYCHAIN } from "../auth/keep.js";
+import type { Eyes } from "../browser/captcha/index.js";
+import { eyesOf } from "../browser/captcha/llm-eyes.js";
 import type { FlowRunner } from "../browser/flow.js";
 import { flowRunner } from "../browser/flow.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
@@ -204,7 +206,10 @@ export async function lookForSiteAccount(o: {
   const gmail = gmailFor(o.settings);
   const screen = o.headed ? headed : screenOf(o.settings);
   const browser = { ...(await browserFor(o.settings, o.site, screen)), profile: o.site };
-  const run = flowRunner(browser, { login: loginFor(o.settings, gmail) });
+  const run = flowRunner(browser, {
+    login: loginFor(o.settings, gmail),
+    captcha: captchaFor(o.settings),
+  });
   return lookForAccount({
     site: o.site,
     email: o.email,
@@ -274,6 +279,12 @@ function flushAtExit(s: TraceSink): void {
 /** The model behind everything: traced when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, under the daily cap when one is (`LLM_DAILY_TOKENS`). */
 /** A model writing a whole file takes minutes, not the 30 s a JSON API gets. */
 const LLM_TIMEOUT_MS = 180_000;
+
+/** Captcha walls solved before they go to a person: checkboxes always, pictures when the model can see. */
+export function captchaFor(settings: Settings): { eyes: Eyes | null } {
+  const llm = llmFor(settings);
+  return { eyes: llm ? eyesOf(llm) : null };
+}
 
 export function llmFor(
   settings: Settings,
@@ -890,6 +901,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       pace: paceFor(settings),
       repairer: rememberingRepairer(memory, llm ? llmRepairer(llm) : noRepairer),
       login: loginFor(settings, gmail),
+      captcha: { eyes: llm ? eyesOf(llm) : null },
       repairIrreversible: !guards.has("irreversible"),
       onRepair: (r) =>
         log.warn(

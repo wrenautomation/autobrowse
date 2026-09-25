@@ -95,6 +95,8 @@ export function messageSource(opts: MessageSourceOptions): CodeSource {
   const timeoutMs = opts.timeoutMs ?? 90_000;
   const inboxFor = (cred: Credential) =>
     cred.codesInbox ?? opts.inbox ?? (cred.username.includes("@") ? cred.username : null);
+  // A code typed once is spent: a second sign-in on the same phone never takes it again.
+  const spent = new Set<string>();
   return {
     offers: (kind, cred) => kind === opts.kind && inboxFor(cred) !== null,
     inbox: (kind, cred) => (kind === opts.kind ? inboxFor(cred) : null),
@@ -111,8 +113,11 @@ export function messageSource(opts: MessageSourceOptions): CodeSource {
           .filter((m) => !hint || `${m.from} ${m.subject} ${m.text}`.toLowerCase().includes(hint))
           .sort((a, b) => b.at.getTime() - a.at.getTime())
           .map((m) => extractCode(`${m.subject}\n${m.text}`))
-          .find((c): c is string => Boolean(c));
-        if (match) return match;
+          .find((c): c is string => Boolean(c) && !spent.has(`${inbox} ${c}`));
+        if (match) {
+          spent.add(`${inbox} ${match}`);
+          return match;
+        }
         if (now() >= deadline) return null;
         await sleep(pollMs);
       }

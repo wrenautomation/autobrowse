@@ -12,6 +12,14 @@ export interface LlmRequest {
   /** Ask the provider for a JSON object; the reply is still validated. */
   json?: boolean;
   maxTokens?: number;
+  /** Pictures the model looks at before the prompt (a captcha). A driver that cannot see throws. */
+  images?: LlmImage[];
+}
+
+export interface LlmImage {
+  mediaType: "image/png" | "image/jpeg";
+  /** Base64, no data: prefix. */
+  data: string;
 }
 
 export interface LlmUsage {

@@ -58,6 +58,7 @@ import {
   budgetOf,
   COMPILED_DIR,
   COMPILED_LIB,
+  captchaFor,
   cardsFor,
   cardsOnFileFor,
   chargesFor,
@@ -249,6 +250,7 @@ export function explorerOpener(
       recordingsDir: expandHome(settings.recordingsDir),
       port,
       ...(signIn ? { login: loginFor(settings, gmailFor(settings)) } : {}),
+      captcha: captchaFor(settings),
       audit: auditFor(settings),
       ...(cards ? { cards, cardsOnFile: cardsOnFileFor(settings) } : {}),
       charges: chargesFor(settings, gmailFor(settings)),
@@ -306,6 +308,7 @@ export function localParts(settings: Settings, o: { headless?: boolean } = {}): 
   const screen = o.headless === undefined ? screenOf(settings) : { headless: o.headless };
   const browser = flowRunner(browserOptions(settings, screen), {
     login: loginFor(settings, gmail),
+    captcha: captchaFor(settings),
     pace: paceFor(settings),
   });
   const sink = sinkFor(settings);

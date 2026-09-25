@@ -41,7 +41,18 @@ export function openaiLlm(opts: {
         ...(req.json ? { response_format: { type: "json_object" } } : {}),
         messages: [
           { role: "system", content: req.system },
-          { role: "user", content: req.prompt },
+          {
+            role: "user",
+            content: req.images?.length
+              ? [
+                  ...req.images.map((i) => ({
+                    type: "image_url",
+                    image_url: { url: `data:${i.mediaType};base64,${i.data}` },
+                  })),
+                  { type: "text", text: req.prompt },
+                ]
+              : req.prompt,
+          },
         ],
       },
     });

@@ -21,6 +21,7 @@ function fakePage(script: { text: string[]; html?: string; dialog?: string[] }) 
     }),
   } as unknown as FlowPage["page"];
   const fp: FlowPage = {
+    captcha: async () => ({ solved: false, kind: null, vendor: null, reason: "fake" }),
     page,
     async open() {},
     url: () => "https://site.test/2fa",

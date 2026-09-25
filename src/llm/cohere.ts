@@ -40,6 +40,8 @@ export function cohereLlm(opts: {
   return {
     id: `cohere/${opts.model}`,
     async complete(req: LlmRequest): Promise<LlmReply> {
+      if (req.images?.length)
+        throw new Error(`cohere/${opts.model}: this driver cannot see images`);
       const maxTokens = req.maxTokens ?? 2048;
       const r = await opts.http.json<ChatResponse>(url, {
         method: "POST",

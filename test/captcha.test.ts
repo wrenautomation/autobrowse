@@ -1,0 +1,62 @@
+import type { Page } from "playwright";
+import { describe, expect, it } from "vitest";
+import { findCaptcha, parseSquares, solveCaptcha } from "../src/browser/captcha/index.js";
+import type { Hands } from "../src/browser/human/index.js";
+
+/** A page where only selectors containing one of `shown` are visible. */
+function pageShowing(...shown: string[]): Page {
+  const loc = (sel: string) => ({
+    first: () => ({ isVisible: async () => shown.some((s) => sel.includes(s)) }),
+  });
+  return { locator: loc, waitForTimeout: async () => undefined } as unknown as Page;
+}
+const hands = {} as Hands;
+
+describe("captcha", () => {
+  it("reads the squares the eyes name, in range, once each", () => {
+    expect(parseSquares('sure: {"squares":[1, 3, 3, "5", 12]}', 9)).toEqual([1, 3, 5]);
+    expect(parseSquares('{"squares":[]}', 9)).toEqual([]);
+    expect(parseSquares("no idea", 9)).toBeNull();
+    expect(parseSquares('{"tiles":[1]}', 9)).toBeNull();
+  });
+
+  it("an open challenge is what is asked, before its checkbox", async () => {
+    expect(
+      await findCaptcha(pageShowing("recaptcha/api2/bframe", "recaptcha/api2/anchor")),
+    ).toEqual({ kind: "grid", vendor: "recaptcha" });
+    expect(await findCaptcha(pageShowing("challenges.cloudflare.com"))).toEqual({
+      kind: "checkbox",
+      vendor: "turnstile",
+    });
+    expect(await findCaptcha(pageShowing())).toBeNull();
+  });
+
+  it("without eyes a picture captcha is a person's; no captcha is not solved", async () => {
+    const grid = await solveCaptcha(pageShowing("hcaptcha.com"), { hands, settleMs: 1 });
+    expect(grid).toMatchObject({ solved: false, kind: "grid", vendor: "hcaptcha" });
+    expect(grid.solved ? "" : grid.reason).toMatch(/needs eyes/);
+    expect(await solveCaptcha(pageShowing(), { hands })).toMatchObject({
+      solved: false,
+      reason: "no captcha on the page",
+    });
+  });
+
+  it("a hand or eye that throws comes back as the reason, not a crash", async () => {
+    const page = pageShowing("recaptcha/api2/anchor");
+    (page as unknown as { frameLocator: () => unknown }).frameLocator = () => ({
+      first: () => ({ locator: () => ({}) }),
+    });
+    const clumsy = {
+      think: async () => undefined,
+      click: async () => {
+        throw new Error("the box moved\nstack");
+      },
+    } as unknown as Hands;
+    expect(await solveCaptcha(page, { hands: clumsy })).toEqual({
+      solved: false,
+      kind: "checkbox",
+      vendor: "recaptcha",
+      reason: "the box moved",
+    });
+  });
+});

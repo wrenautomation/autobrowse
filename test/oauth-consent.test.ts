@@ -17,6 +17,7 @@ function consentPages(
   const acts: string[] = [];
   const page = () => pages[Math.min(i, pages.length - 1)] as (typeof pages)[number];
   const fp: FlowPage = {
+    captcha: async () => ({ solved: false, kind: null, vendor: null, reason: "fake" }),
     page: {} as FlowPage["page"],
     async open() {},
     url: () => page().url,

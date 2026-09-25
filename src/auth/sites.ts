@@ -105,21 +105,23 @@ const GOOGLE_PASSKEY_SETUP: PasskeySetupSpec = {
 /** Google re-asks for the password on security pages; answer on the spot. */
 const GOOGLE_SIGN_IN_HERE = { at: /accounts\.google\.com/, run: signInToGoogle };
 
+/** A Google Account page, not its signed-out `/intro/` twin. */
+const GOOGLE_SIGNED_IN = /^https:\/\/myaccount\.google\.com\/(?!intro(\/|\?|$))/;
+
 /** The personal Google account: what "Sign in with Google" buttons use. */
 const google: SiteLogin = {
   site: "google",
   home: "https://myaccount.google.com/",
   origins: ["google.com"],
   ask: 'Your Google account: the one behind every "Sign in with Google" button',
-  loggedIn: async (fp) =>
-    /myaccount\.google\.com/.test(fp.url()) && !/accounts\.google\.com/.test(fp.url()),
+  loggedIn: async (fp) => GOOGLE_SIGNED_IN.test(fp.url()),
   async signIn(ctx) {
     await ctx.fp.open(
       "https://accounts.google.com/ServiceLogin?continue=https://myaccount.google.com/",
       { allowWall: true },
     );
     await signInToGoogle(ctx);
-    if (!(await ctx.fp.waitForUrl(/myaccount\.google\.com/, 30_000)))
+    if (!(await ctx.fp.waitForUrl(GOOGLE_SIGNED_IN, 30_000)))
       throw new LoginFailed("google", `still on ${ctx.fp.url()} after Google sign-in`);
   },
   signInHere: GOOGLE_SIGN_IN_HERE,

@@ -44,7 +44,9 @@ irreversible act. Each is on by default and can be switched off. A `send`
 gate (a step that files, posts or sends something in your name; every
 compiled irreversible step opens one) is always asked: `approve <workflow>
 <key> send`. What stays human: hardware keys, adding a payment method,
-captchas until Browserbase takes them.
+a captcha the solver cannot read (`src/browser/captcha`: checkboxes by a
+human click, squares, letters and sliders by the configured model when it
+sees).
 
 **The bar for asking.** Try it first. `NEEDS-WILLIAM.md` and the `needs`
 rows are only for what a machine cannot hold: your password or passkey,
@@ -139,7 +141,7 @@ a row; it is work.
   --headed` mints a 24-char password, stores the credential sealed under
   `instagram` before the browser opens, and lets the agent make the account
   placing `email`, `password`, `code` (read from that inbox or the phone)
-  and `phone`; a captcha hands off to you in the window (enter to go on).
+  and `phone`; a captcha the solver cannot read hands off to you in the window (enter to go on).
   `--inbox will@…` reads the codes there when the address is an alias.
   The journal keeps every placed field redacted, so the compiled flow reads
   it as a secret by key.

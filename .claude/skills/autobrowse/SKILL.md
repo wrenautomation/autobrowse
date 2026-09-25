@@ -48,6 +48,7 @@ Act (journaled):
 - `{"cmd":"keep","hints":{…},"env":"X_API_KEY"}` — a secret the site just showed goes straight to the secret sink (`.env` locally, SSM in prod). The journal keeps the element and env name, never the value. This is how keys get set up.
 - `{"cmd":"os","act":{…}}` — desktop: `{"kind":"apps"}`, `{"kind":"open","app":"Finder"}`, `{"kind":"tree"}`, `{"kind":"click","role":"AXButton","name":"OK"}`, `{"kind":"type","text":"…","secret":true}`, `{"kind":"key","combo":"cmd+shift+4"}`, `{"kind":"shot"}`, `{"kind":"shell","command":"…","root":true}`, `{"kind":"wait","ms":500}`. Needs Accessibility granted to the terminal; root needs `pnpm autobrowse desktop setup` done once.
 - `{"cmd":"note","text":"…"}` — a comment in the journal.
+- `{"cmd":"captcha"}` — solve the captcha on the page: a checkbox by a human click, a picture (squares, letters, slider) by a model that sees. Returns `{solved, kind, vendor, reason?}`. Never screenshot a captcha yourself; this crops it in memory. Unsolved = hand it to William.
 - `{"cmd":"eval","js":"…"}` — last resort when hints cannot reach it; not journaled as a click, so the recording will miss it.
 
 - `{"cmd":"batch","cmds":[{…},{…}]}` — up to 30 commands in order, one answer, one `changed` for the lot. No `close`, `pause`, `resume`, `save` or nested batch.

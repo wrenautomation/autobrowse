@@ -19,8 +19,12 @@ import { type IdentityProvider, type Provider, providerOf, registerProvider } fr
 export interface SignInContext {
   fp: FlowPage;
   cred: Credential;
-  /** A second-factor code of this kind, or throws when none can be had. */
-  code(kind: CodeKind, hint?: string): Promise<string>;
+  /**
+   * A second-factor code of this kind, or throws when none can be had.
+   * `after`: only one that arrived after this (the moment it was asked for),
+   * so a text meant for another account on the same phone is never taken.
+   */
+  code(kind: CodeKind, hint?: string, after?: Date): Promise<string>;
   /** Whether a code of this kind can be had, so the sign-in picks that step on the page. */
   offers(kind: CodeKind): boolean;
   /** Where that code would land, to match against a page that masks numbers ("•••-••82"). */
@@ -469,20 +473,66 @@ async function googleSecondStep(ctx: SignInContext): Promise<void> {
     }
     return submitCode(fp, await ctx.code("totp"));
   }
+  // Wrong codes lock the account's texts for hours: say so, never guess on.
+  const locked = { text: "/too many failed attempts/i" } as const;
+  const lockedOut = () =>
+    new LoginFailed(
+      site,
+      "Google: too many failed attempts on this account; try again in a few hours",
+    );
+  // "Enter a phone number to get a text message with a verification code": a
+  // Workspace user with no phone of its own, asked first (Google stores it). Ours.
+  const phoneBox = { role: "textbox", name: "/^phone number$/i" } as const;
+  const ours = ctx.inbox("sms");
+  const canText = ctx.offers("sms") && Boolean(ours && /^\+?\d[\d\s().-]{6,}$/.test(ours));
+  const textOurs = async (): Promise<Date> => {
+    if (await fp.has(locked)) throw lockedOut();
+    const asked = new Date();
+    await fp.act({ kind: "fill", value: ours ?? "" }, phoneBox, { goal: "give Google our phone" });
+    await fp.act(
+      { kind: "click" },
+      { role: "button", name: "/^next$/i" },
+      { goal: "send the text" },
+    );
+    await fp.wait(SETTLE_MS);
+    return asked;
+  };
+  const answer = async (asked: Date) => {
+    if (await fp.has(locked)) throw lockedOut();
+    if (!(await fp.has(codeBox, RENDER_MS)))
+      throw new LoginFailed(site, "no code box after asking for the SMS");
+    // Every sender texts the same phone: only a code that came after this ask is this account's.
+    await submitCode(fp, await ctx.code("sms", "google", asked));
+    await fp.wait(SETTLE_MS);
+    if (await fp.has(locked)) throw lockedOut();
+    if (await fp.has({ text: "/wrong code/i" }))
+      throw new LoginFailed(site, "Google said the texted code was wrong");
+  };
+  if (canText && (await fp.has(phoneBox, RENDER_MS))) return answer(await textOurs());
   await toSelection(fp);
   // Google lists every phone it knows, masked to the last two digits, and
   // greys out one it was given minutes ago ("for your security"). Only a
   // live link to the phone we can read counts.
-  const tail = ctx.inbox("sms")?.slice(-2);
+  const tail = ours?.slice(-2);
   const smsLink: Hints = { css: `${choice("verification code at").css}:has-text("••${tail}")` };
-  if (ctx.offers("sms") && tail && (await fp.has(smsLink))) {
-    await fp.act({ kind: "click" }, smsLink, { goal: "have Google text the code" });
+  // A Workspace user on a new browser gets one choice and no digits: "Get a
+  // verification code sent to your phone" (and "Try another way" is a dead end,
+  // "Couldn't sign you in"; mapped 2026-09-25). Taken when it is the only phone step.
+  const unmasked = choice("verification code sent to your phone");
+  const sms =
+    ctx.offers("sms") && tail && (await fp.has(smsLink))
+      ? smsLink
+      : ctx.offers("sms") && (await fp.has(unmasked))
+        ? unmasked
+        : null;
+  if (sms) {
+    const asked = new Date();
+    await fp.act({ kind: "click" }, sms, { goal: "have Google text the code" });
     await fp.wait(SETTLE_MS);
-    if (!(await fp.has(codeBox, RENDER_MS)))
-      throw new LoginFailed(site, "no code box after asking for the SMS");
-    return submitCode(fp, await ctx.code("sms", "google"));
+    if (canText && (await fp.has(phoneBox, RENDER_MS))) return answer(await textOurs());
+    return answer(asked);
   }
-  if (ctx.notify) {
+  if (ctx.notify && (await fp.has(choice("Tap Yes on your phone")))) {
     const before = fp.url();
     await fp.act({ kind: "click" }, choice("Tap Yes on your phone"), {
       goal: "ask the phone for a Yes",
@@ -742,8 +792,9 @@ export function signInContext(p: SignInParts): SignInContext {
   const contextAs = (cred: Credential): SignInContext => ({
     fp: pageFor(cred),
     cred,
-    async code(kind, hint) {
-      const req = hint ? { site, kind, since, hint } : { site, kind, since };
+    async code(kind, hint, after) {
+      const from = after && after > since ? after : since;
+      const req = hint ? { site, kind, since: from, hint } : { site, kind, since: from };
       const c = await p.codes.get(req, cred);
       if (!c) throw new LoginFailed(site, `no ${kind} code available`);
       return c;

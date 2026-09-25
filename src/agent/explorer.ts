@@ -38,6 +38,8 @@ export const stepSchema = z.object({
       goal: z.string(),
     }),
     z.object({ cmd: z.literal("key"), key: z.string() }),
+    /** Any captcha on the page: solved by the hands and, for a picture, a model that sees. */
+    z.object({ cmd: z.literal("captcha") }),
     /** Read a control's or heading's text and keep it under a name; the compiled flow reads it too. */
     z.object({ cmd: z.literal("read"), ref, as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/) }),
     /** A secret the site minted goes to the sink under an env name; the model never sees it. */
@@ -112,6 +114,7 @@ Actions, with "cmd" set to exactly one of these words:
   {"cmd":"upload","ref":n,"files":["path"],"goal":"why"}
   {"cmd":"open","url":"https://..."}
   {"cmd":"key","key":"Escape"}
+  {"cmd":"captcha"}   (solve the captcha on the page, any kind; says solved or why not)
   {"cmd":"read","ref":n,"as":"camelName"}   (keep an element's text under a name; a workflow built from this run will read it the same way)
   {"cmd":"keep","ref":n,"env":"SOME_API_KEY"}   (a key, token or password the site just minted: it goes straight to the secret store under that env name; never read or quote it)
   {"cmd":"os","act":{"op":"tree"},"goal":"why"}   (the desktop, outside the browser: the front app's controls as role "name" lines)
@@ -127,7 +130,7 @@ Use os acts only when the goal is outside the browser (an app, a system setting,
 Control names carry content too: a link named "Name Jane Doe" tells you the name is Jane Doe. When the goal asks you to report or collect something, read it with read{ref,as} first, then quote it in the done summary.
 An "iframe:" section is a frame inside the page (a captcha, an embedded sign-in); its refs work like any other.
 Rules: never invent values; use only the inputs given. Never buy, delete, or submit money-related forms: return human{reason} instead.
-A checkbox captcha ("I'm not a robot") is a control: click it, then wait a step for it to tick. An image or puzzle challenge (pick the squares, drag a slider) is for a person: return human{reason}.
+Any captcha ("I'm not a robot", pick the squares, type the letters, drag a slider): use captcha. Only when it says it is not solved twice, return human{reason}.
 Prefer the shortest path. When the tree shows the goal is met, return done with achieved=true.
 If the same step fails twice, try another element or return done with achieved=false.`;
 
@@ -263,6 +266,7 @@ type Act = Exclude<Step["action"], { cmd: "done" } | { cmd: "human" }>;
 function toCommand(a: Act, page: Digest): ExploreCommand {
   if (a.cmd === "open") return { cmd: "open", url: a.url };
   if (a.cmd === "key") return { cmd: "key", key: a.key };
+  if (a.cmd === "captcha") return { cmd: "captcha" };
   if (a.cmd === "os") return { cmd: "os", act: a.act };
   const ref = page.refs.find((r) => r.n === a.ref);
   if (!ref) throw new Error(`ref ${a.ref} is not on the page; refs go 1..${page.refs.length}`);

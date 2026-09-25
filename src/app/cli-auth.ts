@@ -38,6 +38,7 @@ import { headed } from "./screen.js";
 import {
   browserFor,
   browserOptions,
+  captchaFor,
   credentialsFor,
   devicesFor,
   gmailFor,
@@ -216,6 +217,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       const chosen = o.ask ? await askSecretTwice(`new password for ${site}`) : null;
       const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
         login: loginFor(settings, gmailFor(settings)),
+        captcha: captchaFor(settings),
       });
       const flow = chosen
         ? rotatePasswordFlow(login, credentialsFor(settings), () => chosen)
@@ -498,7 +500,10 @@ export function registerAuthCommands(program: Command, settings: Settings): void
         throw new Error(
           `no credential for ${site}: \`autobrowse creds set ${credName}\`, or --headed to log in by hand`,
         );
-      const runner = flowRunner(opts, { login: loginFor(settings, gmailFor(settings)) });
+      const runner = flowRunner(opts, {
+        login: loginFor(settings, gmailFor(settings)),
+        captcha: captchaFor(settings),
+      });
       const check = defineFlow<undefined, string>({
         site,
         name: "login",
@@ -523,6 +528,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       const { googleWorkspaceLogo } = await import("../browser/flows/google-workspace-logo.js");
       const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
         login: loginFor(settings, gmailFor(settings)),
+        captcha: captchaFor(settings),
       });
       console.log(await runner.run(googleWorkspaceLogo, { file: resolve(file) }));
     });
@@ -542,6 +548,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       const { googleProfilePhoto } = await import("../browser/flows/google-profile-photo.js");
       const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
         login: loginFor(settings, gmailFor(settings)),
+        captcha: captchaFor(settings),
       });
       console.log(
         await runner.run(
@@ -562,6 +569,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       const login = loginNamed(site);
       const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
         login: loginFor(settings, gmailFor(settings)),
+        captcha: captchaFor(settings),
       });
       console.log(await runner.run(enrollPasskeyFlow(login, credentialsFor(settings)), undefined));
     });
@@ -577,6 +585,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       const login = loginNamed(site);
       const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
         login: loginFor(settings, gmailFor(settings)),
+        captcha: captchaFor(settings),
       });
       console.log(
         await runner.run(sealRecoveryCodesFlow(login, credentialsFor(settings)), undefined),
@@ -595,6 +604,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       const login = resolveLogin(SITE_LOGINS, site) ?? { site };
       const runner = flowRunner(browserOptions(settings, o.headed ? headed : undefined), {
         login: loginFor(settings, gmailFor(settings)),
+        captcha: captchaFor(settings),
       });
       console.log(
         await runner.run(enrollTotpFlow(login, credentialsFor(settings), o.url), undefined),

@@ -168,6 +168,8 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   /** Read a secret the site just minted straight into the secret sink under `env`; nothing shows it. */
   targetSchema.extend({ cmd: z.literal("keep"), env: z.string().regex(/^[A-Z][A-Z0-9_]*$/) }),
   z.object({ cmd: z.literal("note"), text: z.string() }),
+  /** Solve the captcha on the page: the checkbox by hand, a picture by the runner's eyes. Journaled, so the compiled flow solves it too. */
+  z.object({ cmd: z.literal("captcha") }),
   /** Write the journal as a recording under `recordingsDir/<name>`. */
   z.object({ cmd: z.literal("save"), name: z.string().regex(/^[a-z][a-z0-9-]*$/) }),
   /** What is recorded so far; `last` = only the newest n. */
@@ -189,6 +191,7 @@ export type Command = z.infer<typeof commandSchema>;
 /** Acts whose answer says what changed on the page, so the caller need not look again. */
 const LOOKS = new Set<Command["cmd"]>([
   "open",
+  "captcha",
   "click",
   "drag",
   "fill",
@@ -243,6 +246,8 @@ export interface ExploreOptions {
   login?: RunnerOptions["login"];
   /** Delays around acts; null (the default) answers a console at once, an agent passes human pace. */
   pace?: RunnerOptions["pace"];
+  /** Captcha walls: checkboxes by hand, pictures when the eyes see. */
+  captcha?: RunnerOptions["captcha"];
   /** The desktop `os` acts run on; this Mac by default, none on a headless host. */
   desktop?: Desktop;
   /** Where `keep` puts a secret read off the page (.env locally, SSM in prod). */
@@ -356,6 +361,7 @@ export async function startExplore(opts: ExploreOptions): Promise<Explorer> {
     const runner = flowRunner(opts.browser, {
       pace: opts.pace ?? null,
       ...(opts.login ? { login: opts.login } : {}),
+      ...(opts.captcha ? { captcha: opts.captcha } : {}),
     });
     void runner.run(flow, undefined).catch(() => undefined);
   });
@@ -868,6 +874,12 @@ async function serve(
         await opts.sink.put(c.env, value);
         journalAct(c, (target) => ({ kind: "keep", target, env: c.env }));
         return { env: c.env, length: value.length };
+      }
+      case "captcha": {
+        const got = await fp.captcha();
+        page = fp.page;
+        journal({ kind: "note", text: "solved a captcha here: `await fp.captcha()`" });
+        return got;
       }
       case "note":
         journal({ kind: "note", text: c.text });

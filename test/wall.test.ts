@@ -20,6 +20,11 @@ describe("looksLikeWall", () => {
       await looksLikeWall(page("https://myaccount.google.com/signinoptions/password")),
     ).toBeNull();
     expect(await looksLikeWall(page("https://x.com/settings/signin-methods"))).toBeNull();
+    // Signed out of a Google Account: every page lands on its /intro/ twin.
+    expect(
+      (await looksLikeWall(page("https://myaccount.google.com/intro/personal-info")))?.kind,
+    ).toBe("login");
+    expect(await looksLikeWall(page("https://myaccount.google.com/introspection"))).toBeNull();
   });
   it("reads captcha and challenge walls from the text", async () => {
     expect((await looksLikeWall(page("https://x.com/", "Verify you are human")))?.kind).toBe(

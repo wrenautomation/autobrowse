@@ -23,7 +23,20 @@ export function anthropicLlm(opts: { apiKey: string; model: string; http: HttpCl
           system: req.json
             ? `${req.system}\nReply with one JSON object and nothing else.`
             : req.system,
-          messages: [{ role: "user", content: req.prompt }],
+          messages: [
+            {
+              role: "user",
+              content: req.images?.length
+                ? [
+                    ...req.images.map((i) => ({
+                      type: "image",
+                      source: { type: "base64", media_type: i.mediaType, data: i.data },
+                    })),
+                    { type: "text", text: req.prompt },
+                  ]
+                : req.prompt,
+            },
+          ],
         },
       });
       if (!r.ok || !r.body) throw new Error(`anthropic: HTTP ${r.status}`);

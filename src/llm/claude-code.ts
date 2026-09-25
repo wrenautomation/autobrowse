@@ -93,10 +93,38 @@ export function claudeCodeLlm(o: ClaudeCodeOptions): Llm {
         "",
         "--no-session-persistence",
       ];
-      const out = await run(args, req.prompt, { cwd, timeoutMs });
+      // Pictures ride in a stream-json user message (image blocks, then the text); the
+      // answer is the stream's `result` line.
+      const seeing = Boolean(req.images?.length);
+      const input = seeing
+        ? `${JSON.stringify({
+            type: "user",
+            message: {
+              role: "user",
+              content: [
+                ...(req.images ?? []).map((i) => ({
+                  type: "image",
+                  source: { type: "base64", media_type: i.mediaType, data: i.data },
+                })),
+                { type: "text", text: req.prompt },
+              ],
+            },
+          })}\n`
+        : req.prompt;
+      if (seeing) {
+        args[2] = "stream-json";
+        args.push("--input-format", "stream-json", "--verbose");
+      }
+      const out = await run(args, input, { cwd, timeoutMs });
       let parsed: HeadlessResult;
       try {
-        parsed = JSON.parse(out) as HeadlessResult;
+        parsed = seeing
+          ? (out
+              .split("\n")
+              .filter((l) => l.trim().startsWith("{"))
+              .map((l) => JSON.parse(l) as HeadlessResult)
+              .find((m) => m.type === "result") ?? {})
+          : (JSON.parse(out) as HeadlessResult);
       } catch {
         throw new Error(`claude -p: not JSON: ${out.slice(0, 200)}`);
       }

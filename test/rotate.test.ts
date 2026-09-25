@@ -9,6 +9,7 @@ function fakePage(script: { text: string[]; present?: (h: Hints) => boolean; url
   const acts: Array<{ op: Op; hints: Hints }> = [];
   let i = 0;
   const fp: FlowPage = {
+    captcha: async () => ({ solved: false, kind: null, vendor: null, reason: "fake" }),
     page: {} as FlowPage["page"],
     async open() {},
     url: () => script.url ?? "https://site.test/password",

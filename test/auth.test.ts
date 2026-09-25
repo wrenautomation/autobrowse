@@ -124,6 +124,24 @@ describe("code sources", () => {
     });
     expect(await src.get({ site: "s", kind: "email", since: new Date(0) }, cred)).toBeNull();
   });
+  it("a code typed once is never handed to the next sign-in on the same phone", async () => {
+    let t = 0;
+    const src = messageSource({
+      kind: "sms",
+      inbox: "+15555550182",
+      reader: {
+        recent: async () => [{ from: "Google", subject: "", text: "G-111111", at: new Date(1) }],
+      },
+      now: () => t,
+      sleep: async (ms) => {
+        t += ms;
+      },
+      timeoutMs: 2_000,
+    });
+    const req = { site: "google", kind: "sms" as const, since: new Date(0) };
+    expect(await src.get(req, cred)).toBe("111111");
+    expect(await src.get(req, cred)).toBeNull();
+  });
   it("first source with an answer wins", async () => {
     const src = codeSources(
       { get: async () => null, offers: () => false, inbox: () => null },
@@ -314,6 +332,7 @@ describe("sign in via a provider on a site nobody wrote a spec for", () => {
     let at = 0;
     const acts: Hints[] = [];
     const fp: FlowPage = {
+      captcha: async () => ({ solved: false, kind: null, vendor: null, reason: "fake" }),
       page: {} as FlowPage["page"],
       async open() {},
       url: () => urls[Math.min(at, urls.length - 1)] as string,
@@ -519,14 +538,32 @@ describe("signInToGoogle second step", () => {
       "fill /email or phone/i",
     ]);
   });
+  const smsPage = (h: Hints) =>
+    !/email|password|phone number/i.test(String(h.name)) &&
+    !/too many|wrong code/i.test(String(h.text));
   it("asks for the SMS when a phone or Twilio can read it", async () => {
-    const { fp, acts } = page((h) => !/email|password/i.test(String(h.name)));
+    const { fp, acts } = page(smsPage);
     await signInToGoogle(ctx(fp, ["sms"]));
     expect(acts.map((a) => `${a.op.kind} ${a.hints.name ?? a.hints.css}`)).toEqual([
       'click :is(a,button,[role=link],[role=button]):not([aria-disabled="true"]):has-text("verification code at"):has-text("••82")',
       "fill /code/i",
       "click /^next$/i",
     ]);
+  });
+  it("a page asking for a phone gets ours, then the code", async () => {
+    const { fp, acts } = page((h) => smsPage(h) || h.name === "/^phone number$/i");
+    await signInToGoogle(ctx(fp, ["sms"]));
+    expect(acts.map((a) => `${a.op.kind} ${a.hints.name}`)).toEqual([
+      "fill /^phone number$/i",
+      "click /^next$/i",
+      "fill /code/i",
+      "click /^next$/i",
+    ]);
+  });
+  it("too many failed attempts ends the sign-in with a plain reason, no guess", async () => {
+    const { fp, acts } = page((h) => smsPage(h) || /too many/i.test(String(h.text)));
+    await expect(signInToGoogle(ctx(fp, ["sms"]))).rejects.toThrow(/try again in a few hours/);
+    expect(acts.some((a) => a.hints.name === "/code/i")).toBe(false);
   });
   it("pings the phone for a Tap Yes when only a phone is linked", async () => {
     const notes: string[] = [];

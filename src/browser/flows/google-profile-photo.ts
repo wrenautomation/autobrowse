@@ -28,11 +28,11 @@ export const googleProfilePhoto = defineFlow<{ file: string }, string>({
       { frame: EDITOR, role: "button", name: "Upload from Device" },
       { goal: "pick the picture", timeoutMs: 15_000 },
     );
-    // "Uploading photo..." for a few seconds, then the crop.
+    // "Uploading photo..." for a few seconds (over 30 once, 2026-09-25), then the crop.
     await fp.act(
       { kind: "click" },
       { frame: EDITOR, role: "button", name: "Next" },
-      { goal: "keep the crop", timeoutMs: 30_000 },
+      { goal: "keep the crop", timeoutMs: 60_000 },
     );
     await fp.act(
       { kind: "click" },

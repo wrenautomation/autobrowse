@@ -294,6 +294,9 @@ export async function looksLikeWall(page: Page): Promise<Wall | null> {
 export function wallOf(url: string, text: string): Wall | null {
   if (/accounts\.google\.com\/|signin\.aws\.amazon\.com\/|\/(login|sign-?in)(\/|\?|#|$)/i.test(url))
     return { kind: "login", detail: `login page: ${url}` };
+  // Google Account signed out: myaccount sends every page to its /intro/ twin with a "Sign in" button.
+  if (/^https:\/\/myaccount\.google\.com\/intro(\/|\?|$)/i.test(url))
+    return { kind: "login", detail: `signed out: ${url}` };
   // "protected by reCAPTCHA" is the legal footer on every sign-up form, not a wall.
   if (
     /verify you are human|(?<!protected by re)captcha|i'm not a robot|unusual traffic|performing security verification|verifies you are not a bot/i.test(
