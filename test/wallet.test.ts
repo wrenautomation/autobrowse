@@ -13,6 +13,7 @@ import {
   backedUpWallet,
   type Card,
   cardField,
+  cardFromFields,
   cardSecret,
   describeCard,
   fileWallet,
@@ -170,5 +171,29 @@ describe("wallet stores", () => {
     expect((err as Error).message).toMatch(/visa: changed on this Mac.*aws-login.*ExpiredToken/);
     expect((err as Error).message).not.toContain(VISA);
     expect(await local.get("visa")).not.toBeNull();
+  });
+  it("builds a card from one field per prompt, each checked on its own", () => {
+    const now = new Date("2026-09-25T12:00:00Z");
+    const o = { label: "main", kind: "credit" as const, now };
+    const card = cardFromFields(
+      { number: "4242 4242 4242 4242", exp: "04/29", cvc: "123", postal: "m5v 2t6" },
+      o,
+    );
+    expect(card).toMatchObject({
+      number: "4242424242424242",
+      expMonth: 4,
+      expYear: 2029,
+      postal: "M5V2T6",
+      holder: "William Jin",
+    });
+    const bad = (f: Partial<Parameters<typeof cardFromFields>[0]>) => () =>
+      cardFromFields({ number: "4242424242424242", exp: "04/29", cvc: "123", ...f }, o);
+    expect(bad({ number: "4242424242424241" })).toThrow(/check digit/);
+    expect(bad({ exp: "13/29" })).toThrow(/mm\/yy/);
+    expect(bad({ exp: "08/26" })).toThrow(/expired/);
+    expect(bad({ cvc: "12" })).toThrow(/CVC/);
+    expect(bad({ postal: "hello" })).toThrow(/postal/);
+    // An error names the field, never the value.
+    expect(bad({ cvc: "98765" })).not.toThrow(/98765/);
   });
 });

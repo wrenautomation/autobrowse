@@ -85,25 +85,75 @@ export function parseCardLine(
       "expected `number mm/yy cvc [postal] [name on card]` on one line (the clipboard was left as is)",
     );
   const [, , mm = "", yy = "", cvc = "", postal, name] = m;
-  const number = digits;
-  if (!luhn(number)) throw new Error("the card number fails its check digit: a digit is off");
-  const expYear = yy.length === 2 ? 2000 + Number(yy) : Number(yy);
-  const expMonth = Number(mm);
+  return cardFromFields(
+    {
+      number: digits,
+      exp: `${mm}/${yy}`,
+      cvc,
+      ...(postal ? { postal } : {}),
+      ...(name ? { name } : {}),
+    },
+    o,
+  );
+}
+
+export interface CardFields {
+  number: string;
+  /** `mm/yy` or `mm/yyyy`. */
+  exp: string;
+  cvc: string;
+  postal?: string;
+  name?: string;
+}
+
+/** Each field checked on its own: errors name the field, never its value. */
+export const cardChecks = {
+  number(v: string): string {
+    const n = v.replace(/[ -]/g, "");
+    if (!/^\d{12,19}$/.test(n)) throw new Error("the number: 12 to 19 digits");
+    if (!luhn(n)) throw new Error("the number fails its check digit: a digit is off");
+    return n;
+  },
+  exp(v: string, now = new Date()): { expMonth: number; expYear: number } {
+    const m = /^(\d{1,2})\s*\/?\s*(\d{2}|\d{4})$/.exec(v.trim());
+    const expMonth = Number(m?.[1]);
+    if (!m || expMonth < 1 || expMonth > 12) throw new Error("the expiry: mm/yy");
+    const yy = m[2] as string;
+    const expYear = yy.length === 2 ? 2000 + Number(yy) : Number(yy);
+    if (
+      expYear < now.getFullYear() ||
+      (expYear === now.getFullYear() && expMonth < now.getMonth() + 1)
+    )
+      throw new Error("the card has expired");
+    return { expMonth, expYear };
+  },
+  cvc(v: string): string {
+    if (!/^\d{3,4}$/.test(v.trim())) throw new Error("the CVC: 3 or 4 digits");
+    return v.trim();
+  },
+  postal(v: string): string | undefined {
+    const p = v.replace(/\s/g, "").toUpperCase();
+    if (!p) return undefined;
+    if (!/^([A-Z]\d[A-Z]\d[A-Z]\d|\d{5}(-\d{4})?)$/.test(p))
+      throw new Error("the postal code: Canadian (A1A 1A1) or US (12345)");
+    return p;
+  },
+};
+
+export function cardFromFields(
+  f: CardFields,
+  o: { label: string; kind: Card["kind"]; now?: Date },
+): Card {
   const now = o.now ?? new Date();
-  if (
-    expYear < now.getFullYear() ||
-    (expYear === now.getFullYear() && expMonth < now.getMonth() + 1)
-  )
-    throw new Error("the card has expired");
+  const postal = cardChecks.postal(f.postal ?? "");
   return cardSchema.parse({
     label: o.label,
     kind: o.kind,
-    holder: name?.trim() || "William Jin",
-    number,
-    expMonth,
-    expYear,
-    cvc,
-    ...(postal ? { postal: postal.replace(" ", "").toUpperCase() } : {}),
+    holder: f.name?.trim() || "William Jin",
+    number: cardChecks.number(f.number),
+    ...cardChecks.exp(f.exp, now),
+    cvc: cardChecks.cvc(f.cvc),
+    ...(postal ? { postal } : {}),
     addedAt: now.toISOString(),
   });
 }
