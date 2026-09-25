@@ -53,7 +53,14 @@ import {
 } from "../gates/payment.js";
 import type { Amount } from "../gates/spend.js";
 import { type Charge, type Receipt, receiptOutcome } from "../money/charges.js";
-import { type Card, cardField, cardSecret, describeCard, RECURRING } from "../money/wallet.js";
+import {
+  type Card,
+  cardEnding,
+  cardField,
+  cardSecret,
+  describeCard,
+  RECURRING,
+} from "../money/wallet.js";
 import { type RawAction, redactRaw } from "../recorder/browser.js";
 import { BINDING, OBSERVER_SCRIPT } from "../recorder/observer.js";
 import {
@@ -180,6 +187,14 @@ export interface ExploreOptions {
    * yes once per card and host before any of it lands. Absent: refused.
    */
   cards?: (o: { host: string; label: string | null; subscription: boolean }) => Promise<Card>;
+  /**
+   * Which card each host was given: written when a card is placed, read when a
+   * site charges the card it keeps, so every charge names its card's ending.
+   */
+  cardsOnFile?: {
+    placed(row: { at: string; site: string; host: string; card: string }): Promise<unknown>;
+    on(host: string): Promise<string | null>;
+  };
   /** Each spending click a person said yes to, with its receipt page: texted, emailed, written down. */
   charges?: (c: Charge, r: Receipt) => Promise<string[]>;
   /** Where every `place` is recorded (allowed or refused); never the value. */
@@ -486,7 +501,11 @@ async function serve(
       redacted: true,
       secret: c.secret,
     }));
-    placedCard = { line: describeCard(card), recurring };
+    if (placedCard?.line !== cardEnding(card))
+      await opts.cardsOnFile
+        ?.placed({ at: new Date().toISOString(), site: opts.site, host, card: cardEnding(card) })
+        .catch(() => undefined);
+    placedCard = { line: cardEnding(card), recurring };
     return { ok: true, secret: c.secret };
   };
   /** After a yes and the click: the page it landed on is the receipt. A failed report never fails the click. */
@@ -495,16 +514,24 @@ async function serve(
     const whole = await pageText();
     const text = redactText(whole).slice(0, 6_000);
     const png = await page.screenshot({ fullPage: true, timeout: 15_000 }).catch(() => undefined);
+    const host = new URL(page.url()).host;
+    const kept = placedCard
+      ? null
+      : await (opts.cardsOnFile?.on(host) ?? Promise.resolve(null)).catch(() => null);
     return opts
       .charges(
         {
           at: new Date().toISOString(),
           site: opts.site,
-          host: new URL(page.url()).host,
+          host,
           url: urlWithoutQuery(page.url()),
           what: spent.what,
           ...(spent.amount ? { amount: spent.amount } : {}),
-          card: placedCard?.line ?? "the card the site keeps",
+          card:
+            placedCard?.line ??
+            (kept
+              ? `${kept}, the one put on ${host} before`
+              : "the card the site keeps (ending not known here)"),
           recurring: placedCard?.recurring ?? RECURRING.test(whole),
           outcome: receiptOutcome(whole),
         },

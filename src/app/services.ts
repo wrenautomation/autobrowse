@@ -23,6 +23,7 @@ import {
   ssmEnvStore,
   syncedCredentials,
   syncedEnvStore,
+  tailJson,
 } from "credvault";
 import type { Logger } from "pino";
 import { fileStepLedger, type StepLedger } from "../agent/ledger.js";
@@ -429,7 +430,7 @@ export function shipperFor(
 /** The ledgers live beside the credential file, one hash-chained JSONL each (`autobrowse ledger verify`). */
 export function ledgerPath(
   settings: Settings,
-  name: "audit" | "spend" | "steps" | "charges",
+  name: "audit" | "spend" | "steps" | "charges" | "cards-on-file",
 ): string {
   return join(dirname(expandHome(settings.credentialsFile)), `${name}.jsonl`);
 }
@@ -610,6 +611,20 @@ export function cardsFor(settings: Settings): ExploreOptions["cards"] {
       subscription,
       policy: { debitHosts: settings.walletDebitHosts },
     });
+  };
+}
+
+/** Which card each host was given (brand, kind, last 4 only): a chained ledger, read from its tail. */
+export function cardsOnFileFor(settings: Settings): NonNullable<ExploreOptions["cardsOnFile"]> {
+  type Row = { at: string; site: string; host: string; card: string };
+  const path = ledgerPath(settings, "cards-on-file");
+  const ledger = chainedFile<Row>(path);
+  return {
+    placed: (row) => ledger.append(row),
+    async on(host) {
+      const rows = await tailJson<Row>(path, 500);
+      return rows.findLast((r) => r.host === host)?.card ?? null;
+    },
   };
 }
 

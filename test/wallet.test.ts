@@ -12,9 +12,11 @@ import { describe, expect, it } from "vitest";
 import {
   backedUpWallet,
   type Card,
+  cardEnding,
   cardField,
   cardFromFields,
   cardSecret,
+  defaultLabel,
   describeCard,
   fileWallet,
   luhn,
@@ -157,6 +159,21 @@ describe("wallet stores", () => {
     const fresh = backedUpWallet(memoryWallet(), ssmWallet(ssm));
     expect(await fresh.restore()).toEqual(["visa"]);
     expect((await fresh.get("visa"))?.number).toBe(VISA);
+  });
+  it("a card is its number: a used label is refused, the same number moves label", async () => {
+    const w = backedUpWallet(memoryWallet(), ssmWallet(fakeSsm()));
+    await w.put(card("main", "credit"));
+    // The 2026-09-25 slip: a second card under the same label replaced the first.
+    const err = await w.put(card("main", "debit", MC)).catch((e: Error) => e);
+    expect((err as Error).message).toMatch(
+      /main already names main: Visa credit ••4242.*mastercard-\d{4}/,
+    );
+    expect((err as Error).message).not.toContain(MC);
+    expect(await w.put(card("visa-4242", "credit"))).toEqual({ replaces: "main" });
+    expect((await w.list()).map((c) => c.label)).toEqual(["visa-4242"]);
+    expect(defaultLabel(MC)).toBe(`mastercard-${MC.slice(-4)}`);
+    expect(cardEnding(card("visa-4242", "credit"))).toBe("Visa credit ending 4242");
+    expect(cardEnding(card("work", "credit"))).toBe("Visa credit ending 4242 (work)");
   });
   it("a failed backup says the Mac has it and how to rerun, without values", async () => {
     const broken = {

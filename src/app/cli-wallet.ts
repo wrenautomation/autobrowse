@@ -12,6 +12,7 @@ import {
   cardBrand,
   cardChecks,
   cardFromFields,
+  defaultLabel,
   describeCard,
   parseCardLine,
   WALLET_SSM_PATH,
@@ -25,24 +26,32 @@ export function registerWalletCommands(program: Command, settings: Settings): vo
     .command("wallet")
     .description("William's cards: credit pays, debit only where WALLET_DEBIT_HOSTS allows");
   wallet
-    .command("add <label>")
-    .description("Store a card: hidden prompts, one field each (paste works)")
+    .command("add [label]")
+    .description(
+      "Store a card: hidden prompts, one field each (paste works); label defaults to brand-last4",
+    )
     .requiredOption("--kind <kind>", "credit or debit")
     .option(
       "--clipboard",
       "take `number mm/yy cvc [postal] [name]` from the clipboard instead; clears it",
     )
-    .action(async (label: string, o: { kind: string; clipboard?: boolean }) => {
+    .action(async (given: string | undefined, o: { kind: string; clipboard?: boolean }) => {
       if (o.kind !== "credit" && o.kind !== "debit")
         throw new Error(`--kind is credit or debit, not ${o.kind}`);
       let card: Card;
       if (o.clipboard) {
         const clip = readClipboard();
-        card = parseCardLine(clip.text, { label, kind: o.kind });
+        card = parseCardLine(clip.text, { label: given ?? "pending", kind: o.kind });
         clip.clear();
-      } else card = cardFromFields(await askCard(), { label, kind: o.kind });
-      await (await walletFor(settings)).put(card);
-      console.log(`stored ${describeCard(card)}; backed up to SSM ${WALLET_SSM_PATH}/${label}`);
+      } else {
+        const f = await askCard();
+        card = cardFromFields(f, { label: given ?? "pending", kind: o.kind });
+      }
+      if (!given) card = { ...card, label: defaultLabel(card.number) };
+      const { replaces } = await (await walletFor(settings)).put(card);
+      console.log(
+        `stored ${describeCard(card)}${replaces ? ` (was ${replaces})` : ""}; backed up to SSM ${WALLET_SSM_PATH}/${card.label}`,
+      );
     });
   wallet
     .command("list")
@@ -64,6 +73,23 @@ export function registerWalletCommands(program: Command, settings: Settings): vo
     .action(async () => {
       const labels = await (await walletFor(settings)).backup();
       console.log(labels.length ? `backed up ${labels.join(", ")}` : "the wallet is empty");
+    });
+  wallet
+    .command("history <label>")
+    .description("Every version the SSM backup kept of a label: brand, kind, when")
+    .action(async (label: string) => {
+      const rows = await (await walletFor(settings)).history(label);
+      console.log(rows.map((r) => `${r.version}  ${r.about}  ${r.at}`).join("\n") || "no history");
+    });
+  wallet
+    .command("recover <label> <version>")
+    .description(
+      "Bring back an earlier version of a label (see history) under its brand-last4 label",
+    )
+    .option("--as <label>", "a label of your own")
+    .action(async (label: string, version: string, o: { as?: string }) => {
+      const card = await (await walletFor(settings)).recover(label, Number(version), o.as);
+      console.log(`recovered ${describeCard(card)}`);
     });
   wallet
     .command("restore")

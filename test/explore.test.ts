@@ -180,7 +180,7 @@ describe("explore mode", () => {
     expect(charges[0]?.[0]).toMatchObject({
       site: "scratch",
       what: 'press "Buy now", which spends',
-      card: "the card the site keeps",
+      card: "the card the site keeps (ending not known here)",
       outcome: "unclear", // the test page says neither paid nor declined
     });
     expect(charges[0]?.[1].text).toContain("Buy now");

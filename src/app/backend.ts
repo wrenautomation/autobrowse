@@ -59,6 +59,7 @@ import {
   COMPILED_DIR,
   COMPILED_LIB,
   cardsFor,
+  cardsOnFileFor,
   chargesFor,
   credentialsFor,
   gmailFor,
@@ -249,7 +250,7 @@ export function explorerOpener(
       port,
       ...(signIn ? { login: loginFor(settings, gmailFor(settings)) } : {}),
       audit: auditFor(settings),
-      ...(cards ? { cards } : {}),
+      ...(cards ? { cards, cardsOnFile: cardsOnFileFor(settings) } : {}),
       charges: chargesFor(settings, gmailFor(settings)),
       pace: paceFor(settings), // an agent browses at a person's pace: sites watch for the other kind
       sink,

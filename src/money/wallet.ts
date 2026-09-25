@@ -15,6 +15,8 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import {
   DeleteParameterCommand,
+  GetParameterCommand,
+  GetParameterHistoryCommand,
   GetParametersByPathCommand,
   ParameterNotFound,
   PutParameterCommand,
@@ -64,6 +66,35 @@ export function describeCard(
 ): string {
   const exp = `${String(c.expMonth).padStart(2, "0")}/${String(c.expYear).slice(-2)}`;
   return `${c.label}: ${cardBrand(c.number)} ${c.kind} ••${c.number.slice(-4)} exp ${exp}`;
+}
+
+/** A card's own name unless given one: brand and last 4 ("mastercard-4445"). */
+export function defaultLabel(number: string): string {
+  return `${cardBrand(number)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")}-${number.slice(-4)}`;
+}
+
+/**
+ * A card is its number: the same number again updates it (its old label
+ * goes), and a label that already names another card is refused, so a
+ * second `add` never silently replaces the first (2026-09-25: a credit card
+ * saved as "main" was overwritten by a debit card 32 s later).
+ */
+export function admitCard(cards: Card[], card: Card): { replaces: string | null } {
+  const taken = cards.find((c) => c.label === card.label && c.number !== card.number);
+  if (taken)
+    throw new Error(
+      `${card.label} already names ${describeCard(taken)}; pick another label (or leave it out for ${defaultLabel(card.number)})`,
+    );
+  const same = cards.find((c) => c.number === card.number && c.label !== card.label);
+  return { replaces: same?.label ?? null };
+}
+
+/** How a charge names its card: "Mastercard credit ending 4445" (a label of his own added). */
+export function cardEnding(c: Pick<Card, "label" | "kind" | "number">): string {
+  const own = c.label === defaultLabel(c.number) ? "" : ` (${c.label})`;
+  return `${cardBrand(c.number)} ${c.kind} ending ${c.number.slice(-4)}${own}`;
 }
 
 /**
@@ -161,7 +192,7 @@ export function cardFromFields(
 export interface Wallet {
   list(): Promise<Card[]>;
   get(label: string): Promise<Card | null>;
-  put(card: Card): Promise<void>;
+  put(card: Card): Promise<unknown>;
   remove(label: string): Promise<boolean>;
 }
 
@@ -205,7 +236,12 @@ export function fileWallet(path: string, cipher: Cipher): Wallet {
 export const WALLET_SSM_PATH = "/wallet/cards";
 
 /** One SecureString per card at `<path>/<label>`: written by the Mac's AWS user, never read by a machine. */
-export function ssmWallet(ssm: Pick<SSMClient, "send">, path = WALLET_SSM_PATH): Wallet {
+export interface VersionedWallet extends Wallet {
+  history(label: string): Promise<{ version: number; about: string; at: string }[]>;
+  version(label: string, v: number): Promise<Card>;
+}
+
+export function ssmWallet(ssm: Pick<SSMClient, "send">, path = WALLET_SSM_PATH): VersionedWallet {
   async function list(): Promise<Card[]> {
     const out: Card[] = [];
     let NextToken: string | undefined;
@@ -221,6 +257,35 @@ export function ssmWallet(ssm: Pick<SSMClient, "send">, path = WALLET_SSM_PATH):
   return {
     list,
     get: async (l) => (await list()).find((c) => c.label === l) ?? null,
+    /** Every stored version of a label: number, brand and kind (the description), when. */
+    async history(l: string) {
+      const out: { version: number; about: string; at: string }[] = [];
+      let NextToken: string | undefined;
+      do {
+        const r = await ssm.send(
+          new GetParameterHistoryCommand({
+            Name: `${path}/${l}`,
+            WithDecryption: false,
+            NextToken,
+          }),
+        );
+        for (const p of r.Parameters ?? [])
+          out.push({
+            version: p.Version ?? 0,
+            about: (p.Description ?? "").replace(/^wallet backup: /, ""),
+            at: p.LastModifiedDate?.toISOString() ?? "",
+          });
+        NextToken = r.NextToken;
+      } while (NextToken);
+      return out;
+    },
+    /** One earlier version of a label, whole. */
+    async version(l: string, v: number) {
+      const r = await ssm.send(
+        new GetParameterCommand({ Name: `${path}/${l}:${v}`, WithDecryption: true }),
+      );
+      return cardSchema.parse(JSON.parse(r.Parameter?.Value ?? ""));
+    },
     async put(card) {
       const c = cardSchema.parse(card);
       await ssm.send(
@@ -254,8 +319,8 @@ export function ssmWallet(ssm: Pick<SSMClient, "send">, path = WALLET_SSM_PATH):
  */
 export function backedUpWallet(
   local: Wallet,
-  backup: Wallet,
-): Wallet & { restore(): Promise<string[]>; backup(): Promise<string[]> } {
+  backup: Wallet & Partial<Pick<VersionedWallet, "history" | "version">>,
+) {
   const also = async (what: string, f: () => Promise<unknown>) => {
     try {
       await f();
@@ -268,11 +333,18 @@ export function backedUpWallet(
   return {
     list: local.list,
     get: local.get,
-    async put(card) {
+    /** Admitted first (`admitCard`); the same number under an old label moves to this one. */
+    async put(card: Card) {
+      const { replaces } = admitCard(await local.list(), card);
       await local.put(card);
       await also(card.label, () => backup.put(card));
+      if (replaces) {
+        await local.remove(replaces);
+        await also(replaces, () => backup.remove(replaces));
+      }
+      return { replaces };
     },
-    async remove(l) {
+    async remove(l: string) {
       const had = await local.remove(l);
       await also(l, () => backup.remove(l));
       return had;
@@ -282,6 +354,19 @@ export function backedUpWallet(
       const cards = await backup.list();
       for (const c of cards) await local.put(c);
       return cards.map((c) => c.label);
+    },
+    /** The backup's versions of a label (SSM keeps each put). */
+    history: (l: string) => {
+      if (!backup.history) throw new Error("this backup keeps no history");
+      return backup.history(l);
+    },
+    /** An earlier version back into the wallet, under its own default label (or `as`). */
+    async recover(l: string, v: number, as?: string) {
+      if (!backup.version) throw new Error("this backup keeps no history");
+      const old = await backup.version(l, v);
+      const card = { ...old, label: as ?? defaultLabel(old.number) };
+      await this.put(card);
+      return card;
     },
     /** Every card in the file to SSM again: after a backup that failed. */
     async backup() {
