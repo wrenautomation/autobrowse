@@ -168,5 +168,10 @@ ones, like wren. Not needed until a run is unattended.
 ## Open
 
 - First real run: replace the three guessed flows with recordings.
-- Postmaster Tools registration for the new domain (browser; no API).
+- Postmaster Tools registration for the new domain (browser; no API). Mapped
+  2026-09-25: v2 at `postmaster.google.com/v2/add_domain`, textbox "Domain",
+  button "Create". The form said "Domain is invalid" for wrenautomation.com
+  (typed or filled); the five sender domains were added by hand on Sep 9 and
+  show Verified. Next: try on a fresh domain; expect a TXT record, which the
+  mail-dns step can write.
 - Terminal logins (gh, aws, restate) and API-token creation: same shape.
