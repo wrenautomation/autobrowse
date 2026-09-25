@@ -51,7 +51,7 @@ import {
   paymentGate,
 } from "../gates/payment.js";
 import type { Amount } from "../gates/spend.js";
-import type { Charge, Receipt } from "../money/charges.js";
+import { type Charge, type Receipt, receiptOutcome } from "../money/charges.js";
 import { type Card, cardField, cardSecret, describeCard, RECURRING } from "../money/wallet.js";
 import { type RawAction, redactRaw } from "../recorder/browser.js";
 import { BINDING, OBSERVER_SCRIPT } from "../recorder/observer.js";
@@ -471,7 +471,8 @@ async function serve(
   /** After a yes and the click: the page it landed on is the receipt. A failed report never fails the click. */
   const reportSpend = async (spent: { what: string; amount: Amount | null }) => {
     if (!opts.charges) return [];
-    const text = redactText(await pageText()).slice(0, 6_000);
+    const whole = await pageText();
+    const text = redactText(whole).slice(0, 6_000);
     const png = await page.screenshot({ fullPage: true, timeout: 15_000 }).catch(() => undefined);
     return opts
       .charges(
@@ -483,7 +484,8 @@ async function serve(
           what: spent.what,
           ...(spent.amount ? { amount: spent.amount } : {}),
           card: placedCard?.line ?? "the card the site keeps",
-          recurring: placedCard?.recurring ?? RECURRING.test(text),
+          recurring: placedCard?.recurring ?? RECURRING.test(whole),
+          outcome: receiptOutcome(whole),
         },
         { text, ...(png ? { png } : {}) },
       )

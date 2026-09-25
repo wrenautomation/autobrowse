@@ -27,6 +27,7 @@ import {
 import type { Logger } from "pino";
 import { fileStepLedger, type StepLedger } from "../agent/ledger.js";
 import { type Look, lookForAccount, RESET_FORMS } from "../auth/exists.js";
+import { registrable } from "../auth/guard.js";
 import {
   envIdentities,
   fileIdentities,
@@ -104,7 +105,7 @@ import { type BudgetExceeded, type BudgetedLlm, budgetedLlm, fileLedger } from "
 import { type Llm, makeLlm } from "../llm/index.js";
 import { otlpSink, type TraceSink, tracedLlm } from "../llm/trace.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
-import { type Charge, reportCharge } from "../money/charges.js";
+import { type Charge, type ChargeRow, reportCharge } from "../money/charges.js";
 import { s3BlobStore } from "../shots/s3.js";
 import { keepArtifact, keepRecording, type ShipReport, shipShots } from "../shots/ship.js";
 import {
@@ -626,19 +627,36 @@ export function chargesFor(
   );
   const from = settings.notifyFrom ?? settings.googleAdminUser;
   const to = settings.receiptsTo ?? settings.notifyTo;
-  const ledger = chainedFile<Charge & { told: string[] }>(ledgerPath(settings, "charges"));
-  return (c, r) =>
-    reportCharge(
-      {
-        ledger,
-        ...(texts.length
-          ? { text: async (line) => void (await Promise.any(texts.map((t) => t.note?.(line)))) }
-          : {}),
-        ...(from && to ? { email: (m) => gmail.send({ from, to, ...m }) } : {}),
-      },
-      c,
-      r,
+  const ledger = chainedFile<ChargeRow>(ledgerPath(settings, "charges"));
+  // The merchant's invoice goes to the account's inbox; one that is already the receipts inbox is not read.
+  const invoice = async (c: Charge, since: Date) => {
+    const cred = await credentialsFor(settings)
+      .get(c.site)
+      .catch(() => null);
+    const inbox = [cred?.username, cred?.codesInbox].find((a) => a?.includes("@"));
+    if (!inbox || inbox.toLowerCase() === to?.toLowerCase()) return null;
+    const domain = registrable(c.host);
+    const found = await gmail.whole(
+      inbox,
+      `after:${Math.floor(since.getTime() / 1000)} {from:${domain} subject:receipt subject:invoice subject:order subject:payment subject:purchase subject:subscription}`,
     );
+    return found.find((m) => m.from.toLowerCase().includes(domain)) ?? found[0] ?? null;
+  };
+  return async (c, r) =>
+    (
+      await reportCharge(
+        {
+          ledger,
+          invoice,
+          ...(texts.length
+            ? { text: async (line) => void (await Promise.any(texts.map((t) => t.note?.(line)))) }
+            : {}),
+          ...(from && to ? { email: (m) => gmail.send({ from, to, ...m }) } : {}),
+        },
+        c,
+        r,
+      )
+    ).told;
 }
 
 /** The store `autobrowse env` and prod's sink share: SSM under /autobrowse/config. */

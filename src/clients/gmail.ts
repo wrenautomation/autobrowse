@@ -25,6 +25,24 @@ export interface GmailUserClient {
    * the question is who wrote and when, never what they said).
    */
   search(inbox: string, query: string, max?: number): Promise<GmailMessage[]>;
+  /** Whole messages (RFC 822, attachments and all) matching a query, newest first: to forward one as a file. */
+  whole(inbox: string, query: string, max?: number): Promise<WholeMessage[]>;
+}
+
+export interface WholeMessage {
+  from: string;
+  subject: string;
+  at: Date;
+  /** The message as sent: attach it as `message/rfc822`. */
+  raw: Buffer;
+}
+
+/** A header from raw RFC 822 text (folded lines joined); "" when absent. */
+export function rawHeader(raw: Buffer, name: string): string {
+  const head = raw.toString("utf8").split(/\r?\n\r?\n/)[0] ?? "";
+  const unfolded = head.replace(/\r?\n[ \t]+/g, " ");
+  const re = new RegExp(`^${name}:[ \\t]*(.*)$`, "im");
+  return re.exec(unfolded)?.[1]?.trim() ?? "";
 }
 
 export interface GmailMessage {
@@ -177,6 +195,35 @@ export function gmailClient(opts: {
       );
       return got
         .filter((m): m is GmailMessage => m !== null)
+        .sort((a, b) => b.at.getTime() - a.at.getTime());
+    },
+    async whole(inbox, query, max = 5) {
+      const token = opts.tokenFor(inbox, [opts.scopes.read]);
+      const list = await authedJson<{ messages?: Array<{ id: string }> }>(
+        opts.http,
+        token,
+        `${GMAIL}/messages?q=${encodeURIComponent(query)}&maxResults=${max}`,
+      );
+      if (list.status >= 400) throw new GmailError("list", list.status, list.body);
+      const got = await Promise.all(
+        (list.body?.messages ?? []).map(async ({ id }): Promise<WholeMessage | null> => {
+          const m = await authedJson<{ raw?: string; internalDate?: string }>(
+            opts.http,
+            token,
+            `${GMAIL}/messages/${encodeURIComponent(id)}?format=raw`,
+          );
+          if (m.status >= 400 || !m.body?.raw) return null;
+          const raw = Buffer.from(m.body.raw, "base64url");
+          return {
+            from: rawHeader(raw, "from"),
+            subject: rawHeader(raw, "subject"),
+            at: new Date(Number(m.body.internalDate ?? 0)),
+            raw,
+          };
+        }),
+      );
+      return got
+        .filter((m): m is WholeMessage => m !== null)
         .sort((a, b) => b.at.getTime() - a.at.getTime());
     },
   };

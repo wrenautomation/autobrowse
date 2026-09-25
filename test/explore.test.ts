@@ -181,6 +181,7 @@ describe("explore mode", () => {
       site: "scratch",
       what: 'press "Buy now", which spends',
       card: "the card the site keeps",
+      outcome: "unclear", // the test page says neither paid nor declined
     });
     expect(charges[0]?.[1].text).toContain("Buy now");
     expect(charges[0]?.[1].text).not.toContain("sk-ant-minted"); // masked like any transcript
