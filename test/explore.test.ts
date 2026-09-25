@@ -9,6 +9,8 @@ import { compile } from "../src/compiler/index.js";
 import { memorySink } from "../src/deps/sink.js";
 import { fakeDesktop } from "../src/desktop/types.js";
 import { startExplore } from "../src/explore/server.js";
+import type { Charge, Receipt } from "../src/money/charges.js";
+import { parseCardLine } from "../src/money/wallet.js";
 import { loadRecording } from "../src/recorder/store.js";
 
 const sink = memorySink();
@@ -33,6 +35,9 @@ describe("explore mode", () => {
   /** Where placed secrets may land; the test page is a data: URL, so its host is "". */
   let allowHost = (_host: string) => true;
   const audit = memoryAudit();
+  // Stripe's public test Visa, never a real card.
+  const visa = parseCardLine("4242424242424242 09/30 321", { label: "main", kind: "credit" });
+  const charges: Array<[Charge, Receipt]> = [];
   const send = async (cmd: Record<string, unknown>, wait = false) => {
     const r = await fetch(`http://127.0.0.1:${port}/${wait ? "?wait=1" : ""}`, {
       method: "POST",
@@ -54,6 +59,14 @@ describe("explore mode", () => {
       secrets: async (name) => (name === "minted" ? "Placed-Value-77" : null),
       secretHosts: (host) => allowHost(host),
       audit,
+      cards: async ({ label }) => {
+        if (label && label !== "main") throw new Error(`no card "${label}" in the wallet`);
+        return visa;
+      },
+      charges: async (c, r) => {
+        charges.push([c, r]);
+        return ["email", "text"];
+      },
       approve: async (ask) => {
         asks.push(ask.what);
         return answer;
@@ -162,6 +175,16 @@ describe("explore mode", () => {
     expect((await send(buy, true)).status).toBe(200);
     expect((await send({ cmd: "eval", js: "document.title" })).body.result).toBe("clicked");
     expect(asks).toEqual(['press "Buy now", which spends', 'press "Buy now", which spends']); // once per answer; the missing "Purchase" asked nobody
+    // The yes-and-click is a charge: told with the page it landed on as the receipt.
+    expect(charges).toHaveLength(1);
+    expect(charges[0]?.[0]).toMatchObject({
+      site: "scratch",
+      what: 'press "Buy now", which spends',
+      card: "the card the site keeps",
+    });
+    expect(charges[0]?.[1].text).toContain("Buy now");
+    expect(charges[0]?.[1].text).not.toContain("sk-ant-minted"); // masked like any transcript
+    expect(charges[0]?.[1].png?.length).toBeGreaterThan(100);
 
     // A popup (an OAuth window) is listed and switched to; closing it returns to the main page.
     await send({ cmd: "eval", js: 'window.open("about:blank", "pop")' });
@@ -248,6 +271,28 @@ describe("explore mode", () => {
     const compiled = await compile(rec);
     expect(compiled.outline.steps.length).toBeGreaterThan(0);
   }, 60_000);
+
+  it("puts a card on a page after one yes per card and host", async () => {
+    await send({ cmd: "open", url: PAGE });
+    answer = true;
+    // A card field: one yes per card and host, then each field lands; the value never crosses the socket.
+    const number = await send(
+      { cmd: "place", hints: { role: "textbox", name: "Domain" }, secret: "card.number" },
+      true,
+    );
+    expect(number.body).toEqual({ ok: true, secret: "card.number" });
+    expect(asks.at(-1)).toBe("put main: Visa credit ••4242 exp 09/30 on ");
+    await send({ cmd: "place", hints: { css: "#p" }, secret: "card@main.cvc" }, true);
+    expect(asks.filter((a) => a.startsWith("put main"))).toHaveLength(1);
+    expect((await send({ cmd: "eval", js: "[d.value, p.value].join(' ')" })).body.result).toBe(
+      "4242424242424242 321",
+    );
+    const other = await send({ cmd: "place", hints: { css: "#p" }, secret: "card@debit.cvc" });
+    expect(other.body.error).toMatch(/no card "debit"/);
+    const cardUses = (await audit.recent()).filter((u) => u.by.startsWith("place card"));
+    expect(cardUses.map((u) => u.allowed)).toEqual([true, true, false]);
+    expect(JSON.stringify(cardUses)).not.toContain("4242424242424242");
+  });
 });
 
 describe("pause: a person's hand acts land in the journal", () => {

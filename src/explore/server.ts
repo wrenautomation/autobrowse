@@ -51,6 +51,8 @@ import {
   paymentGate,
 } from "../gates/payment.js";
 import type { Amount } from "../gates/spend.js";
+import type { Charge, Receipt } from "../money/charges.js";
+import { type Card, cardField, cardSecret, describeCard, RECURRING } from "../money/wallet.js";
 import { type RawAction, redactRaw } from "../recorder/browser.js";
 import { BINDING, OBSERVER_SCRIPT } from "../recorder/observer.js";
 import {
@@ -171,6 +173,14 @@ export interface ExploreOptions {
   secrets?: SecretValues;
   /** Hosts a placed secret (by name) may land on; any other host refuses the `place`. Absent: any. */
   secretHosts?: (host: string, secret: string) => boolean;
+  /**
+   * The wallet, where there is one (the Mac): `place{secret:"card.<field>"}`
+   * (or `card@<label>.<field>`) picks the card for this host, and a person says
+   * yes once per card and host before any of it lands. Absent: refused.
+   */
+  cards?: (o: { host: string; label: string | null; subscription: boolean }) => Promise<Card>;
+  /** Each spending click a person said yes to, with its receipt page: texted, emailed, written down. */
+  charges?: (c: Charge, r: Receipt) => Promise<string[]>;
   /** Where every `place` is recorded (allowed or refused); never the value. */
   audit?: SecretAudit;
   /**
@@ -389,7 +399,7 @@ async function serve(
   const hands = handsFor(opts.pace ?? null);
   const gate = async (act: "fill" | "select" | "click", t: Target, wait: boolean) => {
     const what = paymentGate(act, t.hints as Hints);
-    if (!what) return;
+    if (!what) return null;
     // A miss is a miss, not a question: the element must be there before anyone is asked.
     await find(t).first().waitFor({ state: "visible", timeout: 10_000 });
     // The button's own amount, else the order total next to it, else a question with no amount.
@@ -398,6 +408,86 @@ async function serve(
         ? (paymentAmount(t.hints as Hints) ?? (await amountNear(find(t).first())))
         : null;
     await decide(`${act} ${JSON.stringify(t.hints)}`, what, page.url(), wait, amount);
+    return { what, amount };
+  };
+  /** Card-and-host pairs a person said yes to this session; the card last placed, for the receipt. */
+  const cardsYes = new Set<string>();
+  let placedCard: { line: string; recurring: boolean } | null = null;
+  const pageText = async () => (await page.innerText("body").catch(() => "")).slice(0, 20_000);
+  const placeCard = async (
+    c: Extract<Command, { cmd: "place" }>,
+    want: { label: string | null; field: string },
+    wait: boolean,
+  ) => {
+    if (!opts.cards)
+      throw new Error("place: no wallet here (cards live on the Mac: autobrowse wallet add)");
+    const host = new URL(page.url()).host;
+    const recurring = RECURRING.test(await pageText());
+    const audit = (allowed: boolean) =>
+      opts.audit?.record({
+        at: new Date().toISOString(),
+        credential: "wallet",
+        field: "secret",
+        site: opts.site,
+        url: urlWithoutQuery(page.url()),
+        by: `place ${c.secret}`,
+        allowed,
+      });
+    let card: Card;
+    try {
+      card = await opts.cards({ host, label: want.label, subscription: recurring });
+    } catch (err) {
+      await audit(false);
+      throw err;
+    }
+    const value = cardField(card, want.field);
+    if (!value)
+      throw new Error(
+        `place: ${c.secret}: ${card.label} has no ${want.field} (fields: number, exp, expMonth, expYear, expYY, cvc, name, postal)`,
+      );
+    const key = `${card.label}@${host}`;
+    if (!cardsYes.has(key)) {
+      await decide(
+        `card ${key}`,
+        `put ${describeCard(card)} on ${host}${card.kind === "debit" ? " (a DEBIT card)" : ""}${recurring ? " for a recurring charge" : ""}`,
+        page.url(),
+        wait,
+      );
+      cardsYes.add(key);
+    }
+    await audit(true);
+    await hands.think(page);
+    await hands.paste(find(c), value, { timeout: 10_000 });
+    journalAct(c, (target) => ({
+      kind: "input",
+      target,
+      value: REDACTED,
+      redacted: true,
+      secret: c.secret,
+    }));
+    placedCard = { line: describeCard(card), recurring };
+    return { ok: true, secret: c.secret };
+  };
+  /** After a yes and the click: the page it landed on is the receipt. A failed report never fails the click. */
+  const reportSpend = async (spent: { what: string; amount: Amount | null }) => {
+    if (!opts.charges) return [];
+    const text = redactText(await pageText()).slice(0, 6_000);
+    const png = await page.screenshot({ fullPage: true, timeout: 15_000 }).catch(() => undefined);
+    return opts
+      .charges(
+        {
+          at: new Date().toISOString(),
+          site: opts.site,
+          host: new URL(page.url()).host,
+          url: urlWithoutQuery(page.url()),
+          what: spent.what,
+          ...(spent.amount ? { amount: spent.amount } : {}),
+          card: placedCard?.line ?? "the card the site keeps",
+          recurring: placedCard?.recurring ?? RECURRING.test(text),
+        },
+        { text, ...(png ? { png } : {}) },
+      )
+      .catch(() => []);
   };
   /** A desktop click that spends (an App Store "Buy") waits for the person the same way; "url" is the app. */
   const gateDesktop = async (a: DesktopOp, wait: boolean) => {
@@ -455,11 +545,12 @@ async function serve(
         return { url: page.url(), wall: await looksLikeWall(page) };
       }
       case "click": {
-        await gate("click", c, wait);
+        const spent = await gate("click", c, wait);
         await hands.think(page);
         await hands.click(find(c), { timeout: 10_000 });
         await settle(page);
         journalAct(c, (target) => ({ kind: "click", target }));
+        if (spent) return { url: page.url(), told: await reportSpend(spent) };
         return { url: page.url() };
       }
       case "fill": {
@@ -477,6 +568,8 @@ async function serve(
         return { ok: true };
       }
       case "place": {
+        const card = cardSecret(c.secret);
+        if (card) return placeCard(c, card, wait);
         if (!opts.secrets) throw new Error("place needs secrets (a signup or a login gives them)");
         const value = await opts.secrets(c.secret);
         if (!value)

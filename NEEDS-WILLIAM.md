@@ -14,7 +14,7 @@ The UI has the same: **Needs** (done button, a note) and **Accounts**
 
 Rows clear themselves when the thing is in hand (a credential stored, an
 env name set, a token kept). This file only keeps the words the rows cannot
-carry. Dated 2026-09-23.
+carry. Dated 2026-09-25.
 
 ## In order of payoff
 
@@ -29,6 +29,18 @@ carry. Dated 2026-09-23.
    ACTIVE ask you over the channel; `SPEND_*` sets what runs without asking.
    `leads_retrieval` needs app review; a CTA to the lander works without it.
 2. **Anthropic credits** ($5) → the agent explores with the good model.
+
+## Cards (2026-09-25)
+
+Wait for the SSM Deny to land first (below). Then copy
+`number mm/yy cvc [postal] [name on card]` and run
+`pnpm autobrowse wallet add main --kind credit`; the same with
+`--kind debit` for the debit card. The clipboard is emptied after.
+Debit is used only on hosts you name in `WALLET_DEBIT_HOSTS` (e.g.
+`td.com,canada.ca`), never for a subscription.
+
+AWS CLI is signed out and `autobrowse aws-login` hit a 400 twice. Run
+`! aws login` once; then I apply the `/wallet` Deny on both boxes.
 
 ## Accounts (policy, seeded 2026-09-22)
 
@@ -63,3 +75,13 @@ housekeeping after (photo `assets/brand/wren-pfp.png`) is one agent line.
 ## Not wanted
 
 `BROWSERBASE_*` (no Browserbase). htn-2026 demo branch waits on a spec.
+
+
+THINGS TO DO:
+- make the clicks facade pattern more robust, injecting random mouse movements (does plyarwight support a ltieral cursor dragigng erractically across the screen, i thinkw ee need that)
+  — done (afa9a31): tremor, wandering, wheel scrolling; SHOW_POINTER=true draws the cursor
+- module separation for this part of the script? (human actions)
+  — done: src/browser/human imports nothing from autobrowse (a test holds it)
+- bill stuff with my credit card (and save my debit card, but heavily prefer not to use it, especially for any subscription based / online thats not banking / strict)
+  — built: `autobrowse wallet`, designs/2026-09-25-wallet.md; see Cards above
+- grpc api revamp? discuss after all others are done

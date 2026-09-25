@@ -24,6 +24,8 @@ const schema = z.object({
   /** Who gets approval requests and completion notes, and the fleet inbox they come from. */
   notifyTo: z.string().email().optional(),
   notifyFrom: z.string().email().optional(),
+  /** Where each charge's receipt is emailed; NOTIFY_TO when unset. */
+  receiptsTo: z.string().email().optional(),
   /** DMARC aggregate reports go here. */
   dmarcRua: z.string().email().optional(),
   /** GitHub token that may dispatch wren's deploy workflow (roster reload). */
@@ -231,6 +233,7 @@ export const ENV_KEYS = {
   awsRegion: "AWS_REGION",
   notifyTo: "NOTIFY_TO",
   notifyFrom: "NOTIFY_FROM",
+  receiptsTo: "RECEIPTS_TO",
   dmarcRua: "DMARC_RUA",
   githubToken: "GITHUB_TOKEN",
   wrenRepo: "WREN_REPO",

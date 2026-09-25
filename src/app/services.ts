@@ -9,6 +9,7 @@ import {
   type CredentialHistory,
   type CredentialStore,
   canaryStore,
+  chainedFile,
   type EnvStore,
   envCredentials,
   envFileStore,
@@ -82,6 +83,7 @@ import { parseGuards } from "../engine/guards.js";
 import { makeRunObject } from "../engine/object.js";
 import { runsRegistry } from "../engine/registry.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
+import type { ExploreOptions } from "../explore/server.js";
 import { askOverChannel } from "../gates/ask.js";
 import type { Approver } from "../gates/payment.js";
 import {
@@ -102,6 +104,7 @@ import { type BudgetExceeded, type BudgetedLlm, budgetedLlm, fileLedger } from "
 import { type Llm, makeLlm } from "../llm/index.js";
 import { otlpSink, type TraceSink, tracedLlm } from "../llm/trace.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
+import { type Charge, reportCharge } from "../money/charges.js";
 import { s3BlobStore } from "../shots/s3.js";
 import { keepArtifact, keepRecording, type ShipReport, shipShots } from "../shots/ship.js";
 import {
@@ -423,7 +426,10 @@ export function shipperFor(
 
 /** Where every secret use is written: next to the credential file, 0600, one JSON line each. */
 /** The ledgers live beside the credential file, one hash-chained JSONL each (`autobrowse ledger verify`). */
-export function ledgerPath(settings: Settings, name: "audit" | "spend" | "steps"): string {
+export function ledgerPath(
+  settings: Settings,
+  name: "audit" | "spend" | "steps" | "charges",
+): string {
   return join(dirname(expandHome(settings.credentialsFile)), `${name}.jsonl`);
 }
 
@@ -590,6 +596,49 @@ export async function walletFor(
     fileWallet(expandHome(settings.walletFile), aesGcmCipher(keychainKey(WALLET_KEYCHAIN))),
     ssmWallet(ssm),
   );
+}
+
+/** Explore's card picker: the Mac's wallet under WALLET_DEBIT_HOSTS; elsewhere none (card places are refused). */
+export function cardsFor(settings: Settings): ExploreOptions["cards"] {
+  if (process.platform !== "darwin") return undefined;
+  return async ({ host, label, subscription }) => {
+    const { pickCard } = await import("../money/wallet.js");
+    return pickCard(await walletFor(settings), {
+      host,
+      label,
+      subscription,
+      policy: { debitHosts: settings.walletDebitHosts },
+    });
+  };
+}
+
+/**
+ * How a charge is told: a text over the phone channels, an email with the
+ * receipt to RECEIPTS_TO (else NOTIFY_TO), and a line in charges.jsonl.
+ */
+export function chargesFor(
+  settings: Settings,
+  gmail: GmailUserClient,
+  http = httpClient(),
+): NonNullable<ExploreOptions["charges"]> {
+  const texts = channelsFor(settings, gmail, http).filter(
+    (c) => (c.name === "phone" || c.name === "linq") && c.note,
+  );
+  const from = settings.notifyFrom ?? settings.googleAdminUser;
+  const to = settings.receiptsTo ?? settings.notifyTo;
+  const ledger = chainedFile<Charge & { told: string[] }>(ledgerPath(settings, "charges"));
+  return (c, r) =>
+    reportCharge(
+      {
+        ledger,
+        ...(texts.length
+          ? { text: async (line) => void (await Promise.any(texts.map((t) => t.note?.(line)))) }
+          : {}),
+        ...(from && to ? { email: (m) => gmail.send({ from, to, ...m }) } : {}),
+      },
+      c,
+      r,
+    );
 }
 
 /** The store `autobrowse env` and prod's sink share: SSM under /autobrowse/config. */

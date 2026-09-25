@@ -58,6 +58,8 @@ import {
   budgetOf,
   COMPILED_DIR,
   COMPILED_LIB,
+  cardsFor,
+  chargesFor,
   credentialsFor,
   gmailFor,
   identitiesFor,
@@ -238,6 +240,7 @@ export function explorerOpener(
   },
 ) => Promise<Explorer> {
   const approver: Approver | null = approverFor(settings, gmailFor(settings));
+  const cards = cardsFor(settings);
   return async (site, port, { signIn = true, ...extra } = {}) =>
     startExplore({
       site,
@@ -246,6 +249,8 @@ export function explorerOpener(
       port,
       ...(signIn ? { login: loginFor(settings, gmailFor(settings)) } : {}),
       audit: auditFor(settings),
+      ...(cards ? { cards } : {}),
+      charges: chargesFor(settings, gmailFor(settings)),
       pace: paceFor(settings), // an agent browses at a person's pace: sites watch for the other kind
       sink,
       ...(approver ? { approve: approver } : {}),

@@ -9,7 +9,14 @@ const SEEN_CAP = 200;
 export interface GmailUserClient {
   /** The primary send-as signature; idempotent. */
   setSignature(email: string, html: string): Promise<"set" | "kept">;
-  send(mail: { from: string; to: string; subject: string; text: string }): Promise<void>;
+  send(mail: {
+    from: string;
+    to: string;
+    subject: string;
+    text: string;
+    /** Files after the text (a receipt screenshot): multipart/mixed. */
+    attachments?: { name: string; type: string; data: Buffer }[];
+  }): Promise<void>;
   /** Messages in `inbox` received after `since`, newest first; for one-time codes. */
   recent(inbox: string, since: Date): Promise<GmailMessage[]>;
   /**
@@ -96,15 +103,7 @@ export function gmailClient(opts: {
     },
     async send(mail) {
       const token = opts.tokenFor(mail.from, [opts.scopes.send]);
-      const raw = [
-        `From: ${mail.from}`,
-        `To: ${mail.to}`,
-        `Subject: ${mail.subject}`,
-        "MIME-Version: 1.0",
-        'Content-Type: text/plain; charset="UTF-8"',
-        "",
-        mail.text,
-      ].join("\r\n");
+      const raw = mimeMessage(mail);
       const r = await authedJson(opts.http, token, `${GMAIL}/messages/send`, {
         method: "POST",
         body: { raw: Buffer.from(raw).toString("base64url") },
@@ -181,4 +180,36 @@ export function gmailClient(opts: {
         .sort((a, b) => b.at.getTime() - a.at.getTime());
     },
   };
+}
+
+/** RFC 5322 text, or multipart/mixed when there are files; base64 lines of 76. */
+export function mimeMessage(mail: Parameters<GmailUserClient["send"]>[0]): string {
+  const head = [
+    `From: ${mail.from}`,
+    `To: ${mail.to}`,
+    `Subject: ${mail.subject}`,
+    "MIME-Version: 1.0",
+  ];
+  const text = ['Content-Type: text/plain; charset="UTF-8"', "", mail.text];
+  if (!mail.attachments?.length) return [...head, ...text].join("\r\n");
+  const b = `autobrowse-${Date.now().toString(36)}`;
+  const parts = mail.attachments.map((a) =>
+    [
+      `--${b}`,
+      `Content-Type: ${a.type}; name="${a.name}"`,
+      `Content-Disposition: attachment; filename="${a.name}"`,
+      "Content-Transfer-Encoding: base64",
+      "",
+      ...(a.data.toString("base64").match(/.{1,76}/g) ?? []),
+    ].join("\r\n"),
+  );
+  return [
+    ...head,
+    `Content-Type: multipart/mixed; boundary="${b}"`,
+    "",
+    `--${b}`,
+    ...text,
+    ...parts,
+    `--${b}--`,
+  ].join("\r\n");
 }
