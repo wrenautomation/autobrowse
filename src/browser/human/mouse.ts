@@ -6,7 +6,7 @@
  *
  * Pure like the typing plan: points in, a path with timings out.
  */
-import { chance, clamp, drawLog, drawNormal, type Random } from "./draw.js";
+import { chance, clamp, drawInt, drawLog, drawMs, drawNormal, type Random } from "./draw.js";
 
 export interface Point {
   x: number;
@@ -29,6 +29,11 @@ export interface MouseStyle {
   hover: [number, number];
   /** Button held down, ms. */
   hold: [number, number];
+  /** Hand tremor, px: the pointer is never still or straight between frames. */
+  tremor: number;
+  /** An idle wander: how many stops, and how long the hand rests at each, ms. */
+  wanderStops: [number, number];
+  wanderRest: [number, number];
 }
 
 export interface PathStep extends Point {
@@ -55,6 +60,25 @@ export function aimPoint(box: Box, random: Random): Point {
   };
 }
 
+/**
+ * Tremor: a smooth wobble, not white noise. A fast shake (8–12 Hz, as a
+ * hand's is) over a slow sway (1–2 Hz), each with its own phase, so two
+ * paths never wobble alike and neighbouring frames move together.
+ */
+export function tremor(px: number, random: Random): (ms: number) => Point {
+  const wave = (hz: number, amp: number) => {
+    const phase = random() * 2 * Math.PI;
+    const w = (2 * Math.PI * hz) / 1000;
+    return (ms: number) => amp * Math.sin(w * ms + phase);
+  };
+  const fx = [wave(8 + random() * 4, px * 0.5), wave(1 + random(), px)];
+  const fy = [wave(8 + random() * 4, px * 0.5), wave(1 + random(), px)];
+  return (ms) => ({
+    x: fx.reduce((n, f) => n + f(ms), 0),
+    y: fy.reduce((n, f) => n + f(ms), 0),
+  });
+}
+
 /** Minimum-jerk easing: the speed profile of a real reach. */
 const ease = (t: number) => t * t * t * (10 - 15 * t + 6 * t * t);
 
@@ -78,25 +102,27 @@ function curve(from: Point, to: Point, size: number, s: MouseStyle, random: Rand
   const ms =
     drawLog(s.reach, random) + drawLog(s.perBit, random) * Math.log2(1 + dist / Math.max(size, 8));
   const n = Math.max(6, Math.round(ms / FRAME_MS));
+  const shake = tremor(s.tremor, random);
   const steps: PathStep[] = [];
   for (let i = 1; i <= n; i++) {
     const t = ease(i / n);
     const u = 1 - t;
-    const last = i === n;
-    const jitter = last ? 0 : 0.6;
+    // The wobble fades as the hand settles, and is gone on the last frame.
+    const w = i === n ? { x: 0, y: 0 } : shake((i * ms) / n);
+    const fade = 1 - t * t;
     steps.push({
       x:
         u * u * u * from.x +
         3 * u * u * t * c1.x +
         3 * u * t * t * c2.x +
         t * t * t * to.x +
-        drawNormal(jitter, random),
+        w.x * fade,
       y:
         u * u * u * from.y +
         3 * u * u * t * c1.y +
         3 * u * t * t * c2.y +
         t * t * t * to.y +
-        drawNormal(jitter, random),
+        w.y * fade,
       after: Math.round(ms / n),
     });
   }
@@ -121,6 +147,34 @@ export function mousePath(
     return [...curve(from, past, size, s, random), ...curve(past, to, size, s, random)];
   }
   return curve(from, to, size, s, random);
+}
+
+/**
+ * An idle hand: a few stops across the page, some near, some a long way,
+ * each reach its own speed, a rest at each. What a person's pointer does
+ * while they read.
+ */
+export function wanderPath(
+  from: Point,
+  view: { width: number; height: number },
+  s: MouseStyle,
+  random: Random,
+): PathStep[] {
+  const steps: PathStep[] = [];
+  let at = from;
+  const stops = drawInt(s.wanderStops, random);
+  for (let i = 0; i < stops; i++) {
+    const far = chance(0.3, random);
+    const to = far
+      ? { x: 5 + random() * (view.width - 10), y: 5 + random() * (view.height - 10) }
+      : driftPoint(at, view, random);
+    const path = mousePath(at, to, 40, s, random);
+    const last = path.at(-1);
+    if (last) last.after += drawMs(s.wanderRest, random);
+    steps.push(...path);
+    at = to;
+  }
+  return steps;
 }
 
 /** Somewhere a resting hand drifts to while reading: near, inside the page. */

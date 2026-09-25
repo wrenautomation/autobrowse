@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Locator, Page } from "playwright";
 import { describe, expect, it } from "vitest";
 import { drawMs } from "../src/browser/human/draw.js";
@@ -7,7 +10,10 @@ import {
   handsFor,
   instantHands,
   mousePath,
+  tremor,
   typingPlan,
+  wanderPath,
+  wheelPlan,
 } from "../src/browser/human/index.js";
 
 /** A fixed, repeatable random source. */
@@ -112,6 +118,59 @@ describe("mouse path", () => {
   });
 });
 
+describe("idle hand", () => {
+  it("trembles smoothly: neighbouring frames move together, never a jump", () => {
+    const w = tremor(0.8, seeded());
+    for (let ms = 0; ms < 1000; ms += 14) {
+      const a = w(ms);
+      const b = w(ms + 14);
+      expect(Math.hypot(a.x, a.y)).toBeLessThan(2);
+      expect(Math.hypot(b.x - a.x, b.y - a.y)).toBeLessThan(1);
+    }
+  });
+
+  it("wanders to a few stops inside the page, resting at each", () => {
+    const view = { width: 1280, height: 800 };
+    const path = wanderPath(
+      { x: 600, y: 400 },
+      view,
+      { ...HUMAN_PACE.mouse, wanderStops: [3, 3] },
+      seeded(),
+    );
+    for (const p of path) {
+      expect(p.x).toBeGreaterThan(-10);
+      expect(p.x).toBeLessThan(view.width + 10);
+    }
+    const rests = path.filter((p) => p.after >= HUMAN_PACE.mouse.wanderRest[0]);
+    expect(rests.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("wheel plan", () => {
+  it("scrolls in notches that add up, with looks between flicks", () => {
+    const plan = wheelPlan(1500, HUMAN_PACE.scroll, seeded());
+    const sum = plan.reduce((n, s) => n + s.dy, 0);
+    expect(sum).toBeGreaterThanOrEqual(1500);
+    expect(sum).toBeLessThan(1500 + HUMAN_PACE.scroll.notch[1]);
+    expect(Math.max(...plan.map((s) => s.dy))).toBeLessThanOrEqual(HUMAN_PACE.scroll.notch[1]);
+    expect(plan.some((s) => s.after >= HUMAN_PACE.scroll.look[0])).toBe(true);
+    expect(wheelPlan(-300, HUMAN_PACE.scroll, seeded()).every((s) => s.dy < 0)).toBe(true);
+  });
+});
+
+describe("module", () => {
+  it("imports nothing from autobrowse: only Playwright types and its own files", () => {
+    const dir = join(dirname(fileURLToPath(import.meta.url)), "../src/browser/human");
+    for (const f of readdirSync(dir)) {
+      const from = [...readFileSync(join(dir, f), "utf8").matchAll(/from "([^"]+)"/g)].map(
+        (m) => m[1],
+      );
+      for (const m of from)
+        expect(m === "playwright" || /^\.\/[a-z]+\.js$/.test(m ?? "")).toBe(true);
+    }
+  });
+});
+
 /** A page and a control that record what the hands did. */
 function fakes(box: { x: number; y: number; width: number; height: number } | null) {
   const log: string[] = [];
@@ -119,6 +178,7 @@ function fakes(box: { x: number; y: number; width: number; height: number } | nu
     viewportSize: () => ({ width: 1280, height: 800 }),
     mouse: {
       move: async (x: number, y: number) => void log.push(`move ${Math.round(x)},${Math.round(y)}`),
+      wheel: async (_x: number, dy: number) => void log.push(`wheel ${dy}`),
     },
     keyboard: {
       type: async (t: string, o?: { delay?: number }) => void log.push(`key ${t} ${o?.delay ?? 0}`),
@@ -157,6 +217,15 @@ describe("hands", () => {
     expect(Number(x)).toBeLessThan(120);
     expect(Number(y)).toBeLessThan(30);
     expect(Number(held)).toBeGreaterThanOrEqual(HUMAN_PACE.mouse.hold[0]);
+  });
+
+  it("wheel a control below the fold into view before reaching for it", async () => {
+    const { log, target } = fakes({ x: 400, y: 2300, width: 120, height: 30 });
+    await handsFor(HUMAN_PACE, seeded()).click(target, { timeout: 1000 });
+    const wheels = log.filter((l) => l.startsWith("wheel")).map((l) => Number(l.split(" ")[1]));
+    expect(wheels.length).toBeGreaterThan(5);
+    expect(wheels.reduce((n, d) => n + d, 0)).toBeGreaterThan(1500);
+    expect(log.at(-1)).toMatch(/^click at/);
   });
 
   it("fall back to a plain click when the control has no box", async () => {

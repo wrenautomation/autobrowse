@@ -544,7 +544,8 @@ export function linqFor(
 
 /** The runner's pace from settings; `fast` means no delays at all. */
 export function paceFor(settings: Settings): Pace | null {
-  return settings.pace === "fast" ? null : HUMAN_PACE;
+  if (settings.pace === "fast") return null;
+  return settings.showPointer ? { ...HUMAN_PACE, showPointer: true } : HUMAN_PACE;
 }
 
 /**

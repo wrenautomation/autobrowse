@@ -7,8 +7,10 @@
  * clicks on the exact centre, a pointer that teleports, every key 50ms
  * apart. So:
  *
- *   think  a pause to read the page; sometimes the hand drifts meanwhile
- *   click  a curved, eased reach to a spot near the middle of the control,
+ *   think  a pause to read the page; sometimes the hand wanders meanwhile,
+ *          a few stops near and far, trembling as a hand does
+ *   click  a control off screen is wheeled to, flick by flick; then a
+ *          curved, eased reach to a spot near the middle of the control,
  *          a beat of hover, the button held down a moment
  *   type   runs of fast and slow keys, beats between words and after
  *          punctuation, the odd stall mid-word; long text is pasted
@@ -16,22 +18,29 @@
  *   paste  a value that arrives whole, as autofill or a password manager
  *          puts it: the field clicked, a beat, the text in at once
  *
- * The details live beside this file (typing.ts, mouse.ts, draw.ts) as
+ * The details live beside this file (typing.ts, mouse.ts, scroll.ts, draw.ts) as
  * pure plans with no page in them; this file only plays them. Every click
  * still ends in Playwright's own click at the chosen spot, so its checks
  * (visible, enabled, not covered, inside an iframe) stand; any trouble in
  * the human part falls back to the plain act, never to a failure.
  *
  * `handsFor(null)` is instant hands: demos, tests, a console answering at once.
+ * `showPointer` draws the pointer on the page (a dot), to watch a headed run;
+ * it puts an element in the page, so it is for watching, never for real runs.
+ *
+ * This folder imports nothing from autobrowse: only Playwright's types.
  */
 import type { Locator, Page } from "playwright";
 import { chance, drawMs, type Random } from "./draw.js";
-import { aimPoint, driftPoint, type MouseStyle, mousePath, type Point } from "./mouse.js";
+import { aimPoint, type MouseStyle, mousePath, type Point, wanderPath } from "./mouse.js";
+import { type ScrollStyle, wheelPlan } from "./scroll.js";
 import { type TypingStyle, typingPlan } from "./typing.js";
 
 export { drawMs } from "./draw.js";
 export type { MouseStyle, PathStep } from "./mouse.js";
-export { aimPoint, mousePath } from "./mouse.js";
+export { aimPoint, mousePath, tremor, wanderPath } from "./mouse.js";
+export type { ScrollStyle, WheelStep } from "./scroll.js";
+export { wheelPlan } from "./scroll.js";
 export type { Keystroke, TypingStyle } from "./typing.js";
 export { typingPlan } from "./typing.js";
 
@@ -42,6 +51,9 @@ export interface Pace {
   drift: number;
   typing: TypingStyle;
   mouse: MouseStyle;
+  scroll: ScrollStyle;
+  /** Draw the pointer on the page, to watch a headed run. */
+  showPointer?: boolean;
 }
 
 export const HUMAN_PACE: Pace = {
@@ -65,6 +77,16 @@ export const HUMAN_PACE: Pace = {
     overshootBy: [0.03, 0.09],
     hover: [70, 260],
     hold: [45, 130],
+    tremor: 0.8,
+    wanderStops: [1, 4],
+    wanderRest: [60, 700],
+  },
+  scroll: {
+    notch: [85, 125],
+    flick: [2, 6],
+    gap: [18, 70],
+    look: [250, 1_100],
+    most: 6_000,
   },
 };
 
@@ -120,12 +142,63 @@ async function pointerOf(page: Page, random: Random): Promise<Point> {
   return start;
 }
 
-async function glide(page: Page, to: Point, size: number, pace: Pace, random: Random) {
-  for (const step of mousePath(await pointerOf(page, random), to, size, pace.mouse, random)) {
+/** A dot that follows the pointer; for watching a headed run. Once per page, again after each load. */
+const shown = new WeakSet<Page>();
+const POINTER_DOT = `(() => {
+  if (window.__handsDot) return;
+  const put = () => {
+    const d = document.createElement("div");
+    d.style.cssText = "position:fixed;z-index:2147483647;pointer-events:none;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:rgba(232,135,90,.85);box-shadow:0 0 0 2px #fff;left:-20px;top:-20px";
+    document.documentElement.appendChild(d);
+    addEventListener("mousemove", (e) => { d.style.left = e.clientX + "px"; d.style.top = e.clientY + "px"; }, true);
+    window.__handsDot = d;
+  };
+  document.documentElement ? put() : addEventListener("DOMContentLoaded", put);
+})()`;
+async function showOn(page: Page) {
+  if (shown.has(page)) return;
+  shown.add(page);
+  await page.addInitScript(POINTER_DOT).catch(() => undefined);
+  await page.evaluate(POINTER_DOT).catch(() => undefined);
+}
+
+async function play(page: Page, steps: { x: number; y: number; after: number }[], pace: Pace) {
+  if (pace.showPointer) await showOn(page);
+  for (const step of steps) {
     await page.mouse.move(step.x, step.y);
+    pointers.set(page, { x: step.x, y: step.y });
     if (step.after) await page.waitForTimeout(step.after);
   }
+}
+
+async function glide(page: Page, to: Point, size: number, pace: Pace, random: Random) {
+  await play(page, mousePath(await pointerOf(page, random), to, size, pace.mouse, random), pace);
   pointers.set(page, to);
+}
+
+/**
+ * Wheel a control into view, as a hand would, when it is off screen: the
+ * pointer over the page, a few flicks toward it until it sits in the
+ * middle band. Too far, or a box that will not settle: the caller's plain
+ * scroll finishes it.
+ */
+async function wheelTo(target: Locator, o: ActTimeout, pace: Pace, random: Random) {
+  const page = target.page();
+  const view = await viewOf(page);
+  const box = await target.boundingBox(o).catch(() => null);
+  if (!view || !box) return;
+  const inView = box.y >= 0 && box.y + box.height <= view.height;
+  if (inView) return;
+  // Aim it somewhere between a third and a half of the way down.
+  const dy = box.y - view.height * (0.33 + random() * 0.17);
+  if (Math.abs(dy) > pace.scroll.most) return;
+  if (pace.showPointer) await showOn(page);
+  const at = await pointerOf(page, random);
+  await page.mouse.move(at.x, at.y);
+  for (const step of wheelPlan(dy, pace.scroll, random)) {
+    await page.mouse.wheel(0, step.dy);
+    await page.waitForTimeout(step.after);
+  }
 }
 
 export function handsFor(pace: Pace | null, random: Random = Math.random): Hands {
@@ -133,6 +206,7 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
 
   const click = async (target: Locator, o: ActTimeout) => {
     const page = target.page();
+    await wheelTo(target, o, pace, random).catch(() => undefined);
     const box = await target
       .scrollIntoViewIfNeeded(o)
       .then(() => target.boundingBox(o))
@@ -156,8 +230,15 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
       const view = chance(pace.drift, random) ? await viewOf(page) : null;
       if (view) {
         const start = Date.now();
-        const to = driftPoint(await pointerOf(page, random), view, random);
-        await glide(page, to, 40, pace, random).catch(() => undefined);
+        // The wander fits the pause: it ends where the reading does.
+        let spent = 0;
+        const path = wanderPath(await pointerOf(page, random), view, pace.mouse, random).filter(
+          (step) => {
+            spent += step.after;
+            return spent <= ms;
+          },
+        );
+        await play(page, path, pace).catch(() => undefined);
         const left = ms - (Date.now() - start);
         if (left > 0) await page.waitForTimeout(left);
         return;

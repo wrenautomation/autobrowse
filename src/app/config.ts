@@ -45,6 +45,11 @@ const schema = z.object({
     .transform((v) => !/^(false|0|no)$/i.test(v)),
   /** How the browser acts: `human` (paced like a person; sites watch for the other kind) or `fast` (demos, tests). */
   pace: z.enum(["human", "fast"]).default("human"),
+  /** Draw the pointer on the page as a dot, to watch a headed run; it adds an element sites can see. */
+  showPointer: z
+    .string()
+    .default("false")
+    .transform((v) => /^(true|1|yes)$/i.test(v)),
   /** Screenshots and Playwright traces from flows that needed a person or failed. */
   artifactsDir: z.string().min(1).default("~/.config/autobrowse/artifacts"),
   /** Raw Playwright codegen output from `record --flow`; may hold typed secrets, never committed. */
@@ -225,6 +230,7 @@ export const ENV_KEYS = {
   browserChannel: "BROWSER_CHANNEL",
   browserHeadless: "BROWSER_HEADLESS",
   pace: "PACE",
+  showPointer: "SHOW_POINTER",
   artifactsDir: "ARTIFACTS_DIR",
   recordingsDir: "RECORDINGS_DIR",
   shotsBucket: "SHOTS_BUCKET",
