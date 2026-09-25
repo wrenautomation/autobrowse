@@ -37,6 +37,14 @@ export const cardSchema = z.object({
   postal: z.string().optional(),
   /** The profile it bills to (`autobrowse profile`); absent: the only profile. */
   owner: z.string().optional(),
+  /** Its receipts and invoices go here, else the owner's email (`wallet tell`). */
+  email: z.string().trim().email().optional(),
+  /** Its charges are texted here, else the owner's phone. */
+  phone: z
+    .string()
+    .trim()
+    .regex(/^\+\d{8,15}$/)
+    .optional(),
   addedAt: z.string(),
 });
 export type Card = z.infer<typeof cardSchema>;

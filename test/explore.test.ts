@@ -10,6 +10,7 @@ import { memorySink } from "../src/deps/sink.js";
 import { fakeDesktop } from "../src/desktop/types.js";
 import { startExplore } from "../src/explore/server.js";
 import type { Charge, Receipt } from "../src/money/charges.js";
+import type { Contacts } from "../src/money/profile.js";
 import { parseCardLine } from "../src/money/wallet.js";
 import { loadRecording } from "../src/recorder/store.js";
 
@@ -37,7 +38,7 @@ describe("explore mode", () => {
   const audit = memoryAudit();
   // Stripe's public test Visa, never a real card.
   const visa = parseCardLine("4242424242424242 09/30 321", { label: "main", kind: "credit" });
-  const charges: Array<[Charge, Receipt]> = [];
+  const charges: Array<[Charge, Receipt, Contacts?]> = [];
   const send = async (cmd: Record<string, unknown>, wait = false) => {
     const r = await fetch(`http://127.0.0.1:${port}/${wait ? "?wait=1" : ""}`, {
       method: "POST",
@@ -61,10 +62,10 @@ describe("explore mode", () => {
       audit,
       cards: async ({ label }) => {
         if (label && label !== "main") throw new Error(`no card "${label}" in the wallet`);
-        return visa;
+        return { ...visa, tell: { email: "card-owner@x.co" } };
       },
-      charges: async (c, r) => {
-        charges.push([c, r]);
+      charges: async (c, r, tell) => {
+        charges.push([c, r, tell]);
         return ["email", "text"];
       },
       approve: async (ask) => {
@@ -307,6 +308,12 @@ describe("explore mode", () => {
     const cardUses = (await audit.recent()).filter((u) => u.by.startsWith("place card"));
     expect(cardUses.map((u) => u.allowed)).toEqual([true, true, false]);
     expect(JSON.stringify(cardUses)).not.toContain("4242424242424242");
+    // Its charge is told to the card's own contacts, and the flow's yes covers the pay click.
+    const asked = asks.length;
+    await send({ cmd: "click", hints: { role: "button", name: "Buy now" } }, true);
+    expect(asks).toHaveLength(asked);
+    expect(charges.at(-1)?.[0].card).toMatch(/Visa credit ending 4242/);
+    expect(charges.at(-1)?.[2]).toEqual({ email: "card-owner@x.co" });
   });
 });
 

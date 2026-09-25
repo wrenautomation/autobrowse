@@ -45,8 +45,35 @@ export const profileSchema = z.object({
     .optional(),
   gender: z.string().trim().optional(),
   address: addressSchema.optional(),
+  /** Where a charge's receipt and invoice go. */
+  email: z.string().trim().email().optional(),
+  /** Where a charge is texted (E.164). */
+  phone: z
+    .string()
+    .trim()
+    .regex(/^\+\d{8,15}$/, "phone: +<country><number>, digits only")
+    .optional(),
 });
 export type Profile = z.infer<typeof profileSchema>;
+
+/** Who hears about a card's charges; a field left out goes to this machine's defaults. */
+export interface Contacts {
+  email?: string;
+  phone?: string;
+}
+
+/** A card's own contacts first, then its owner's. */
+export function contactsOf(
+  card: { email?: string | undefined; phone?: string | undefined },
+  owner: Profile | null,
+): Contacts {
+  const email = card.email ?? owner?.email;
+  const phone = card.phone ?? owner?.phone;
+  return { ...(email ? { email } : {}), ...(phone ? { phone } : {}) };
+}
+
+/** `+15551234567` → `••4567`: enough to know which phone, not the number. */
+export const phoneEnding = (p: string) => `••${p.slice(-4)}`;
 
 const COUNTRY_NAMES: Readonly<Record<string, string>> = { CA: "Canada", US: "United States" };
 
@@ -57,6 +84,8 @@ export function describeProfile(p: Profile): string {
     `${p.id}: ${p.name}`,
     p.birthday ? `born ${p.birthday}` : null,
     p.gender ?? null,
+    p.email ? `receipts ${p.email}` : null,
+    p.phone ? `texts ${phoneEnding(p.phone)}` : null,
     a
       ? `${[a.line1, a.line2].filter(Boolean).join(", ")}, ${a.city} ${a.regionCode} ${a.postal}, ${a.country}`
       : "no address",

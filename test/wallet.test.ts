@@ -9,7 +9,14 @@ import {
 } from "@aws-sdk/client-ssm";
 import { plainCipher } from "credvault";
 import { describe, expect, it } from "vitest";
-import { backedUpProfiles, fileProfiles, ownerOf, type Profile } from "../src/money/profile.js";
+import {
+  backedUpProfiles,
+  contactsOf,
+  fileProfiles,
+  ownerOf,
+  type Profile,
+  profileSchema,
+} from "../src/money/profile.js";
 import {
   backedUpWallet,
   type Card,
@@ -240,6 +247,21 @@ describe("profiles", () => {
     expect(ownerOf([a], undefined)?.id).toBe("william");
     expect(ownerOf([a, b], undefined)).toBeNull();
     expect(ownerOf([a, b], "wren")?.id).toBe("wren");
+  });
+  it("a charge is told to the card's own contacts, else its owner's", () => {
+    const owner = profileSchema.parse({
+      id: "william",
+      name: "W",
+      email: "me@x.co",
+      phone: "+15551234567",
+    });
+    expect(contactsOf({}, owner)).toEqual({ email: "me@x.co", phone: "+15551234567" });
+    expect(contactsOf({ email: "cards@x.co" }, owner)).toEqual({
+      email: "cards@x.co",
+      phone: "+15551234567",
+    });
+    expect(contactsOf({}, null)).toEqual({});
+    expect(() => profileSchema.parse({ id: "w", name: "W", phone: "555-1234" })).toThrow();
   });
   it("the file is sealed and backed up; an empty Mac fills from the backup", async () => {
     const dir = mkdtempSync(join(tmpdir(), "profiles-"));

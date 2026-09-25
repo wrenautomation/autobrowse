@@ -621,7 +621,7 @@ export function cardsFor(settings: Settings): ExploreOptions["cards"] {
   if (process.platform !== "darwin") return undefined;
   return async ({ host, label, subscription }) => {
     const { pickCard } = await import("../money/wallet.js");
-    const { ownerOf } = await import("../money/profile.js");
+    const { contactsOf, ownerOf } = await import("../money/profile.js");
     const card = await pickCard(await walletFor(settings), {
       host,
       label,
@@ -630,7 +630,11 @@ export function cardsFor(settings: Settings): ExploreOptions["cards"] {
     });
     // The billing address is the owner's: a checkout's address fields come from the profile.
     const owner = ownerOf(await (await profilesFor(settings)).list(), card.owner);
-    return { ...card, ...(owner?.address ? { billing: owner.address } : {}) };
+    return {
+      ...card,
+      ...(owner?.address ? { billing: owner.address } : {}),
+      tell: contactsOf(card, owner),
+    };
   };
 }
 
@@ -650,18 +654,24 @@ export function cardsOnFileFor(settings: Settings): NonNullable<ExploreOptions["
 
 /**
  * How a charge is told: a text over the phone channels, an email with the
- * receipt to RECEIPTS_TO (else NOTIFY_TO), and a line in charges.jsonl.
+ * receipt, and a line in charges.jsonl. To the card's own contacts (card,
+ * then its owner's profile), else RECEIPTS_TO (else NOTIFY_TO) and this
+ * machine's phone.
  */
 export function chargesFor(
   settings: Settings,
   gmail: GmailUserClient,
   http = httpClient(),
 ): NonNullable<ExploreOptions["charges"]> {
-  const texts = channelsFor(settings, gmail, http).filter(
-    (c) => (c.name === "phone" || c.name === "linq") && c.note,
-  );
   const from = settings.notifyFrom ?? settings.googleAdminUser;
-  const to = settings.receiptsTo ?? settings.notifyTo;
+  const receiptsTo = settings.receiptsTo ?? settings.notifyTo;
+  const phone = phoneFor(settings);
+  const linq = linqFor(settings, http);
+  const textsTo = (number?: string) =>
+    [
+      phone && phoneChannel(number ? { ...phone, number } : phone),
+      linq && linqChannel(number ? { ...linq, to: number } : linq),
+    ].filter((c): c is Channel => Boolean(c?.note));
   const ledger = chainedFile<ChargeRow>(ledgerPath(settings, "charges"));
   // The merchant's invoice goes to the account's inbox; one that is already the receipts inbox is not read.
   const invoice = async (c: Charge, since: Date) => {
@@ -669,7 +679,7 @@ export function chargesFor(
       .get(c.site)
       .catch(() => null);
     const inbox = [cred?.username, cred?.codesInbox].find((a) => a?.includes("@"));
-    if (!inbox || inbox.toLowerCase() === to?.toLowerCase()) return null;
+    if (!inbox || inbox.toLowerCase() === receiptsTo?.toLowerCase()) return null;
     const domain = registrable(c.host);
     const found = await gmail.whole(
       inbox,
@@ -677,8 +687,10 @@ export function chargesFor(
     );
     return found.find((m) => m.from.toLowerCase().includes(domain)) ?? found[0] ?? null;
   };
-  return async (c, r) =>
-    (
+  return async (c, r, tell) => {
+    const to = tell?.email ?? receiptsTo;
+    const texts = textsTo(tell?.phone);
+    return (
       await reportCharge(
         {
           ledger,
@@ -692,6 +704,7 @@ export function chargesFor(
         r,
       )
     ).told;
+  };
 }
 
 /** The store `autobrowse env` and prod's sink share: SSM under /autobrowse/config. */

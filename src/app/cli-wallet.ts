@@ -54,6 +54,8 @@ export function registerWalletCommands(program: Command, settings: Settings): vo
     .option("--region-code <code>", "abbreviated: AB")
     .option("--postal <code>")
     .option("--country <cc>", "two letters: CA")
+    .option("--email <address>", "where its cards' receipts and invoices go")
+    .option("--phone <+number>", "where its cards' charges are texted")
     .action(async (id: string, o: Record<string, string | undefined>) => {
       const { describeProfile, profileSchema, addressSchema } = await import("../money/profile.js");
       const store = await profilesFor(settings);
@@ -72,7 +74,13 @@ export function registerWalletCommands(program: Command, settings: Settings): vo
       const next = profileSchema.parse({
         ...was,
         id,
-        ...def({ name: o.name ?? was?.name, birthday: o.birthday, gender: o.gender }),
+        ...def({
+          name: o.name ?? was?.name,
+          birthday: o.birthday,
+          gender: o.gender,
+          email: o.email,
+          phone: o.phone,
+        }),
         ...(Object.keys(addr).length || was?.address
           ? { address: addressSchema.parse({ ...was?.address, ...addr }) }
           : {}),
@@ -144,6 +152,25 @@ export function registerWalletCommands(program: Command, settings: Settings): vo
       if (!card) throw new Error(`no card ${label}`);
       await w.put({ ...card, owner: profile });
       console.log(`${label} bills to ${profile}`);
+    });
+  wallet
+    .command("tell <label>")
+    .description(
+      "Where this card's receipts and charge texts go; unset, the owner profile's, else this machine's",
+    )
+    .option("--email <address>")
+    .option("--phone <+number>")
+    .action(async (label: string, o: { email?: string; phone?: string }) => {
+      const { cardSchema } = await import("../money/wallet.js");
+      const { phoneEnding } = await import("../money/profile.js");
+      const w = await walletFor(settings);
+      const card = await w.get(label);
+      if (!card) throw new Error(`no card ${label}`);
+      const next = cardSchema.parse({ ...card, ...o });
+      await w.put(next);
+      console.log(
+        `${label}: receipts ${next.email ?? "(owner's)"}, texts ${next.phone ? phoneEnding(next.phone) : "(owner's)"}`,
+      );
     });
   wallet
     .command("history <label>")

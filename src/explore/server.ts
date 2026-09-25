@@ -53,7 +53,7 @@ import {
 } from "../gates/payment.js";
 import type { Amount } from "../gates/spend.js";
 import { type Charge, type Receipt, receiptOutcome, stillAsking } from "../money/charges.js";
-import { ADDRESS_FIELDS, type Address } from "../money/profile.js";
+import { ADDRESS_FIELDS, type Address, type Contacts } from "../money/profile.js";
 import {
   type Card,
   cardEnding,
@@ -199,7 +199,7 @@ export interface ExploreOptions {
     host: string;
     label: string | null;
     subscription: boolean;
-  }) => Promise<Card & { billing?: Address }>;
+  }) => Promise<Card & { billing?: Address; tell?: Contacts }>;
   /**
    * Which card each host was given: written when a card is placed, read when a
    * site charges the card it keeps, so every charge names its card's ending.
@@ -209,7 +209,7 @@ export interface ExploreOptions {
     on(host: string): Promise<string | null>;
   };
   /** Each spending click a person said yes to, with its receipt page: texted, emailed, written down. */
-  charges?: (c: Charge, r: Receipt) => Promise<string[]>;
+  charges?: (c: Charge, r: Receipt, tell?: Contacts) => Promise<string[]>;
   /** Where every `place` is recorded (allowed or refused); never the value. */
   audit?: SecretAudit;
   /**
@@ -477,7 +477,7 @@ async function serve(
   };
   /** Card-and-host pairs a person said yes to this session; the card last placed, for the receipt. */
   const cardsYes = new Set<string>();
-  let placedCard: { line: string; recurring: boolean } | null = null;
+  let placedCard: { line: string; recurring: boolean; tell?: Contacts } | null = null;
   const pageText = async () => (await page.innerText("body").catch(() => "")).slice(0, 20_000);
   const placeCard = async (
     c: Extract<Command, { cmd: "place" }>,
@@ -498,7 +498,7 @@ async function serve(
         by: `place ${c.secret}`,
         allowed,
       });
-    let card: Card & { billing?: Address };
+    let card: Card & { billing?: Address; tell?: Contacts };
     try {
       card = await opts.cards({ host, label: want.label, subscription: recurring });
     } catch (err) {
@@ -534,7 +534,7 @@ async function serve(
       await opts.cardsOnFile
         ?.placed({ at: new Date().toISOString(), site: opts.site, host, card: cardEnding(card) })
         .catch(() => undefined);
-    placedCard = { line: cardEnding(card), recurring };
+    placedCard = { line: cardEnding(card), recurring, ...(card.tell ? { tell: card.tell } : {}) };
     return { ok: true, secret: c.secret };
   };
   /** After a yes and the click: the page it landed on is the receipt. A failed report never fails the click. */
@@ -567,6 +567,7 @@ async function serve(
           outcome: receiptOutcome(whole),
         },
         { text, ...(png ? { png } : {}) },
+        placedCard?.tell,
       )
       .catch(() => []);
   };
