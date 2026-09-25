@@ -66,7 +66,7 @@ import {
 } from "../channels/index.js";
 import { cloudflare, verifyCloudflareToken } from "../clients/cloudflare.js";
 import { type GmailUserClient, gmailClient } from "../clients/gmail.js";
-import { googleAdmin } from "../clients/google-admin.js";
+import { type GoogleAdminClient, googleAdmin } from "../clients/google-admin.js";
 import { type HttpClient, httpClient, safeUrl } from "../clients/http.js";
 import { instantly } from "../clients/instantly.js";
 import { type LinqClient, linqClient } from "../clients/linq.js";
@@ -775,6 +775,26 @@ export function googleTokens(
   return tokenFor;
 }
 
+/** The Workspace admin API as GOOGLE_ADMIN_USER: domains, users, their names and passwords. */
+export function googleAdminFor(
+  settings: Settings,
+  http = httpClient(),
+  scopes: readonly string[] = [
+    SCOPES.directoryDomain,
+    SCOPES.directoryUser,
+    SCOPES.siteVerification,
+  ],
+): GoogleAdminClient {
+  return googleAdmin({
+    token: googleTokens(
+      settings,
+      undefined,
+      http,
+    )(required(settings.googleAdminUser, "GOOGLE_ADMIN_USER"), scopes),
+    http,
+  });
+}
+
 export function gmailFor(settings: Settings, http = httpClient()): GmailUserClient {
   return gmailClient({
     tokenFor: googleTokens(settings),
@@ -880,7 +900,6 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   const http = httpClient();
   const llm = llmFor(settings, http);
   const memory = memoryFor(settings, http);
-  const tokenFor = googleTokens(settings);
   const gmail = gmailFor(settings, http);
   const ssm = lazy(() => new SSMClient({ region: settings.awsRegion }));
 
@@ -919,16 +938,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
         http,
       }),
     ),
-    google: lazy(() =>
-      googleAdmin({
-        token: tokenFor(required(settings.googleAdminUser, "GOOGLE_ADMIN_USER"), [
-          SCOPES.directoryDomain,
-          SCOPES.directoryUser,
-          SCOPES.siteVerification,
-        ]),
-        http,
-      }),
-    ),
+    google: lazy(() => googleAdminFor(settings, http)),
     gmail,
     roster: lazy(() =>
       ssmRosterStore({ param: settings.rosterSsmParam, region: settings.awsRegion }),

@@ -281,7 +281,8 @@ pnpm autobrowse workspace-logo logo.png   # the org logo across Gmail/Calendar/D
 pnpm autobrowse profile-photo pfp.gif --as google@wren   # an account's round picture in Gmail; a GIF stays animated
 pnpm autobrowse enroll-totp cloudflare --url https://dash.cloudflare.com/profile/authentication  # reads the seed, stores it, confirms
 pnpm autobrowse enroll-totp will@a.com william@a.com  # several Google accounts, one after another
-pnpm autobrowse creds totp-share will@a.com           # same authenticator into Apple Passwords (all your devices)
+pnpm autobrowse creds to-passwords will@a.com         # login + authenticator into Apple Passwords, sorted (all your devices)
+pnpm autobrowse inbox-name will@a.com will jin        # fix a Workspace inbox's display name (admin API)
 pnpm autobrowse run bootstrap cloudflare --plan '{"provider":"cloudflare"}'   # mints CLOUDFLARE_ACCOUNT_ID + API token into .env (--plan: JSON, a file, or -)
 # map a page by hand or by model: one open browser, one command at a time (token printed at start)
 pnpm autobrowse explore cloudflare --url https://dash.cloudflare.com/profile/api-tokens

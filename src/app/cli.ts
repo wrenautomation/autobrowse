@@ -235,6 +235,23 @@ program
     }
   });
 
+program
+  .command("inbox-name <address> <first> <last>")
+  .description(
+    "The name mail shows beside a Workspace inbox (users cannot change it themselves): set through the admin API",
+  )
+  .action(async (address: string, first: string, last: string) => {
+    const { googleAdminFor } = await import("./services.js");
+    const { SCOPES } = await import("../google-auth.js");
+    // Only the user scope: a name needs nothing more.
+    await googleAdminFor(settings, undefined, [SCOPES.directoryUser]).setName(
+      address.toLowerCase(),
+      first,
+      last,
+    );
+    console.log(`${address}: name is now ${first} ${last} (mail shows it within minutes)`);
+  });
+
 for (const verb of ["approve", "reject"] as const) {
   program
     .command(`${verb} <workflow> <key> <gate>`)

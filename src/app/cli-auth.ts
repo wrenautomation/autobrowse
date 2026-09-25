@@ -382,32 +382,49 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       );
     });
   creds
-    .command("totp-share <sites...>")
+    .command("to-passwords <sites...>")
     .description(
-      "Put each account's authenticator in Apple Passwords (iCloud syncs it to your iPhone, iPad and Macs): the same seed autobrowse signs in with, never shown",
+      "Put the accounts in Apple Passwords, sorted: address, password and authenticator on one login each; iCloud syncs them to your iPhone, iPad and Macs. Nothing is shown",
     )
-    .action(async (siteArgs: string[]) => {
-      if (process.platform !== "darwin")
-        throw new Error("totp-share opens Apple Passwords (macOS)");
+    .option(
+      "--without-authenticator",
+      "also add logins with no authenticator yet (Passwords never adds one to them later)",
+    )
+    .action(async (siteArgs: string[], o: { withoutAuthenticator?: boolean }) => {
+      const { importIntoPasswords, otpauthUri } = await import("./apple-passwords.js");
       const store = credentialsFor(settings);
-      const { execFile } = await import("node:child_process");
+      const rows = [];
       for (const site of siteArgs.map((a) => accountSite(a))) {
         const cred = await store.get(site);
-        if (!cred?.totpSecret) {
-          console.log(`${site}: no authenticator yet (autobrowse enroll-totp ${site})`);
+        if (!cred?.password) {
+          console.log(`${site}: no password stored`);
           continue;
         }
-        const issuer = (site.split("@")[0] ?? site).replace(/^./, (c) => c.toUpperCase());
-        const uri = `otpauth://totp/${encodeURIComponent(`${issuer}:${cred.username}`)}?secret=${cred.totpSecret}&issuer=${encodeURIComponent(issuer)}`;
-        // Passwords asks which saved login it belongs to; the seed goes nowhere else.
-        await new Promise<void>((res, rej) =>
-          execFile("open", [uri], (err) =>
-            err ? rej(new Error(`open failed for ${site}`)) : res(),
-          ),
+        if (!cred.totpSecret && !o.withoutAuthenticator) {
+          console.log(`${site}: skipped, no authenticator yet (autobrowse enroll-totp ${site})`);
+          continue;
+        }
+        const provider = site.split("@")[0] ?? site;
+        const issuer = provider.replace(/^./, (c) => c.toUpperCase());
+        const login = resolveLogin(SITE_LOGINS, site);
+        rows.push({
+          title: `${issuer} (${cred.username})`,
+          url: login?.home ?? `https://${provider}.com/`,
+          username: cred.username,
+          password: cred.password,
+          notes: "added by autobrowse",
+          ...(cred.totpSecret
+            ? { otpauth: otpauthUri(issuer, cred.username, cred.totpSecret) }
+            : {}),
+        });
+        console.log(
+          `${site}: password${cred.totpSecret ? " + authenticator" : " only (no authenticator yet)"}`,
         );
-        console.log(`${site}: opened in Passwords; pick the login it belongs to`);
-        await new Promise((r) => setTimeout(r, 1_500));
       }
+      if (!rows.length) return;
+      const said = await importIntoPasswords(rows);
+      console.log(`Passwords: ${said || "(no summary shown)"}`);
+      console.log("an import never overwrites a login already there");
     });
   creds
     .command("list [platform]")

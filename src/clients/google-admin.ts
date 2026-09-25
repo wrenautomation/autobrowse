@@ -31,6 +31,8 @@ export interface GoogleAdminClient {
   getUser(email: string): Promise<{ primaryEmail: string } | null>;
   createUser(user: NewUser): Promise<{ primaryEmail: string }>;
   setPassword(email: string, password: string): Promise<void>;
+  /** The name mail shows beside the address; a Workspace user cannot change it themselves. */
+  setName(email: string, givenName: string, familyName: string): Promise<void>;
 }
 
 export class GoogleAdminError extends Error {
@@ -121,6 +123,14 @@ export function googleAdmin(opts: { token: TokenSupplier; http: HttpClient }): G
         },
       );
       if (!u) throw new GoogleAdminError("set password", 404, null);
+    },
+    async setName(email, givenName, familyName) {
+      const u = await call<{ primaryEmail: string }>(
+        "set name",
+        `${DIRECTORY}/users/${encodeURIComponent(email)}`,
+        { method: "PUT", body: { name: { givenName, familyName } } },
+      );
+      if (!u) throw new GoogleAdminError("set name", 404, null);
     },
   };
 }
