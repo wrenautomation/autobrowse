@@ -25,6 +25,7 @@ import {
   syncedCredentials,
   syncedEnvStore,
   tailJson,
+  versionsFile,
 } from "credvault";
 import type { Logger } from "pino";
 import { fileStepLedger, type StepLedger } from "../agent/ledger.js";
@@ -373,6 +374,8 @@ export function identitiesFor(settings: Settings): IdentityStore {
   return layeredIdentities(fileIdentities(settings.accountsFile), envIdentities(settings.accounts));
 }
 
+const syncedStores = new Map<string, CredentialStore>();
+
 export function credentialsFor(
   settings: Settings,
   o: {
@@ -389,19 +392,30 @@ export function credentialsFor(
   const env = envCredentials(process.env, CRED_ENV);
   // SSM is the truth: reads ask it first and refresh the file, writes land in both.
   // Env baked in at deploy is only the fallback, so a changed password is never stale on the box.
+  // One synced store per file for the whole process: its cache is what keeps KMS reads down.
+  const key = `${settings.credentialsFile}|${settings.credentialsCipher}|${settings.awsRegion}`;
+  const syncedNow = () => {
+    const made = syncedStores.get(key);
+    if (made) return made;
+    const synced = syncedCredentials(file, envStoreFor(settings), {
+      ...CRED_ENV,
+      history: credentialHistoryFor(settings),
+      // Which SSM version the file holds per site, so the next CLI run trusts the file.
+      versions: versionsFile(`${expandHome(settings.credentialsFile)}.versions.json`),
+      onSharedError: (site, err, during) => {
+        if (during === "write")
+          console.error(
+            `${site}: kept here, not in the shared store (${err instanceof Error ? err.message : String(err)}); autobrowse creds push ${site}`,
+          );
+      },
+    });
+    syncedStores.set(key, synced);
+    return synced;
+  };
   const store =
     settings.credentialsShared === "ssm" && o.shared !== false
       ? (() => {
-          const synced = syncedCredentials(file, envStoreFor(settings), {
-            ...CRED_ENV,
-            history: credentialHistoryFor(settings),
-            onSharedError: (site, err, during) => {
-              if (during === "write")
-                console.error(
-                  `${site}: kept here, not in the shared store (${err instanceof Error ? err.message : String(err)}); autobrowse creds push ${site}`,
-                );
-            },
-          });
+          const synced = syncedNow();
           return layeredCredentials([synced, env], synced);
         })()
       : layeredCredentials([env, file]);
@@ -574,10 +588,7 @@ export function paceFor(settings: Settings): Pace | null {
  * store (SSM) in prod; elsewhere the env file in front of it, so a token
  * minted on the laptop is on the box and survives the laptop.
  */
-export function sinkFor(
-  settings: Settings,
-  ssm: SSMClient = lazy(() => new SSMClient({ region: settings.awsRegion })),
-): EnvStore {
+export function sinkFor(settings: Settings, ssm: SSMClient = ssmFor(settings)): EnvStore {
   const shared = envStoreFor(settings, ssm);
   return settings.secretSink === "ssm"
     ? shared
@@ -591,7 +602,7 @@ export function sinkFor(
  */
 export function credentialHistoryFor(
   settings: Settings,
-  ssm: SSMClient = lazy(() => new SSMClient({ region: settings.awsRegion })),
+  ssm: SSMClient = ssmFor(settings),
 ): CredentialHistory {
   return ssmCredentialHistory(ssm, `${ENV_STORE_PREFIX}/history`);
 }
@@ -720,12 +731,30 @@ export function chargesFor(
   };
 }
 
-/** The store `autobrowse env` and prod's sink share: SSM under /autobrowse/config. */
-export function envStoreFor(
-  settings: Settings,
-  ssm: SSMClient = lazy(() => new SSMClient({ region: settings.awsRegion })),
-): EnvStore {
-  return ssmEnvStore(ssm, ENV_STORE_PREFIX);
+/** One SSM client per region for the process, made on first use. */
+const ssmClients = new Map<string, SSMClient>();
+function ssmFor(settings: Settings): SSMClient {
+  let c = ssmClients.get(settings.awsRegion);
+  if (!c) {
+    c = lazy(() => new SSMClient({ region: settings.awsRegion }));
+    ssmClients.set(settings.awsRegion, c);
+  }
+  return c;
+}
+
+/**
+ * The store `autobrowse env` and prod's sink share: SSM under /autobrowse/config.
+ * One per client for the process: it remembers each value by version, and every
+ * value read from SSM is a KMS decrypt (billed past 20k a month).
+ */
+const envStores = new WeakMap<SSMClient, EnvStore>();
+export function envStoreFor(settings: Settings, ssm: SSMClient = ssmFor(settings)): EnvStore {
+  let store = envStores.get(ssm);
+  if (!store) {
+    store = ssmEnvStore(ssm, ENV_STORE_PREFIX);
+    envStores.set(ssm, store);
+  }
+  return store;
 }
 
 export function memoryFor(settings: Settings, http = httpClient()): Memory {
@@ -902,7 +931,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   const llm = llmFor(settings, http);
   const memory = memoryFor(settings, http);
   const gmail = gmailFor(settings, http);
-  const ssm = lazy(() => new SSMClient({ region: settings.awsRegion }));
+  const ssm = ssmFor(settings);
 
   const list = channelsFor(settings, gmail, http);
   if (list.length === 0) log.warn("no channel configured: gates are visible only in the UI/CLI");
