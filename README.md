@@ -326,6 +326,8 @@ pnpm autobrowse reject domain wren-six.com purchase
 pnpm autobrowse pause domain wren-six.com
 pnpm autobrowse play domain wren-six.com
 pnpm autobrowse run domain wren-six.com        # after a failure: resumes the stored plan
+# A plan that names a file on this Mac (a photo to upload) ships it to the shots bucket's inputs/
+# first; the box can read only that folder, and files there expire after a week.
 pnpm autobrowse reset domain wren-six.com
 pnpm autobrowse desktop                        # the Mac outside the browser: apps, menus, root commands
 ```

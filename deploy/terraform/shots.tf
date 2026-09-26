@@ -30,12 +30,33 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "shots" {
   }
 }
 
-# The box writes shots; it never reads, lists or deletes them.
+# The box writes shots; it never lists or deletes them. It reads only
+# inputs/: the files a plan named (`autobrowse run` ships them there).
 data "aws_iam_policy_document" "box_shots" {
   statement {
     sid       = "ShipShots"
     actions   = ["s3:PutObject"]
     resources = ["${aws_s3_bucket.shots.arn}/*"]
+  }
+  statement {
+    sid       = "ReadRunInputs"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.shots.arn}/inputs/*"]
+  }
+}
+
+# A plan's files are needed for the run, not kept: gone after a week.
+resource "aws_s3_bucket_lifecycle_configuration" "shots" {
+  bucket = aws_s3_bucket.shots.id
+  rule {
+    id     = "run-inputs-expire"
+    status = "Enabled"
+    filter {
+      prefix = "inputs/"
+    }
+    expiration {
+      days = 7
+    }
   }
 }
 

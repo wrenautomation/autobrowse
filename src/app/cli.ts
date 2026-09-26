@@ -108,7 +108,14 @@ program
   .option("--plan <json|file>", "inline JSON, a file path, or - for stdin")
   .option("--dry-run", "plan only; stop before the first irreversible step")
   .action(async (workflow: string, key: string, o: { plan?: string; dryRun?: boolean }) => {
-    const plan = o.plan ? ((await readJson(o.plan)) as Record<string, unknown>) : null;
+    let plan = o.plan ? ((await readJson(o.plan)) as Record<string, unknown>) : null;
+    // The run may happen on the box: files the plan names on this machine go with it.
+    if (plan && settings.shotsBucket) {
+      const { shipPlanFiles, s3InputStore } = await import("../browser/run-files.js");
+      const r = await shipPlanFiles(plan, s3InputStore(settings.shotsBucket, settings.awsRegion));
+      plan = r.plan as Record<string, unknown>;
+      for (const f of r.shipped) console.log(`shipped ${f} (the run reads it for a week)`);
+    }
     await patient(api.run(workflow, key).run(plan ? { ...plan, dryRun: o.dryRun ?? false } : null));
     console.log(
       `${plan ? "started" : "resumed"} ${workflow}/${key}; watch: autobrowse status ${workflow} ${key}`,

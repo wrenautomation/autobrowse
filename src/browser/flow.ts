@@ -14,7 +14,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Locator, Page } from "playwright";
+import type { FileChooser, Locator, Page } from "playwright";
 import { expandHome } from "../google-auth.js";
 import { redactAria, redactText } from "../recorder/redact.js";
 import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js";
@@ -283,19 +283,45 @@ async function doOp(
     case "press":
       return hands.press(target, op.key, { timeout });
     case "upload": {
-      const isInput = await target
-        .evaluate(
-          (el) => el.tagName === "INPUT" && (el as { type?: string }).type === "file",
-          undefined,
-          { timeout },
-        )
-        .catch(() => false);
-      if (isInput) return target.setInputFiles(op.files, { timeout });
-      const chooser = page.waitForEvent("filechooser", { timeout });
-      await hands.click(target, { timeout });
-      return (await chooser).setFiles(op.files);
+      // A ref from another machine (s3://, a signed URL) becomes a temp file for this act.
+      const { localCopies } = await import("./run-files.js");
+      const local = await localCopies(op.files);
+      try {
+        return await uploadFiles(page, target, local.paths, timeout, hands);
+      } finally {
+        await local.done();
+      }
     }
   }
+}
+
+/** Files into a file input, else through the chooser the target opens. */
+async function uploadFiles(
+  page: Page,
+  target: Locator,
+  files: string[],
+  timeout: number,
+  hands: Hands,
+): Promise<void> {
+  const isInput = await target
+    .evaluate(
+      (el) => el.tagName === "INPUT" && (el as { type?: string }).type === "file",
+      undefined,
+      { timeout },
+    )
+    .catch(() => false);
+  if (isInput) return target.setInputFiles(files, { timeout });
+  // Caught here: a click that throws must not leave the wait to reject unhandled.
+  const chooser = page.waitForEvent("filechooser", { timeout }).catch((e: unknown) => e);
+  await hands.click(target, { timeout });
+  const got = await chooser;
+  if (!(got instanceof Error)) return (got as FileChooser).setFiles(files);
+  // Some buttons open no chooser (YouTube Studio): their hidden input sits beside them.
+  const near = target
+    .locator("xpath=ancestor-or-self::*[.//input[@type='file']][1]//input[@type='file']")
+    .first();
+  if (await near.count()) return near.setInputFiles(files, { timeout });
+  throw got;
 }
 
 export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): FlowRunner {
