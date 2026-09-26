@@ -1,6 +1,8 @@
 /** The library seams: each layer on its own, with the caller's own pieces plugged in. */
+import { memoryEnvStore } from "credvault";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { missingEntries } from "../src/app/services.js";
 import { defineFlow } from "../src/browser/flow.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
@@ -129,6 +131,23 @@ describe("use as a library", () => {
     expect(reads).toBe(2);
     expect(seen.length).toBe(1);
     expect(seen[0]).toMatch(/^Bearer laptop \/v[\d.]+\/me\/adaccounts$/);
+  });
+
+  it("a token miss reads only the names this process lacks, never the whole store", async () => {
+    const store = memoryEnvStore({ HAVE: "1", NEW_TOKEN: "t" });
+    const asked: string[][] = [];
+    const counted = {
+      ...store,
+      getMany: async (names: string[]) => {
+        asked.push(names);
+        return store.getMany(names);
+      },
+    };
+    expect(await missingEntries(counted, (n) => n === "HAVE")).toEqual([
+      { name: "NEW_TOKEN", value: "t" },
+    ]);
+    expect(await missingEntries(counted, () => true)).toEqual([]);
+    expect(asked).toEqual([["NEW_TOKEN"]]);
   });
 
   it("the verb over the caller's own legs: no site facade, no agent", async () => {

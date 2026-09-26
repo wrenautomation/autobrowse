@@ -50,11 +50,12 @@ export interface SiteParts {
   /** What the sink holds, with each value's lapse date: turns on `renew`. */
   kept?: () => Promise<EnvListing[]>;
   /**
-   * Every entry the shared store holds: a call that finds no token reads it
-   * once and retries, so a token minted on another machine (the laptop) is
-   * seen here (the box) without a restart.
+   * The shared store's entries this process lacks (`have` says which it has):
+   * a call that finds no token reads them once and retries, so a token minted
+   * on another machine (the laptop) is seen here (the box) without a restart.
+   * Only the missing ones: every value read from SSM is a KMS decrypt.
    */
-  reload?: () => Promise<EnvEntry[]>;
+  reload?: (have: (name: string) => boolean) => Promise<EnvEntry[]>;
 }
 
 /** How long a store read on a token miss stands before a miss reads again. */
@@ -168,7 +169,9 @@ export function sitesFor(p: SiteParts): SiteFacade {
           const miss = e instanceof SiteError && e.status === 501 && /no token/.test(e.message);
           if (!miss || Date.now() - readAt < RELOAD_EVERY_MS) throw e;
           readAt = Date.now();
-          const entries = await reload().catch(() => null);
+          const entries = await reload((name) => Boolean(made.get(name) ?? env(name))).catch(
+            () => null,
+          );
           if (!entries) throw e;
           for (const { name, value } of entries) if (!env(name)) made.set(name, value);
           return facade.call(...a);

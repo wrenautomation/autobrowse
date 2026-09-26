@@ -11,6 +11,7 @@ import {
   type CredentialStore,
   canaryStore,
   chainedFile,
+  type EnvEntry,
   type EnvStore,
   envCredentials,
   envFileStore,
@@ -731,6 +732,16 @@ export function chargesFor(
   };
 }
 
+/** The store's entries `have` says this process lacks, read by name: never the whole store. */
+export async function missingEntries(
+  store: EnvStore,
+  have: (name: string) => boolean,
+): Promise<EnvEntry[]> {
+  const names = (await store.list()).map((e) => e.name).filter((n) => !have(n));
+  if (!names.length) return [];
+  return Object.entries(await store.getMany(names)).map(([name, value]) => ({ name, value }));
+}
+
 /** One SSM client per region for the process, made on first use. */
 const ssmClients = new Map<string, SSMClient>();
 function ssmFor(settings: Settings): SSMClient {
@@ -1057,7 +1068,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       approve: approverFor(settings, gmailFor(settings)),
       identities: () => identitiesFor(settings).list(),
       kept: () => sink.list(),
-      reload: () => sink.all(),
+      reload: (have) => missingEntries(sink, have),
     }),
   );
   const late: { doer: Doer | null } = { doer: null };
