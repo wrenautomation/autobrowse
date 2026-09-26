@@ -8,8 +8,8 @@
  * The upload act turns a ref (or a signed https URL) back into a temp file.
  */
 import { createHash } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
@@ -33,8 +33,8 @@ const looksLikePath = (s: string) => /^(\/|~\/|\.\.?\/)/.test(s) && !s.includes(
 const expand = (s: string) => (s.startsWith("~/") ? join(homedir(), s.slice(2)) : resolve(s));
 
 export interface InputStore {
-  /** Store the bytes under `key`; the ref the box reads them back by. */
-  put(key: string, body: Uint8Array, contentType: string): Promise<string>;
+  /** Store the file under `key` (streamed: a video never sits in memory); the ref the box reads it back by. */
+  put(key: string, path: string, size: number, contentType: string): Promise<string>;
 }
 
 /**
@@ -50,12 +50,14 @@ export async function shipPlanFiles(
     if (typeof v === "string") {
       if (!looksLikePath(v)) return v;
       const path = expand(v);
-      if (!(await stat(path).catch(() => null))?.isFile()) return v;
-      const body = await readFile(path);
+      const st = await stat(path).catch(() => null);
+      if (!st?.isFile()) return v;
+      const hash = createHash("sha256");
+      for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
       const ext = extname(path).toLowerCase();
-      const key = `${INPUTS_PREFIX}${createHash("sha256").update(body).digest("hex").slice(0, 24)}${ext}`;
+      const key = `${INPUTS_PREFIX}${hash.digest("hex").slice(0, 24)}${ext}`;
       shipped.push(v);
-      return store.put(key, body, TYPES[ext] ?? "application/octet-stream");
+      return store.put(key, path, st.size, TYPES[ext] ?? "application/octet-stream");
     }
     if (Array.isArray(v)) return Promise.all(v.map(walk));
     if (v && typeof v === "object") {
@@ -135,10 +137,16 @@ export function s3InputStore(bucket: string, region: string): InputStore {
     PutObjectCommand,
   }));
   return {
-    async put(key, body, contentType) {
+    async put(key, path, size, contentType) {
       const { s3, PutObjectCommand } = await client;
       await s3.send(
-        new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType }),
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: createReadStream(path),
+          ContentLength: size,
+          ContentType: contentType,
+        }),
       );
       return `s3://${bucket}/${key}`;
     },

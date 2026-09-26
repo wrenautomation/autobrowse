@@ -21,6 +21,7 @@ import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js
 import { type Hands, HUMAN_PACE, handsFor, instantHands, type Pace } from "./human/index.js";
 import { type Hints, locate, textOf } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
+import type { SessionPark } from "./park.js";
 import { canLearn, noRepairer, type Repairer, type RepairReport, snapshotPage } from "./repair.js";
 import {
   type Artifacts,
@@ -211,9 +212,21 @@ export interface RunnerOptions {
   /** Every failure record written (kind failed/human/interrupted): what healing starts from. */
   onFailure?: (record: FailureRecord, file: string) => void;
   locks?: KeyedMutex;
+  /**
+   * Keep each run's browser for the next run on the same site instead of
+   * closing it: a gate or a hand-off between two steps keeps the page.
+   * Only for a long-lived worker; a one-shot CLI would never exit.
+   */
+  park?: SessionPark;
 }
 
 const ACT_TIMEOUT_MS = 15_000;
+
+/** The same page, fragment aside. */
+function samePage(current: string, url: string): boolean {
+  const strip = (u: string) => u.replace(/#.*$/, "").replace(/\/$/, "");
+  return strip(current) === strip(url);
+}
 
 const SETTLE_MS = 8_000;
 /** AWS's console → sign-in chain takes 30–60 s to DOMContentLoaded headless; Playwright's 30 s default cut it. */
@@ -333,11 +346,18 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
     run: (flow, input) =>
       locks.withLock(flow.site, async () => {
         // Opening the browser is the first thing the network or the machine can break.
-        const session = await openSession(flow.site, opts).catch((err: unknown) => {
-          if (isTransientBrowserError(err))
-            throw new FlowInterrupted(`${flow.site}/${flow.name}`, err, {});
-          throw err;
-        });
+        const parked = (await runner.park?.take(flow.site)) ?? null;
+        const session =
+          parked ??
+          (await openSession(flow.site, opts).catch((err: unknown) => {
+            if (isTransientBrowserError(err))
+              throw new FlowInterrupted(`${flow.site}/${flow.name}`, err, {});
+            throw err;
+          }));
+        // A kept browser already on the page the flow opens first stays put:
+        // reloading would lose what the last run left there (a form, a list).
+        let keepPage = parked !== null;
+        let broken = false;
         const stamp = `${flow.site}-${flow.name}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
         let lastGoal: string | null = null;
         mkdirSync(artifactsDir, { recursive: true });
@@ -355,7 +375,9 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           },
           async open(url, o = {}) {
             active = session.page;
-            await settle(session.page, url);
+            const stay = keepPage && samePage(session.page.url(), url);
+            keepPage = false;
+            if (!stay) await settle(session.page, url);
             if (OFFLINE_PAGE.test(session.page.url()))
               throw new Error(`net::ERR_INTERNET_DISCONNECTED opening ${url}`);
             if (o.allowWall) return;
@@ -553,12 +575,18 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             err.artifacts = artifacts;
             throw err;
           }
-          if (kind === "interrupted")
+          if (kind === "interrupted") {
+            broken = true;
             throw new FlowInterrupted(`${flow.site}/${flow.name}`, err, artifacts);
+          }
           throw new FlowFailed(`${flow.site}/${flow.name}`, err, artifacts);
         } finally {
           if (tracing) await session.context.tracing.stop().catch(() => undefined);
-          await session.close();
+          if (runner.park && !broken) {
+            // Stubs from `answer` belong to this run.
+            await session.context.unrouteAll({ behavior: "ignoreErrors" }).catch(() => undefined);
+            await runner.park.put(flow.site, session);
+          } else await session.close();
         }
       }),
   };

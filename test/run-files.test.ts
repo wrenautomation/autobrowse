@@ -40,3 +40,17 @@ describe("run files", () => {
     await expect(readFile(local.paths[0] as string)).rejects.toThrow();
   });
 });
+
+describe("temp dir reaper", () => {
+  it("removes only our stale dirs", async () => {
+    const { mkdir, readdir, utimes } = await import("node:fs/promises");
+    const { reapTempDirs } = await import("../src/browser/reap.js");
+    const root = await mkdtemp(join(tmpdir(), "reap-"));
+    for (const d of ["run-files-old", "run-files-new", "other-old"]) await mkdir(join(root, d));
+    const old = new Date(Date.now() - 2 * 3600_000);
+    await utimes(join(root, "run-files-old"), old, old);
+    await utimes(join(root, "other-old"), old, old);
+    expect(await reapTempDirs({ dir: root })).toBe(1);
+    expect((await readdir(root)).sort()).toEqual(["other-old", "run-files-new"]);
+  });
+});

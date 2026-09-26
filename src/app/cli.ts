@@ -322,10 +322,11 @@ program
   )
   .option("--dry", "name them only")
   .action(async (o: { dry?: boolean }) => {
-    const { reapOrphans } = await import("../browser/reap.js");
+    const { reapOrphans, reapTempDirs } = await import("../browser/reap.js");
     const { expandHome } = await import("../google-auth.js");
     const gone = await reapOrphans(expandHome(settings.profilesDir), o.dry ? { dry: true } : {});
     if (!gone.length) console.log("no orphaned browsers");
+    if (!o.dry) console.log(`${await reapTempDirs()} stale temp folders removed`);
     for (const x of gone)
       console.log(`${o.dry ? "orphan" : "stopped"} ${x.profile} (pid ${x.pid})`);
   });

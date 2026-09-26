@@ -67,3 +67,33 @@ export async function reapOrphans(
     }
   });
 }
+
+/** Temp dirs a file-handling step makes and removes; one a crash left behind is only ever seconds old when in use. */
+export const TEMP_PREFIXES = ["run-files-", "upload-", "passwords-"] as const;
+
+/**
+ * Remove our temp dirs older than `olderThanMs` (a crash mid-upload leaves a
+ * copy of the file; a crashed Passwords import leaves logins on disk).
+ * Returns how many went. Never throws.
+ */
+export async function reapTempDirs(
+  o: { dir?: string; olderThanMs?: number; now?: number } = {},
+): Promise<number> {
+  const { readdir, rm, stat } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = o.dir ?? tmpdir();
+  const cutoff = (o.now ?? Date.now()) - (o.olderThanMs ?? 60 * 60_000);
+  let gone = 0;
+  for (const name of await readdir(dir).catch(() => [] as string[])) {
+    if (!TEMP_PREFIXES.some((p) => name.startsWith(p))) continue;
+    const path = join(dir, name);
+    const st = await stat(path).catch(() => null);
+    if (!st?.isDirectory() || st.mtimeMs > cutoff) continue;
+    await rm(path, { recursive: true, force: true }).then(
+      () => gone++,
+      () => {},
+    );
+  }
+  return gone;
+}

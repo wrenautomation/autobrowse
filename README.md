@@ -67,7 +67,9 @@ a row; it is work.
 - **Hand-offs.** A browser flow that meets a login, captcha or consent
   throws `NeedsHuman`. The runner saves a screenshot and a Playwright trace,
   the run waits at gate `human`, the person does the thing in the
-  persistent profile and approves; the step reruns.
+  persistent profile and approves; the step reruns. The worker keeps the
+  browser open across the wait (`BROWSER_KEEP_MINUTES`, default 10; at most
+  `BROWSER_KEEP_MAX`, default 2), so the rerun starts on the same page.
 - **Verified.** A browser step is proved by an API read afterwards (the
   purchase by the Registrar API, DKIM by the record's shape, the user by
   Directory). The trace is for the person; the API read is for the machine.

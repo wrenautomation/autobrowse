@@ -53,6 +53,7 @@ import type { FlowRunner } from "../browser/flow.js";
 import { flowRunner } from "../browser/flow.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { HUMAN_PACE, type Pace } from "../browser/human/index.js";
+import { SessionPark } from "../browser/park.js";
 import { llmRepairer, noRepairer, rememberingRepairer } from "../browser/repair.js";
 import type { BrowserOptions, FailureRecord } from "../browser/session.js";
 import {
@@ -913,9 +914,17 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
 
   const guards = parseGuards(settings.guards);
   const failures: { hook: App["onFailure"] } = { hook: null };
+  const park =
+    settings.browserKeepMinutes > 0
+      ? new SessionPark({
+          idleMs: settings.browserKeepMinutes * 60_000,
+          max: settings.browserKeepMax,
+        })
+      : undefined;
   const browser = holding(
     idle,
     flowRunner(browserOptions(settings, screen), {
+      ...(park ? { park } : {}),
       onFailure: (record, file) => failures.hook?.(record, file),
       pace: paceFor(settings),
       repairer: rememberingRepairer(memory, llm ? llmRepairer(llm) : noRepairer),

@@ -45,6 +45,14 @@ const schema = z.object({
     .string()
     .default("true")
     .transform((v) => !/^(false|0|no)$/i.test(v)),
+  /**
+   * The browser a worker run used stays open this long for the next run on
+   * the same site: a check-in with you (a gate, a hand-off) keeps the page it
+   * was on. 0 = close after every run.
+   */
+  browserKeepMinutes: z.coerce.number().min(0).default(10),
+  /** At most this many browsers kept open at once (~300 MB each). */
+  browserKeepMax: z.coerce.number().int().min(1).default(2),
   /** How the browser acts: `human` (paced like a person; sites watch for the other kind) or `fast` (demos, tests). */
   pace: z.enum(["human", "fast"]).default("human"),
   /** Draw the pointer on the page as a dot, to watch a headed run; it adds an element sites can see. */
@@ -246,6 +254,8 @@ export const ENV_KEYS = {
   profilesDir: "PROFILES_DIR",
   browserChannel: "BROWSER_CHANNEL",
   browserHeadless: "BROWSER_HEADLESS",
+  browserKeepMinutes: "BROWSER_KEEP_MINUTES",
+  browserKeepMax: "BROWSER_KEEP_MAX",
   pace: "PACE",
   showPointer: "SHOW_POINTER",
   artifactsDir: "ARTIFACTS_DIR",
