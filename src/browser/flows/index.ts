@@ -1,4 +1,5 @@
 /** The hand-written browser legs, and the walker most OAuth consents are made of. */
+export { CALCOM_API_KEY, type CalcomKeyInput, calcomApiKey } from "./calcom-api-key.js";
 export { type ConsentWalk, consentFlow } from "./consent-walker.js";
 export { facebookOauthConsent } from "./facebook-oauth-consent.js";
 export { googleDkimGenerate, googleDkimStart } from "./google-dkim.js";

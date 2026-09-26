@@ -10,6 +10,7 @@
 import * as restate from "@restatedev/restate-sdk";
 import { z } from "zod";
 import { type BrowserFlow, FlowFailed, type FlowRunner } from "../browser/flow.js";
+import { calcomApiKey } from "../browser/flows/calcom-api-key.js";
 import { facebookOauthConsent } from "../browser/flows/facebook-oauth-consent.js";
 import { googleDkimGenerate, googleDkimStart } from "../browser/flows/google-dkim.js";
 import { googleProfilePhoto } from "../browser/flows/google-profile-photo.js";
@@ -77,6 +78,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     resetMailProbe,
     npmGranularToken,
     npmTrustedPublisher,
+    calcomApiKey,
     facebookOauthConsent,
     tiktokOauthConsent,
     xOauthConsent,

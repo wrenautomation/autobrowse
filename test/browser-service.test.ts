@@ -46,6 +46,7 @@ describe("browser service", () => {
   it("names the fixed legs site/name and builds the service", () => {
     expect(Object.keys(BROWSER_FLOWS).sort()).toEqual([
       "account/reset-mail-probe",
+      "calcom/api-key",
       "facebook/oauth-consent",
       "google-admin/dkim-generate",
       "google-admin/dkim-start",

@@ -343,10 +343,12 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       if (!parsed.success)
         throw new SiteError(400, parsed.error.issues.map((i) => i.message).join("; "));
       // Named by the caller, else by the accounts policy. A policy pick falls back to the site's own
-      // token only at a provider's site; a site with its own logins keeps that token for whoever its
-      // own credential is (a person's own LinkedIn), never for the policy's account.
+      // token at a provider's site, and at a site whose key a browser flow mints (npm, Cal.com: one
+      // key, kept under its plain name). A site with its own OAuth logins keeps that token for whoever
+      // its own credential is (a person's own LinkedIn), never for the policy's account.
       const chosen = account ?? (await deps.accountFor?.(s)) ?? null;
-      const fallback = !account && chosen && deps.providerOf?.(s);
+      const oneKey = !s.setup.some((st) => "oauth" in st.how);
+      const fallback = !account && chosen && (deps.providerOf?.(s) || oneKey);
       const token = r.api
         ? ((await tokenFor(s, chosen)) ?? (fallback ? await tokenFor(s, null) : null))
         : null;

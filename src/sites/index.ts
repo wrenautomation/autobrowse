@@ -1,3 +1,4 @@
+export { CALCOM_ORIGIN, calcom } from "./calcom.js";
 export {
   type CheckRow,
   checkSite,
@@ -24,6 +25,7 @@ export { profileOf, type SiteParts, sitesFor } from "./wire.js";
 export { x, xOAuth } from "./x.js";
 export { youtube } from "./youtube.js";
 
+import { calcom } from "./calcom.js";
 import { gmail } from "./gmail.js";
 import { instagram } from "./instagram.js";
 import { langfuse } from "./langfuse.js";
@@ -48,4 +50,5 @@ export const SITES: readonly SiteApi[] = [
   meta,
   x,
   npm,
+  calcom,
 ];

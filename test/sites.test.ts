@@ -7,6 +7,7 @@ import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import {
   accessTokens,
+  calcom,
   checkSite,
   linkedin,
   matchPath,
@@ -219,6 +220,31 @@ describe("site facade", () => {
       via: "none",
       missing: "flow google/youtube-community-post not recorded",
     });
+  });
+
+  it("calcom: one plain key serves the policy's account; version header, query passed through", async () => {
+    const api = fakeFetch(({ url, headers }) => {
+      expect(headers.get("authorization")).toBe("Bearer cal_live_k");
+      expect(headers.get("cal-api-version")).toBe("2024-08-13");
+      expect(url.pathname).toBe("/v2/bookings");
+      expect(url.searchParams.get("status")).toBe("upcoming");
+      expect(url.searchParams.get("take")).toBe("5");
+      expect(url.search).not.toContain("cal_live_k");
+      return { body: { status: "success", data: [{ uid: "b1", metadata: { offer: "pilot" } }] } };
+    });
+    const env: Record<string, string> = { CALCOM_API_KEY: "cal_live_k" };
+    const sites = siteFacade([calcom], {
+      http: httpClient({ fetch: api.fetch }),
+      env: (n) => env[n],
+      sink: memorySink(),
+      runner: fakeBrowser([]),
+      flow: () => null,
+      // The policy names an account; the key a browser flow minted is kept under its plain name.
+      accountFor: async () => "will@wren.test",
+    });
+    expect(
+      await sites.call("calcom", "GET", "/v2/bookings?status=upcoming", { take: 5 }),
+    ).toMatchObject({ data: [{ uid: "b1", metadata: { offer: "pilot" } }] });
   });
 
   it("access tokens fall back to a kept access token when there is no refresh token", async () => {

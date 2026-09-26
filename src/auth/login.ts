@@ -395,12 +395,17 @@ export async function signInToGoogle(ctx: SignInContext): Promise<void> {
   if (/verify it.s you|confirm your recovery|tap yes on your/i.test(text))
     throw new LoginFailed(site, "Google asked for a second step this tool cannot answer");
   // The OAuth consent ("Google will allow x.com to access this info about you",
-  // "You're signing back in to x"): Continue.
+  // "You're signing back in to x"): Continue. A site that asks for more than
+  // sign-in (Cal.com: the calendar) shows a second page after it, "already has
+  // some access", with its own Continue; it grants nothing new.
   // The page renders late ("Loading"), so the button is awaited, not the text.
   const consent = { role: "button", name: "/^continue$/i" } as const;
-  if (/signin\/oauth/.test(fp.url()) && (await fp.has(consent, 8_000))) {
+  for (let page = 0; page < 3; page++) {
+    const at = fp.url();
+    if (!/signin\/oauth/.test(at) || !(await fp.has(consent, 8_000))) break;
     await fp.act({ kind: "click" }, consent, { goal: "consent to the sign-in" });
-    await fp.waitForUrl((u) => !/signin\/oauth/.test(u), 15_000);
+    // A page that did not move will not move on a second press.
+    if (!(await fp.waitForUrl((u) => u !== at, 15_000)) || fp.url() === at) break;
   }
 }
 
