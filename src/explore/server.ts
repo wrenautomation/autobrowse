@@ -12,7 +12,15 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
@@ -294,7 +302,33 @@ export interface ExploreOptions {
    * A session nobody closed held its browser open for days.
    */
   idleMinutes?: number;
+  /**
+   * Every journaled act is appended here as it lands. A session that dies
+   * (a crash, the browser gone, idle) loses nothing: the next one given the
+   * same file starts with that journal and knows the page it ended on
+   * (`resumedFrom`). Only `close` removes it.
+   */
+  journalFile?: string;
   now?: () => number;
+}
+
+/** Where a session's journal lives between lives: `id` is the port (CLI) or the agent session. */
+export const journalFileFor = (recordingsDir: string, site: string, id: string): string =>
+  join(recordingsDir, `.explore-${site}`, `journal-${id}.jsonl`);
+
+/** The acts a dead session left, oldest first; lines that do not parse are skipped. */
+export function readJournal(file: string): Action[] {
+  if (!existsSync(file)) return [];
+  const out: Action[] = [];
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      out.push(JSON.parse(line) as Action);
+    } catch {
+      // a line cut by the crash
+    }
+  }
+  return out;
 }
 
 export const DEFAULT_IDLE_MINUTES = 30;
@@ -314,6 +348,8 @@ export interface Explorer {
   resumed(): Promise<void>;
   /** Resolves when `close` arrives or the browser goes away. */
   done: Promise<void>;
+  /** What a dead session's journal carried in: its acts and the page it ended on. */
+  resumedFrom: { acts: number; url: string | null } | null;
 }
 export type ExploreCommand = Command;
 
@@ -420,11 +456,17 @@ async function serve(
   const now = opts.now ?? Date.now;
   const t0 = now();
   const startedAt = new Date(t0).toISOString();
-  const actions: Action[] = [];
+  const actions: Action[] = opts.journalFile ? readJournal(opts.journalFile) : [];
+  const carried = actions.at(-1);
+  const resumedFrom = carried ? { acts: actions.length, url: carried.url ?? null } : null;
+  /** A resumed journal's times run on from where it stopped. */
+  const tBase = carried ? carried.t + 1 : 0;
   const shotsDir = join(opts.recordingsDir, `.explore-${opts.site}`);
   mkdirSync(shotsDir, { recursive: true });
   const desktop = opts.desktop ?? (process.platform === "darwin" ? macDesktop() : noDesktop());
-  let shotN = 0;
+  // A resumed journal points at the earlier shots: number on past them. A fresh
+  // session writes over them, so the folder stays one session's size.
+  let shotN = carried ? readdirSync(shotsDir).filter((f) => /^\d{4}\.png$/.test(f)).length : 0;
   let finish: () => void = () => undefined;
   const done = new Promise<void>((resolve) => {
     finish = resolve;
@@ -447,8 +489,11 @@ async function serve(
     await page.screenshot({ path: file });
     return file;
   };
-  const journal = (a: Journaled) =>
-    actions.push({ ...a, t: now() - t0, url: page.url() } as Action);
+  const journal = (a: Journaled) => {
+    const act = { ...a, t: tBase + now() - t0, url: page.url() } as Action;
+    actions.push(act);
+    if (opts.journalFile) appendFileSync(opts.journalFile, `${JSON.stringify(act)}\n`);
+  };
   // While paused, the page reports what a person does (the recorder's
   // observer), so hand-done steps sit in the same journal as the
   // commands. Un-paused, commands journal themselves and the DOM is quiet.
@@ -956,6 +1001,8 @@ async function serve(
         return answer({});
       }
       case "close":
+        // Closed on purpose: nothing left to resume.
+        if (opts.journalFile) rmSync(opts.journalFile, { force: true });
         queueMicrotask(() => finish());
         return { ok: true };
     }
@@ -1033,5 +1080,6 @@ async function serve(
     resumed: () =>
       paused ? new Promise<void>((resolve) => waiters.push(resolve)) : Promise.resolve(),
     done,
+    resumedFrom,
   };
 }

@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { compile } from "../src/compiler/index.js";
 import { memorySink } from "../src/deps/sink.js";
 import { fakeDesktop } from "../src/desktop/types.js";
-import { pageChange, startExplore } from "../src/explore/server.js";
+import { journalFileFor, pageChange, readJournal, startExplore } from "../src/explore/server.js";
 import type { Charge, Receipt } from "../src/money/charges.js";
 import type { Contacts } from "../src/money/profile.js";
 import { parseCardLine } from "../src/money/wallet.js";
@@ -423,6 +423,48 @@ describe("a session nobody closes", () => {
       await rm(dir, { recursive: true, force: true, maxRetries: 5 });
     }
   }, 30_000);
+});
+
+describe("a session that dies", () => {
+  it("leaves its journal; the next one resumes it on the last page; close drops it", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "explore-resume-"));
+    const journalFile = journalFileFor(join(dir, "recordings"), "scratch", "test");
+    const start = (idleMinutes = 0) =>
+      startExplore({
+        site: "scratch",
+        port: 9700 + Math.floor(Math.random() * 90),
+        recordingsDir: join(dir, "recordings"),
+        journalFile,
+        idleMinutes,
+        browser: {
+          tier: "local",
+          channel: "chromium",
+          profilesDir: join(dir, "profiles"),
+          artifactsDir: join(dir, "artifacts"),
+          headless: true,
+        },
+      });
+    try {
+      const first = await start(0.005); // dies idle after 300 ms: not a close
+      expect(first.resumedFrom).toBeNull();
+      await first.exec({ cmd: "open", url: PAGE });
+      await first.exec({ cmd: "note", text: "on the form" });
+      await first.done;
+      const left = readJournal(journalFile);
+      expect(left.length).toBeGreaterThanOrEqual(2);
+      const second = await start();
+      expect(second.resumedFrom).toEqual({ acts: left.length, url: left.at(-1)?.url });
+      await second.exec({ cmd: "note", text: "after the crash" });
+      const j = (await second.exec({ cmd: "journal" })) as { total: number };
+      expect(j.total).toBe(left.length + 1);
+      await second.exec({ cmd: "close" });
+      await second.done;
+      expect(readJournal(journalFile)).toEqual([]);
+    } finally {
+      await new Promise((r) => setTimeout(r, 500));
+      await rm(dir, { recursive: true, force: true, maxRetries: 5 });
+    }
+  }, 60_000);
 });
 
 describe("pageChange", () => {

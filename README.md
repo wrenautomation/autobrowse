@@ -96,6 +96,9 @@ a row; it is work.
   click and keystroke lands in the same journal; the agent re-reads the
   page when it resumes. The UI's **Explore** page is the same thing with
   a form, live steps and screenshots, pause/resume/stop, save, compile.
+  The journal is written as it grows: a session that dies (crash, restart)
+  resumes on its last page with every act, and a dead agent session's
+  resume goes on from its last step, not step 1. `--fresh` starts over.
 - **Self-repairing.** Every flow failure writes `<stamp>.failure.json`
   (site, URL, last goal, error). `autobrowse repair <that file>` starts
   the agent on that page toward the flow's goal and records the way

@@ -141,6 +141,37 @@ describe("agentSessions", () => {
     expect(s.get(v.id)).toMatchObject({ status: "done", achieved: true, prompt: null });
     expect(notes[1]).toMatch(/^agent on site achieved: g — through/);
   });
+  it("a session that died picks up from its last step, not step 1", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sessions-"));
+    // One step, then the model is gone: the session fails with a step behind it.
+    const dying = agentSessions({
+      llm: fakeLlm([{ thought: "go", action: { cmd: "click", ref: 1, goal: "go" } }]),
+      open: async () => fakeExplorer().ex,
+      dir,
+    });
+    const v = await dying.start({ site: "a", goal: "g" });
+    for (let i = 0; i < 20 && dying.get(v.id)?.status !== "failed"; i++) await tick();
+    await dying.flush();
+    // After a restart the view is back from disk, its browser gone.
+    const opened: Array<string | undefined> = [];
+    const { ex, calls } = fakeExplorer();
+    const again = agentSessions({
+      llm: fakeLlm([{ thought: "x", action: { cmd: "done", summary: "s", achieved: true } }]),
+      open: async (_site, _port, session) => {
+        opened.push(session);
+        return ex;
+      },
+      dir,
+    });
+    expect(again.get(v.id)?.steps).toHaveLength(1);
+    await again.resume(v.id);
+    for (let i = 0; i < 20 && again.get(v.id)?.status !== "done"; i++) await tick();
+    const view = again.get(v.id);
+    expect(view).toMatchObject({ status: "done", achieved: true, error: null });
+    expect(view?.steps.map((s) => s.n)).toEqual([1, 2]);
+    expect(opened).toEqual([v.id]);
+    expect(calls[0]).toEqual({ cmd: "open", url: "https://site.test/" });
+  });
   it("views persist to disk and come back closed after a restart", async () => {
     const dir = mkdtempSync(join(tmpdir(), "sessions-"));
     const llm = fakeLlm([{ thought: "x", action: { cmd: "done", summary: "s", achieved: true } }]);

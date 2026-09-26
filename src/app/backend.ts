@@ -33,7 +33,12 @@ import { filePicks } from "../do/memory.js";
 import { doerFor } from "../do/wire.js";
 import type { RunEvent } from "../engine/events.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
-import { type ExploreOptions, type Explorer, startExplore } from "../explore/server.js";
+import {
+  type ExploreOptions,
+  type Explorer,
+  journalFileFor,
+  startExplore,
+} from "../explore/server.js";
 import type { Approver } from "../gates/payment.js";
 import { expandHome } from "../google-auth.js";
 import type { Llm } from "../llm/types.js";
@@ -236,7 +241,10 @@ export function explorerOpener(
 ): (
   site: string,
   port: number,
-  extra?: Pick<ExploreOptions, "tokenFile" | "secrets" | "secretHosts" | "idleMinutes"> & {
+  extra?: Pick<
+    ExploreOptions,
+    "tokenFile" | "secrets" | "secretHosts" | "idleMinutes" | "journalFile"
+  > & {
     /** false: a wall on `open` stays a wall (a signup page must not sign in as a stored account). */
     signIn?: boolean;
   },
@@ -279,7 +287,15 @@ export function agentFor(
     ledger: stepLedgerFor(settings),
     ...(o.notify ? { notify: o.notify } : {}),
     ...(o.emit ? { emit: o.emit } : {}),
-    open: (site, port) => open(site, port),
+    // One journal per session: a pick-up after a crash saves the acts before it too.
+    open: (site, port, session) =>
+      open(
+        site,
+        port,
+        session
+          ? { journalFile: journalFileFor(expandHome(settings.recordingsDir), site, session) }
+          : {},
+      ),
   });
 }
 

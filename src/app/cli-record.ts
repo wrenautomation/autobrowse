@@ -1,7 +1,10 @@
 /** `autobrowse login <site>` and `autobrowse record <name>`: the recorder's command line. */
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Command } from "commander";
+import { urlWithoutQuery } from "../auth/guard.js";
 import type { SecretValues } from "../auth/signup.js";
+import { expandHome } from "../google-auth.js";
 import { explorerOpener, type LocalBackend } from "./backend.js";
 import type { Settings } from "./config.js";
 import { headed } from "./screen.js";
@@ -30,6 +33,10 @@ export function registerRecordCommands(
     .option("--headed", "show the browser (default: BROWSER_HEADLESS)")
     .option("--idle <minutes>", "close after this long with no command; 0 = never", "30")
     .option(
+      "--fresh",
+      "start over: drop the journal a session that died left (by default the new one resumes it, on its last page)",
+    )
+    .option(
       "--codes <inbox>",
       'place{secret:"code"} types the newest code this inbox got after the session opened',
     )
@@ -57,12 +64,20 @@ export function registerRecordCommands(
           newPassword?: string;
           signup?: string;
           login?: string;
+          fresh?: boolean;
         },
       ) => {
-        const { tokenFileFor } = await import("../explore/server.js");
+        const { tokenFileFor, journalFileFor } = await import("../explore/server.js");
         const tokenFile = tokenFileFor(Number(o.port));
+        const journalFile = journalFileFor(
+          expandHome(settings.recordingsDir),
+          site,
+          `port-${o.port}`,
+        );
+        if (o.fresh) rmSync(journalFile, { force: true });
         const ex = await opener(o)(site, Number(o.port), {
           tokenFile,
+          journalFile,
           idleMinutes: Number(o.idle),
           signIn: !o.signup,
           ...(await withLogins(await exploreSecrets(site, o), o.login)),
@@ -71,11 +86,17 @@ export function registerRecordCommands(
         console.log(
           `exploring ${site} on http://127.0.0.1:${ex.port}\ntoken file ${tokenFile}\ncurl -s -X POST -H "Authorization: Bearer $(cat ${tokenFile})" http://127.0.0.1:${ex.port}/ -d '{"cmd":"aria"}'`,
         );
-        if (o.url)
+        const back = ex.resumedFrom;
+        if (back)
+          console.log(
+            `resumed ${back.acts} journaled acts${back.url ? ` (last page ${urlWithoutQuery(back.url)})` : ""}; --fresh starts over`,
+          );
+        const start = o.url ?? back?.url;
+        if (start)
           await fetch(`http://127.0.0.1:${ex.port}/`, {
             method: "POST",
             headers: { authorization: `Bearer ${ex.token}` },
-            body: JSON.stringify({ cmd: "open", url: o.url }),
+            body: JSON.stringify({ cmd: "open", url: start }),
           });
         await ex.done;
         console.log(`explore ${site} closed`);

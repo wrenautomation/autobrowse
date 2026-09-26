@@ -23,6 +23,8 @@ scripts/stop.sh <port>                 # close browser + socket
 `twilio`, `instantly`, `google-admin`, or `scratch` (no login). Profiles
 are listed by `pnpm autobrowse creds list`. Start one session per site;
 `start.sh` on an open port just reports it.
+A session that died (crash, idle close) left its journal: `start.sh <site> "" <same port>`
+resumes it on its last page, so `save` still has every act. `stop.sh` ends it for good.
 
 Login is the profile's job. Never type a password, TOTP or code yourself.
 If a wall stays up, say so and stop.

@@ -90,8 +90,11 @@ export interface AgentSessions {
 
 export interface SessionsOptions {
   llm: Llm;
-  /** Opens an explore server for the site on the port; the login hook rides inside. */
-  open(site: string, port: number): Promise<Explorer>;
+  /**
+   * Opens an explore server for the site on the port; the login hook rides
+   * inside. `session` names its journal, so a pick-up keeps the acts before.
+   */
+  open(site: string, port: number, session?: string): Promise<Explorer>;
   /** First loopback port; each live session takes the next free one. */
   basePort?: number;
   maxSteps?: number;
@@ -209,6 +212,106 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
     return live.explorer;
   };
 
+  /**
+   * The agent on the session's explorer until done. `view.steps` already
+   * holding steps is a pick-up: the agent sees them as its own and goes on.
+   */
+  const drive = (live: Live, req: StartRequest): void => {
+    const view = live.view;
+    const ref = { workflow: AGENT, key: view.id };
+    const before = { ...view.usage };
+    void emit({ type: "started", run: ref, at: now().toISOString() });
+    live.finished = (async () => {
+      try {
+        const ex = await o.open(req.site, view.port, view.id);
+        live.explorer = ex;
+        void ex.done.then(() => {
+          if (view.status !== "closed" && view.status !== "done") view.status = "closed";
+          // The browser is gone; nothing keeps its pages and journal alive.
+          live.explorer = null;
+        });
+        if (req.url) await ex.exec({ cmd: "open", url: req.url });
+        view.status = "running";
+        const result: AgentResult = await exploreWithAgent({
+          explorer: ex,
+          llm: o.llm,
+          goal: req.goal,
+          inputs: view.inputs,
+          maxSteps: req.maxSteps ?? o.maxSteps ?? 25,
+          session: view.id,
+          prior: [...view.steps],
+          site: req.site,
+          ...(o.ledger ? { ledger: o.ledger } : {}),
+          stopped: () => live.stopFlag,
+          // The model's `human` is a pause with a prompt, not the end: the
+          // person does the thing in the window and resumes.
+          onHuman: async (reason) => {
+            view.status = "needs-human";
+            view.prompt = reason;
+            await ex.exec({ cmd: "pause" });
+            persist(view);
+            await o
+              .notify?.(`agent on ${req.site} needs you: ${reason} (session ${view.id})`)
+              .catch(() => undefined);
+            await ex.resumed();
+            view.prompt = null;
+            if (!live.stopFlag) view.status = "running";
+            return !live.stopFlag;
+          },
+          onStep: (r) => {
+            const step: StepView = { ...r, screenshot: null };
+            view.steps.push(step);
+            persist(view);
+            void emit({
+              type: "step",
+              run: ref,
+              at: now().toISOString(),
+              step: `${r.n}. ${r.step?.action.cmd ?? "invalid"}`,
+              result: {
+                status: r.error ? "failed" : "done",
+                detail: r.error ?? r.step?.thought ?? "",
+                at: now().toISOString(),
+              },
+            });
+            // Off the loop: the picture arrives when it arrives.
+            void ex
+              .exec({ cmd: "screenshot" })
+              .then((s) => {
+                step.screenshot = (s as { file: string }).file;
+              })
+              .catch(() => undefined);
+          },
+        });
+        view.usage = {
+          inputTokens: before.inputTokens + result.usage.inputTokens,
+          outputTokens: before.outputTokens + result.usage.outputTokens,
+        };
+        view.achieved = result.achieved;
+        view.summary = result.summary;
+        view.status = live.stopFlag ? "stopped" : "done";
+        if (!live.stopFlag)
+          await o
+            .notify?.(
+              `agent on ${req.site} ${result.achieved ? "achieved" : "did not achieve"}: ${req.goal} — ${result.summary}`,
+            )
+            .catch(() => undefined);
+      } catch (err) {
+        view.error = err instanceof Error ? err.message : String(err);
+        view.status = "failed";
+      }
+      persist(view);
+      void emit({
+        type: "finished",
+        run: ref,
+        at: now().toISOString(),
+        status:
+          view.status === "failed" ? "failed" : view.status === "stopped" ? "rejected" : "done",
+        summary:
+          view.error ?? `${view.achieved ? "achieved" : "not achieved"}: ${view.summary ?? ""}`,
+      });
+    })();
+  };
+
   return {
     async flush() {
       while (writing.size > 0) await Promise.all([...writing.values()].map((w) => w.done));
@@ -235,93 +338,7 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
       const live: Live = { view, explorer: null, stopFlag: false, finished: Promise.resolve() };
       sessions.set(id, live);
       persist(view);
-      const ref = { workflow: AGENT, key: id };
-      void emit({ type: "started", run: ref, at: view.startedAt });
-      live.finished = (async () => {
-        try {
-          const ex = await o.open(req.site, view.port);
-          live.explorer = ex;
-          void ex.done.then(() => {
-            if (view.status !== "closed" && view.status !== "done") view.status = "closed";
-            // The browser is gone; nothing keeps its pages and journal alive.
-            live.explorer = null;
-          });
-          if (req.url) await ex.exec({ cmd: "open", url: req.url });
-          view.status = "running";
-          const result: AgentResult = await exploreWithAgent({
-            explorer: ex,
-            llm: o.llm,
-            goal: req.goal,
-            inputs: view.inputs,
-            maxSteps: req.maxSteps ?? o.maxSteps ?? 25,
-            session: id,
-            site: req.site,
-            ...(o.ledger ? { ledger: o.ledger } : {}),
-            stopped: () => live.stopFlag,
-            // The model's `human` is a pause with a prompt, not the end: the
-            // person does the thing in the window and resumes.
-            onHuman: async (reason) => {
-              view.status = "needs-human";
-              view.prompt = reason;
-              await ex.exec({ cmd: "pause" });
-              persist(view);
-              await o
-                .notify?.(`agent on ${req.site} needs you: ${reason} (session ${id})`)
-                .catch(() => undefined);
-              await ex.resumed();
-              view.prompt = null;
-              if (!live.stopFlag) view.status = "running";
-              return !live.stopFlag;
-            },
-            onStep: (r) => {
-              const step: StepView = { ...r, screenshot: null };
-              view.steps.push(step);
-              persist(view);
-              void emit({
-                type: "step",
-                run: ref,
-                at: now().toISOString(),
-                step: `${r.n}. ${r.step?.action.cmd ?? "invalid"}`,
-                result: {
-                  status: r.error ? "failed" : "done",
-                  detail: r.error ?? r.step?.thought ?? "",
-                  at: now().toISOString(),
-                },
-              });
-              // Off the loop: the picture arrives when it arrives.
-              void ex
-                .exec({ cmd: "screenshot" })
-                .then((s) => {
-                  step.screenshot = (s as { file: string }).file;
-                })
-                .catch(() => undefined);
-            },
-          });
-          view.usage = result.usage;
-          view.achieved = result.achieved;
-          view.summary = result.summary;
-          view.status = live.stopFlag ? "stopped" : "done";
-          if (!live.stopFlag)
-            await o
-              .notify?.(
-                `agent on ${req.site} ${result.achieved ? "achieved" : "did not achieve"}: ${req.goal} — ${result.summary}`,
-              )
-              .catch(() => undefined);
-        } catch (err) {
-          view.error = err instanceof Error ? err.message : String(err);
-          view.status = "failed";
-        }
-        persist(view);
-        void emit({
-          type: "finished",
-          run: ref,
-          at: now().toISOString(),
-          status:
-            view.status === "failed" ? "failed" : view.status === "stopped" ? "rejected" : "done",
-          summary:
-            view.error ?? `${view.achieved ? "achieved" : "not achieved"}: ${view.summary ?? ""}`,
-        });
-      })();
+      drive(live, req);
       return view;
     },
     list: () =>
@@ -337,6 +354,16 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
     },
     async resume(id) {
       const live = must(id);
+      // Its browser died (a crash, a restart): a new one on the last page,
+      // and the agent goes on from its last step instead of step 1.
+      if (!live.explorer && live.view.status !== "done" && live.view.status !== "stopped") {
+        const view = live.view;
+        Object.assign(view, { status: "starting", error: null, prompt: null, port: freePort() });
+        live.stopFlag = false;
+        persist(view);
+        drive(live, { site: view.site, goal: view.goal, url: view.steps.at(-1)?.url ?? null });
+        return view;
+      }
       await open(live).exec({ cmd: "resume" });
       if (live.view.status === "paused" || live.view.status === "needs-human")
         live.view.status = "running";

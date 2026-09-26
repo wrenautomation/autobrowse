@@ -78,6 +78,8 @@ export interface AgentOptions {
   /** Where every step lands as a row (`~/.config/autobrowse/steps.jsonl`); `session` names the run there. */
   ledger?: StepLedger;
   session?: string;
+  /** Steps a session that died already took: seen as this run's own, counted on from. */
+  prior?: readonly StepRecord[];
   site?: string;
   /** A person said stop: the loop ends before its next step. */
   stopped?: () => boolean;
@@ -136,8 +138,9 @@ If the same step fails twice, try another element or return done with achieved=f
 
 /** Run the agent until it says done, a person says stop, or the budget runs out. */
 export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
-  const max = o.maxSteps ?? 25;
-  const steps: StepRecord[] = [];
+  const steps: StepRecord[] = [...(o.prior ?? [])];
+  const first = steps.length + 1;
+  const max = steps.length + (o.maxSteps ?? 25);
   const usage: LlmUsage = { inputTokens: 0, outputTokens: 0 };
   let nudged = false;
   /** The page the last journaled thought was on: one note per page keeps compiled steps page-sized. */
@@ -171,7 +174,7 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
       })
       .catch(() => undefined);
   };
-  for (let n = 1; n <= max; n++) {
+  for (let n = first; n <= max; n++) {
     await o.explorer.resumed();
     if (o.stopped?.()) return { achieved: false, summary: "stopped by a person", steps, usage };
     t0 = Date.now();
