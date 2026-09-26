@@ -23,9 +23,10 @@ export interface Effects {
 /**
  * `human` = a person has to do something (a step threw NeedsHuman; approve reruns it).
  * `send` = the step files, posts or sends something in the person's name; always asked.
+ * `choose` = the prompt lists options; the answer's note is the one picked. Always asked.
  * The others are guards (see guards.ts) a person approves, or turns off.
  */
-export type GateName = "purchase" | "password" | "send" | "human";
+export type GateName = "purchase" | "password" | "send" | "choose" | "human";
 /** What a step may ask for; `human` is the host's, an approve there records no answer. */
 export type StepGate = Exclude<GateName, "human">;
 

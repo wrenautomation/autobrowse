@@ -98,6 +98,24 @@ describe("runFlow", () => {
     expect(out.results.check?.detail).toContain("registered by someone else");
   });
 
+  it("a taken domain waits for a pick among free look-alikes, then buys that one", async () => {
+    const cloudflare = fakeCloudflare({ taken: ["wren-new.test"] });
+    const deps = fakeDeps({ cloudflare });
+    const { fx } = fakeEffects();
+    const { answer, asked } = scriptedAnswers({ choose: [{ note: "2" }], purchase: [{}] });
+    const out = await runFlow(fx, deps, plan({ inboxes: [] }), answer);
+    expect(asked).toEqual(["choose", "purchase"]);
+    expect(out.status).toBe("done");
+    expect(out.results.check?.detail).toMatch(/taken; \d+ free look-alikes/);
+    const picked = out.results.pick?.detail.replace("picked ", "") ?? "";
+    expect(picked).not.toBe("wren-new.test");
+    expect(cloudflare.purchases).toEqual([picked]);
+    expect(cloudflare.created).toEqual([picked]);
+    // No inboxes: a site, not a sender. Nothing after the zone ran (no browser, no Workspace).
+    expect(out.results.inboxes).toMatchObject({ status: "skipped" });
+    expect(deps.calls).toEqual([]);
+  });
+
   it("dry run plans up to the first irreversible step", async () => {
     const deps = fakeDeps();
     const { fx } = fakeEffects();
@@ -284,11 +302,11 @@ describe("nextStep", () => {
     const next = (results: Record<string, ReturnType<typeof r>>) =>
       nextStep(domainWorkflow, results);
     expect(next({})).toBe("check");
-    expect(next({ check: r("done"), buy: r("skipped") })).toBe("zone");
-    expect(next({ check: r("done"), buy: r("needs-human") })).toBe("buy");
-    expect(next({ check: r("done"), buy: r("rejected") })).toBeNull();
-    expect(next({ check: r("done"), buy: r("failed") })).toBe("buy");
-    expect(next({ check: r("done"), buy: r("planned") })).toBe("buy");
+    expect(next({ check: r("done"), pick: r("skipped"), buy: r("skipped") })).toBe("zone");
+    expect(next({ check: r("done"), pick: r("skipped"), buy: r("needs-human") })).toBe("buy");
+    expect(next({ check: r("done"), pick: r("skipped"), buy: r("rejected") })).toBeNull();
+    expect(next({ check: r("done"), pick: r("skipped"), buy: r("failed") })).toBe("buy");
+    expect(next({ check: r("done"), pick: r("skipped"), buy: r("planned") })).toBe("buy");
     const all = Object.fromEntries(STEPS.map((s) => [s, r("done")]));
     expect(next(all)).toBeNull();
   });
@@ -314,7 +332,8 @@ describe("parsePlan", () => {
         inboxes: [{ local: "a", givenName: "A", familyName: "B" }],
       }),
     ).toThrow();
-    expect(() => parsePlan({ domain: "ok.test", inboxes: [] })).toThrow();
+    // No inboxes is a domain-only plan (a site), not an error.
+    expect(parsePlan({ domain: "ok.test" }).inboxes).toEqual([]);
     expect(() =>
       parsePlan({
         domain: "ok.test",

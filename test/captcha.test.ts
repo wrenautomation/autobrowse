@@ -8,7 +8,11 @@ function pageShowing(...shown: string[]): Page {
   const loc = (sel: string) => ({
     first: () => ({ isVisible: async () => shown.some((s) => sel.includes(s)) }),
   });
-  return { locator: loc, waitForTimeout: async () => undefined } as unknown as Page;
+  return {
+    locator: loc,
+    frames: () => [],
+    waitForTimeout: async () => undefined,
+  } as unknown as Page;
 }
 const hands = {} as Hands;
 
@@ -18,6 +22,17 @@ describe("captcha", () => {
     expect(parseSquares('{"squares":[]}', 9)).toEqual([]);
     expect(parseSquares("no idea", 9)).toBeNull();
     expect(parseSquares('{"tiles":[1]}', 9)).toBeNull();
+  });
+
+  it("finds Turnstile in a closed shadow root by the frame list", async () => {
+    const frame = {
+      url: () => "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/x",
+      frameElement: async () => ({
+        boundingBox: async () => ({ x: 192, y: 304, width: 300, height: 65 }),
+      }),
+    };
+    const page = { ...pageShowing(), frames: () => [frame] } as unknown as Page;
+    expect(await findCaptcha(page)).toEqual({ kind: "checkbox", vendor: "turnstile" });
   });
 
   it("an open challenge is what is asked, before its checkbox", async () => {

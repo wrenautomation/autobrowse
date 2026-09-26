@@ -19,6 +19,9 @@ scripts/cmd.sh <port> '<json>'         # one command, JSON back
 scripts/stop.sh <port>                 # close browser + socket
 ```
 
+Right now (read when this skill loaded):
+!`for d in "${CLAUDE_SKILL_DIR:-}" .claude/skills/autobrowse autobrowse/.claude/skills/autobrowse; do [ -x "$d/scripts/state.sh" ] && { "$d/scripts/state.sh"; break; }; done 2>/dev/null || true`
+
 `<site>` is a profile name: `google`, `cloudflare`, `aws`, `anthropic`, `sentry`,
 `twilio`, `instantly`, `google-admin`, or `scratch` (no login). Profiles
 are listed by `pnpm autobrowse creds list`. Start one session per site;

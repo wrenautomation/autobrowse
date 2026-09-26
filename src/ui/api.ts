@@ -78,7 +78,7 @@ const ACTIONS = ["approve", "reject", "pause", "play", "reset"] as const;
 type Action = (typeof ACTIONS)[number];
 const isAction = (s: string): s is Action => (ACTIONS as readonly string[]).includes(s);
 const actionBody = z.object({
-  name: z.enum(["purchase", "password", "send", "human"]).optional(),
+  name: z.enum(["purchase", "password", "send", "choose", "human"]).optional(),
   note: z.string().max(2000).optional(),
 });
 const inboundBody = z.object({ text: z.string().min(1).max(2000), from: z.string().optional() });

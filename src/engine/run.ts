@@ -106,6 +106,7 @@ export async function advance<P extends PlanBase, D, M, S extends string>(
   const open = await fx.get<OpenGate>(KEYS.gate);
   if (open) return { kind: "waiting", gate: open };
   const { results, memo, answers } = await load<M, S>(fx, workflow);
+  const settled = workflow.settle ? workflow.settle(plan, memo) : plan;
   const name = nextStep(workflow, results);
   if (name === null) return { kind: "finished", status: finalStatus(results) };
   const step = workflow.steps.find((s) => s.name === name);
@@ -128,7 +129,7 @@ export async function advance<P extends PlanBase, D, M, S extends string>(
     const out = await step.run({
       fx,
       deps,
-      plan,
+      plan: settled,
       memo,
       gate(gate, prompt) {
         const answer = answers[gate];

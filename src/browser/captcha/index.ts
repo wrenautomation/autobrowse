@@ -86,6 +86,28 @@ const GENERIC = {
     '[class*="captcha" i][class*="container" i], [class*="captcha" i][class*="verify" i], [id*="captcha" i]',
 };
 
+/**
+ * Cloudflare's own challenge page puts Turnstile in a closed shadow root:
+ * no selector reaches it, but the frame list does. Its box on the page,
+ * when one is showing.
+ */
+async function turnstileBox(
+  page: Page,
+): Promise<{ x: number; y: number; width: number; height: number } | null> {
+  for (const f of page.frames()) {
+    if (!f.url().includes("challenges.cloudflare.com")) continue;
+    const box = await f
+      .frameElement()
+      .then((e) => e.boundingBox())
+      .catch(() => null);
+    if (box && box.width > 0 && box.height > 0) return box;
+  }
+  return null;
+}
+
+const turnstileShown = async (page: Page): Promise<boolean> =>
+  (await visible(page.locator(TURNSTILE.frame))) || (await turnstileBox(page)) !== null;
+
 const visible = (l: Locator) =>
   l
     .first()
@@ -99,8 +121,7 @@ export async function findCaptcha(page: Page): Promise<Captcha | null> {
   if (await visible(page.locator(RECAPTCHA.anchor)))
     return { kind: "checkbox", vendor: "recaptcha" };
   if (await visible(page.locator(HCAPTCHA.anchor))) return { kind: "checkbox", vendor: "hcaptcha" };
-  if (await visible(page.locator(TURNSTILE.frame)))
-    return { kind: "checkbox", vendor: "turnstile" };
+  if (await turnstileShown(page)) return { kind: "checkbox", vendor: "turnstile" };
   if (await visible(page.locator(GENERIC.slider))) return { kind: "slider", vendor: "generic" };
   if (
     (await visible(page.locator(GENERIC.picture))) &&
@@ -167,9 +188,25 @@ async function tick(
   settleMs: number,
 ): Promise<Step> {
   if (vendor === "turnstile") {
-    const frame = page.frameLocator(TURNSTILE.frame).first();
-    await hands.click(frame.locator(TURNSTILE.box).first(), T).catch(() => undefined);
+    if (await visible(page.locator(TURNSTILE.frame))) {
+      const frame = page.frameLocator(TURNSTILE.frame).first();
+      await hands.click(frame.locator(TURNSTILE.box).first(), T).catch(() => undefined);
+    } else {
+      // Shadow-rooted: the box sits at the widget's left edge, half way down.
+      const box = await turnstileBox(page);
+      const body = page.locator("body");
+      const origin = await body.boundingBox().catch(() => null);
+      if (box && origin) {
+        await hands.think(page);
+        const at = {
+          x: box.x - origin.x + Math.min(32, box.width * 0.1),
+          y: box.y - origin.y + box.height / 2,
+        };
+        await hands.click(body, { ...T, at }).catch(() => undefined);
+      }
+    }
     const until = Date.now() + settleMs * 2;
+    let goneSince: number | null = null;
     while (Date.now() < until) {
       const token = await page
         .locator(TURNSTILE.response)
@@ -177,7 +214,12 @@ async function tick(
         .inputValue()
         .catch(() => "");
       if (token) return "ticked";
-      if (!(await visible(page.locator(TURNSTILE.frame)))) return "ticked";
+      // Gone for good, not a reload between tries (Cloudflare's page re-renders it).
+      if (await turnstileShown(page)) goneSince = null;
+      else {
+        goneSince ??= Date.now();
+        if (Date.now() - goneSince >= 2_000) return "ticked";
+      }
       await page.waitForTimeout(500);
     }
     return "again";

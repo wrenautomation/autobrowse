@@ -51,6 +51,11 @@ export interface Workflow<P extends PlanBase, D, M, S extends string = string> {
   plan: z.ZodType<P>;
   steps: ReadonlyArray<StepDef<P, D, M, S>>;
   emptyMemo(): M;
+  /**
+   * The plan as the run has settled it so far: a pick at a `choose` gate
+   * (another domain) lands here, and every later step sees the settled plan.
+   */
+  settle?(plan: P, memo: M): P;
 }
 
 /** Any workflow, for hosts that do not care about the types. */

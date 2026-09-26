@@ -11,8 +11,11 @@ export const inboxSchema = z.object({
 });
 
 export const planSchema = z.object({
-  domain: z.string().regex(DOMAIN).describe("The sending domain, e.g. getwren.co"),
-  inboxes: z.array(inboxSchema).min(1).describe("Inboxes to make on it"),
+  domain: z.string().regex(DOMAIN).describe("The domain, e.g. getwren.co"),
+  inboxes: z
+    .array(inboxSchema)
+    .default([])
+    .describe("Inboxes to make on it; none = buy and DNS only (a site, not a sender)"),
   niches: z
     .union([z.literal("all"), z.array(z.string().min(1)).min(1)])
     .default("all")

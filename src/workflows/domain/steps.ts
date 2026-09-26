@@ -21,6 +21,7 @@ import { appendEntries } from "../../clients/roster.js";
 import type { Effects } from "../../engine/effects.js";
 import { done, rejected, type StepDef, skipped } from "../../engine/workflow.js";
 import type { DomainDeps } from "./deps.js";
+import { domainIdeas } from "./ideas.js";
 import { inboxAddress, type Plan } from "./plan.js";
 
 /** Everything the steps learn that later steps need. Never a password: those go from generation to the credential store inside one journaled step. */
@@ -32,7 +33,15 @@ export interface DomainMemo {
   verificationToken?: string;
   dkim?: DkimRecord;
   rosterAdded?: string[];
+  /** Free look-alikes when the asked-for domain is taken: what `pick` offers. */
+  options?: DomainQuote[];
+  /** The one a person picked from `options`: the run's domain from then on. */
+  picked?: string;
 }
+
+/** The plan with the picked domain in it (`Workflow.settle`). */
+export const settleDomain = (plan: Plan, memo: DomainMemo): Plan =>
+  memo.picked ? { ...plan, domain: memo.picked } : plan;
 
 /** An inbox's credential and browser profile: `google@<email>`. */
 export const inboxSite = (email: string) => `google@${email}`;
@@ -50,6 +59,22 @@ export const check: Step<"check"> = {
     const [quote] = await fx.run("cloudflare check", () => deps.cloudflare.check([plan.domain]));
     if (!quote) throw new Error(`Cloudflare did not answer for ${plan.domain}`);
     memo.quote = quote;
+    if (!quote.registrable && quote.reason === "domain_unavailable" && plan.buy) {
+      // Taken: the free look-alikes go to a person to pick from (`pick`).
+      const stem = plan.domain.split(".")[0] as string;
+      const ideas = domainIdeas([stem]).filter((d) => d !== plan.domain);
+      const quotes = await fx.run("cloudflare check look-alikes", () =>
+        deps.cloudflare.check(ideas),
+      );
+      memo.options = quotes
+        .filter((q) => q.registrable)
+        .sort((a, b) => Number(a.price ?? 1e9) - Number(b.price ?? 1e9))
+        .slice(0, 10);
+      if (memo.options.length > 0)
+        return done(
+          `${plan.domain} is taken; ${memo.options.length} free look-alikes to pick from`,
+        );
+    }
     if (!quote.registrable)
       throw new Error(
         quote.reason === "domain_unavailable"
@@ -59,6 +84,40 @@ export const check: Step<"check"> = {
     return done(`available at $${quote.price ?? "?"} (renews $${quote.renewal ?? "?"})`);
   },
 };
+
+/** A taken domain: a person picks a look-alike (by number or name), and the run goes on with it. */
+export const pick: Step<"pick"> = {
+  name: "pick",
+  async run({ plan, memo, gate }) {
+    if (memo.owned || memo.quote?.registrable) return skipped("nothing to pick");
+    const options = memo.options ?? [];
+    const list = options
+      .map((o, i) => `${i + 1}. ${o.name} $${o.price ?? "?"} (renews $${o.renewal ?? "?"})`)
+      .join("\n");
+    const answer = gate(
+      "choose",
+      `${plan.domain} is taken. Reply with the number or name of the one to buy:\n${list}`,
+    );
+    if (!answer.approved) return rejected(answer.note ?? "none picked");
+    const said = (answer.note ?? "").trim().toLowerCase();
+    const chosen = options[Number(said) - 1] ?? options.find((o) => o.name === said);
+    if (!chosen) throw new Error(`"${said}" is not one of the ${options.length} options`);
+    memo.picked = chosen.name;
+    memo.quote = chosen;
+    return done(`picked ${chosen.name}`);
+  },
+};
+
+/** Steps that make or use inboxes: a domain with none (a site) stops after its zone. */
+export function withInboxes<S extends string>(step: Step<S>): Step<S> {
+  return {
+    ...step,
+    run: (ctx) =>
+      ctx.plan.inboxes.length === 0
+        ? Promise.resolve(skipped("no inboxes: buy and DNS only"))
+        : step.run(ctx),
+  };
+}
 
 export const buy: Step<"buy"> = {
   name: "buy",

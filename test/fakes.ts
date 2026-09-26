@@ -90,6 +90,8 @@ export function fakeCloudflare(
     zone?: string | null;
     /** Why Cloudflare will not sell it; absent: it will, for $10.44. */
     unavailable?: string;
+    /** These names only are someone else's (\`domain_unavailable\`). */
+    taken?: string[];
     /** Where a registration ends; default succeeded. */
     registers?: string;
   } = {},
@@ -107,8 +109,8 @@ export function fakeCloudflare(
     purchases: [],
     async check(domains) {
       return domains.map((name) =>
-        opts.unavailable
-          ? { name, registrable: false, reason: opts.unavailable }
+        opts.unavailable || opts.taken?.includes(name)
+          ? { name, registrable: false, reason: opts.unavailable ?? "domain_unavailable" }
           : { name, registrable: true, price: "10.44", renewal: "10.44" },
       );
     },
@@ -124,8 +126,8 @@ export function fakeCloudflare(
     async zoneId() {
       return zone;
     },
-    async registered() {
-      return opts.registered ?? false;
+    async registered(domain) {
+      return opts.registered ?? registrations.get(domain)?.state === "succeeded";
     },
     async createZone(domain) {
       zone = `zone-${domain}`;
