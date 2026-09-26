@@ -224,6 +224,31 @@ export interface PageChange {
   more?: number;
 }
 
+/**
+ * Where an act left the page, short: an OAuth URL runs to 2 KB, and every
+ * act and batch step repeats it. The path stays, a long query does not;
+ * `{"cmd":"url"}` still answers the whole thing.
+ */
+export function shortUrl(u: string): string {
+  if (u.length <= 160) return u;
+  const q = u.indexOf("?");
+  return q >= 0 && q <= 150 ? `${u.slice(0, q)}?…` : `${u.slice(0, 150)}…`;
+}
+
+/** An answer with its `url` fields short (the top one and each batch step's). */
+function leanUrls(answer: unknown): unknown {
+  if (!answer || typeof answer !== "object") return answer;
+  const a = answer as Record<string, unknown>;
+  const step = (d: unknown) =>
+    d && typeof d === "object" && typeof (d as { url?: unknown }).url === "string"
+      ? { ...d, url: shortUrl((d as { url: string }).url) }
+      : d;
+  return {
+    ...(step(a) as object),
+    ...(Array.isArray(a.done) ? { done: a.done.map(step) } : {}),
+  };
+}
+
 /** What an act changed, as a multiset diff of snapshot rows. */
 export function pageChange(before: readonly string[], after: readonly string[]): PageChange {
   const left = new Map<string, number>();
@@ -1033,13 +1058,14 @@ async function serve(
       // resend loop); without it the gate answers 202 at once and the same command re-asks.
       const wait = new URL(req.url ?? "/", "http://x").searchParams.get("wait") === "1";
       try {
-        res.end(JSON.stringify(await run(parsed, wait)));
+        const answer = await run(parsed, wait);
+        res.end(JSON.stringify(parsed.cmd === "url" ? answer : leanUrls(answer)));
       } catch (err) {
         res.statusCode = err instanceof PaymentGate ? (err.reason === "asked" ? 202 : 403) : 500;
         res.end(
           JSON.stringify({
             error: err instanceof Error ? err.message.split("\n")[0] : String(err),
-            url: page.url(),
+            url: shortUrl(page.url()),
             ...(err instanceof PaymentGate ? { gate: err.gate, reason: err.reason } : {}),
           }),
         );

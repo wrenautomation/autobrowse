@@ -8,7 +8,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { compile } from "../src/compiler/index.js";
 import { memorySink } from "../src/deps/sink.js";
 import { fakeDesktop } from "../src/desktop/types.js";
-import { journalFileFor, pageChange, readJournal, startExplore } from "../src/explore/server.js";
+import {
+  journalFileFor,
+  pageChange,
+  readJournal,
+  shortUrl,
+  startExplore,
+} from "../src/explore/server.js";
 import type { Charge, Receipt } from "../src/money/charges.js";
 import type { Contacts } from "../src/money/profile.js";
 import { parseCardLine } from "../src/money/wallet.js";
@@ -24,6 +30,15 @@ const desktop = fakeDesktop([
 const PAGE = `data:text/html,${encodeURIComponent(
   `<label>Domain <input id="d"></label><label>Password <input type="password" id="p"></label><button id="go" onclick="document.title='clicked';this.after(Object.assign(document.createElement('p'),{textContent:'Payment successful'}))">Buy now</button><button id="co" onclick="document.title='checkout'">Checkout</button><input type="submit" id="done" value="Complete Order" onclick="event.preventDefault();document.title='ordered'"><p id="key">sk-ant-minted-key-1234567890abcdefghijklmnopqrstuvwxyz</p>`,
 )}`;
+
+describe("shortUrl", () => {
+  it("keeps the path, drops a long query, leaves short URLs whole", () => {
+    expect(shortUrl("https://a.test/x?y=1")).toBe("https://a.test/x?y=1");
+    const oauth = `https://accounts.google.com/signin/oauth/v2/consentsummary?part=${"x".repeat(2000)}`;
+    expect(shortUrl(oauth)).toBe("https://accounts.google.com/signin/oauth/v2/consentsummary?…");
+    expect(shortUrl(`https://a.test/${"p".repeat(300)}`)).toHaveLength(151);
+  });
+});
 
 describe("explore mode", () => {
   let dir: string;
@@ -116,7 +131,9 @@ describe("explore mode", () => {
 
   it("takes commands one at a time, journals the ones that work, and saves a compilable recording", async () => {
     const opened = await send({ cmd: "open", url: PAGE });
-    expect(opened.body, JSON.stringify(opened.body)).toHaveProperty("url", PAGE);
+    // An act answers the URL short; `url` answers it whole.
+    expect(opened.body, JSON.stringify(opened.body)).toHaveProperty("url", shortUrl(PAGE));
+    expect((await send({ cmd: "url" })).body).toEqual({ url: PAGE });
     const aria = (await send({ cmd: "aria" })).body.aria as string;
     expect(aria).toContain('button "Buy now"');
     expect(aria).toContain('textbox "Domain"');
