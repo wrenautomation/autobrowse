@@ -1,8 +1,10 @@
 /**
  * How a hand moves a mouse: a curve, not a line; fast in the middle and
  * slow at both ends; longer to far or small targets (Fitts's law); on a
- * long reach it sometimes overshoots and comes back. It lands somewhere
- * inside the control, near the middle, never the same pixel twice.
+ * long reach it sometimes overshoots and comes back, or stops part way
+ * and goes on. It lands somewhere inside the control, near the middle,
+ * never the same pixel twice. A hand resting on the mouse is not frozen:
+ * every pause drifts a pixel or so and comes back.
  *
  * Pure like the typing plan: points in, a path with timings out.
  */
@@ -34,6 +36,12 @@ export interface MouseStyle {
   /** An idle wander: how many stops, and how long the hand rests at each, ms. */
   wanderStops: [number, number];
   wanderRest: [number, number];
+  /** Chance a reach stops part way, and for how long, ms. */
+  hesitate: number;
+  hesitateMs: [number, number];
+  /** A resting hand's drift, px, and how far apart its small moves come, ms. */
+  jitter: number;
+  jitterGap: [number, number];
 }
 
 export interface PathStep extends Point {
@@ -144,9 +152,43 @@ export function mousePath(
       x: to.x + ((to.x - from.x) / dist) * dist * by + drawNormal(4, random),
       y: to.y + ((to.y - from.y) / dist) * dist * by + drawNormal(4, random),
     };
-    return [...curve(from, past, size, s, random), ...curve(past, to, size, s, random)];
+    return [...reach(from, past, size, s, random), ...curve(past, to, size, s, random)];
   }
-  return curve(from, to, size, s, random);
+  return reach(from, to, size, s, random);
+}
+
+/** A reach that sometimes stops part way, a little off the line, rests, and goes on. */
+function reach(from: Point, to: Point, size: number, s: MouseStyle, random: Random): PathStep[] {
+  const dist = Math.hypot(to.x - from.x, to.y - from.y);
+  if (dist < 60 || !chance(s.hesitate, random)) return curve(from, to, size, s, random);
+  const t = 0.35 + random() * 0.4;
+  const mid = {
+    x: from.x + (to.x - from.x) * t + drawNormal(dist * 0.04, random),
+    y: from.y + (to.y - from.y) * t + drawNormal(dist * 0.04, random),
+  };
+  return [
+    // Nowhere in particular to land part way: a wide target.
+    ...curve(from, mid, 80, s, random),
+    ...restAt(mid, drawMs(s.hesitateMs, random), s, random),
+    ...curve(mid, to, size, s, random),
+  ];
+}
+
+/**
+ * A hand resting on the mouse for `ms`: a small move now and then, a pixel
+ * or so off, then back on `at`. The waits add up to `ms`.
+ */
+export function restAt(at: Point, ms: number, s: MouseStyle, random: Random): PathStep[] {
+  const shake = tremor(s.jitter, random);
+  const steps: PathStep[] = [];
+  for (let spent = 0; spent < ms; ) {
+    const gap = Math.min(drawMs(s.jitterGap, random), ms - spent);
+    const w = shake(spent);
+    steps.push({ x: at.x + w.x, y: at.y + w.y, after: gap });
+    spent += gap;
+  }
+  if (steps.length) steps.push({ ...at, after: 0 });
+  return steps;
 }
 
 /**
@@ -168,10 +210,10 @@ export function wanderPath(
     const to = far
       ? { x: 5 + random() * (view.width - 10), y: 5 + random() * (view.height - 10) }
       : driftPoint(at, view, random);
-    const path = mousePath(at, to, 40, s, random);
-    const last = path.at(-1);
-    if (last) last.after += drawMs(s.wanderRest, random);
-    steps.push(...path);
+    steps.push(
+      ...mousePath(at, to, 40, s, random),
+      ...restAt(to, drawMs(s.wanderRest, random), s, random),
+    );
     at = to;
   }
   return steps;

@@ -6,10 +6,12 @@ import { describe, expect, it } from "vitest";
 import { drawMs } from "../src/browser/human/draw.js";
 import {
   aimPoint,
+  BACKSPACE,
   HUMAN_PACE,
   handsFor,
   instantHands,
   mousePath,
+  restAt,
   tremor,
   typingPlan,
   wanderPath,
@@ -36,12 +38,18 @@ describe("draws", () => {
   });
 });
 
+/** What a field holds after the keys: Backspace takes the last character off. */
+const typedOut = (keys: { ch: string }[]) =>
+  keys
+    .reduce<string[]>((out, k) => (k.ch === BACKSPACE ? out.slice(0, -1) : [...out, k.ch]), [])
+    .join("");
+
 describe("typing plan", () => {
   const text = "hello there, this is William. Nothing else.";
   const plan = typingPlan(text, HUMAN_PACE.typing, seeded());
 
   it("types every character, in order, each held a moment", () => {
-    expect(plan.map((k) => k.ch).join("")).toBe(text);
+    expect(typedOut(plan)).toBe(text);
     for (const k of plan) {
       expect(k.hold).toBeGreaterThanOrEqual(HUMAN_PACE.typing.hold[0]);
       expect(k.hold).toBeLessThanOrEqual(HUMAN_PACE.typing.hold[1]);
@@ -60,6 +68,31 @@ describe("typing plan", () => {
     expect(typingPlan(text, HUMAN_PACE.typing, seeded())).toEqual(plan);
   });
 
+  it("slips onto a neighbouring key, runs on, and backs it all out", () => {
+    const sloppy = { ...HUMAN_PACE.typing, typo: 1, typoRun: [3, 3] as [number, number] };
+    const r = seeded();
+    for (const t of ["William", "the quick brown fox", "Hi, Sam."]) {
+      const keys = typingPlan(t, sloppy, r);
+      expect(typedOut(keys)).toBe(t);
+      expect(keys.some((k) => k.ch === BACKSPACE)).toBe(true);
+    }
+    // A slip of several keys: three typed, three erased, then the right one.
+    const keys = typingPlan("word", sloppy, seeded());
+    expect(keys.slice(3, 6).map((k) => k.ch)).toEqual([BACKSPACE, BACKSPACE, BACKSPACE]);
+    expect(keys[0]?.ch).not.toBe("w");
+    expect(keys[2]?.after).toBeGreaterThanOrEqual(HUMAN_PACE.typing.notice[0]);
+    expect(keys[6]?.ch).toBe("w");
+  });
+
+  it("never slips on digits or symbols, nor past the end of a word", () => {
+    const sloppy = { ...HUMAN_PACE.typing, typo: 1, typoRun: [3, 3] as [number, number] };
+    expect(typingPlan("123-456", sloppy, seeded()).some((k) => k.ch === BACKSPACE)).toBe(false);
+    // "a b": the slip on "a" cannot run on into the space.
+    const keys = typingPlan("a b", sloppy, seeded());
+    expect(keys.slice(0, 2).map((k) => k.ch)).toEqual([keys[0]?.ch, BACKSPACE]);
+    expect(typedOut(keys)).toBe("a b");
+  });
+
   it("counts an emoji as one keystroke", () => {
     expect(typingPlan("a👍b", HUMAN_PACE.typing, seeded()).map((k) => k.ch)).toEqual([
       "a",
@@ -74,7 +107,7 @@ describe("mouse path", () => {
   const to = { x: 900, y: 500 };
 
   it("ends exactly on the aim, curved and eased on the way", () => {
-    const path = mousePath(from, to, 40, HUMAN_PACE.mouse, seeded());
+    const path = mousePath(from, to, 40, { ...HUMAN_PACE.mouse, hesitate: 0 }, seeded());
     expect(path.at(-1)).toMatchObject(to);
     // Not a straight line: some point sits off the chord.
     const off = path.map((p) =>
@@ -105,6 +138,32 @@ describe("mouse path", () => {
     expect(path.at(-1)).toMatchObject(to);
   });
 
+  it("sometimes stops part way, rests, and goes on", () => {
+    const path = mousePath(
+      from,
+      to,
+      40,
+      { ...HUMAN_PACE.mouse, overshoot: 0, hesitate: 1 },
+      seeded(),
+    );
+    expect(path.at(-1)).toMatchObject(to);
+    // A run of tiny moves in the middle: the hand resting, not frozen, not travelling.
+    const still = path.filter((p, i) => {
+      const a = path[i - 1];
+      return a && Math.hypot(p.x - a.x, p.y - a.y) < 3 && p.after > 14;
+    });
+    expect(still.length).toBeGreaterThan(0);
+    const reach = mousePath(
+      from,
+      to,
+      40,
+      { ...HUMAN_PACE.mouse, overshoot: 0, hesitate: 0 },
+      seeded(),
+    );
+    const time = (p: { after: number }[]) => p.reduce((n, s) => n + s.after, 0);
+    expect(time(path)).toBeGreaterThan(time(reach) + HUMAN_PACE.mouse.hesitateMs[0]);
+  });
+
   it("aims inside the control, near its middle", () => {
     const box = { x: 10, y: 20, width: 200, height: 40 };
     const r = seeded();
@@ -129,6 +188,16 @@ describe("idle hand", () => {
     }
   });
 
+  it("rests with a pixel or so of drift, and ends back on the spot", () => {
+    const at = { x: 300, y: 200 };
+    const steps = restAt(at, 600, HUMAN_PACE.mouse, seeded());
+    expect(steps.reduce((n, s) => n + s.after, 0)).toBe(600);
+    expect(steps.length).toBeGreaterThan(2);
+    for (const p of steps) expect(Math.hypot(p.x - at.x, p.y - at.y)).toBeLessThan(2);
+    expect(steps.at(-1)).toEqual({ ...at, after: 0 });
+    expect(restAt(at, 0, HUMAN_PACE.mouse, seeded())).toEqual([]);
+  });
+
   it("wanders to a few stops inside the page, resting at each", () => {
     const view = { width: 1280, height: 800 };
     const path = wanderPath(
@@ -141,7 +210,8 @@ describe("idle hand", () => {
       expect(p.x).toBeGreaterThan(-10);
       expect(p.x).toBeLessThan(view.width + 10);
     }
-    const rests = path.filter((p) => p.after >= HUMAN_PACE.mouse.wanderRest[0]);
+    // A rest ends back on its stop with no wait; three stops, three rests.
+    const rests = path.filter((p, i) => p.after === 0 && i > 0);
     expect(rests.length).toBeGreaterThanOrEqual(3);
   });
 });
@@ -205,6 +275,9 @@ function fakes(box: { x: number; y: number; width: number; height: number } | nu
   return { log, page, target };
 }
 
+/** Hands that never slip, for tests about the order of keys. */
+const neat = { ...HUMAN_PACE, typing: { ...HUMAN_PACE.typing, typo: 0 } };
+
 describe("hands", () => {
   it("reach the control along a path, then click inside it with the button held", async () => {
     const { log, target } = fakes({ x: 400, y: 300, width: 120, height: 30 });
@@ -236,12 +309,25 @@ describe("hands", () => {
 
   it("clear the field, then type it key by key", async () => {
     const { log, target } = fakes({ x: 0, y: 0, width: 100, height: 20 });
-    await handsFor(HUMAN_PACE, seeded()).type(target, "hi", { timeout: 1000 });
+    await handsFor(neat, seeded()).type(target, "hi", { timeout: 1000 });
     expect(log.filter((l) => /^(fill|key)/.test(l)).map((l) => l.replace(/ \d+$/, ""))).toEqual([
       "fill",
       "key h",
       "key i",
     ]);
+  });
+
+  it("back a slip out with Backspace", async () => {
+    const { log, page } = fakes(null);
+    const sloppy = {
+      ...HUMAN_PACE,
+      typing: { ...HUMAN_PACE.typing, typo: 1, typoRun: [1, 1] as [number, number] },
+    };
+    await handsFor(sloppy, seeded()).type(page, "ok", { timeout: 1000 });
+    const keys = log.map((l) => l.replace(/ \d+$/, ""));
+    expect(keys).toContain(`press ${BACKSPACE}`);
+    const played = keys.map((k) => ({ ch: k === `press ${BACKSPACE}` ? BACKSPACE : k.slice(4) }));
+    expect(typedOut(played)).toBe("ok");
   });
 
   it("paste long text instead of typing it", async () => {
@@ -253,7 +339,7 @@ describe("hands", () => {
 
   it("type at the caret when handed a page", async () => {
     const { log, page } = fakes(null);
-    await handsFor(HUMAN_PACE, seeded()).type(page, "ok", { timeout: 1000 });
+    await handsFor(neat, seeded()).type(page, "ok", { timeout: 1000 });
     expect(log.map((l) => l.replace(/ \d+$/, ""))).toEqual(["key o", "key k"]);
   });
 

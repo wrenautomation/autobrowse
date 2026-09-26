@@ -11,9 +11,12 @@
  *          a few stops near and far, trembling as a hand does
  *   click  a control off screen is wheeled to, flick by flick; then a
  *          curved, eased reach to a spot near the middle of the control,
- *          a beat of hover, the button held down a moment
+ *          sometimes stopping part way; a beat of hover, the button held
+ *          down a moment. Every pause drifts a pixel or so, as a resting
+ *          hand does
  *   type   runs of fast and slow keys, beats between words and after
- *          punctuation, the odd stall mid-word; long text is pasted
+ *          punctuation, the odd stall mid-word, the odd slip onto the key
+ *          next door, backed out with Backspace; long text is pasted
  *   press  one key, held down like a key is
  *   paste  a value that arrives whole, as autofill or a password manager
  *          puts it: the field clicked, a beat, the text in at once
@@ -32,17 +35,17 @@
  */
 import type { Locator, Page } from "playwright";
 import { chance, drawMs, type Random } from "./draw.js";
-import { aimPoint, type MouseStyle, mousePath, type Point, wanderPath } from "./mouse.js";
+import { aimPoint, type MouseStyle, mousePath, type Point, restAt, wanderPath } from "./mouse.js";
 import { type ScrollStyle, wheelPlan } from "./scroll.js";
-import { type TypingStyle, typingPlan } from "./typing.js";
+import { BACKSPACE, type TypingStyle, typingPlan } from "./typing.js";
 
 export { drawMs } from "./draw.js";
 export type { MouseStyle, PathStep } from "./mouse.js";
-export { aimPoint, mousePath, tremor, wanderPath } from "./mouse.js";
+export { aimPoint, mousePath, restAt, tremor, wanderPath } from "./mouse.js";
 export type { ScrollStyle, WheelStep } from "./scroll.js";
 export { wheelPlan } from "./scroll.js";
 export type { Keystroke, TypingStyle } from "./typing.js";
-export { typingPlan } from "./typing.js";
+export { BACKSPACE, typingPlan } from "./typing.js";
 
 export interface Pace {
   /** Reading the page before an act, ms. */
@@ -69,6 +72,10 @@ export const HUMAN_PACE: Pace = {
     stall: 0.015,
     stallMs: [500, 1_800],
     pasteOver: 400,
+    typo: 0.025,
+    typoRun: [1, 3],
+    notice: [180, 650],
+    erase: [70, 160],
   },
   mouse: {
     reach: [90, 170],
@@ -80,6 +87,10 @@ export const HUMAN_PACE: Pace = {
     tremor: 0.8,
     wanderStops: [1, 4],
     wanderRest: [60, 700],
+    hesitate: 0.2,
+    hesitateMs: [80, 450],
+    jitter: 0.6,
+    jitterGap: [30, 200],
   },
   scroll: {
     notch: [85, 125],
@@ -190,6 +201,12 @@ async function play(page: Page, steps: { x: number; y: number; after: number }[]
   }
 }
 
+/** Rest the hand on the mouse where it is, for a draw from `range`. */
+async function rest(page: Page, range: [number, number], pace: Pace, random: Random) {
+  const at = await pointerOf(page, random);
+  await play(page, restAt(at, drawMs(range, random), pace.mouse, random), pace);
+}
+
 async function glide(page: Page, to: Point, size: number, pace: Pace, random: Random) {
   await play(page, mousePath(await pointerOf(page, random), to, size, pace.mouse, random), pace);
   pointers.set(page, to);
@@ -233,7 +250,7 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
     if (!box) return target.click({ ...o, ...(at ? { position: at } : {}) });
     const aim = at ? { x: box.x + at.x, y: box.y + at.y } : aimPoint(box, random);
     await glide(page, aim, Math.min(box.width, box.height), pace, random).catch(() => undefined);
-    await page.waitForTimeout(drawMs(pace.mouse.hover, random));
+    await rest(page, pace.mouse.hover, pace, random).catch(() => undefined);
     // Playwright's click at that spot: it checks the control is still there and uncovered,
     // finds the pointer already on it, and holds the button for `delay`.
     await target.click({
@@ -272,11 +289,11 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
       const start = { x: box.x + from.x, y: box.y + from.y };
       const end = { x: box.x + to.x, y: box.y + to.y };
       await glide(page, start, size, pace, random);
-      await page.waitForTimeout(drawMs(pace.mouse.hover, random));
+      await rest(page, pace.mouse.hover, pace, random);
       await page.mouse.down();
-      await page.waitForTimeout(drawMs(pace.mouse.hold, random));
+      await rest(page, pace.mouse.hold, pace, random);
       await glide(page, end, size, pace, random);
-      await page.waitForTimeout(drawMs(pace.mouse.hover, random));
+      await rest(page, pace.mouse.hover, pace, random);
       await page.mouse.up();
     },
     async type(target, text, o) {
@@ -293,13 +310,14 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
       // through the locator, which re-checks and re-focuses the control on every key.
       for (const k of typingPlan(text, pace.typing, random)) {
         // `delay` is how long the key is held: down, wait, up.
-        await page.keyboard.type(k.ch, { delay: k.hold });
+        if (k.ch === BACKSPACE) await page.keyboard.press(BACKSPACE, { delay: k.hold });
+        else await page.keyboard.type(k.ch, { delay: k.hold });
         if (k.after) await page.waitForTimeout(k.after);
       }
     },
     async paste(target, text, o) {
       await click(target, o);
-      await target.page().waitForTimeout(drawMs(pace.mouse.hover, random));
+      await rest(target.page(), pace.mouse.hover, pace, random).catch(() => undefined);
       await target.fill(text, o);
     },
     press: (target, key, o) => {
