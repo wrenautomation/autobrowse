@@ -92,6 +92,12 @@ const schema = z.object({
   openaiApiKey: z.string().min(1).optional(),
   openaiBaseUrl: z.string().url().optional(),
   cohereApiKey: z.string().optional(),
+  /**
+   * The model that looks at captcha pictures. Unset: Anthropic when its key
+   * is here (Claude sees), else the model above (which may be text only).
+   */
+  eyesProvider: z.enum(["anthropic", "openai", "cohere", "claude-code"]).optional(),
+  eyesModel: z.string().min(1).optional(),
   /** Tokens (in + out) every model call may spend per UTC day, all processes together; 0 = no cap. */
   llmDailyTokens: z.coerce.number().int().min(0).default(3_000_000),
   /** Tries at a captcha before it is handed to you; 0 = hand it over at once. */
@@ -278,6 +284,8 @@ export const ENV_KEYS = {
   openaiApiKey: "OPENAI_API_KEY",
   openaiBaseUrl: "OPENAI_BASE_URL",
   cohereApiKey: "COHERE_API_KEY",
+  eyesProvider: "EYES_PROVIDER",
+  eyesModel: "EYES_MODEL",
   llmDailyTokens: "LLM_DAILY_TOKENS",
   captchaAttempts: "CAPTCHA_ATTEMPTS",
   memory: "MEMORY",

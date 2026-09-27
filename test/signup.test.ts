@@ -1,7 +1,7 @@
 import { memoryCredentials } from "credvault";
 import { describe, expect, it } from "vitest";
 import { exploreWithAgent } from "../src/agent/explorer.js";
-import type { CodeSource } from "../src/auth/codes.js";
+import { type CodeSource, codeSources, messageSource } from "../src/auth/codes.js";
 import {
   accountKey,
   codeSecrets,
@@ -229,6 +229,32 @@ describe("codeSecrets", () => {
     expect(await s("code")).toBe("111111");
     expect(await s("code")).toBe("222222");
     expect(src.asked[1]?.getTime()).toBeGreaterThan(src.asked[0]?.getTime() ?? 0);
+  });
+
+  it("a code texted to our phone is placed while the inbox stays empty", async () => {
+    const since = new Date("2026-09-27T10:00:00Z");
+    const read: string[] = [];
+    const quiet = { recent: async () => [] };
+    const phone = {
+      recent: async (inbox: string) => {
+        read.push(inbox);
+        return [
+          {
+            from: "FB",
+            subject: "",
+            text: "Your code is 48213",
+            at: new Date(since.getTime() + 1),
+          },
+        ];
+      },
+    };
+    const wait = { pollMs: 1, timeoutMs: 50, sleep: async () => undefined };
+    const src = codeSources(
+      messageSource({ kind: "email", reader: quiet, ...wait }),
+      messageSource({ kind: "sms", inbox: "+15550001111", reader: phone, ...wait }),
+    );
+    expect(await codeSecrets(src, "hello@wren.test", since)("code")).toBe("48213");
+    expect(read).toEqual(["+15550001111"]);
   });
 });
 

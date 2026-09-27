@@ -284,8 +284,22 @@ function flushAtExit(s: TraceSink): void {
 const LLM_TIMEOUT_MS = 180_000;
 
 /** Captcha walls solved before they go to a person: checkboxes always, pictures when the model can see. */
-export function captchaFor(settings: Settings): { eyes: Eyes | null; attempts: number } {
-  const llm = llmFor(settings);
+export function captchaFor(
+  settings: Settings,
+  http?: HttpClient,
+): { eyes: Eyes | null; attempts: number } {
+  const provider =
+    settings.eyesProvider ?? (settings.anthropicApiKey ? "anthropic" : settings.llmProvider);
+  const model =
+    settings.eyesModel ?? (provider === settings.llmProvider ? settings.llmModel : undefined);
+  const llm = llmFor(
+    {
+      ...settings,
+      llmProvider: provider,
+      ...(model ? { llmModel: model } : { llmModel: undefined }),
+    },
+    http,
+  );
   return { eyes: llm ? eyesOf(llm) : null, attempts: settings.captchaAttempts };
 }
 
@@ -969,7 +983,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       pace: paceFor(settings),
       repairer: rememberingRepairer(memory, llm ? llmRepairer(llm) : noRepairer),
       login: loginFor(settings, gmail),
-      captcha: { eyes: llm ? eyesOf(llm) : null, attempts: settings.captchaAttempts },
+      captcha: captchaFor(settings, http),
       repairIrreversible: !guards.has("irreversible"),
       onRepair: (r) =>
         log.warn(

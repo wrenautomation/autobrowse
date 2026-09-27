@@ -3,14 +3,18 @@ import { describe, expect, it } from "vitest";
 import { findCaptcha, parseSquares, solveCaptcha } from "../src/browser/captcha/index.js";
 import type { Hands } from "../src/browser/human/index.js";
 
-/** A page where only selectors containing one of `shown` are visible. */
+/** A page (its main frame, or a frame inside it) where only selectors containing one of `shown` are visible. */
 function pageShowing(...shown: string[]): Page {
   const loc = (sel: string) => ({
-    first: () => ({ isVisible: async () => shown.some((s) => sel.includes(s)) }),
+    first: () => ({
+      isVisible: async () => shown.some((s) => sel.includes(s)),
+      contentFrame: () => ({ locator: () => ({}) }),
+    }),
   });
+  const frame = { url: () => "https://example.com/", locator: loc };
   return {
     locator: loc,
-    frames: () => [],
+    frames: () => [frame],
     waitForTimeout: async () => undefined,
   } as unknown as Page;
 }
@@ -27,12 +31,23 @@ describe("captcha", () => {
   it("finds Turnstile in a closed shadow root by the frame list", async () => {
     const frame = {
       url: () => "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/x",
+      locator: pageShowing().locator,
       frameElement: async () => ({
         boundingBox: async () => ({ x: 192, y: 304, width: 300, height: 65 }),
       }),
     };
     const page = { ...pageShowing(), frames: () => [frame] } as unknown as Page;
     expect(await findCaptcha(page)).toEqual({ kind: "checkbox", vendor: "turnstile" });
+  });
+
+  it("finds a widget nested in another site's iframe", async () => {
+    const outer = { url: () => "https://www.facebook.com/", locator: pageShowing().locator };
+    const nested = {
+      url: () => "https://www.fbsbx.com/captcha/recaptcha/iframe/",
+      locator: pageShowing("recaptcha/enterprise/anchor").locator,
+    };
+    const page = { ...pageShowing(), frames: () => [outer, nested] } as unknown as Page;
+    expect(await findCaptcha(page)).toEqual({ kind: "checkbox", vendor: "recaptcha" });
   });
 
   it("an open challenge is what is asked, before its checkbox", async () => {
@@ -58,9 +73,6 @@ describe("captcha", () => {
 
   it("a hand or eye that throws comes back as the reason, not a crash", async () => {
     const page = pageShowing("recaptcha/api2/anchor");
-    (page as unknown as { frameLocator: () => unknown }).frameLocator = () => ({
-      first: () => ({ locator: () => ({}) }),
-    });
     const clumsy = {
       think: async () => undefined,
       click: async () => {

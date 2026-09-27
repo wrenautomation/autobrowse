@@ -106,7 +106,7 @@ async function turnstileBox(
 }
 
 const turnstileShown = async (page: Page): Promise<boolean> =>
-  (await visible(page.locator(TURNSTILE.frame))) || (await turnstileBox(page)) !== null;
+  (await shown(page, TURNSTILE.frame)) !== null || (await turnstileBox(page)) !== null;
 
 const visible = (l: Locator) =>
   l
@@ -114,19 +114,36 @@ const visible = (l: Locator) =>
     .isVisible()
     .catch(() => false);
 
+/**
+ * The first visible match in the page or any frame inside it: widgets nest
+ * (Facebook's checkpoint puts reCAPTCHA's iframe inside one of its own), so
+ * a page-level selector alone misses them.
+ */
+async function shown(page: Page, selector: string): Promise<Locator | null> {
+  for (const f of page.frames()) {
+    const l = f.locator(selector);
+    if (await visible(l)) return l.first();
+  }
+  return null;
+}
+
+/** The inside of a vendor's iframe, wherever on the page it sits. */
+async function inside(page: Page, iframe: string): Promise<FrameLocator> {
+  const el = await shown(page, iframe);
+  if (!el) throw new Error("the captcha frame went away");
+  return el.contentFrame();
+}
+
 /** The captcha on the page, the challenge before its checkbox (an open challenge is what is asked now). */
 export async function findCaptcha(page: Page): Promise<Captcha | null> {
-  if (await visible(page.locator(RECAPTCHA.bframe))) return { kind: "grid", vendor: "recaptcha" };
-  if (await visible(page.locator(HCAPTCHA.bframe))) return { kind: "grid", vendor: "hcaptcha" };
-  if (await visible(page.locator(RECAPTCHA.anchor)))
-    return { kind: "checkbox", vendor: "recaptcha" };
-  if (await visible(page.locator(HCAPTCHA.anchor))) return { kind: "checkbox", vendor: "hcaptcha" };
+  const on = async (selector: string) => (await shown(page, selector)) !== null;
+  if (await on(RECAPTCHA.bframe)) return { kind: "grid", vendor: "recaptcha" };
+  if (await on(HCAPTCHA.bframe)) return { kind: "grid", vendor: "hcaptcha" };
+  if (await on(RECAPTCHA.anchor)) return { kind: "checkbox", vendor: "recaptcha" };
+  if (await on(HCAPTCHA.anchor)) return { kind: "checkbox", vendor: "hcaptcha" };
   if (await turnstileShown(page)) return { kind: "checkbox", vendor: "turnstile" };
-  if (await visible(page.locator(GENERIC.slider))) return { kind: "slider", vendor: "generic" };
-  if (
-    (await visible(page.locator(GENERIC.picture))) &&
-    (await visible(page.locator(GENERIC.input)))
-  )
+  if (await on(GENERIC.slider)) return { kind: "slider", vendor: "generic" };
+  if ((await on(GENERIC.picture)) && (await on(GENERIC.input)))
     return { kind: "text", vendor: "generic" };
   return null;
 }
@@ -188,8 +205,8 @@ async function tick(
   settleMs: number,
 ): Promise<Step> {
   if (vendor === "turnstile") {
-    if (await visible(page.locator(TURNSTILE.frame))) {
-      const frame = page.frameLocator(TURNSTILE.frame).first();
+    if (await shown(page, TURNSTILE.frame)) {
+      const frame = await inside(page, TURNSTILE.frame);
       await hands.click(frame.locator(TURNSTILE.box).first(), T).catch(() => undefined);
     } else {
       // Shadow-rooted: the box sits at the widget's left edge, half way down.
@@ -225,13 +242,13 @@ async function tick(
     return "again";
   }
   const parts = vendor === "hcaptcha" ? HCAPTCHA : RECAPTCHA;
-  const frame = page.frameLocator(parts.anchor).first();
+  const frame = await inside(page, parts.anchor);
   await hands.think(page);
   await hands.click(frame.locator(parts.box), T);
   const until = Date.now() + settleMs;
   while (Date.now() < until) {
     if (await visible(frame.locator(parts.ticked))) return "ticked";
-    if (await visible(page.locator(parts.bframe))) return "again";
+    if (await shown(page, parts.bframe)) return "again";
     await page.waitForTimeout(400);
   }
   return "again";
@@ -260,7 +277,7 @@ async function pickSquares(
   settleMs: number,
 ): Promise<Step> {
   const parts = vendor === "hcaptcha" ? HCAPTCHA : RECAPTCHA;
-  const frame: FrameLocator = page.frameLocator(parts.bframe).first();
+  const frame = await inside(page, parts.bframe);
   // reCAPTCHA fades new squares in where clicked ones were: look again until none is left.
   for (let look = 0; look < 4; look++) {
     const tiles = frame.locator(parts.tiles);
@@ -297,7 +314,7 @@ async function pickSquares(
   await hands.click(frame.locator(parts.verify).first(), T);
   const until = Date.now() + settleMs;
   while (Date.now() < until) {
-    if (!(await visible(page.locator(parts.bframe)))) return "ticked";
+    if (!(await shown(page, parts.bframe))) return "ticked";
     await page.waitForTimeout(500);
   }
   // Still open: a wrong pick or a fresh challenge; the next round looks again.
@@ -305,24 +322,25 @@ async function pickSquares(
 }
 
 async function readLetters(page: Page, hands: Hands, eyes: Eyes): Promise<Step> {
-  const png = await page
-    .locator(GENERIC.picture)
-    .first()
-    .screenshot({ ...T, type: "png" });
+  const picture = await shown(page, GENERIC.picture);
+  const input = await shown(page, GENERIC.input);
+  if (!picture || !input) return "gave-up";
+  const png = await picture.screenshot({ ...T, type: "png" });
   const answer = await eyes.look(
     png,
     'A text captcha: the letters and digits in the picture, exactly as shown (case matters). Reply {"text":"..."}.',
   );
   const text = /"text"\s*:\s*"([^"]{1,20})"/.exec(answer)?.[1]?.trim();
   if (!text) return "gave-up";
-  await hands.type(page.locator(GENERIC.input).first(), text, T);
+  await hands.type(input, text, T);
   // The form's own submit is the flow's to press: a text captcha is one field of it.
   return "ticked";
 }
 
 async function slide(page: Page, hands: Hands, eyes: Eyes, settleMs: number): Promise<Step> {
-  const handle = page.locator(GENERIC.slider).first();
-  const puzzle = page.locator(GENERIC.puzzle).first();
+  const handle = await shown(page, GENERIC.slider);
+  const puzzle = await shown(page, GENERIC.puzzle);
+  if (!handle || !puzzle) return "gave-up";
   const box = await puzzle.boundingBox(T);
   const grip = await handle.boundingBox(T);
   if (!box || !grip) return "gave-up";

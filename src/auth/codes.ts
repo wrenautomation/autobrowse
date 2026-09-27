@@ -16,6 +16,8 @@ export interface CodeRequest {
   since: Date;
   /** Something the message would contain, to pick the right one: "Cloudflare", "verification". */
   hint?: string;
+  /** Stop polling: another source already answered (a code read after this is left for the next ask). */
+  signal?: AbortSignal;
 }
 
 export interface CodeSource {
@@ -87,14 +89,20 @@ export interface MessageSourceOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 
+const isPhone = (inbox: string | undefined): boolean =>
+  Boolean(inbox && !inbox.includes("@") && /^\+?[\d\s().-]{7,}$/.test(inbox));
+
 /** Polls the inbox until a message newer than `since` with a code (and the hint, if any) arrives. */
 export function messageSource(opts: MessageSourceOptions): CodeSource {
   const now = opts.now ?? Date.now;
   const sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const pollMs = opts.pollMs ?? 3_000;
   const timeoutMs = opts.timeoutMs ?? 90_000;
+  // A phone reads its own number; an address the credential names is for email, not a text.
   const inboxFor = (cred: Credential) =>
-    cred.codesInbox ?? opts.inbox ?? (cred.username.includes("@") ? cred.username : null);
+    opts.kind === "sms" && opts.inbox && !isPhone(cred.codesInbox)
+      ? opts.inbox
+      : (cred.codesInbox ?? opts.inbox ?? (cred.username.includes("@") ? cred.username : null));
   // A code typed once is spent: a second sign-in on the same phone never takes it again.
   const spent = new Set<string>();
   return {
@@ -107,7 +115,9 @@ export function messageSource(opts: MessageSourceOptions): CodeSource {
       const deadline = now() + timeoutMs;
       const hint = req.hint?.toLowerCase();
       for (;;) {
+        if (req.signal?.aborted) return null;
         const messages = await opts.reader.recent(inbox, req.since);
+        if (req.signal?.aborted) return null;
         const match = messages
           .filter((m) => m.at.getTime() >= req.since.getTime())
           .filter((m) => !hint || `${m.from} ${m.subject} ${m.text}`.toLowerCase().includes(hint))

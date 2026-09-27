@@ -49,18 +49,29 @@ export interface SignupSecretsOptions {
   now?: () => Date;
 }
 
-/** The newest code sent to the credential's inbox or phone after `since`, email first. */
+/** The newest code sent to the credential's inbox or phone after `since`, whichever lands first. */
 export async function nextCode(
   codes: CodeSource,
   cred: Credential,
   since: Date,
 ): Promise<string | null> {
-  for (const kind of ["email", "sms"] as const) {
-    if (!codes.offers(kind, cred)) continue;
-    const code = await codes.get({ site: "signup", kind, since }, cred);
-    if (code) return code;
+  // Email and text polled together: the page says which it sent, the agent placing `code` may not.
+  const kinds = (["email", "sms"] as const).filter((k) => codes.offers(k, cred));
+  if (!kinds.length) return null;
+  const stop = new AbortController();
+  const asks = kinds.map((kind) =>
+    codes.get({ site: "signup", kind, since, signal: stop.signal }, cred).then((code) => {
+      if (!code) throw new Error("none");
+      return code;
+    }),
+  );
+  try {
+    return await Promise.any(asks);
+  } catch {
+    return null;
+  } finally {
+    stop.abort();
   }
-  return null;
 }
 
 /**
