@@ -28,9 +28,9 @@ import { registerReachCommands } from "./cli-reach.js";
 import { registerRecordCommands } from "./cli-record.js";
 import { registerShotsCommands } from "./cli-shots.js";
 import { registerSiteCommands } from "./cli-site.js";
-import { registerStepsCommands } from "./cli-steps.js";
 import { registerUnsubscribe } from "./cli-unsubscribe.js";
 import { registerWalletCommands } from "./cli-wallet.js";
+import { registerWatchedCommands } from "./cli-watched.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
 import { fileDone } from "./needs.js";
@@ -316,7 +316,7 @@ registerAwsCommands(program, local);
 registerLangfuseCommands(program, () => envStoreFor(settings));
 registerReachCommands(program, () => envStoreFor(settings), local);
 registerShotsCommands(program, settings);
-registerStepsCommands(program, settings);
+registerWatchedCommands(program, settings);
 program
   .command("reap")
   .description(

@@ -1,5 +1,5 @@
 /**
- * `autobrowse steps [run]`: what a watched flow did, step by step (see
+ * `autobrowse watched [run]`: what a watched flow did, step by step (see
  * `browser/watch`). No run = the newest; a run is its folder or a name
  * fragment ("cloudflare-login"). Each line: step, outcome, time, goal, url,
  * and the shot to open. The trace replays it: `npx playwright show-trace`.
@@ -11,9 +11,9 @@ import { readSteps, watchedRuns } from "../browser/watch.js";
 import { expandHome } from "../google-auth.js";
 import type { Settings } from "./config.js";
 
-export function registerStepsCommands(program: Command, settings: Settings): void {
+export function registerWatchedCommands(program: Command, settings: Settings): void {
   program
-    .command("steps [run]")
+    .command("watched [run]")
     .description(
       "What a watched flow did, step by step (WATCH_FLOWS=<site|site/flow|all>); newest run by default",
     )

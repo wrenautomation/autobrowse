@@ -103,7 +103,7 @@ const schema = z.object({
   /**
    * Flows to watch step by step: `all`, a site (`cloudflare`), or `site/flow`,
    * comma separated. Each step leaves a masked screenshot and its aria tree,
-   * and the trace is kept even when the run works. Read with `autobrowse steps`.
+   * and the trace is kept even when the run works. Read with `autobrowse watched`.
    */
   watchFlows: z.string().optional(),
   /** Tries at a captcha before it is handed to you; 0 = hand it over at once. */
