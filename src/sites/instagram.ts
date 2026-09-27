@@ -9,6 +9,7 @@
  */
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
+import { META_REDIRECT } from "./meta.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 
 /**
@@ -89,6 +90,8 @@ export const instagramOAuth: OAuthSpec = {
   // No refresh token: the long-lived token (60 days) is kept; consent again when it lapses.
   refreshToken: "INSTAGRAM_REFRESH_TOKEN",
   accessToken: "INSTAGRAM_ACCESS_TOKEN",
+  // Meta takes neither http nor localhost: the Meta app's https redirect, answered by the browser.
+  redirect: META_REDIRECT,
   longLived: {
     url: `${INSTAGRAM_ORIGIN}/access_token`,
     fields: { grant_type: "ig_exchange_token" },
@@ -229,7 +232,7 @@ export const instagram: SiteApi = {
       makes: ["INSTAGRAM_CLIENT_ID", "INSTAGRAM_CLIENT_SECRET"],
       how: {
         workflow: "instagram-developer-app",
-        input: { redirectUri: "http://127.0.0.1:9400/oauth/callback" },
+        input: { redirectUri: META_REDIRECT },
       },
       summary:
         "On developers.facebook.com: an app with the Instagram product (Instagram Login), the redirect URI, the account as a tester; keep the Instagram app id and secret",

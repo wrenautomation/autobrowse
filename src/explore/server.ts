@@ -38,6 +38,7 @@ import {
 } from "../browser/flow.js";
 import { ariaWithFrames } from "../browser/frames.js";
 import { handsFor } from "../browser/human/index.js";
+import { inPage } from "../browser/in-page.js";
 import { type Hints, locate, locateAll, textOf } from "../browser/locate.js";
 import { snapshotPage } from "../browser/repair.js";
 import { type BrowserOptions, bodyText, looksLikeWall, NeedsHuman } from "../browser/session.js";
@@ -926,7 +927,7 @@ async function serve(
                   timeout: 10_000,
                 },
               )
-          : await page.evaluate(c.js);
+          : await inPage(page, c.js);
         return { result: typeof result === "string" ? out(result, c.raw) : result };
       }
       case "count":
@@ -974,7 +975,7 @@ async function serve(
         handActs = 0;
         journal({ kind: "pause" });
         // The page may predate the init script: hook it now.
-        await page.evaluate(OBSERVER_SCRIPT).catch(() => undefined);
+        await inPage(page, OBSERVER_SCRIPT).catch(() => undefined);
         return { paused: true };
       case "resume": {
         journal({ kind: "resume" });

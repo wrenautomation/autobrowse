@@ -6,6 +6,7 @@
  */
 import { mkdirSync } from "node:fs";
 import { join, relative } from "node:path";
+import { inPage } from "../browser/in-page.js";
 import type { Session } from "../browser/session.js";
 import type { DistributiveOmit } from "../types.js";
 import { BINDING, OBSERVER_SCRIPT } from "./observer.js";
@@ -144,7 +145,7 @@ export async function startBrowserRecording(opts: {
   };
 
   if (opts.startUrl) await session.page.goto(opts.startUrl).catch(() => undefined);
-  else await session.page.evaluate(OBSERVER_SCRIPT).catch(() => undefined);
+  else await inPage(session.page, OBSERVER_SCRIPT).catch(() => undefined);
 
   const finished = (async (): Promise<BrowserRecording> => {
     await new Promise<void>((resolve) => {

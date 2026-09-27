@@ -300,6 +300,9 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
       const page = isPage(target) ? target : target.page();
       if (!isPage(target)) {
         await click(target, o);
+        // A click on a wrapper or an overlay leaves focus elsewhere and the keys would
+        // go nowhere: put focus on the control, as a person's second click would.
+        if (!(await hasFocus(target))) await target.focus(o);
         await target.fill("", o);
       }
       if ([...text].length > pace.typing.pasteOver) {
@@ -314,6 +317,8 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
         else await page.keyboard.type(k.ch, { delay: k.hold });
         if (k.after) await page.waitForTimeout(k.after);
       }
+      // Keys that landed nowhere leave the field empty: a person would see it and fill it.
+      if (!isPage(target) && text && (await fieldValue(target)) === "") await target.fill(text, o);
     },
     async paste(target, text, o) {
       await click(target, o);
@@ -328,3 +333,15 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
     },
   };
 }
+
+/** Whether the control (or something inside it) has focus; unknown counts as yes. */
+const hasFocus = (target: Locator): Promise<boolean> =>
+  target
+    .evaluate(
+      (el) => el === el.ownerDocument.activeElement || el.contains(el.ownerDocument.activeElement),
+    )
+    .catch(() => true);
+
+/** A field's value; null for anything that is not a field (a rich editor keeps its own). */
+const fieldValue = (target: Locator): Promise<string | null> =>
+  target.inputValue({ timeout: 1_000 }).catch(() => null);

@@ -15,6 +15,7 @@
  * cleared, the console signs in fresh, and the card is tried once more.
  */
 import { defineFlow, type FlowPage } from "../flow.js";
+import { inPage } from "../in-page.js";
 
 export interface AwsCliLoginInput {
   /** The URL `aws login --remote` printed. */
@@ -50,7 +51,8 @@ export const awsCliLogin = defineFlow<AwsCliLoginInput, { code: string }>({
       if ((await continueSession(fp, url, user)) === "stale")
         return fp.human(`AWS still says Bad Request at ${fp.url()} after fresh cookies`);
     }
-    const code = await fp.page.evaluate(() => {
+    // The page's own click handler calls the clipboard: the shim must sit in its world.
+    const code = await inPage(fp.page, () => {
       let captured = "";
       navigator.clipboard.writeText = (t: string) => {
         captured = t;

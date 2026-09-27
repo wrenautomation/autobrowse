@@ -242,8 +242,13 @@ describe("module", () => {
 });
 
 /** A page and a control that record what the hands did. */
-function fakes(box: { x: number; y: number; width: number; height: number } | null) {
+function fakes(
+  box: { x: number; y: number; width: number; height: number } | null,
+  field: { clickFocuses?: boolean; keysLand?: boolean } = {},
+) {
   const log: string[] = [];
+  const { clickFocuses = true, keysLand = true } = field;
+  const state = { focused: false, value: "" };
   const page = {
     viewportSize: () => ({ width: 1280, height: 800 }),
     mouse: {
@@ -251,7 +256,10 @@ function fakes(box: { x: number; y: number; width: number; height: number } | nu
       wheel: async (_x: number, dy: number) => void log.push(`wheel ${dy}`),
     },
     keyboard: {
-      type: async (t: string, o?: { delay?: number }) => void log.push(`key ${t} ${o?.delay ?? 0}`),
+      type: async (t: string, o?: { delay?: number }) => {
+        log.push(`key ${t} ${o?.delay ?? 0}`);
+        if (state.focused && keysLand) state.value += t;
+      },
       press: async (k: string) => void log.push(`press ${k}`),
       insertText: async (t: string) => void log.push(`insert ${t.length}`),
     },
@@ -261,13 +269,24 @@ function fakes(box: { x: number; y: number; width: number; height: number } | nu
     page: () => page,
     scrollIntoViewIfNeeded: async () => {},
     boundingBox: async () => box,
-    click: async (o: { position?: { x: number; y: number }; delay?: number }) =>
-      void log.push(
+    click: async (o: { position?: { x: number; y: number }; delay?: number }) => {
+      log.push(
         o.position
           ? `click at ${Math.round(o.position.x)},${Math.round(o.position.y)} held ${o.delay}`
           : "click plain",
-      ),
-    fill: async (v: string) => void log.push(`fill ${v.length}`),
+      );
+      state.focused = clickFocuses;
+    },
+    focus: async () => {
+      log.push("focus");
+      state.focused = true;
+    },
+    evaluate: async () => state.focused,
+    inputValue: async () => state.value,
+    fill: async (v: string) => {
+      log.push(`fill ${v.length}`);
+      state.value = v;
+    },
     pressSequentially: async (ch: string, o: { delay: number }) =>
       void log.push(`key ${ch} ${o.delay}`),
     press: async (k: string) => void log.push(`press ${k}`),
@@ -315,6 +334,20 @@ describe("hands", () => {
       "key h",
       "key i",
     ]);
+  });
+
+  it("focus the control when the click left focus elsewhere", async () => {
+    const { log, target } = fakes({ x: 0, y: 0, width: 100, height: 20 }, { clickFocuses: false });
+    await handsFor(neat, seeded()).type(target, "hi", { timeout: 1000 });
+    expect(
+      log.filter((l) => /^(focus|fill|key)/.test(l)).map((l) => l.replace(/ \d+$/, "")),
+    ).toEqual(["focus", "fill", "key h", "key i"]);
+  });
+
+  it("fill the field when the keys landed nowhere", async () => {
+    const { log, target } = fakes({ x: 0, y: 0, width: 100, height: 20 }, { keysLand: false });
+    await handsFor(neat, seeded()).type(target, "hi", { timeout: 1000 });
+    expect(log.at(-1)).toBe("fill 2");
   });
 
   it("back a slip out with Backspace", async () => {
