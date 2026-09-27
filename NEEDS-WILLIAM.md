@@ -10,6 +10,13 @@ Live list: `pnpm autobrowse needs`. Rows clear themselves. Dated 2026-09-27.
   william@wrenautomation.com, name "Wren Automation", handle wrenautomation.
   Then tell me. I do the developer app and consent.
 
+- **GitHub login** (CI is off: the org's free Actions minutes ran out in
+  September, all on the retired emails_gen; they come back Oct 1). Copy
+  `email password [authenticator key]` for WilliamJin123, then
+  `autobrowse creds paste github`. If it signs in with Google instead,
+  just say so. I then add ••4445 to the wrenautomation org's billing and
+  set a $10/month Actions budget (one text to you for the yes).
+
 Optional: `autobrowse creds paste google@will` and a Gmail consent for
 will@williamjin.dev, if autobrowse should read that inbox.
 
