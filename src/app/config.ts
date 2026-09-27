@@ -100,6 +100,12 @@ const schema = z.object({
   eyesModel: z.string().min(1).optional(),
   /** Tokens (in + out) every model call may spend per UTC day, all processes together; 0 = no cap. */
   llmDailyTokens: z.coerce.number().int().min(0).default(3_000_000),
+  /**
+   * Flows to watch step by step: `all`, a site (`cloudflare`), or `site/flow`,
+   * comma separated. Each step leaves a masked screenshot and its aria tree,
+   * and the trace is kept even when the run works. Read with `autobrowse steps`.
+   */
+  watchFlows: z.string().optional(),
   /** Tries at a captcha before it is handed to you; 0 = hand it over at once. */
   captchaAttempts: z.coerce.number().int().min(0).default(3),
   /** Memory between runs (repairs that worked, hand-off notes). `none` keeps it in-process. */
@@ -288,6 +294,7 @@ export const ENV_KEYS = {
   eyesModel: "EYES_MODEL",
   llmDailyTokens: "LLM_DAILY_TOKENS",
   captchaAttempts: "CAPTCHA_ATTEMPTS",
+  watchFlows: "WATCH_FLOWS",
   memory: "MEMORY",
   backboardApiKey: "BACKBOARD_API_KEY",
   backboardAssistant: "BACKBOARD_ASSISTANT",

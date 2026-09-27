@@ -33,6 +33,7 @@ import {
   openSession,
   pageHtml,
 } from "./session.js";
+import { type Watch, watches, watchSteps } from "./watch.js";
 import type { Passkeys } from "./webauthn.js";
 
 /** A site names a persistent profile; any kebab-case string. Known ones have a home page for `login`. */
@@ -218,6 +219,12 @@ export interface RunnerOptions {
    * Only for a long-lived worker; a one-shot CLI would never exit.
    */
   park?: SessionPark;
+  /**
+   * The flows to watch step by step (`WATCH_FLOWS`: `all`, a site, or
+   * `site/flow`, comma separated): a masked screenshot and the aria tree per
+   * step, and the trace kept even when the run works (`browser/watch`).
+   */
+  watch?: string;
 }
 
 const ACT_TIMEOUT_MS = 15_000;
@@ -369,48 +376,20 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         let signingIn = false;
         let triedCaptcha = false;
         let active = session.page;
+        const watch: Watch | null = watches(runner.watch ?? opts.watchFlows, flow.site, flow.name)
+          ? watchSteps(join(artifactsDir, stamp))
+          : null;
+        const stepped = <T>(
+          s: Parameters<Watch["step"]>[0],
+          run: () => Promise<T>,
+          outcome?: (r: T) => "ok" | "repaired" | "failed",
+        ): Promise<T> => (watch ? watch.step(s, () => active, run, outcome) : run());
         const fp: FlowPage = {
           get page() {
             return active;
           },
-          async open(url, o = {}) {
-            active = session.page;
-            const stay = keepPage && samePage(session.page.url(), url);
-            keepPage = false;
-            if (!stay) await settle(session.page, url);
-            if (OFFLINE_PAGE.test(session.page.url()))
-              throw new Error(`net::ERR_INTERNET_DISCONNECTED opening ${url}`);
-            if (o.allowWall) return;
-            // Twice: a security page asks for the password again right after a sign-in.
-            for (let attempt = 1; ; attempt++) {
-              const wall = await looksLikeWall(session.page);
-              if (!wall) return;
-              const after = attempt > 1 ? " after signing in" : "";
-              if (wall.kind === "captcha" && runner.captcha && !triedCaptcha) {
-                triedCaptcha = true;
-                const got = await fp.captcha();
-                if (got.solved) {
-                  // A checkbox wall lets the page through on its own (Cloudflare reloads it).
-                  await session.page
-                    .waitForLoadState("networkidle", { timeout: SETTLE_MS })
-                    .catch(() => undefined);
-                  continue;
-                }
-                throw new NeedsHuman(`${flow.site}: captcha (${got.reason})${after}`);
-              }
-              if (wall.kind === "captcha" || !runner.login || signingIn || attempt > 2)
-                throw new NeedsHuman(`${flow.site}: ${wall.detail}${after}`);
-              signingIn = true;
-              try {
-                const outcome = await runner.login(fp, flow.site);
-                if (outcome !== "signed-in")
-                  throw new NeedsHuman(`${flow.site}: ${wall.detail} (${outcome})`);
-              } finally {
-                signingIn = false;
-              }
-              await settle(session.page, url);
-            }
-          },
+          open: (url, o = {}) =>
+            stepped({ kind: "open", goal: `open ${url}` }, () => openPage(url, o)),
           url: () => active.url(),
           text: () => bodyText(active, 20_000),
           html: () => pageHtml(active, 400_000),
@@ -453,74 +432,143 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           },
           async act(op, hints, a) {
             lastGoal = a.goal;
-            const timeout = a.timeoutMs ?? ACT_TIMEOUT_MS;
-            const page = active;
-            try {
-              await doOp(page, hints, op, timeout, hands);
-              return;
-            } catch (err) {
-              if (a.irreversible && !runner.repairIrreversible)
-                throw new NeedsHuman(`${flow.site}: ${a.goal} (irreversible, not repaired)`);
-              const proposal = await repairer.propose({
-                site: flow.site,
-                goal: a.goal,
-                failed: hints,
-                url: page.url(),
-                snapshot: await snapshotPage(page),
-              });
-              if (!proposal) throw err;
-              const report: RepairReport = {
-                ...proposal,
-                site: flow.site,
-                flow: `${flow.site}/${flow.name}`,
-                goal: a.goal,
-                failed: hints,
-                url: page.url(),
-                ok: false,
-              };
-              try {
-                await doOp(page, proposal.hints, op, timeout, hands);
-                report.ok = true;
-              } finally {
-                runner.onRepair?.(report);
-                if (canLearn(repairer)) await repairer.learn(report);
-              }
-            }
+            await stepped(
+              { kind: "act", goal: a.goal, op: op.kind, hints },
+              () => actOnce(op, hints, a),
+              (how) => how,
+            );
           },
           async signIn(site, account) {
             if (!runner.login || signingIn) return "no-login";
             signingIn = true;
             try {
-              return await runner.login(fp, site ?? flow.site, account);
+              return await stepped(
+                { kind: "sign-in", goal: `sign in to ${site ?? flow.site}` },
+                () =>
+                  (runner.login as NonNullable<RunnerOptions["login"]>)(
+                    fp,
+                    site ?? flow.site,
+                    account,
+                  ),
+              );
             } finally {
               signingIn = false;
             }
           },
-          async captcha() {
-            const eyes = runner.captcha?.eyes ?? null;
-            const attempts = runner.captcha?.attempts ?? 3;
-            let got: CaptchaOutcome = {
-              solved: false,
-              kind: null,
-              vendor: null,
-              reason: "captcha attempts are 0 (CAPTCHA_ATTEMPTS)",
-            };
-            for (let n = 1; n <= attempts; n++) {
-              got = await solveCaptcha(active, { hands, eyes });
-              // Nothing there, or a picture with no eyes: another try would say the same.
-              if (got.solved || !got.kind || (!eyes && got.kind !== "checkbox")) break;
-            }
-            return got;
-          },
+          captcha: () =>
+            stepped(
+              { kind: "captcha", goal: "solve the captcha" },
+              () => solveWithRetries(),
+              (got) => (got.solved ? "ok" : "failed"),
+            ),
           human(reason) {
             throw new NeedsHuman(`${flow.site}: ${reason}`);
           },
           passkeys: session.passkeys,
         };
+        /** One act: the recorded locator, else the repairer's; "repaired" when the second found it. */
+        async function actOnce(
+          op: Op,
+          hints: Hints,
+          a: Parameters<FlowPage["act"]>[2],
+        ): Promise<"ok" | "repaired"> {
+          const timeout = a.timeoutMs ?? ACT_TIMEOUT_MS;
+          const page = active;
+          try {
+            await doOp(page, hints, op, timeout, hands);
+            return "ok";
+          } catch (err) {
+            if (a.irreversible && !runner.repairIrreversible)
+              throw new NeedsHuman(`${flow.site}: ${a.goal} (irreversible, not repaired)`);
+            const proposal = await repairer.propose({
+              site: flow.site,
+              goal: a.goal,
+              failed: hints,
+              url: page.url(),
+              snapshot: await snapshotPage(page),
+            });
+            if (!proposal) throw err;
+            const report: RepairReport = {
+              ...proposal,
+              site: flow.site,
+              flow: `${flow.site}/${flow.name}`,
+              goal: a.goal,
+              failed: hints,
+              url: page.url(),
+              ok: false,
+            };
+            try {
+              await doOp(page, proposal.hints, op, timeout, hands);
+              report.ok = true;
+            } finally {
+              runner.onRepair?.(report);
+              if (canLearn(repairer)) await repairer.learn(report);
+            }
+            return "repaired";
+          }
+        }
+        async function solveWithRetries(): Promise<CaptchaOutcome> {
+          const eyes = runner.captcha?.eyes ?? null;
+          const attempts = runner.captcha?.attempts ?? 3;
+          let got: CaptchaOutcome = {
+            solved: false,
+            kind: null,
+            vendor: null,
+            reason: "captcha attempts are 0 (CAPTCHA_ATTEMPTS)",
+          };
+          for (let n = 1; n <= attempts; n++) {
+            got = await solveCaptcha(active, { hands, eyes });
+            // Nothing there, or a picture with no eyes: another try would say the same.
+            if (got.solved || !got.kind || (!eyes && got.kind !== "checkbox")) break;
+          }
+          return got;
+        }
+        async function openPage(url: string, o: { allowWall?: boolean }): Promise<void> {
+          active = session.page;
+          const stay = keepPage && samePage(session.page.url(), url);
+          keepPage = false;
+          if (!stay) await settle(session.page, url);
+          if (OFFLINE_PAGE.test(session.page.url()))
+            throw new Error(`net::ERR_INTERNET_DISCONNECTED opening ${url}`);
+          if (o.allowWall) return;
+          // Twice: a security page asks for the password again right after a sign-in.
+          for (let attempt = 1; ; attempt++) {
+            const wall = await looksLikeWall(session.page);
+            if (!wall) return;
+            const after = attempt > 1 ? " after signing in" : "";
+            if (wall.kind === "captcha" && runner.captcha && !triedCaptcha) {
+              triedCaptcha = true;
+              const got = await fp.captcha();
+              if (got.solved) {
+                // A checkbox wall lets the page through on its own (Cloudflare reloads it).
+                await session.page
+                  .waitForLoadState("networkidle", { timeout: SETTLE_MS })
+                  .catch(() => undefined);
+                continue;
+              }
+              throw new NeedsHuman(`${flow.site}: captcha (${got.reason})${after}`);
+            }
+            if (wall.kind === "captcha" || !runner.login || signingIn || attempt > 2)
+              throw new NeedsHuman(`${flow.site}: ${wall.detail}${after}`);
+            signingIn = true;
+            try {
+              const login = runner.login;
+              const outcome = await stepped(
+                { kind: "sign-in", goal: `sign in to ${flow.site}` },
+                () => login(fp, flow.site),
+              );
+              if (outcome !== "signed-in")
+                throw new NeedsHuman(`${flow.site}: ${wall.detail} (${outcome})`);
+            } finally {
+              signingIn = false;
+            }
+            await settle(session.page, url);
+          }
+        }
         try {
           return await flow.run(fp, input);
         } catch (err) {
-          const artifacts: Artifacts = {};
+          const artifacts: Artifacts = watch ? { steps: watch.dir } : {};
           const shot = join(artifactsDir, `${stamp}.png`);
           if (
             await session.page.screenshot({ path: shot, fullPage: true }).then(
@@ -567,6 +615,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             at: new Date().toISOString(),
             ...(artifacts.screenshot ? { screenshot: artifacts.screenshot } : {}),
             ...(artifacts.aria ? { aria: artifacts.aria } : {}),
+            ...(watch ? { steps: watch.dir } : {}),
           };
           artifacts.failure = join(artifactsDir, `${stamp}.failure.json`);
           writeFileSync(artifacts.failure, JSON.stringify(record, null, 2));
@@ -581,7 +630,11 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           }
           throw new FlowFailed(`${flow.site}/${flow.name}`, err, artifacts);
         } finally {
-          if (tracing) await session.context.tracing.stop().catch(() => undefined);
+          // A watched run keeps its trace whatever happened; a failure saved one already.
+          if (tracing)
+            await session.context.tracing
+              .stop(watch ? { path: join(watch.dir, "trace.zip") } : undefined)
+              .catch(() => undefined);
           if (runner.park && !broken) {
             // Stubs from `answer` belong to this run.
             await session.context.unrouteAll({ behavior: "ignoreErrors" }).catch(() => undefined);

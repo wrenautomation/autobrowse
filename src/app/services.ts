@@ -244,6 +244,7 @@ export function browserOptions(
     profilesDir: settings.profilesDir,
     channel: settings.browserChannel,
     artifactsDir: settings.artifactsDir,
+    ...(settings.watchFlows ? { watchFlows: settings.watchFlows } : {}),
     browserbase:
       settings.browserbaseApiKey && settings.browserbaseProjectId
         ? {

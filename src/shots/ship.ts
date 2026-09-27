@@ -57,9 +57,15 @@ const TYPES: Record<string, string> = {
   ".txt": "text/plain; charset=utf-8",
 };
 
-/** A flow's failure: the PNG, its aria tree and its failure JSON. */
+/**
+ * A flow's failure: the PNG, its aria tree and its failure JSON; a watched
+ * run's steps.jsonl and masked shots. Never a trace: it holds field values.
+ */
 export const keepArtifact = (rel: string): boolean =>
-  IMAGES.has(extname(rel)) || rel.endsWith(".aria.txt") || rel.endsWith(".failure.json");
+  IMAGES.has(extname(rel)) ||
+  rel.endsWith(".aria.txt") ||
+  rel.endsWith(".failure.json") ||
+  rel.endsWith("/steps.jsonl");
 
 /** A recording or explore: its screenshots, manifest, summary and journals. */
 export const keepRecording = (rel: string): boolean =>

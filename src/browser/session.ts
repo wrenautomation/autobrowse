@@ -40,6 +40,8 @@ export interface Artifacts {
   trace?: string;
   /** The failure as data (site, flow, url, last goal, error): what `autobrowse repair` starts from. */
   failure?: string;
+  /** A watched run's steps (`WATCH_FLOWS`): steps.jsonl, a masked shot and aria per step. */
+  steps?: string;
 }
 
 /** What a flow left behind when it stopped: enough for an agent to pick up where it fell. */
@@ -54,6 +56,8 @@ export interface FailureRecord {
   at: string;
   screenshot?: string;
   aria?: string;
+  /** Every step up to the failure, when the run was watched. */
+  steps?: string;
 }
 
 /**
@@ -69,6 +73,8 @@ export interface BrowserOptions {
   tier: Tier;
   profilesDir: string;
   artifactsDir: string;
+  /** Flows watched step by step (`WATCH_FLOWS`, see `browser/watch`); the runner's own `watch` wins. */
+  watchFlows?: string;
   headless?: boolean;
   /**
    * Which local browser: "chrome" (the installed Google Chrome, what a
