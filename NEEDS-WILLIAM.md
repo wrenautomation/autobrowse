@@ -38,14 +38,21 @@ To skip a text for a purchase you already said yes to:
   test. The typecheck is now incremental (15s → 7s from round 2). The model's
   time is most of the rest, and it is only cut by a faster model.
 
-- **Self-healing flows?** Yes, three layers, cheapest first.
-  - A moved button: the fix found once is kept (`autobrowse repairs`) and
-    tried first next run. No 15s wait, no model.
+- **Self-healing flows?** Yes. Only the broken op is mended, on the live
+  page, and the run carries on from there. Each op runs once: n broken ops
+  cost n fixes, never a replay per fix.
+  - Moved button: the fix found once is kept and tried first next run. No
+    wait, no model.
   - No kept fix: one model call on a page snapshot finds the control.
-  - A compiled workflow step that still fails: `AUTO_HEAL=true` rewrites
-    only that step and proves it again. Off by default.
-  - To audit: `WATCH_FLOWS=<site>` records each step (masked shot, page
-    tree, trace); `autobrowse watched` reads it.
+  - Page changed shape (a new screen, a dialog): up to 3 clicks past it,
+    then the op. Never a click that buys, sends or confirms.
+  - `autobrowse repairs --apply` writes the kept fixes into the workflow's
+    source: that one statement, no model. Everything else stays.
+  - Last resort (`AUTO_HEAL=true`): an agent does just that one act; its ops
+    replace that one statement; then a proof.
+  - To audit: `autobrowse repairs` lists every fix. `WATCH_FLOWS=<site>`
+    records each step (masked shot, page tree, trace); `autobrowse watched`
+    reads it.
 
 ## Done since last list
 

@@ -218,6 +218,7 @@ export function healer(
       compiledDir: COMPILED_DIR,
       recordingsDir: expandHome(settings.recordingsDir),
       lib: COMPILED_LIB,
+      check: (dir: string) => checkCompiled(dir),
       ...(prove ? { prove: async (name: string) => proofLine(await prove(name)) } : {}),
       ...(llm
         ? {

@@ -65,12 +65,28 @@ export function registerRepairsCommands(program: Command, settings: Settings): v
     .description(
       "Locators a flow's source has wrong and what works instead (runs use the fix already); --forget once the source is changed",
     )
+    .option("--apply", "write the fixes into the compiled workflows they belong to (no model)")
     .option(
       "--forget [goal]",
       "drop the flow's fixes (or one goal's): its source now says the same",
     )
-    .action((flow: string | undefined, o: { forget?: string | true }) => {
+    .action(async (flow: string | undefined, o: { forget?: string | true; apply?: boolean }) => {
       const fixes = fileFixes(expandHome(settings.fixesFile));
+      if (o.apply) {
+        const [{ applyFixes }, { COMPILED_DIR, COMPILED_LIB }] = await Promise.all([
+          import("../agent/heal.js"),
+          import("./services.js"),
+        ]);
+        const got = await applyFixes(COMPILED_DIR, fixes, COMPILED_LIB);
+        for (const a of got.applied) console.log(`applied  ${a}`);
+        for (const r of got.rendered)
+          console.log(`re-rendered ${r}: its source had changed; run compile --finish on it`);
+        const left = fixes.list().length;
+        console.log(
+          `${got.applied.length} applied${left ? `; ${left} left (hand-written flows: edit, then --forget)` : ""}`,
+        );
+        return;
+      }
       if (o.forget !== undefined) {
         if (!flow) throw new Error("--forget needs a flow: repairs <site/name> --forget");
         const n = fixes.forget(flow, o.forget === true ? undefined : o.forget);

@@ -24,7 +24,10 @@ describe("fixes", () => {
     expect(fixes.list()).toEqual([]);
     fixes.learn({ ...report, ok: true });
     // Kept under the base site: every account's run shares it.
-    expect(fixes.find("x/login", "click Next", report.failed)).toEqual(report.hints);
+    expect(fixes.find("x/login", "click Next", report.failed)).toEqual({
+      hints: report.hints,
+      detours: [],
+    });
     fixes.used("x/login", "click Next", report.failed);
     expect(fixes.list()[0]?.used).toBe(1);
     fixes.drop("x/login", "click Next", report.failed);
@@ -34,10 +37,13 @@ describe("fixes", () => {
     expect(fixes.list()).toEqual([]);
   });
 
-  const server = createServer((_q, r) =>
-    r
-      .writeHead(200, { "content-type": "text/html" })
-      .end("<title>t</title><button onclick=\"document.title='paid'\">Pay now</button>"),
+  const server = createServer((q, r) =>
+    r.writeHead(200, { "content-type": "text/html" }).end(
+      q.url === "/screen"
+        ? // A new screen in the way: "Pay now" shows only after "Continue".
+          "<title>t</title><button onclick=\"this.remove();document.getElementById('p').hidden=false\">Continue</button><button id=p hidden onclick=\"document.title='paid'\">Pay now</button>"
+        : "<title>t</title><button onclick=\"document.title='paid'\">Pay now</button>",
+    ),
   );
   const ready = new Promise<string>((ok) =>
     server.listen(0, "127.0.0.1", () =>
@@ -96,5 +102,92 @@ describe("fixes", () => {
       goal: "pay",
       used: 1,
     });
+  }, 60_000);
+
+  it("a new screen in the way: one detour click on the live page, then the op; kept for next run", async () => {
+    const url = `${await ready}screen`;
+    const dir = mkdtempSync(join(tmpdir(), "autobrowse-detour-"));
+    const fixes = fileFixes(join(dir, "fixes.json"));
+    const asked: number[] = [];
+    const repairer: Repairer = {
+      id: "detour",
+      async propose(req) {
+        asked.push(req.detours?.length ?? 0);
+        return req.detours?.length
+          ? { hints: { role: "button", name: "Pay now" }, reason: "behind a screen" }
+          : { hints: { role: "button", name: "Continue" }, reason: "new screen", detour: true };
+      },
+    };
+    const runner = flowRunner(
+      {
+        tier: "local",
+        channel: "chromium",
+        profilesDir: join(dir, "profiles"),
+        artifactsDir: join(dir, "artifacts"),
+        headless: true,
+      },
+      { pace: null, repairer, fixes },
+    );
+    const pay = defineFlow<undefined, string>({
+      site: "scratch",
+      name: "pay-screen",
+      async run(fp) {
+        await fp.open(url);
+        await fp.act(
+          { kind: "click" },
+          { role: "button", name: "Checkout" },
+          { goal: "pay", timeoutMs: 2_000 },
+        );
+        return fp.page.title();
+      },
+    });
+    expect(await runner.run(pay, undefined)).toBe("paid");
+    expect(asked).toEqual([0, 1]);
+    expect(fixes.list()[0]).toMatchObject({
+      detours: [{ role: "button", name: "Continue" }],
+      hints: { role: "button", name: "Pay now" },
+    });
+    expect(await runner.run(pay, undefined)).toBe("paid");
+    expect(asked).toEqual([0, 1]);
+  }, 60_000);
+
+  it("never takes a detour that commits something", async () => {
+    const url = `${await ready}screen`;
+    const dir = mkdtempSync(join(tmpdir(), "autobrowse-detour-"));
+    const runner = flowRunner(
+      {
+        tier: "local",
+        channel: "chromium",
+        profilesDir: join(dir, "profiles"),
+        artifactsDir: join(dir, "artifacts"),
+        headless: true,
+      },
+      {
+        pace: null,
+        fixes: memoryFixes(),
+        repairer: {
+          id: "bad",
+          propose: async () => ({
+            hints: { role: "button", name: "Confirm order" },
+            reason: "x",
+            detour: true,
+          }),
+        },
+      },
+    );
+    const pay = defineFlow<undefined, string>({
+      site: "scratch",
+      name: "pay-bad",
+      async run(fp) {
+        await fp.open(url);
+        await fp.act(
+          { kind: "click" },
+          { role: "button", name: "Checkout" },
+          { goal: "pay", timeoutMs: 1_000 },
+        );
+        return fp.page.title();
+      },
+    });
+    await expect(runner.run(pay, undefined)).rejects.toThrow();
   }, 60_000);
 });

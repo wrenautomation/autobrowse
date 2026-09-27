@@ -2,6 +2,7 @@
 
 import { serve } from "@restatedev/restate-sdk/node";
 import pino from "pino";
+import type { FailureRecord } from "../browser/session.js";
 import { httpClient } from "../clients/http.js";
 import { startUiServer } from "../ui/server.js";
 import { backendFor } from "./backend.js";
@@ -109,20 +110,31 @@ if (!approverFor(settings, gmailFor(settings))) {
 if (settings.autoHeal && backend.heal) {
   const { healLine } = await import("../agent/heal.js");
   const heal = backend.heal;
-  const healing = new Set<string>();
-  app.onFailure = (record, file) => {
-    // Only a plain failure heals; a person's step stays theirs, an interrupted leg retries itself.
-    if (record.kind !== "failed") return;
+  // One heal per flow at a time. A failure while it runs (its proof broke at
+  // the next op) waits and heals after: one op per heal, a few in a row at most.
+  const healing = new Map<string, { next: FailureRecord | null }>();
+  const HEALS_IN_A_ROW = 5;
+  const start = (record: FailureRecord, file: string, rounds: number) => {
     const key = `${record.site}/${record.flow}`;
-    if (healing.has(key)) return;
-    healing.add(key);
+    healing.set(key, { next: null });
     void heal(record)
       .then((out) => {
         log.info({ heal: out, file }, "heal");
         return app.channel.note?.(healLine(out));
       })
       .catch((err: Error) => log.warn({ err: err.message, file }, "heal failed"))
-      .finally(() => healing.delete(key));
+      .finally(() => {
+        const next = healing.get(key)?.next ?? null;
+        healing.delete(key);
+        if (next && rounds + 1 < HEALS_IN_A_ROW) start(next, file, rounds + 1);
+      });
+  };
+  app.onFailure = (record, file) => {
+    // Only a plain failure heals; a person's step stays theirs, an interrupted leg retries itself.
+    if (record.kind !== "failed") return;
+    const running = healing.get(`${record.site}/${record.flow}`);
+    if (running) running.next = record;
+    else start(record, file, 0);
   };
   log.info("auto-heal on");
 } else if (settings.autoHeal) {

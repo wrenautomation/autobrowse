@@ -43,7 +43,8 @@ function renderValue(v: OpValue): string {
   }
 }
 
-function renderOp(op: OutlineOp): string {
+/** One op as one statement, indented for a flow's body. */
+export function renderOp(op: OutlineOp): string {
   if (op.kind === "human") return `    fp.human(${q(op.reason)});`;
   const plan = planLocator(op.hints);
   const hints = `{ ${Object.entries(op.hints)
@@ -84,7 +85,7 @@ function renderUrl(url: string): string {
 }
 
 /** Plan fields and secrets one flow needs, in order of first use. */
-function flowInputs(step: Extract<OutlineStep, { kind: "browser" }>) {
+export function flowInputs(step: Extract<OutlineStep, { kind: "browser" }>) {
   const fields: string[] = [];
   const secrets: string[] = [];
   for (const m of (step.url ?? "").matchAll(URL_FIELD)) {

@@ -1,23 +1,38 @@
 /**
- * Healing: a compiled flow's step failed, so the agent picks up on the page
- * where it stopped, finishes that one step, and what it did replaces the
- * step's ops in the workflow's outline. The workflow is re-rendered and
- * proven. Deterministic first, explore only at the break, deterministic
- * again after: the flow is not "agentic now", it has one step rewritten.
+ * Healing: a compiled flow's act broke and neither the kept fix nor the
+ * repairer found the control (the page changed shape: a new screen, a step
+ * moved). The agent picks up on the page where it stopped and does that one
+ * act, nothing more. What it did replaces that one op in the outline, and
+ * that one statement in the module's source; every other op, and the
+ * model's earlier finish, stay as they were. Then the workflow is proven.
+ * If the next op is broken too, the proof fails there and heals that one:
+ * micro-patches, never a re-explore of the whole flow.
  *
- * A step that needs a person (captcha, purchase) stays a paused session.
- * Hand-written workflows have no outline, so they are reported, not touched.
- * Off unless AUTO_HEAL is set; `autobrowse heal <failure>` runs one by hand.
+ * Only when the source no longer shows the op plainly (the finish reshaped
+ * it) or the repair typed a new plan value is the module re-rendered and
+ * finished again. A step that needs a person (captcha, purchase) stays a
+ * paused session. Hand-written workflows have no outline, so they are
+ * reported, not touched. Off unless AUTO_HEAL is set; `autobrowse heal
+ * <failure>` runs one by hand.
  */
-import { readdir } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { type Fix, type Fixes, flowKey } from "../browser/fixes.js";
 import type { FailureRecord } from "../browser/session.js";
-import { type FinishOutcome, loadOutline, rerender } from "../compiler/index.js";
-import type { Outline } from "../compiler/outline.js";
+import { MODULE_FILE } from "../compiler/finish.js";
+import {
+  type FinishOutcome,
+  format,
+  loadOutline,
+  rerender,
+  saveOutline,
+} from "../compiler/index.js";
+import type { Outline, OutlineOp } from "../compiler/outline.js";
+import { brokenOp, replaceOp } from "../compiler/patch.js";
 import { structure } from "../compiler/structure.js";
+import { redactText } from "../recorder/redact.js";
 import { loadRecording } from "../recorder/store.js";
-import { repairRequest } from "./repair.js";
-import type { AgentSessions, SessionView } from "./sessions.js";
+import type { AgentSessions, SessionView, StartRequest } from "./sessions.js";
 
 export interface HealOptions {
   agent: AgentSessions;
@@ -30,6 +45,8 @@ export interface HealOptions {
   prove?: (workflow: string) => Promise<string>;
   /** After the re-render: the model's finish (plan inputs, gates, proof reads) under tsc+vitest. Absent = template output stands. */
   finish?: (workflow: string, step: string) => Promise<FinishOutcome>;
+  /** Typecheck and test a workflow's directory; null when both pass. A patched source must pass it or the heal re-renders. */
+  check?: (dir: string) => Promise<string | null>;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
 }
@@ -47,6 +64,8 @@ export interface Located {
   dir: string;
   outline: Outline;
   stepIndex: number;
+  /** The op that broke; null when the record does not say which. */
+  opIndex: number | null;
 }
 
 /** Which compiled workflow owns the flow that failed: the step is named after it. */
@@ -72,34 +91,27 @@ export async function locateFailure(
     }
     if (outline.site !== record.site) continue;
     const stepIndex = outline.steps.findIndex((s) => s.name === record.flow);
-    if (stepIndex >= 0) return { name, dir, outline, stepIndex };
+    const step = outline.steps[stepIndex];
+    if (step?.kind !== "browser") continue;
+    const opIndex = brokenOp(step, record.hints, record.goal, record.actsBefore);
+    return { name, dir, outline, stepIndex, opIndex };
   }
   return null;
 }
 
-/** The outline with one step's ops replaced by what the repair session did. Pure. */
-export function spliceStep(outline: Outline, stepIndex: number, healed: Outline): Outline {
-  const step = outline.steps[stepIndex];
-  if (step?.kind !== "browser") throw new Error("only a browser step can be healed");
-  const ops = healed.steps.flatMap((s) => (s.kind === "browser" ? s.ops : []));
-  if (ops.length === 0) throw new Error("the repair did nothing the flow could replay");
-  const steps = outline.steps.map((s, i) => (i === stepIndex ? { ...step, ops } : s));
+/** The agent's goal: the one act, not the rest of the flow. */
+export function healRequest(
+  record: FailureRecord,
+  op: Exclude<OutlineOp, { kind: "human" }>,
+): StartRequest {
   return {
-    ...outline,
-    steps,
-    // Fields and secrets the repair introduced (a value typed in) join the plan.
-    fields: dedupe([...outline.fields, ...healed.fields], (f) => f.key),
-    secrets: dedupe([...outline.secrets, ...healed.secrets], (s) => s.key),
+    site: record.site,
+    url: record.url,
+    goal:
+      `Do only this one act of the flow "${record.flow}": "${op.goal}". ` +
+      `Its locator no longer finds the control; the flow stopped here with: ${redactText(record.error)}. ` +
+      "Stop as soon as that act is done: the flow does the rest.",
   };
-}
-
-function dedupe<T>(items: T[], key: (t: T) => string): T[] {
-  const seen = new Set<string>();
-  return items.filter((t) => {
-    if (seen.has(key(t))) return false;
-    seen.add(key(t));
-    return true;
-  });
 }
 
 const SETTLED = new Set<SessionView["status"]>(["done", "stopped", "failed", "closed"]);
@@ -131,7 +143,19 @@ export async function healFailure(record: FailureRecord, o: HealOptions): Promis
       summary: `no compiled workflow owns "${record.flow}" on ${record.site}; a hand-written flow is edited by hand`,
     };
   }
-  const started = await o.agent.start(repairRequest(record));
+  const step = found.outline.steps[found.stepIndex];
+  const op = found.opIndex === null || step?.kind !== "browser" ? null : step.ops[found.opIndex];
+  if (!op || op.kind === "human" || found.opIndex === null) {
+    return {
+      status: "failed",
+      workflow: found.name,
+      step: record.flow,
+      session: null,
+      summary: `can't tell which act of "${record.flow}" broke, so nothing was rewritten; \`autobrowse repair\` the failure by hand`,
+    };
+  }
+  const opIndex = found.opIndex;
+  const started = await o.agent.start(healRequest(record, op));
   const view = await settle(o, started.id);
   const base = { workflow: found.name, step: record.flow, session: view.id };
   if (view.status === "needs-human") {
@@ -153,21 +177,40 @@ export async function healFailure(record: FailureRecord, o: HealOptions): Promis
   await o.agent.save(view.id, recName);
   await o.agent.close(view.id);
   const healed = structure(await loadRecording(o.recordingsDir, recName));
-  const outline = spliceStep(found.outline, found.stepIndex, healed);
-  await rerender(found.dir, outline, { lib: o.lib });
-  const finished = o.finish
-    ? await o.finish(found.name, record.flow).catch((err: Error) => ({
-        status: "gave-up" as const,
-        rounds: 0,
-        usage: { inputTokens: 0, outputTokens: 0 },
-        summary: err.message,
-      }))
-    : null;
-  const rewritten = `step "${record.flow}" rewritten from the repair${
-    finished
-      ? `, ${finished.status === "finished" ? "finished" : finished.status} by the model`
-      : ""
-  }`;
+  const ops = healed.steps.flatMap((s) => (s.kind === "browser" ? s.ops : []));
+  const moduleFile = join(found.dir, MODULE_FILE);
+  // No module yet (never rendered): nothing to patch, so it renders.
+  const before = await readFile(moduleFile, "utf8").catch(() => null);
+  const mended = replaceOp(found.outline, before ?? "", found.stepIndex, opIndex, {
+    ops,
+    fields: healed.fields,
+    secrets: healed.secrets,
+  });
+  const what = `op ${opIndex + 1} of "${record.flow}" ("${op.goal}") replaced by ${ops.length} op${ops.length === 1 ? "" : "s"}`;
+  let how: string | null = null;
+  if (mended.source !== null && before !== null) {
+    await writeFile(moduleFile, mended.source);
+    await format([moduleFile]);
+    const broken = o.check ? await o.check(found.dir).catch((err: Error) => err.message) : null;
+    if (broken === null) {
+      await saveOutline(found.dir, mended.outline);
+      how = "patched in place, no model";
+    } else await writeFile(moduleFile, before);
+  }
+  if (how === null) {
+    // The source can't take a one-line patch: re-render, and the model finishes it again.
+    await rerender(found.dir, mended.outline, { lib: o.lib });
+    const finished = o.finish
+      ? await o.finish(found.name, record.flow).catch((err: Error) => ({
+          status: "gave-up" as const,
+          rounds: 0,
+          usage: { inputTokens: 0, outputTokens: 0 },
+          summary: err.message,
+        }))
+      : null;
+    how = `re-rendered${finished ? `, ${finished.status === "finished" ? "finished" : finished.status} by the model` : ""}`;
+  }
+  const rewritten = `${what}; ${how}`;
   if (!o.prove) return { ...base, status: "healed", summary: `${rewritten}; not yet proven` };
   const proof = await o.prove(found.name).catch((err: Error) => `proof failed: ${err.message}`);
   const ok = proof.startsWith("proven");
@@ -192,4 +235,85 @@ export function healLine(out: HealOutcome): string {
     case "no-workflow":
       return `autobrowse: ${out.summary}`;
   }
+}
+
+export interface Applied {
+  /** `workflow: goal` per fix written in. */
+  applied: string[];
+  /** Workflows whose source could not take the patch and were re-rendered (run `compile --finish` on them). */
+  rendered: string[];
+}
+
+/**
+ * Kept fixes written into the compiled workflows they belong to: one
+ * statement each (a detour becomes its clicks, then the op), no model, and
+ * the fix is dropped once the source says the same. Fixes for hand-written
+ * flows, or ones whose op can't be pinned, stay listed for a person.
+ */
+export async function applyFixes(compiledDir: string, fixes: Fixes, lib: string): Promise<Applied> {
+  const out: Applied = { applied: [], rendered: [] };
+  let names: string[];
+  try {
+    names = (await readdir(compiledDir, { withFileTypes: true }))
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+  } catch {
+    return out;
+  }
+  const kept = fixes.list();
+  for (const name of names) {
+    const dir = join(compiledDir, name);
+    let outline: Outline;
+    try {
+      outline = await loadOutline(dir);
+    } catch {
+      continue;
+    }
+    const moduleFile = join(dir, MODULE_FILE);
+    let source: string | null = await readFile(moduleFile, "utf8").catch(() => null);
+    let render = source === null;
+    const done: Fix[] = [];
+    for (const [si, step] of outline.steps.entries()) {
+      if (step.kind !== "browser") continue;
+      const key = flowKey(outline.site, step.name);
+      // Last op first: an earlier fix that adds detour clicks would shift the later ones.
+      const pinned = kept
+        .filter((f) => f.flow === key)
+        .map((f) => ({ f, at: brokenOp(step, f.failed, f.goal) }))
+        .filter((p): p is { f: Fix; at: number } => p.at !== null)
+        .sort((a, b) => b.at - a.at);
+      for (const { f, at } of pinned) {
+        const op = step.ops[at];
+        if (!op || op.kind === "human") continue;
+        const ops: OutlineOp[] = [
+          ...(f.detours ?? []).map((hints) => ({
+            kind: "click" as const,
+            goal: `get past ${hints.name ?? hints.text ?? "the screen in the way"}`,
+            hints,
+            irreversible: false,
+          })),
+          { ...op, hints: f.hints },
+        ];
+        const mended = replaceOp(outline, source ?? "", si, at, { ops });
+        outline = mended.outline;
+        if (mended.source === null) render = true;
+        else source = mended.source;
+        done.push(f);
+      }
+    }
+    if (!done.length) continue;
+    if (render) {
+      await rerender(dir, outline, { lib });
+      out.rendered.push(name);
+    } else {
+      await writeFile(moduleFile, source as string);
+      await format([moduleFile]);
+      await saveOutline(dir, outline);
+    }
+    for (const f of done) {
+      fixes.drop(f.flow, f.goal, f.failed);
+      out.applied.push(`${name}: ${f.goal}`);
+    }
+  }
+  return out;
 }

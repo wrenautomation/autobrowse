@@ -23,7 +23,14 @@ import { type Hands, HUMAN_PACE, handsFor, instantHands, type Pace } from "./hum
 import { type Hints, locate, textOf } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
 import type { SessionPark } from "./park.js";
-import { canLearn, noRepairer, type Repairer, type RepairReport, snapshotPage } from "./repair.js";
+import {
+  COMMITTING,
+  canLearn,
+  noRepairer,
+  type Repairer,
+  type RepairReport,
+  snapshotPage,
+} from "./repair.js";
 import {
   type Artifacts,
   type BrowserOptions,
@@ -231,6 +238,8 @@ export interface RunnerOptions {
 }
 
 const ACT_TIMEOUT_MS = 15_000;
+/** Clicks past what is in the way before one act gives up: a new screen or two, not a new flow. */
+const MAX_DETOURS = 3;
 
 /** The same page, fragment aside. */
 function samePage(current: string, url: string): boolean {
@@ -370,6 +379,10 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         let broken = false;
         const stamp = `${flow.site}-${flow.name}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
         let lastGoal: string | null = null;
+        // What the last act or read looked for: a heal finds the one op that broke by it.
+        let lastHints: Hints | null = null;
+        let acts = 0;
+        let actsBefore = 0;
         mkdirSync(artifactsDir, { recursive: true });
         // Tracing is best effort: a CDP-attached context may refuse it.
         const tracing = await session.context.tracing
@@ -409,7 +422,11 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
                   .first()
                   .isVisible()
                   .catch(() => false),
-          read: async (hints) => (await textOf(locate(active, hints))).slice(0, 2_000),
+          read: async (hints) => {
+            lastHints = hints;
+            actsBefore = acts++;
+            return (await textOf(locate(active, hints))).slice(0, 2_000);
+          },
           wait: (ms) => active.waitForTimeout(ms),
           answer: (prefix, body) =>
             session.context
@@ -435,6 +452,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           },
           async act(op, hints, a) {
             lastGoal = a.goal;
+            lastHints = hints;
+            actsBefore = acts++;
             await stepped(
               { kind: "act", goal: a.goal, op: op.kind, hints },
               () => actOnce(op, hints, a),
@@ -483,7 +502,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           const fix = mayRepair ? (runner.fixes?.find(key, a.goal, hints) ?? null) : null;
           if (fix) {
             try {
-              await doOp(page, fix, op, timeout, hands);
+              for (const d of fix.detours) await doOp(page, d, { kind: "click" }, timeout, hands);
+              await doOp(page, fix.hints, op, timeout, hands);
               runner.fixes?.used(key, a.goal, hints);
               return "repaired";
             } catch {
@@ -497,32 +517,46 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           } catch (err) {
             if (!mayRepair)
               throw new NeedsHuman(`${flow.site}: ${a.goal} (irreversible, not repaired)`);
-            const proposal = await repairer.propose({
-              site: flow.site,
-              goal: a.goal,
-              failed: hints,
-              url: page.url(),
-              snapshot: await snapshotPage(page),
-            });
-            if (!proposal) throw err;
-            const report: RepairReport = {
-              ...proposal,
-              site: flow.site,
-              flow: `${flow.site}/${flow.name}`,
-              goal: a.goal,
-              failed: hints,
-              url: page.url(),
-              ok: false,
-            };
-            try {
-              await doOp(page, proposal.hints, op, timeout, hands);
-              report.ok = true;
-            } finally {
-              runner.onRepair?.(report);
-              runner.fixes?.learn(report);
-              if (canLearn(repairer)) await repairer.learn(report);
+            // On the live page, from where the run is: a few clicks past what is in
+            // the way, then the op. The run goes on from there; nothing replays.
+            const detours: Hints[] = [];
+            for (;;) {
+              const proposal = await repairer.propose({
+                site: flow.site,
+                goal: a.goal,
+                failed: hints,
+                url: page.url(),
+                snapshot: await snapshotPage(page),
+                ...(detours.length ? { detours } : {}),
+              });
+              if (!proposal) throw err;
+              if (proposal.detour) {
+                const name = `${proposal.hints.name ?? ""} ${proposal.hints.text ?? ""}`;
+                if (detours.length >= MAX_DETOURS || COMMITTING.test(name)) throw err;
+                await doOp(page, proposal.hints, { kind: "click" }, timeout, hands);
+                detours.push(proposal.hints);
+                continue;
+              }
+              const report: RepairReport = {
+                ...proposal,
+                ...(detours.length ? { detours } : {}),
+                site: flow.site,
+                flow: `${flow.site}/${flow.name}`,
+                goal: a.goal,
+                failed: hints,
+                url: page.url(),
+                ok: false,
+              };
+              try {
+                await doOp(page, proposal.hints, op, timeout, hands);
+                report.ok = true;
+              } finally {
+                runner.onRepair?.(report);
+                runner.fixes?.learn(report);
+                if (canLearn(repairer)) await repairer.learn(report);
+              }
+              return "repaired";
             }
-            return "repaired";
           }
         }
         async function solveWithRetries(): Promise<CaptchaOutcome> {
@@ -628,6 +662,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             flow: flow.name,
             url: active.url(),
             goal: lastGoal,
+            ...(lastHints ? { hints: lastHints, actsBefore } : {}),
             error: redactText(err instanceof Error ? err.message : String(err)),
             kind,
             at: new Date().toISOString(),

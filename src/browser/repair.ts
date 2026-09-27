@@ -2,9 +2,12 @@
  * When a locator no longer matches, a repairer looks at the page and
  * proposes another set of hints for the same goal. The proposal is data
  * (hints), never code and never an action: the flow re-applies it through
- * the same `locate` and does the same op. An irreversible op is never
- * repaired; it goes to a person. Every repair is reported so the flow's
- * source can be fixed for good.
+ * the same `locate` and does the same op. When the page changed shape (a
+ * new "Continue" screen, a dialog in the way), the proposal is a detour: a
+ * click to make first, on the live page, then the repairer looks again. The
+ * run carries on from where it is, so every op runs once however many
+ * broke. An irreversible op is never repaired; it goes to a person. Every
+ * repair is reported so the flow's source can be fixed for good.
  */
 import type { Page } from "playwright";
 import { z } from "zod";
@@ -20,11 +23,15 @@ export interface RepairRequest {
   url: string;
   /** Interactive elements on the page, one per line, already truncated. */
   snapshot: string;
+  /** Detour clicks already made for this goal: never propose one twice. */
+  detours?: Hints[];
 }
 
 export interface RepairProposal {
   hints: Hints;
   reason: string;
+  /** The hints name a click that must come first (a screen or dialog in the way), not the goal's control. */
+  detour?: boolean;
 }
 
 export interface Repairer {
@@ -33,6 +40,8 @@ export interface Repairer {
 }
 
 export interface RepairReport extends RepairProposal {
+  /** Clicks made on the way, in order, before the goal's control. */
+  detours?: Hints[];
   site: string;
   flow: string;
   goal: string;
@@ -85,11 +94,12 @@ const proposalSchema = z.object({
     testId: z.string().nullable().optional(),
   }),
   reason: z.string(),
+  detour: z.boolean().optional(),
   /** The model may say the goal cannot be met on this page. */
   giveUp: z.boolean().optional(),
 });
 
-const SYSTEM = `You repair a broken browser automation step. You get the goal, the locator hints that no longer match, and a list of the interactive elements on the page now. Pick the one element that serves the goal and describe it with hints: testId, role + name, name (label), placeholder, text, or id. Prefer stable, visible labels. If nothing on the page serves the goal, set giveUp true.`;
+const SYSTEM = `You repair a broken browser automation step. You get the goal, the locator hints that no longer match, and a list of the interactive elements on the page now. Pick the one element that serves the goal and describe it with hints: testId, role + name, name (label), placeholder, text, or id. Prefer stable, visible labels. If the goal's control is not on the page because something is in the way (a new intermediate screen, a dialog, a banner), name the one click that gets past it (Continue, Next, Not now, Close, Accept) and set detour true; never a detour that buys, pays, sends, submits, deletes or confirms. If nothing on the page serves the goal, set giveUp true.`;
 
 export function llmRepairer(llm: Llm): Repairer {
   return {
@@ -101,9 +111,10 @@ export function llmRepairer(llm: Llm): Repairer {
           `Goal: ${req.goal}`,
           `URL: ${req.url}`,
           `Failed hints: ${JSON.stringify(req.failed)}`,
+          ...(req.detours?.length ? [`Detours already made: ${JSON.stringify(req.detours)}`] : []),
           "Elements:",
           req.snapshot,
-          'Reply: {"hints": {...}, "reason": "...", "giveUp": false}',
+          'Reply: {"hints": {...}, "reason": "...", "detour": false, "giveUp": false}',
         ].join("\n"),
         maxTokens: 400,
       });
@@ -111,10 +122,14 @@ export function llmRepairer(llm: Llm): Repairer {
       const hints: Hints = {};
       for (const [k, v] of Object.entries(value.hints))
         if (v) (hints as Record<string, string>)[k] = v;
-      return { hints, reason: value.reason };
+      return { hints, reason: value.reason, ...(value.detour ? { detour: true } : {}) };
     },
   };
 }
+
+/** A detour that commits something is a person's, never the repairer's. */
+export const COMMITTING =
+  /\b(buy|pay|purchase|order|checkout|send|submit|delete|remove|confirm|publish|post)\b/i;
 
 /** Repairs nothing; the default when no model is configured. */
 export const noRepairer: Repairer = { id: "none", propose: async () => null };
@@ -152,7 +167,8 @@ export function rememberingRepairer(memory: Memory, next: Repairer): LearningRep
       return next.propose(req);
     },
     async learn(report) {
-      if (!report.ok) return;
+      // A detour path lives in the fixes file, whole; memory keeps plain hint swaps.
+      if (!report.ok || report.detours?.length) return;
       await memory
         .remember(
           `site=${report.site} goal=${report.goal} repaired (${report.reason}) ${HINT_MARK}${JSON.stringify(report.hints)}`,

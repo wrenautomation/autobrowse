@@ -11,6 +11,7 @@ import type { Browser, BrowserContext, Page } from "playwright";
 import type { HttpClient } from "../clients/http.js";
 import { expandHome } from "../google-auth.js";
 import { geometry, type Identity, learnIdentity, wearIdentity } from "./identity.js";
+import type { Hints } from "./locate.js";
 import { reapOrphans, reapTempDirs } from "./reap.js";
 import { type PasskeyRecord, type Passkeys, virtualAuthenticator } from "./webauthn.js";
 
@@ -51,6 +52,10 @@ export interface FailureRecord {
   url: string;
   /** The goal of the last act the flow attempted, when there was one. */
   goal: string | null;
+  /** What the last act or read looked for: pins the one op that broke. */
+  hints?: Hints;
+  /** Acts and reads the run made before that one: tells two "click Next" apart. */
+  actsBefore?: number;
   error: string;
   kind: "failed" | "human" | "interrupted";
   at: string;

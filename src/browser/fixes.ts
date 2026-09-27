@@ -3,8 +3,9 @@
  * A repair that works is kept here by flow, goal and the hints that broke.
  * The next run tries the fix first, so a moved button costs no 15s wait and
  * no model call. A fix that stops working is dropped, and the repairer runs
- * again. `autobrowse repairs` lists them: each row is a line to change in the
- * flow's source, after which `--forget` clears it.
+ * again. `autobrowse repairs` lists them; `--apply` writes them into the
+ * compiled workflows they belong to (that one statement, no model), and a
+ * hand-written flow's row is a line to change by hand, then `--forget`.
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -19,6 +20,8 @@ export interface Fix {
   failed: Hints;
   /** What worked. */
   hints: Hints;
+  /** Clicks first, in order: a screen or dialog now in the way. */
+  detours?: Hints[];
   reason: string;
   url: string;
   found: string;
@@ -29,7 +32,7 @@ export interface Fix {
 
 export interface Fixes {
   /** The fix for these hints on this step, if one is kept. */
-  find(flow: string, goal: string, failed: Hints): Hints | null;
+  find(flow: string, goal: string, failed: Hints): { hints: Hints; detours: Hints[] } | null;
   /** A repair that worked: kept. One that did not: ignored. */
   learn(report: RepairReport): void;
   /** The fix went through again. */
@@ -58,7 +61,10 @@ function table(load: () => Fix[], save: (fixes: Fix[]) => void, now: () => Date)
   };
   const write = () => save([...all().values()].slice(-LIMIT));
   return {
-    find: (flow, goal, failed) => all().get(key(flow, goal, failed))?.hints ?? null,
+    find(flow, goal, failed) {
+      const f = all().get(key(flow, goal, failed));
+      return f ? { hints: f.hints, detours: f.detours ?? [] } : null;
+    },
     learn(r) {
       if (!r.ok) return;
       const at = r.flow.indexOf("/");
@@ -70,6 +76,7 @@ function table(load: () => Fix[], save: (fixes: Fix[]) => void, now: () => Date)
         goal: r.goal,
         failed: r.failed,
         hints: r.hints,
+        ...(r.detours?.length ? { detours: r.detours } : {}),
         reason: r.reason,
         url: r.url,
         found: now().toISOString(),
