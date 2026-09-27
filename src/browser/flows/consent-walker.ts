@@ -19,6 +19,12 @@ export interface ConsentWalk {
   loginUrl: RegExp;
   /** The button that grants. */
   allow: Hints;
+  /**
+   * A box to tick before the allow button wakes up ("I trust this app"):
+   * `tick` (its label: the input itself is often hidden under a drawn box)
+   * is pressed only while `unticked` shows.
+   */
+  confirm?: { unticked: Hints; tick: Hints };
   /** Page text that means the site refused the request (bad client, bad redirect). */
   refused: RegExp;
   rounds?: number;
@@ -43,6 +49,13 @@ export function consentFlow(w: ConsentWalk): BrowserFlow<OauthConsentInput, { la
         if (landed(fp.url())) return { landed: fp.url() };
         const text = await fp.text();
         if (await fp.has(w.allow)) {
+          // A click before the page wakes up is lost (X, 2026-09-27): look again, press again.
+          for (let n = 0; w.confirm && n < 3 && (await fp.has(w.confirm.unticked)); n++) {
+            await fp.act({ kind: "click" }, w.confirm.tick, { goal: "tick the acknowledgement" });
+            await fp.wait(1_000);
+          }
+          if (w.confirm && (await fp.has(w.confirm.unticked)))
+            return fp.human(`${w.site}: the acknowledgement box would not tick`);
           await fp.act({ kind: "click" }, w.allow, { goal: "consent" });
           await fp.waitForUrl(landed, 10_000);
           continue;

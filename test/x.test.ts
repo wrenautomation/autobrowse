@@ -38,6 +38,10 @@ describe("x sign-in", () => {
       true,
     );
     expect(X_LOGIN_URL.test("https://twitter.com/login")).toBe(true);
+    // The page X moved its login to in 2026-09.
+    expect(
+      X_LOGIN_URL.test("https://x.com/i/jf/onboarding/web?mode=login&redirect_after_login=%2F"),
+    ).toBe(true);
     expect(X_LOGIN_URL.test("https://x.com/home")).toBe(false);
     expect(X_LOGIN_URL.test("https://x.com/i/oauth2/authorize?x")).toBe(false);
   });
@@ -60,16 +64,31 @@ describe("x sign-in", () => {
     });
     await signInToX(ctx(fp, ["sms"]));
     expect(acts.map(line)).toEqual([
-      "fill /phone, email,? (address,)? ?or username/i",
-      "click /^next$/i",
+      "fill /phone, email,? (address,)? ?or username|^email or username$/i",
+      "click /^(next|continue)$/i",
       "fill /phone number or username/i",
-      "click /^next$/i",
-      "fill /^password$/i",
-      "click /^log in$/i",
+      "click /^(next|continue)$/i",
+      "fill /^password( show password)?$/i",
+      "click /^(log in|continue)$/i",
       "fill /verification code|^code$/i",
-      "click /^next$/i",
+      "click /^(next|continue)$/i",
     ]);
     expect(acts[6]?.op).toMatchObject({ kind: "fill", value: "123456" });
+  });
+
+  it("the 2026-09 page: Email or username, Continue, Password, Continue, no code", async () => {
+    let url = "https://x.com/i/jf/onboarding/web?mode=login";
+    const { fp, acts } = fakePage({
+      text: ["Email or username Continue", "Login Password Continue", "Home"],
+      present: (h) => !/phone number or username|code/i.test(String(h.name)),
+      url: () => url,
+      onAct: (n) => {
+        if (n === 4) url = "https://x.com/home";
+      },
+    });
+    await signInToX(ctx(fp, []));
+    expect(acts.map((a) => a.op.kind)).toEqual(["fill", "click", "fill", "click"]);
+    expect(acts[2]?.op).toMatchObject({ kind: "fill", value: "p" });
   });
 
   it("stops on a rejected password or a puzzle", async () => {

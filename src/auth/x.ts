@@ -4,22 +4,33 @@
  * on an unfamiliar login — the phone or username again, then the password,
  * then the verification code: the authenticator when a seed is stored,
  * else the code X texts or emails. The "Arkose" puzzle is a person's.
- * Unverified until a credential exists (from the public pages 2026-09-22).
+ *
+ * Two pages, same steps. Since 2026-09 X logs in on /i/jf/onboarding/web
+ * (mapped 2026-09-27, proven as wren_automation): textbox "Email or
+ * username", button "Continue" (a div until the field has text), then a
+ * "Password" field and "Continue" again. The older /i/flow/login says
+ * "Phone, email, or username", "Next", "Log in".
  */
 import { LoginFailed, passwordOf, type SignInContext } from "./login.js";
 
 const SETTLE_MS = 1_500;
 const RENDER_MS = 8_000;
 /** Login flow and its checks: what `signInHere` acts on. */
-export const X_LOGIN_URL = /(x|twitter)\.com\/(i\/flow\/login|login|account\/access)/;
-const NEXT = { role: "button", name: "/^next$/i" } as const;
+export const X_LOGIN_URL =
+  /(x|twitter)\.com\/(i\/flow\/login|i\/jf\/onboarding|login|account\/access)/;
+/** "Next" on the old page, "Continue" on the new one. */
+const NEXT = { role: "button", name: "/^(next|continue)$/i" } as const;
 
 export async function signInToX(ctx: SignInContext): Promise<void> {
   const { fp, cred, code } = ctx;
   const site = "x";
   await fp.wait(SETTLE_MS);
-  const username = { role: "textbox", name: "/phone, email,? (address,)? ?or username/i" } as const;
-  const password = { role: "textbox", name: "/^password$/i" } as const;
+  const username = {
+    role: "textbox",
+    name: "/phone, email,? (address,)? ?or username|^email or username$/i",
+  } as const;
+  // The new page names it "Password Show password" (the eye button is inside the label).
+  const password = { role: "textbox", name: "/^password( show password)?$/i" } as const;
   if (await fp.has(username, RENDER_MS)) {
     await fp.act({ kind: "fill", value: cred.username }, username, { goal: "type the username" });
     await fp.act({ kind: "click" }, NEXT, { goal: "next" });
@@ -40,7 +51,7 @@ export async function signInToX(ctx: SignInContext): Promise<void> {
     });
     await fp.act(
       { kind: "click" },
-      { role: "button", name: "/^log in$/i" },
+      { role: "button", name: "/^(log in|continue)$/i" },
       { goal: "submit the sign-in form" },
     );
     await fp.wait(SETTLE_MS);

@@ -92,6 +92,19 @@ describe("gmail site: one consent per account", () => {
     expect(await profileOf(creds, "google", "other@x.dev")).toBeNull();
   });
 
+  it("a handle login is found by the inbox its codes go to, when only one has it", async () => {
+    const creds = memoryCredentials({
+      x: { username: "jin@gmail.com", password: "p" },
+      "x@wren": { username: "wren_automation", password: "p", codesInbox: "william@wren.co" },
+    });
+    expect(await profileOf(creds, "x", "william@wren.co")).toBe("x@wren");
+    const two = memoryCredentials({
+      "x@a": { username: "a", password: "p", codesInbox: "ops@wren.co" },
+      "x@b": { username: "b", password: "p", codesInbox: "ops@wren.co" },
+    });
+    expect(await profileOf(two, "x", "ops@wren.co")).toBeNull();
+  });
+
   it("a consent without --account is kept under whoever consented, too", async () => {
     const port = 9414;
     const api = fakeFetch(({ url }) =>

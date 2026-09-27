@@ -110,12 +110,17 @@ export async function profileOf(
   const named = `${site}@${account.trim().toLowerCase()}`;
   const byName = await credentials.get(named);
   if (byName && same(byName.username, account)) return named;
+  const mine: Array<[string, NonNullable<Awaited<ReturnType<CredentialStore["get"]>>>]> = [];
   for (const name of await credentials.list()) {
     if (!name.startsWith(`${site}@`) && !name.startsWith(`${site}-`)) continue;
     const c = await credentials.get(name);
-    if (c && same(c.username, account)) return name;
+    if (!c) continue;
+    if (same(c.username, account)) return name;
+    mine.push([name, c]);
   }
-  return null;
+  // A handle login (X's `wren_automation`) is the account whose mail it gets: one match only.
+  const byInbox = mine.filter(([, c]) => c.codesInbox && same(c.codesInbox, account));
+  return byInbox.length === 1 ? (byInbox[0]?.[0] ?? null) : null;
 }
 
 export function sitesFor(p: SiteParts): SiteFacade {

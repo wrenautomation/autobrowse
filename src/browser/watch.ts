@@ -58,13 +58,16 @@ export interface Watch {
   ): Promise<T>;
 }
 
-/** Whether `WATCH_FLOWS` names this flow. */
+/** Whether `WATCH_FLOWS` names this flow; `x` also names an account's run (`x@wren`). */
 export function watches(spec: string | undefined, site: string, name: string): boolean {
   const want = (spec ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  return want.some((w) => w === "all" || w === "*" || w === site || w === `${site}/${name}`);
+  const base = site.split("@")[0] as string;
+  return want.some(
+    (w) => w === "all" || w === "*" || [site, base].some((s) => w === s || w === `${s}/${name}`),
+  );
 }
 
 /** Every field, in every frame: a card number or a password never lands in a shot. */
@@ -121,6 +124,7 @@ export function watchSteps(dir: string, now: () => number = Date.now): Watch {
           n: k,
           at: new Date(started).toISOString(),
           ...s,
+          goal: redactText(s.goal),
           url: redactText(p.url()),
           ms: now() - started,
           outcome: o,

@@ -14,6 +14,9 @@ describe("watched flows", () => {
     expect(watches(" meta , cloudflare/login", "cloudflare", "login")).toBe(true);
     expect(watches("cloudflare/api-token", "cloudflare", "login")).toBe(false);
     expect(watches(undefined, "cloudflare", "login")).toBe(false);
+    expect(watches("x", "x@wren", "oauth-consent")).toBe(true);
+    expect(watches("x@wren/oauth-consent", "x@wren", "oauth-consent")).toBe(true);
+    expect(watches("x@wren", "x", "oauth-consent")).toBe(false);
   });
 
   const server = createServer((_q, r) =>
