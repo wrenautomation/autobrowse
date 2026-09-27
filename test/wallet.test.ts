@@ -75,7 +75,7 @@ describe("wallet cards", () => {
       );
   });
   it("describes with brand, kind, last 4, expiry only", () => {
-    expect(describeCard(card("main", "credit"))).toBe("main: Visa credit ••4242 exp 09/28");
+    expect(describeCard(card("main", "credit"))).toBe("main: Visa credit ••4242");
     expect(luhn(MC)).toBe(true);
   });
   it("names the fields place may ask for", () => {

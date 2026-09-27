@@ -118,6 +118,20 @@ describe("needs", () => {
     ]);
     expect(rows.find((r) => r.id === "inbox-w")?.after).toBe("login-google-w");
   });
+  it("sender mailboxes: one login row each, kept apart by domain; no inbox row (wren reads them)", () => {
+    const rows = accountNeeds(
+      ctx(
+        {},
+        {
+          identities: [
+            { address: "will@a.com", at: "google", for: ["sends"] },
+            { address: "will@b.com", at: "google", for: ["sends"] },
+          ],
+        },
+      ),
+    );
+    expect(rows.map((r) => r.id)).toEqual(["login-google-will-a", "login-google-will-b"]);
+  });
   it("done marks persist in a file", () => {
     const store = fileDone(join(mkdtempSync(join(tmpdir(), "needs-")), "done.json"));
     expect(store.read()).toEqual({});

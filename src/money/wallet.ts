@@ -71,12 +71,9 @@ export function cardBrand(number: string): string {
   return "Card";
 }
 
-/** What a person reads about a card: never more than this. */
-export function describeCard(
-  c: Pick<Card, "label" | "kind" | "number" | "expMonth" | "expYear">,
-): string {
-  const exp = `${String(c.expMonth).padStart(2, "0")}/${String(c.expYear).slice(-2)}`;
-  return `${c.label}: ${cardBrand(c.number)} ${c.kind} ••${c.number.slice(-4)} exp ${exp}`;
+/** What a person reads about a card: brand, kind, last 4. Never the expiry: it lands in ledgers and texts. */
+export function describeCard(c: Pick<Card, "label" | "kind" | "number">): string {
+  return `${c.label}: ${cardBrand(c.number)} ${c.kind} ••${c.number.slice(-4)}`;
 }
 
 /** A card's own name unless given one: brand and last 4 ("mastercard-4445"). */

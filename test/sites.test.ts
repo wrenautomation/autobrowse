@@ -339,8 +339,9 @@ describe("site facade", () => {
       async run() {},
     });
     const browser = fakeBrowser([]);
+    const uris: string[] = [];
     browser.on(app, async (i) => {
-      expect(i.redirectUri).toBe("http://127.0.0.1:9400/oauth/callback");
+      uris.push(i.redirectUri);
       await i.sink.put("LINKEDIN_CLIENT_ID", "id");
       await i.sink.put("LINKEDIN_CLIENT_SECRET", "secret");
     });
@@ -370,6 +371,18 @@ describe("site facade", () => {
     });
     expect((await sites.status("linkedin")).setup[0]?.done).toBe(true);
     expect((await sites.status("linkedin")).setup[1]?.blockedOn).toEqual([]);
+    // What the step takes reads back; `--input` overrides it key by key, never the sink.
+    expect((await sites.status("linkedin")).setup[0]?.input).toEqual({
+      redirectUri: "http://127.0.0.1:9400/oauth/callback",
+    });
+    await sites.setup("linkedin", "developer-app", null, null, {
+      redirectUri: "http://127.0.0.1:9500/cb",
+      sink: "nope",
+    });
+    expect(uris).toEqual(["http://127.0.0.1:9400/oauth/callback", "http://127.0.0.1:9500/cb"]);
+    await expect(
+      sites.setup("linkedin", "consent", null, null, { scope: "x" }),
+    ).rejects.toMatchObject({ status: 400 });
   });
 
   it("a compiled setup step runs as the policy's account for its purpose: `{ account: true }` is its address, its provider flows re-sited to that profile", async () => {

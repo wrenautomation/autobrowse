@@ -17,7 +17,7 @@ const CHARGE: Charge = {
   url: "https://my.racknerd.com/cart.php",
   what: 'press "Complete order", which spends',
   amount: { value: 11.29, currency: "USD", per: "year" },
-  card: "main: Visa credit ••4242 exp 09/30",
+  card: "main: Visa credit ••4242",
   recurring: true,
   outcome: "charged",
 };
@@ -33,7 +33,7 @@ describe("charges", () => {
   it("the mail carries amount, host, card and the receipt screenshot", () => {
     const m = chargeMail(CHARGE, { text: "Order #1 paid", png: Buffer.from("png") });
     expect(m.subject).toMatch(/^Charge: .*11\.29.* at my\.racknerd\.com$/);
-    expect(m.text).toContain("Card: main: Visa credit ••4242 exp 09/30");
+    expect(m.text).toContain("Card: main: Visa credit ••4242");
     expect(m.text).toContain("(recurring)");
     expect(m.text).toContain("Order #1 paid");
     expect(m.attachments).toEqual([

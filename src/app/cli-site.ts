@@ -37,7 +37,7 @@ export function registerSiteCommands(program: Command, local: LocalBackend): voi
         );
       for (const st of s.setup)
         console.log(
-          `  setup ${st.name.padEnd(14)} ${st.done ? "done" : st.blockedOn.length ? `blocked on ${st.blockedOn.join(", ")}` : st.unrecorded ? `flow ${st.unrecorded} not recorded` : "ready"}  → ${st.makes.join(", ")}`,
+          `  setup ${st.name.padEnd(14)} ${st.done ? "done" : st.blockedOn.length ? `blocked on ${st.blockedOn.join(", ")}` : st.unrecorded ? `flow ${st.unrecorded} not recorded` : "ready"}  → ${st.makes.join(", ")}${st.input ? `  input ${JSON.stringify(st.input)}` : ""}`,
         );
     });
   site
@@ -119,12 +119,23 @@ export function registerSiteCommands(program: Command, local: LocalBackend): voi
       "--profile <name>",
       "force the browser profile it runs in: a second profile for the same account, when the first one's session is stuck",
     )
-    .action(async (name: string, step: string, o: { account?: string; profile?: string }) => {
-      const sites = local().backend.sites;
-      if (!sites) throw new Error("no site apis here");
-      const { made } = await sites.setup(name, step, o.account ?? null, o.profile ?? null);
-      console.log(`kept ${made.join(", ")}`);
-    });
+    .option(
+      "--input <json|file>",
+      "over the step's input, key by key (a token's name, scopes, expiry); `site status` shows what it takes",
+    )
+    .action(
+      async (
+        name: string,
+        step: string,
+        o: { account?: string; profile?: string; input?: string },
+      ) => {
+        const sites = local().backend.sites;
+        if (!sites) throw new Error("no site apis here");
+        const input = o.input ? ((await readJson(o.input)) as Record<string, unknown>) : undefined;
+        const { made } = await sites.setup(name, step, o.account ?? null, o.profile ?? null, input);
+        console.log(`kept ${made.join(", ")}`);
+      },
+    );
   site
     .command("renew")
     .description(

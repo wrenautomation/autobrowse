@@ -320,7 +320,7 @@ describe("explore mode", () => {
       true,
     );
     expect(number.body).toMatchObject({ ok: true, secret: "card.number" });
-    expect(asks.at(-1)).toMatch(/^start paying on .*: put main: Visa credit ••4242 exp 09\/30 on /);
+    expect(asks.at(-1)).toMatch(/^start paying on .*: put main: Visa credit ••4242 on /);
     await send({ cmd: "place", hints: { css: "#p" }, secret: "card@main.cvc" }, true);
     expect(asks.filter((a) => a.includes("put main"))).toHaveLength(1);
     expect((await send({ cmd: "eval", js: "[d.value, p.value].join(' ')" })).body.result).toBe(

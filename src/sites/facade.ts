@@ -89,6 +89,8 @@ export interface SetupRow extends Pick<SetupStep, "name" | "makes" | "needs" | "
   blockedOn: string[];
   /** The flow this step runs, when nobody has recorded it yet. */
   unrecorded?: string;
+  /** What the step's flow is handed; `--input` overrides any key. */
+  input?: Record<string, unknown>;
 }
 
 export interface SiteRow {
@@ -119,6 +121,8 @@ export interface SiteFacade {
     account?: string | null,
     /** Force the browser profile the step runs in (a second profile for the same account). */
     profile?: string | null,
+    /** Over the step's own input, key by key: a token's name, scopes, expiry for this run. */
+    input?: Record<string, unknown>,
   ): Promise<{ made: readonly string[] }>;
   /**
    * Make again every kept token that lapses within the renew window, by the
@@ -303,6 +307,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       summary: step.summary,
       done: step.makes.every((n) => Boolean(deps.env(n))),
       blockedOn,
+      ...(!("oauth" in step.how) && step.how.input ? { input: step.how.input } : {}),
     };
     const how = step.how;
     const leg: Leg =
@@ -398,7 +403,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       }
       throw new SiteError(501, `${method} ${r.path}: no token for ${name} and no browser leg`);
     },
-    async setup(name, stepName, account, asProfile) {
+    async setup(name, stepName, account, asProfile, over) {
       const s = site(name);
       const step = s.setup.find((x) => x.name === stepName);
       if (!step) throw new SiteError(404, `no setup step ${stepName} on ${name}`);
@@ -422,11 +427,14 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
               resolveInput(v, deps.env, as),
             ]),
           ),
+          ...over,
           ...("flow" in step.how ? { sink: deps.sink } : {}),
         };
         await run(input);
         return { made: step.makes };
       }
+      if (over && Object.keys(over).length)
+        throw new SiteError(400, `${stepName} is an OAuth consent; it takes no input`);
       const spec = step.how.oauth;
       const implicit = !account ? ((await deps.accountFor?.(s, step)) ?? null) : null;
       const as = account ?? implicit;

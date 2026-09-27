@@ -171,9 +171,14 @@ export function siteNeeds(ctx: NeedsContext): Need[] {
 /** Needs per account in the policy: its Google credential and a readable inbox. */
 export function accountNeeds(ctx: NeedsContext): Need[] {
   const out: Need[] = [];
-  for (const id of ctx.identities) {
-    if (id.at !== "google") continue;
-    const label = id.address.split("@")[0] ?? id.address;
+  const google = ctx.identities.filter((i) => i.at === "google");
+  // Sender mailboxes share local parts across domains (will@a, will@b): the domain keeps ids apart.
+  const local = (a: string) => a.split("@")[0] ?? a;
+  const shared = (a: string) => google.filter((i) => local(i.address) === local(a)).length > 1;
+  for (const id of google) {
+    const label = shared(id.address)
+      ? `${local(id.address)}-${id.address.split("@")[1]?.split(".")[0] ?? ""}`
+      : local(id.address);
     out.push({
       id: `login-google-${label}`,
       kind: "credential",
@@ -182,6 +187,8 @@ export function accountNeeds(ctx: NeedsContext): Need[] {
       how: [`autobrowse creds paste google@${label}`],
       check: async () => Boolean(await profileOf(ctx.credentials, "google", id.address)),
     });
+    // A mailbox that only sends is read by wren's own inbox sync; autobrowse reads codes elsewhere.
+    if (id.for.length && id.for.every((p) => p === "sends")) continue;
     out.push({
       id: `inbox-${label}`,
       kind: "consent",

@@ -14,7 +14,20 @@ export interface CheckOptions {
 export async function checkCompiled(dir: string, o: CheckOptions = {}): Promise<string | null> {
   const cwd = o.cwd ?? process.cwd();
   const rel = relative(cwd, dir);
-  const tsc = await run(cwd, "tsc", ["--noEmit", "--pretty", "false"], o.timeoutMs);
+  // Incremental: a finish round after the first re-checks only what changed (15s → 7s here).
+  const tsc = await run(
+    cwd,
+    "tsc",
+    [
+      "--noEmit",
+      "--pretty",
+      "false",
+      "--incremental",
+      "--tsBuildInfoFile",
+      "node_modules/.cache/autobrowse/tsc.tsbuildinfo",
+    ],
+    o.timeoutMs,
+  );
   const own = tsc.output
     .split("\n")
     .filter((line) => line.includes(rel))
