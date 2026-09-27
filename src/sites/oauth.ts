@@ -79,6 +79,15 @@ export function accountEnv(name: string, account?: string | null): string {
     .toUpperCase()}`;
 }
 
+const POINTER = "=>";
+
+/** What an alias name holds instead of a second copy of a refresh token: the real name. */
+export const pointTo = (name: string) => `${POINTER}${name}`;
+
+/** The name a pointer value names, or null for a real value. */
+export const pointedAt = (value: string | undefined): string | null =>
+  value?.startsWith(POINTER) ? value.slice(POINTER.length) : null;
+
 /**
  * An access token: minted from the refresh token when there is one (cached
  * until a minute before it expires), else the kept access token itself.
@@ -93,7 +102,9 @@ export function accessTokens(
 ): (spec: OAuthSpec, account?: string | null) => Promise<string | null> {
   const cache = new Map<string, { token: string; until: number }>();
   return async (spec, account) => {
-    const refreshName = accountEnv(spec.refreshToken, account);
+    const asked = accountEnv(spec.refreshToken, account);
+    // An alias names the real copy (`pointTo`): mint from it and keep the new one there.
+    const refreshName = pointedAt(env(asked)) ?? asked;
     const refresh = env(refreshName);
     const id = env(spec.clientId);
     const secret = env(spec.clientSecret);

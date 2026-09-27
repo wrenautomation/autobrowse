@@ -13,7 +13,7 @@ import { memorySink } from "../src/deps/sink.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
 import { siteFacade } from "../src/sites/facade.js";
 import { SITES } from "../src/sites/index.js";
-import { accessTokens } from "../src/sites/oauth.js";
+import { accessTokens, pointTo } from "../src/sites/oauth.js";
 import { multipart, x, xOAuth } from "../src/sites/x.js";
 import { fakePage } from "./auth-fakes.js";
 
@@ -170,6 +170,8 @@ describe("x site", () => {
     await expect(sites.setup("x", "consent")).resolves.toEqual({
       made: ["X_REFRESH_TOKEN", "X_REFRESH_TOKEN__WRENAUTOMATION"],
     });
+    // One real copy; the handle's name points at it (X rolls the token on each use).
+    expect(sink.values.X_REFRESH_TOKEN__WRENAUTOMATION).toBe(pointTo("X_REFRESH_TOKEN"));
     const token = calls.find((c) => c.url.pathname === "/2/oauth2/token");
     expect(token?.headers.get("authorization")).toBe(
       `Basic ${Buffer.from("cid:cs").toString("base64")}`,
@@ -208,6 +210,12 @@ describe("x site", () => {
     clock = 7200 * 1000;
     expect(await mint(xOAuth)).toBe("at2");
     expect(kept.at(-1)).toEqual(["X_REFRESH_TOKEN", "rt3"]);
+    // An alias mints from the real copy and keeps the new token there.
+    env.X_REFRESH_TOKEN__WREN = pointTo("X_REFRESH_TOKEN");
+    clock *= 2;
+    expect(await mint(xOAuth, "wren")).toBe("at3");
+    expect(kept.at(-1)).toEqual(["X_REFRESH_TOKEN", "rt4"]);
+    expect(env.X_REFRESH_TOKEN__WREN).toBe(pointTo("X_REFRESH_TOKEN"));
   });
 
   it("uploads an image in one multipart request and a video in chunks, waiting for processing", async () => {

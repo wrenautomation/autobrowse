@@ -12,7 +12,7 @@ import { type JsonSchema, jsonSchemaOf } from "../engine/inputs.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import type { Approver } from "../gates/payment.js";
 import type { Proof, RunAs } from "../workflows/proof.js";
-import { accessTokens, accountEnv, runConsent } from "./oauth.js";
+import { accessTokens, accountEnv, pointTo, runConsent } from "./oauth.js";
 import type { RenewReport } from "./renew.js";
 import {
   type Leg,
@@ -150,7 +150,8 @@ export async function checkSite(
   const probe = row.probe;
   if (!probe) return { site: row.site, ok: false, why: "no probe" };
   const r = row.routes.find((x) => x.method === "GET" && matchPath(x.path, probe.path));
-  if (r?.via !== "api")
+  // The row's `via` is the site's plain token; an account's token is only found by calling as it.
+  if (!account && r?.via !== "api")
     return { site: row.site, ok: false, why: r?.missing ?? "probe has no api leg" };
   const t = now();
   try {
@@ -242,13 +243,18 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     "token" in s.auth
       ? (deps.env(accountEnv(s.auth.token, account)) ?? null)
       : minted(s.auth.oauth, account);
-  const hasToken = (s: SiteApi) => {
+  /** A token under the site's plain name, or under the account (the policy's when none is named). */
+  const hasToken = (s: SiteApi, account: string | null = null) => {
     if ("token" in s.auth) return Boolean(deps.env(s.auth.token));
     const o = s.auth.oauth;
-    return Boolean(
-      (deps.env(o.refreshToken) && deps.env(o.clientId) && deps.env(o.clientSecret)) ||
-        (o.accessToken && deps.env(o.accessToken)),
-    );
+    const held = (as: string | null) =>
+      Boolean(
+        (deps.env(accountEnv(o.refreshToken, as)) &&
+          deps.env(o.clientId) &&
+          deps.env(o.clientSecret)) ||
+          (o.accessToken && deps.env(accountEnv(o.accessToken, as))),
+      );
+    return held(null) || (account !== null && held(account));
   };
   /** The browser leg's runnable, or null when nobody has recorded it yet. */
   const legOf = async (
@@ -280,7 +286,11 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       return out.output;
     };
   };
-  const routeRow = async (s: SiteApi, r: SiteRoute<never, unknown>): Promise<RouteRow> => {
+  const routeRow = async (
+    s: SiteApi,
+    r: SiteRoute<never, unknown>,
+    account: string | null,
+  ): Promise<RouteRow> => {
     const base = {
       method: r.method,
       path: r.path,
@@ -289,7 +299,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       spends: Boolean(r.spends),
       request: jsonSchemaOf(r.request),
     };
-    if (r.api && hasToken(s)) return { ...base, via: "api" };
+    if (r.api && hasToken(s, account)) return { ...base, via: "api" };
     if (r.browser) {
       if (!(await legOf(r.browser)))
         return { ...base, via: "none", missing: `${legName(r.browser)} not recorded` };
@@ -319,14 +329,17 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     if (!(await legOf(leg))) row.unrecorded = legName(leg);
     return row;
   };
-  const status = async (s: SiteApi): Promise<SiteRow> => ({
-    site: s.site,
-    origin: s.origin,
-    authed: hasToken(s),
-    routes: await Promise.all(s.routes.map((r) => routeRow(s, r))),
-    setup: await Promise.all(s.setup.map(setupRow)),
-    ...(s.probe ? { probe: s.probe } : {}),
-  });
+  const status = async (s: SiteApi): Promise<SiteRow> => {
+    const as = (await deps.accountFor?.(s)) ?? null;
+    return {
+      site: s.site,
+      origin: s.origin,
+      authed: hasToken(s, as),
+      routes: await Promise.all(s.routes.map((r) => routeRow(s, r, as))),
+      setup: await Promise.all(s.setup.map(setupRow)),
+      ...(s.probe ? { probe: s.probe } : {}),
+    };
+  };
   return {
     list: () => Promise.all(sites.map(status)),
     status: (name) => status(site(name)),
@@ -468,7 +481,10 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       for (const as of names) {
         if (got.refreshToken) {
           const at = accountEnv(spec.refreshToken, as);
-          await deps.sink.put(at, got.refreshToken);
+          // One real copy; every other name points at it. A site that rolls the refresh
+          // token on each use (X) would leave a second copy dead after the first mint.
+          const real = accountEnv(spec.refreshToken, names[0] ?? null);
+          await deps.sink.put(at, at === real ? got.refreshToken : pointTo(real));
           made.push(at);
         }
         // The access token itself only when nothing mints one (no refresh token came back).
