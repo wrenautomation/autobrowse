@@ -452,6 +452,7 @@ export function registerRecordCommands(
             hosts: signupHosts(site, o.url ?? null),
           },
           save: `signup-${site}`,
+          signIn: false,
           maxSteps: Number(o.maxSteps),
           port: Number(o.port),
           headed: o.headed ?? false,
@@ -695,6 +696,8 @@ interface AgentRun {
   maxSteps: number;
   port: number;
   headed: boolean;
+  /** False on a signup: its page offers "continue with Google", which is not a login wall. */
+  signIn?: boolean;
   /** Named values the agent may `place` and never sees; `hosts` says where they may land. */
   secrets?: {
     names: readonly string[];
@@ -711,7 +714,10 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<{ achieved: bo
   const ex = await explorerOpener(settings, undefined, r.headed ? headed : undefined)(
     r.site,
     r.port,
-    r.secrets ? { secrets: r.secrets.values, secretHosts: r.secrets.hosts } : {},
+    {
+      ...(r.secrets ? { secrets: r.secrets.values, secretHosts: r.secrets.hosts } : {}),
+      ...(r.signIn === false ? { signIn: false } : {}),
+    },
   );
   console.log(
     `agent on ${r.site}; pause/resume: curl -s -X POST -H "Authorization: Bearer ${ex.token}" http://127.0.0.1:${ex.port}/ -d '{"cmd":"pause"}'`,
