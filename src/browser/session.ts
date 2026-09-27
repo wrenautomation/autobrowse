@@ -14,8 +14,14 @@ import { geometry, type Identity, learnIdentity, wearIdentity } from "./identity
 import { reapOrphans, reapTempDirs } from "./reap.js";
 import { type PasskeyRecord, type Passkeys, virtualAuthenticator } from "./webauthn.js";
 
-/** Playwright loads on the first browser, not at process start (~2 s of a CLI's boot). */
-const chromium = async () => (await import("playwright")).chromium;
+/**
+ * Patchright: Playwright with the CDP tells (Runtime.enable, console hooks)
+ * patched out, so Cloudflare Turnstile and bot walls see a plain Chrome.
+ * Same API and browser builds. Loads on the first browser, not at process
+ * start (~2 s of a CLI's boot).
+ */
+const chromium = async () =>
+  (await import("patchright")).chromium as unknown as typeof import("playwright").chromium;
 
 /** A page needs a person: login, captcha, consent, or a layout nobody planned for. */
 export class NeedsHuman extends Error {
