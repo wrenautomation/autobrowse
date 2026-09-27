@@ -170,15 +170,17 @@ export function watchedRuns(artifactsDir: string): string[] {
       return [];
     }
   })();
-  return dirs
-    .filter((d) => d.isDirectory())
-    .map((d) => join(artifactsDir, d.name))
-    .filter((d) => {
-      try {
-        return statSync(join(d, "steps.jsonl")).isFile();
-      } catch {
-        return false;
-      }
-    })
-    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+  // One stat per run folder, not two per comparison.
+  const runs: { dir: string; at: number }[] = [];
+  for (const d of dirs) {
+    if (!d.isDirectory()) continue;
+    const dir = join(artifactsDir, d.name);
+    try {
+      if (statSync(join(dir, "steps.jsonl")).isFile())
+        runs.push({ dir, at: statSync(dir).mtimeMs });
+    } catch {
+      // not a watched run
+    }
+  }
+  return runs.sort((a, b) => b.at - a.at).map((r) => r.dir);
 }

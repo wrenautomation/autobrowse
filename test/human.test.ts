@@ -41,7 +41,11 @@ describe("draws", () => {
 /** What a field holds after the keys: Backspace takes the last character off. */
 const typedOut = (keys: { ch: string }[]) =>
   keys
-    .reduce<string[]>((out, k) => (k.ch === BACKSPACE ? out.slice(0, -1) : [...out, k.ch]), [])
+    .reduce<string[]>((out, k) => {
+      if (k.ch === BACKSPACE) out.pop();
+      else out.push(k.ch);
+      return out;
+    }, [])
     .join("");
 
 describe("typing plan", () => {

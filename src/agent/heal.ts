@@ -260,7 +260,13 @@ export async function applyFixes(compiledDir: string, fixes: Fixes, lib: string)
   } catch {
     return out;
   }
-  const kept = fixes.list();
+  // By flow once: each step looks up its own fixes instead of scanning them all.
+  const byFlow = new Map<string, Fix[]>();
+  for (const f of fixes.list()) {
+    const list = byFlow.get(f.flow);
+    if (list) list.push(f);
+    else byFlow.set(f.flow, [f]);
+  }
   for (const name of names) {
     const dir = join(compiledDir, name);
     let outline: Outline;
@@ -277,8 +283,7 @@ export async function applyFixes(compiledDir: string, fixes: Fixes, lib: string)
       if (step.kind !== "browser") continue;
       const key = flowKey(outline.site, step.name);
       // Last op first: an earlier fix that adds detour clicks would shift the later ones.
-      const pinned = kept
-        .filter((f) => f.flow === key)
+      const pinned = (byFlow.get(key) ?? [])
         .map((f) => ({ f, at: brokenOp(step, f.failed, f.goal) }))
         .filter((p): p is { f: Fix; at: number } => p.at !== null)
         .sort((a, b) => b.at - a.at);

@@ -697,6 +697,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           }
           throw new FlowFailed(`${flow.site}/${flow.name}`, err, artifacts);
         } finally {
+          runner.fixes?.flush();
           // A watched run keeps its trace whatever happened; a failure saved one already.
           if (tracing)
             await session.context.tracing

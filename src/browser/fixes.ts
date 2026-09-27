@@ -35,8 +35,10 @@ export interface Fixes {
   find(flow: string, goal: string, failed: Hints): { hints: Hints; detours: Hints[] } | null;
   /** A repair that worked: kept. One that did not: ignored. */
   learn(report: RepairReport): void;
-  /** The fix went through again. */
+  /** The fix went through again: counted in memory, written at the next `flush` (one write per run, not per act). */
   used(flow: string, goal: string, failed: Hints): void;
+  /** Write counts `used` kept in memory. */
+  flush(): void;
   /** The fix no longer works: dropped, so the repairer looks again. */
   drop(flow: string, goal: string, failed: Hints): void;
   list(): Fix[];
@@ -59,7 +61,17 @@ function table(load: () => Fix[], save: (fixes: Fix[]) => void, now: () => Date)
     rows ??= new Map(load().map((f) => [key(f.flow, f.goal, f.failed), f]));
     return rows;
   };
-  const write = () => save([...all().values()].slice(-LIMIT));
+  let dirty = false;
+  const write = () => {
+    dirty = false;
+    // Oldest first in a Map's order: drop from the front past the limit, no copy of the rest.
+    const rows = all();
+    for (const k of rows.keys()) {
+      if (rows.size <= LIMIT) break;
+      rows.delete(k);
+    }
+    save([...rows.values()]);
+  };
   return {
     find(flow, goal, failed) {
       const f = all().get(key(flow, goal, failed));
@@ -89,7 +101,10 @@ function table(load: () => Fix[], save: (fixes: Fix[]) => void, now: () => Date)
       if (!f) return;
       f.used += 1;
       f.lastUsed = now().toISOString();
-      write();
+      dirty = true;
+    },
+    flush() {
+      if (dirty) write();
     },
     drop(flow, goal, failed) {
       if (all().delete(key(flow, goal, failed))) write();

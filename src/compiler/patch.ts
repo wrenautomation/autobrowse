@@ -43,8 +43,14 @@ export function brokenOp(
   const pool = byGoal.length ? byGoal : found;
   if (pool.length === 1) return pool[0] as number;
   if (actsBefore === undefined) return null;
-  const rank = (i: number) => step.ops.slice(0, i).filter((op) => op.kind !== "human").length;
-  return pool.find((i) => rank(i) === actsBefore) ?? null;
+  // Acts and reads before op i: one pass, not a recount per candidate.
+  const rank: number[] = [];
+  let n = 0;
+  for (const op of step.ops) {
+    rank.push(n);
+    if (op.kind !== "human") n += 1;
+  }
+  return pool.find((i) => rank[i] === actsBefore) ?? null;
 }
 
 export interface Mended {
