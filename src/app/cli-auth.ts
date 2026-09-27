@@ -513,21 +513,69 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .command("spend")
     .description("Every payment-gate decision: auto, person, denied, over the cap (SPEND_* policy)")
     .option("--last <n>", "how many lines", "50")
-    .action(async (o: { last: string }) => {
-      const { spendLedgerFor, spendPolicyFor } = await import("./services.js");
-      const { amountLine } = await import("../gates/spend.js");
-      const p = spendPolicyFor(settings);
-      console.log(
-        `policy: allow=${p.allow.join(",") || "-"} auto-yes-under=${p.autoYesUnder} daily-cap=${p.dailyCap} hard-cap=${p.hardCap ?? "-"}`,
-      );
-      const rows = await spendLedgerFor(settings).recent(Number(o.last));
-      if (!rows.length) console.log("no gate decisions recorded yet");
-      for (const r of rows) {
+    .option(
+      "--grant <site>",
+      "a yes given ahead: the site's payment asks go through without a text until it lapses",
+    )
+    .option("--hours <n>", "how long the grant lasts", "2")
+    .option("--max <amount>", "per purchase; an ask with no amount on it still texts you")
+    .option("--note <words>", "who said so (kept in the ledger)")
+    .option("--revoke <site>", "end the site's grants now")
+    .action(
+      async (o: {
+        last: string;
+        grant?: string;
+        hours: string;
+        max?: string;
+        note?: string;
+        revoke?: string;
+      }) => {
+        const { spendGrantsFor, spendLedgerFor, spendPolicyFor } = await import("./services.js");
+        const { amountLine } = await import("../gates/spend.js");
+        const grants = spendGrantsFor(settings);
+        if (o.revoke) {
+          console.log(`revoked ${await grants.revoke(o.revoke)} grant(s) on ${o.revoke}`);
+          return;
+        }
+        if (o.grant) {
+          if (!o.note) throw new Error("--grant needs --note: who said so");
+          const at = new Date();
+          const hours = Number(o.hours);
+          if (!(hours > 0)) throw new Error("--hours must be a positive number");
+          const until = new Date(at.getTime() + hours * 3_600_000).toISOString();
+          const max = o.max === undefined ? null : Number(o.max);
+          await grants.add({ site: o.grant, max, until, note: o.note, at: at.toISOString() });
+          await spendLedgerFor(settings).record({
+            at: at.toISOString(),
+            site: o.grant,
+            url: "",
+            what: `grant until ${until}${max === null ? "" : ` up to ${max}`}: ${o.note}`,
+            amount: null,
+            decided: "granted",
+            allowed: true,
+          });
+          console.log(
+            `granted ${o.grant} until ${until}${max === null ? "" : `, up to ${max} a purchase`}`,
+          );
+          return;
+        }
+        const p = spendPolicyFor(settings);
         console.log(
-          `${r.at}\t${r.allowed ? "yes" : "no "}\t${r.decided}\t${r.site}\t${r.amount ? amountLine(r.amount) : "?"}\t${r.what}`,
+          `policy: allow=${p.allow.join(",") || "-"} auto-yes-under=${p.autoYesUnder} daily-cap=${p.dailyCap} hard-cap=${p.hardCap ?? "-"}`,
         );
-      }
-    });
+        for (const g of grants.list(new Date()))
+          console.log(
+            `grant: ${g.site} until ${g.until}${g.max === null ? "" : ` up to ${g.max}`} (${g.note})`,
+          );
+        const rows = await spendLedgerFor(settings).recent(Number(o.last));
+        if (!rows.length) console.log("no gate decisions recorded yet");
+        for (const r of rows) {
+          console.log(
+            `${r.at}\t${r.allowed ? "yes" : "no "}\t${r.decided}\t${r.site}\t${r.amount ? amountLine(r.amount) : "?"}\t${r.what}`,
+          );
+        }
+      },
+    );
 
   program
     .command("login <site>")

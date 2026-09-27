@@ -4,6 +4,7 @@ import { paymentAmount } from "../src/gates/payment.js";
 import {
   type Amount,
   amountIn,
+  memoryGrants,
   memorySpendLedger,
   NO_AUTO_SPEND,
   policedApprover,
@@ -99,5 +100,60 @@ describe("policedApprover", () => {
     const { approve, asked } = setup(NO_AUTO_SPEND);
     expect(await approve(ask("anthropic", "Buy $1 of credits"))).toBe(true);
     expect(asked).toHaveLength(1);
+  });
+
+  it("a yes given ahead covers the site's asks until it lapses; the hard cap still refuses", async () => {
+    const grants = memoryGrants();
+    const now = new Date(Date.UTC(2026, 8, 27, 12));
+    await grants.add({
+      site: "cloudflare",
+      max: null,
+      until: new Date(now.getTime() + 3_600_000).toISOString(),
+      note: "William: go ahead",
+      at: now.toISOString(),
+    });
+    const asked: string[] = [];
+    const ledger = memorySpendLedger();
+    let t = now.getTime();
+    const approve = policedApprover(
+      async (a) => {
+        asked.push(a.what);
+        return false;
+      },
+      {
+        policy,
+        ledger,
+        grants,
+        now: () => {
+          t += 60_000;
+          return new Date(t);
+        },
+      },
+    );
+    expect(await approve(ask("cloudflare", "Add payment method"))).toBe(true);
+    expect(await approve(ask("cloudflare@wren", "Purchase $12.18"))).toBe(true);
+    expect(await approve(ask("cloudflare", "Pay $1,000"))).toBe(false);
+    expect(await approve(ask("npm", "Pay $5"))).toBe(false);
+    expect(asked).toHaveLength(1);
+    t += 3_600_000;
+    expect(await approve(ask("cloudflare", "Purchase $12.18"))).toBe(false);
+    expect(ledger.records.map((r) => r.decided)).toEqual([
+      "granted",
+      "granted",
+      "cap",
+      "denied",
+      "denied",
+    ]);
+    // A max per purchase: an ask with no amount on it is the person's.
+    await grants.add({
+      site: "npm",
+      max: 10,
+      until: new Date(t + 3_600_000).toISOString(),
+      note: "x",
+      at: new Date(t).toISOString(),
+    });
+    expect(await approve(ask("npm", "Pay $5"))).toBe(true);
+    expect(await approve(ask("npm", "Subscribe"))).toBe(false);
+    expect(await grants.revoke("npm")).toBe(1);
   });
 });

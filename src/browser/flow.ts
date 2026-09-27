@@ -18,6 +18,7 @@ import type { FileChooser, Locator, Page } from "playwright";
 import { expandHome } from "../google-auth.js";
 import { redactAria, redactText } from "../recorder/redact.js";
 import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js";
+import { type Fixes, flowKey } from "./fixes.js";
 import { type Hands, HUMAN_PACE, handsFor, instantHands, type Pace } from "./human/index.js";
 import { type Hints, locate, textOf } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
@@ -210,6 +211,8 @@ export interface RunnerOptions {
   repairIrreversible?: boolean;
   /** Every repair, tried or not, so the flow's source can be fixed for good. */
   onRepair?: (report: RepairReport) => void;
+  /** Repairs that worked, tried before the source's own hints on the next run (`browser/fixes`). */
+  fixes?: Fixes;
   /** Every failure record written (kind failed/human/interrupted): what healing starts from. */
   onFailure?: (record: FailureRecord, file: string) => void;
   locks?: KeyedMutex;
@@ -474,11 +477,25 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         ): Promise<"ok" | "repaired"> {
           const timeout = a.timeoutMs ?? ACT_TIMEOUT_MS;
           const page = active;
+          const mayRepair = !a.irreversible || runner.repairIrreversible;
+          // A kept fix first: the source's hints are known stale, so no wait on them and no model.
+          const key = flowKey(flow.site, flow.name);
+          const fix = mayRepair ? (runner.fixes?.find(key, a.goal, hints) ?? null) : null;
+          if (fix) {
+            try {
+              await doOp(page, fix, op, timeout, hands);
+              runner.fixes?.used(key, a.goal, hints);
+              return "repaired";
+            } catch {
+              // The page moved again (or back): drop it and go the long way.
+              runner.fixes?.drop(key, a.goal, hints);
+            }
+          }
           try {
             await doOp(page, hints, op, timeout, hands);
             return "ok";
           } catch (err) {
-            if (a.irreversible && !runner.repairIrreversible)
+            if (!mayRepair)
               throw new NeedsHuman(`${flow.site}: ${a.goal} (irreversible, not repaired)`);
             const proposal = await repairer.propose({
               site: flow.site,
@@ -502,6 +519,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               report.ok = true;
             } finally {
               runner.onRepair?.(report);
+              runner.fixes?.learn(report);
               if (canLearn(repairer)) await repairer.learn(report);
             }
             return "repaired";

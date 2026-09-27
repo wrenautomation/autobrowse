@@ -51,6 +51,7 @@ import {
 import { CRED_ENV, ENV_STORE_PREFIX, KEYCHAIN, WALLET_KEYCHAIN } from "../auth/keep.js";
 import type { Eyes } from "../browser/captcha/index.js";
 import { eyesOf } from "../browser/captcha/llm-eyes.js";
+import { fileFixes } from "../browser/fixes.js";
 import type { FlowRunner } from "../browser/flow.js";
 import { flowRunner } from "../browser/flow.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
@@ -95,7 +96,9 @@ import type { ExploreOptions } from "../explore/server.js";
 import { askOverChannel } from "../gates/ask.js";
 import type { Approver } from "../gates/payment.js";
 import {
+  fileGrants,
   fileSpendLedger,
+  type Grants,
   policedApprover,
   type SpendLedger,
   type SpendPolicy,
@@ -875,7 +878,13 @@ export function approverFor(
   return policedApprover(person, {
     policy: spendPolicyFor(settings),
     ledger: spendLedgerFor(settings),
+    grants: spendGrantsFor(settings),
   });
+}
+
+/** Yeses the person gave ahead (`spend --grant`), beside the ledgers. */
+export function spendGrantsFor(settings: Settings): Grants {
+  return fileGrants(join(dirname(expandHome(settings.credentialsFile)), "spend-grants.json"));
 }
 
 /** What the gate decides alone (`SPEND_*`); default: nothing, the person answers every ask. */
@@ -986,6 +995,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       login: loginFor(settings, gmail),
       captcha: captchaFor(settings, http),
       repairIrreversible: !guards.has("irreversible"),
+      fixes: fileFixes(expandHome(settings.fixesFile)),
       onRepair: (r) =>
         log.warn(
           { repair: r },

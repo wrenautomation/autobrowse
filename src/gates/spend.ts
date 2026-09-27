@@ -5,6 +5,7 @@
  * button with no amount on it is always a question. Every decision is one
  * line in the spend ledger, next to the secret audit.
  */
+import { readFileSync, writeFileSync } from "node:fs";
 import { chainedFile } from "credvault";
 import type { Approval, Approver } from "./payment.js";
 
@@ -55,7 +56,8 @@ export const NO_AUTO_SPEND: SpendPolicy = {
   hardCap: null,
 };
 
-export type Decided = "auto" | "person" | "cap" | "denied" | "unanswered";
+/** `granted`: covered by a yes the person gave ahead (`spend grant`). */
+export type Decided = "auto" | "person" | "granted" | "cap" | "denied" | "unanswered";
 
 export interface SpendRecord {
   at: string;
@@ -106,9 +108,84 @@ export async function spentToday(ledger: SpendLedger, now: Date): Promise<number
     .reduce((sum, r) => sum + (r.amount?.value ?? 0), 0);
 }
 
+/**
+ * A yes given ahead: "go ahead with Cloudflare, no text needed". It covers
+ * one site's payment asks until it lapses, up to `max` a purchase when set
+ * (then an ask with no amount on it still goes to the person). The hard
+ * cap still refuses first. Each use is a `granted` line in the ledger.
+ */
+export interface Grant {
+  site: string;
+  /** Per purchase; null = any amount under the hard cap. */
+  max: number | null;
+  until: string;
+  /** Who said so, in words. */
+  note: string;
+  at: string;
+}
+
+export interface Grants {
+  /** The live grant that covers this site, or null. `x@wren` is covered by a grant on `x`. */
+  live(site: string, now: Date): Grant | null;
+  add(g: Grant): Promise<void>;
+  /** Grants not yet lapsed. */
+  list(now: Date): Grant[];
+  /** Ends a site's grants now; how many. */
+  revoke(site: string): Promise<number>;
+}
+
+const base = (site: string) => site.split("@")[0] ?? site;
+
+function grantsOver(load: () => Grant[], save: (g: Grant[]) => Promise<void>): Grants {
+  const live = (now: Date) => load().filter((g) => Date.parse(g.until) > now.getTime());
+  return {
+    live: (site, now) =>
+      live(now)
+        .filter((g) => g.site === site || g.site === base(site))
+        .at(-1) ?? null,
+    async add(g) {
+      await save([...live(new Date(g.at)), g]);
+    },
+    list: live,
+    async revoke(site) {
+      const all = load();
+      const kept = all.filter((g) => g.site !== site);
+      await save(kept);
+      return all.length - kept.length;
+    },
+  };
+}
+
+export function fileGrants(path: string): Grants {
+  return grantsOver(
+    () => {
+      try {
+        return JSON.parse(readFileSync(path, "utf8")) as Grant[];
+      } catch {
+        return [];
+      }
+    },
+    async (g) => {
+      writeFileSync(path, `${JSON.stringify(g, null, 1)}\n`, { mode: 0o600 });
+    },
+  );
+}
+
+export function memoryGrants(): Grants {
+  let kept: Grant[] = [];
+  return grantsOver(
+    () => kept,
+    async (g) => {
+      kept = g;
+    },
+  );
+}
+
 export interface PolicedOptions {
   policy: SpendPolicy;
   ledger: SpendLedger;
+  /** Yeses given ahead; absent = none. */
+  grants?: Grants;
   now?: () => Date;
 }
 
@@ -134,6 +211,11 @@ export function policedApprover(ask: Approver, o: PolicedOptions): Approver {
     if (amount && o.policy.hardCap !== null && amount.value > o.policy.hardCap) {
       await write("cap", false);
       return false;
+    }
+    const grant = o.grants?.live(a.site, now()) ?? null;
+    if (grant && (grant.max === null || (amount && amount.value <= grant.max))) {
+      await write("granted", true);
+      return true;
     }
     if (
       amount &&

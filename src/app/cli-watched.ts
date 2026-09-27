@@ -7,6 +7,7 @@
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { Command } from "commander";
+import { fileFixes } from "../browser/fixes.js";
 import { readSteps, watchedRuns } from "../browser/watch.js";
 import { expandHome } from "../google-auth.js";
 import type { Settings } from "./config.js";
@@ -50,5 +51,42 @@ export function registerWatchedCommands(program: Command, settings: Settings): v
       }
       if (existsSync(join(dir, "trace.zip")))
         console.log(`replay: npx playwright show-trace ${join(dir, "trace.zip")}`);
+    });
+}
+
+/**
+ * `autobrowse repairs [flow]`: every locator a flow's source has wrong and
+ * what worked instead, the to-do list for fixing the source. Runs already
+ * use these (no wait, no model); `--forget` once the source says the same.
+ */
+export function registerRepairsCommands(program: Command, settings: Settings): void {
+  program
+    .command("repairs [flow]")
+    .description(
+      "Locators a flow's source has wrong and what works instead (runs use the fix already); --forget once the source is changed",
+    )
+    .option(
+      "--forget [goal]",
+      "drop the flow's fixes (or one goal's): its source now says the same",
+    )
+    .action((flow: string | undefined, o: { forget?: string | true }) => {
+      const fixes = fileFixes(expandHome(settings.fixesFile));
+      if (o.forget !== undefined) {
+        if (!flow) throw new Error("--forget needs a flow: repairs <site/name> --forget");
+        const n = fixes.forget(flow, o.forget === true ? undefined : o.forget);
+        console.log(`forgot ${n} fix${n === 1 ? "" : "es"} for ${flow}`);
+        return;
+      }
+      const rows = fixes
+        .list()
+        .filter((f) => !flow || f.flow === flow || f.flow.startsWith(`${flow}/`));
+      if (!rows.length) {
+        console.log(flow ? `no fixes for ${flow}` : "no fixes: every flow's locators still match");
+        return;
+      }
+      for (const f of rows)
+        console.log(
+          `${f.flow}  ${f.goal}\n  was ${JSON.stringify(f.failed)}\n  now ${JSON.stringify(f.hints)}  (${f.reason}; found ${f.found.slice(0, 10)}, used ${f.used}×)`,
+        );
     });
 }

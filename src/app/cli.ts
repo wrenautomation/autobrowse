@@ -30,7 +30,7 @@ import { registerShotsCommands } from "./cli-shots.js";
 import { registerSiteCommands } from "./cli-site.js";
 import { registerUnsubscribe } from "./cli-unsubscribe.js";
 import { registerWalletCommands } from "./cli-wallet.js";
-import { registerWatchedCommands } from "./cli-watched.js";
+import { registerRepairsCommands, registerWatchedCommands } from "./cli-watched.js";
 import { ingress } from "./client.js";
 import { loadEnvFile, loadSettings } from "./config.js";
 import { fileDone } from "./needs.js";
@@ -317,6 +317,7 @@ registerLangfuseCommands(program, () => envStoreFor(settings));
 registerReachCommands(program, () => envStoreFor(settings), local);
 registerShotsCommands(program, settings);
 registerWatchedCommands(program, settings);
+registerRepairsCommands(program, settings);
 program
   .command("reap")
   .description(
