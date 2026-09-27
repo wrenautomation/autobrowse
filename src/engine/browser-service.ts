@@ -9,6 +9,7 @@
  */
 import * as restate from "@restatedev/restate-sdk";
 import { z } from "zod";
+import { withCall } from "../browser/attempt.js";
 import { type BrowserFlow, FlowFailed, type FlowRunner } from "../browser/flow.js";
 import { calcomApiKey } from "../browser/flows/calcom-api-key.js";
 import { facebookOauthConsent } from "../browser/flows/facebook-oauth-consent.js";
@@ -120,7 +121,14 @@ export function browserService(deps: BrowserServiceDeps) {
   const leg =
     <I, O>(flow: BrowserFlow<I, O>) =>
     (ctx: restate.Context, input: I): Promise<O> =>
-      ctx.run(`browser ${flow.site}/${flow.name}`, () => runLeg(deps.runner, flow, input), RETRY);
+      ctx.run(
+        `browser ${flow.site}/${flow.name}`,
+        () =>
+          withCall(`${ctx.request().id} ${flow.site}/${flow.name}`, () =>
+            runLeg(deps.runner, flow, input),
+          ),
+        RETRY,
+      );
   return restate.service({
     name: BROWSER_SERVICE,
     handlers: {

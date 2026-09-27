@@ -8,6 +8,7 @@
  * that was reset cannot move the run that replaced it.
  */
 import * as restate from "@restatedev/restate-sdk";
+import { withCall } from "../browser/attempt.js";
 import { FlowFailed } from "../browser/flow.js";
 import { type Artifacts, NeedsHuman } from "../browser/session.js";
 import { HttpError } from "../clients/http.js";
@@ -92,7 +93,7 @@ async function journaled<T>(
       name,
       async () => {
         try {
-          return await fn();
+          return await withCall(`${ctx.request().id} ${name}`, fn);
         } catch (err) {
           if (!unrecoverable(err)) throw err;
           if (err instanceof NeedsHuman)

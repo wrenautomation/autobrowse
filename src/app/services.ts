@@ -49,6 +49,7 @@ import {
   totpSource,
 } from "../auth/index.js";
 import { CRED_ENV, ENV_STORE_PREFIX, KEYCHAIN, WALLET_KEYCHAIN } from "../auth/keep.js";
+import { fileDoneActs } from "../browser/attempt.js";
 import type { Eyes } from "../browser/captcha/index.js";
 import { eyesOf } from "../browser/captcha/llm-eyes.js";
 import { fileFixes } from "../browser/fixes.js";
@@ -996,6 +997,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       captcha: captchaFor(settings, http),
       repairIrreversible: !guards.has("irreversible"),
       fixes: fileFixes(expandHome(settings.fixesFile)),
+      done: fileDoneActs(join(expandHome(settings.artifactsDir), "done-acts")),
       onRepair: (r) =>
         log.warn(
           { repair: r },

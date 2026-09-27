@@ -17,6 +17,7 @@ import { join } from "node:path";
 import type { FileChooser, Locator, Page } from "playwright";
 import { expandHome } from "../google-auth.js";
 import { redactAria, redactText } from "../recorder/redact.js";
+import { currentCall, type DoneActs } from "./attempt.js";
 import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js";
 import { type Fixes, flowKey } from "./fixes.js";
 import { type Hands, HUMAN_PACE, handsFor, instantHands, type Pace } from "./human/index.js";
@@ -220,6 +221,8 @@ export interface RunnerOptions {
   onRepair?: (report: RepairReport) => void;
   /** Repairs that worked, tried before the source's own hints on the next run (`browser/fixes`). */
   fixes?: Fixes;
+  /** Irreversible acts a durable call already did: a retry never does them twice (`browser/attempt`). */
+  done?: DoneActs;
   /** Every failure record written (kind failed/human/interrupted): what healing starts from. */
   onFailure?: (record: FailureRecord, file: string) => void;
   locks?: KeyedMutex;
@@ -379,6 +382,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         let broken = false;
         const stamp = `${flow.site}-${flow.name}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
         let lastGoal: string | null = null;
+        const call = currentCall();
         // What the last act or read looked for: a heal finds the one op that broke by it.
         let lastHints: Hints | null = null;
         let acts = 0;
@@ -454,11 +458,21 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             lastGoal = a.goal;
             lastHints = hints;
             actsBefore = acts++;
+            // Kept after the flow succeeds too: a step that runs two flows replays the first when the second breaks.
+            const once =
+              a.irreversible && call && runner.done
+                ? `${flow.site}/${flow.name} ${actsBefore} ${a.goal}`
+                : null;
+            if (once && runner.done?.has(call as string, once))
+              throw new NeedsHuman(
+                `${flow.site}: "${a.goal}" already went through on an earlier try of this step; check it before running again`,
+              );
             await stepped(
               { kind: "act", goal: a.goal, op: op.kind, hints },
               () => actOnce(op, hints, a),
               (how) => how,
             );
+            if (once) runner.done?.add(call as string, once);
           },
           async signIn(site, account) {
             if (!runner.login || signingIn) return "no-login";
