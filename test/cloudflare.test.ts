@@ -63,13 +63,17 @@ function fakeApi() {
       });
     }
     if (u.pathname.startsWith("/client/v4/accounts/acc/registrar/domains/")) {
+      // As the real API: 200 for any name; only ours carries cloudflare_registration.
+      const name = decodeURIComponent(u.pathname.split("/").at(-1) as string);
       return new Response(
         JSON.stringify({
-          success: false,
-          result: null,
-          errors: [{ code: 1000, message: "not found" }],
+          success: true,
+          result:
+            name === "ours.test"
+              ? { name, cloudflare_registration: true, expires_at: "2027-01-01T00:00:00Z" }
+              : { name, supported_tld: true },
+          errors: [],
         }),
-        { status: 404 },
       );
     }
     return new Response(
@@ -128,6 +132,7 @@ describe("cloudflare client", () => {
       "TXT x.test v=spf1 -all",
     ]);
     expect(await cf.registered("x.test")).toBe(false);
+    expect(await cf.registered("ours.test")).toBe(true);
     // The token travels in a header, never in the URL.
     expect(api.calls.every((c) => !c.includes("t="))).toBe(true);
     // The zone name is looked up once, not once per record.

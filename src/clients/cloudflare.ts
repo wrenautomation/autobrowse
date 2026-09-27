@@ -168,11 +168,13 @@ export function cloudflare(opts: {
     },
     async registered(domain) {
       try {
-        const d = await call<{ name: string }>(
+        // A domain nobody here holds still answers 200 ({ name, supported_tld }): only a
+        // registration of ours carries cloudflare_registration.
+        const d = await call<{ name: string; cloudflare_registration?: boolean }>(
           "GET",
           `/accounts/${opts.accountId}/registrar/domains/${encodeURIComponent(domain)}`,
         );
-        return d.name === domain;
+        return d.name === domain && d.cloudflare_registration === true;
       } catch (err) {
         if (err instanceof CloudflareError && err.status === 404) return false;
         throw err;
