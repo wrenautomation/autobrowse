@@ -47,7 +47,7 @@ describe("explore mode", () => {
   let token: string;
   /** The person behind the payment gate: says yes, remembers what was asked. */
   const asks: string[] = [];
-  let answer = true;
+  let answer: boolean | null = true;
   /** Where placed secrets may land; the test page is a data: URL, so its host is "". */
   let allowHost = (_host: string) => true;
   const audit = memoryAudit();
@@ -188,11 +188,17 @@ describe("explore mode", () => {
     expect(refused.status).toBe(403);
     expect(refused.body).toMatchObject({ gate: "payment", reason: "denied" });
     expect((await send({ cmd: "eval", js: "document.title" })).body.result).not.toBe("clicked");
+    // Silence is not a no: it says so, and the next send asks again.
+    answer = null;
+    expect((await send(buy)).status).toBe(202);
+    const silent = await send(buy);
+    expect(silent.status).toBe(403);
+    expect(silent.body).toMatchObject({ gate: "payment", reason: "no-answer" });
     answer = true;
     // `?wait=1` holds the request until the answer: one request, the act done on a yes.
     expect((await send(buy, true)).status).toBe(200);
     expect((await send({ cmd: "eval", js: "document.title" })).body.result).toBe("clicked");
-    expect(asks).toHaveLength(2); // once per answer (the no, then the yes); the missing "Purchase" asked nobody
+    expect(asks).toHaveLength(3); // once per answer (the no, the silence, then the yes); the missing "Purchase" asked nobody
     expect(asks[1]).toMatch(/^start paying on .*: press "Buy now", which spends \(one yes covers/);
     // The yes-and-click is a charge: told with the page it landed on as the receipt.
     expect(charges).toHaveLength(1);
@@ -211,7 +217,7 @@ describe("explore mode", () => {
     expect(charges).toHaveLength(1);
     expect((await send({ cmd: "click", hints: { css: "#done" } }, true)).status).toBe(200);
     expect((await send({ cmd: "eval", js: "document.title" })).body.result).toBe("ordered");
-    expect(asks).toHaveLength(2);
+    expect(asks).toHaveLength(3);
     expect(charges).toHaveLength(2);
 
     // A popup (an OAuth window) is listed and switched to; closing it returns to the main page.

@@ -112,8 +112,11 @@ export interface Approval {
   amount?: Amount;
 }
 
-/** Asks a person; true only on an explicit yes. Absent → the act is refused. */
-export type Approver = (ask: Approval) => Promise<boolean>;
+/**
+ * Asks a person: true on an explicit yes, false on a no, null when no answer
+ * came in time. Only a yes lets the act happen.
+ */
+export type Approver = (ask: Approval) => Promise<boolean | null>;
 
 /** The refusal an explore command answers with: the act did not happen. */
 export type GateReason = "no-approver" | "denied" | "no-answer" | "asked";
@@ -131,7 +134,7 @@ export class PaymentGate extends Error {
           ? `payment step refused: ${what}`
           : reason === "asked"
             ? `payment step asked: ${what}; the person has been texted, send the same command again after they answer`
-            : `payment step unanswered: ${what}`,
+            : `payment step unanswered: ${what}; no reply in time, send the same command again to ask again`,
     );
   }
 }
@@ -144,7 +147,7 @@ export class PaymentGate extends Error {
 export class PendingApprovals {
   private readonly pending = new Map<
     string,
-    { promise: Promise<boolean>; answer: boolean | null }
+    { promise: Promise<boolean | null>; answer: boolean | null | undefined }
   >();
   constructor(private readonly approve: Approver) {}
 
@@ -152,12 +155,12 @@ export class PendingApprovals {
   async decide(key: string, ask: Approval, wait: boolean): Promise<void> {
     let entry = this.pending.get(key);
     if (!entry) {
-      const e: { promise: Promise<boolean>; answer: boolean | null } = {
+      const e: { promise: Promise<boolean | null>; answer: boolean | null | undefined } = {
         promise: null as never,
-        answer: null,
+        answer: undefined,
       };
       e.promise = this.approve(ask)
-        .catch(() => false)
+        .catch(() => null)
         .then((a) => {
           e.answer = a;
           return a;
@@ -166,8 +169,10 @@ export class PendingApprovals {
       this.pending.set(key, entry);
     }
     if (wait) await entry.promise;
-    if (entry.answer === null) throw new PaymentGate(ask.what, "asked");
+    if (entry.answer === undefined) throw new PaymentGate(ask.what, "asked");
     this.pending.delete(key);
+    // Silence is not a no: the next try asks again.
+    if (entry.answer === null) throw new PaymentGate(ask.what, "no-answer");
     if (!entry.answer) throw new PaymentGate(ask.what, "denied");
   }
 }

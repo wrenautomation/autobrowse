@@ -1,7 +1,7 @@
 /**
  * A yes/no over a channel the person owns: the question goes out as a
  * note, the answer is the first reply after it that parses as yes or no.
- * No reply by the deadline is a no.
+ * No reply by the deadline is no answer (null), which the gate never reads as a yes.
  */
 import type { MessageReader } from "../auth/codes.js";
 import { parseCommand } from "../channels/commands.js";
@@ -47,7 +47,7 @@ export function askOverChannel(opts: AskOptions): Approver {
       }
       if (now() >= deadline) {
         opts.onAnswer?.(ask, "none");
-        return false;
+        return null;
       }
       await sleep(pollMs);
     }

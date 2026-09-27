@@ -99,7 +99,7 @@ describe("askOverChannel", () => {
     );
     expect(await channel([{ s: 5, text: "no" }]).approver(ask)).toBe(false);
   });
-  it("is a no when nobody answers by the deadline", async () => {
-    expect(await channel([]).approver(ask)).toBe(false);
+  it("is no answer, not a no, when nobody replies by the deadline", async () => {
+    expect(await channel([]).approver(ask)).toBeNull();
   });
 });

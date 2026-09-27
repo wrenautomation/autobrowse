@@ -55,7 +55,7 @@ export const NO_AUTO_SPEND: SpendPolicy = {
   hardCap: null,
 };
 
-export type Decided = "auto" | "person" | "cap" | "denied";
+export type Decided = "auto" | "person" | "cap" | "denied" | "unanswered";
 
 export interface SpendRecord {
   at: string;
@@ -146,7 +146,7 @@ export function policedApprover(ask: Approver, o: PolicedOptions): Approver {
       return true;
     }
     const yes = await ask(a);
-    await write(yes ? "person" : "denied", yes);
+    await write(yes ? "person" : yes === null ? "unanswered" : "denied", yes === true);
     return yes;
   };
 }
