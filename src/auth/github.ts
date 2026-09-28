@@ -36,26 +36,10 @@ export async function signInToGithub(ctx: SignInContext): Promise<void> {
   if (/incorrect username or password/i.test(text))
     throw new LoginFailed(site, "password rejected");
 
-  // Two-factor: the authenticator code page, or the chooser that leads to it.
-  const otp = { role: "textbox", name: "/authentication code|verification code|xxxxxx/i" } as const;
-  if (/two-factor authentication/i.test(text)) {
-    if (!(await fp.has(otp, RENDER_MS))) {
-      const app = { text: "/authenticator app/i" } as const;
-      if (!(await fp.has(app)))
-        throw new LoginFailed(site, "two-factor page offers no authenticator app");
-      await fp.act({ kind: "click" }, app, { goal: "use the authenticator app" });
-      await fp.wait(SETTLE_MS);
-    }
-    if (!ctx.offers("totp"))
-      throw new LoginFailed(site, "two-factor asks for an authenticator code; store totpSecret");
-    await fp.act({ kind: "fill", value: await code("totp") }, otp, {
-      goal: "type the authenticator code",
-    });
-    // GitHub submits six digits on its own; a Verify button is there on some pages.
-    const verify = { role: "button", name: "/^verify$/i" } as const;
-    if (await fp.has(verify, 2_000))
-      await fp.act({ kind: "click" }, verify, { goal: "submit the code" });
-    await fp.waitForUrl((u) => !/two-factor/.test(u), 15_000);
+  // Two-factor. Never GitHub Mobile (William, 09-27): the authenticator key
+  // when one is stored, else a code by text or email, picked under "More options".
+  if (/two-factor/.test(fp.url())) {
+    await twoFactor(ctx);
     text = await fp.text();
   }
   // A new device: GitHub emails a code before it lets the session through.
@@ -81,6 +65,58 @@ export async function signInToGithub(ctx: SignInContext): Promise<void> {
   const authorize = { role: "button", name: "/^authorize/i" } as const;
   if (/login\/oauth\/authorize/.test(fp.url()) && (await fp.has(authorize, RENDER_MS)))
     await fp.act({ kind: "click" }, authorize, { goal: "authorize the app" });
+}
+
+/** The two-factor ways GitHub offers, in the order we take them, and the code each needs. */
+const WAYS = [
+  { kind: "totp", choice: { text: "/authenticator app/i" }, url: /two-factor(\/app)?$/ },
+  { kind: "sms", choice: { text: "/text message|sms/i" }, url: /two-factor\/sms$/ },
+  { kind: "email", choice: { text: "/email/i" }, url: /two-factor\/email$/ },
+] as const;
+
+async function twoFactor(ctx: SignInContext): Promise<void> {
+  const { fp, code } = ctx;
+  const site = "github";
+  const otp = { role: "textbox", name: "/code|xxxxxx/i" } as const;
+  const usable = WAYS.filter((w) => ctx.offers(w.kind));
+  if (usable.length === 0)
+    throw new LoginFailed(
+      site,
+      "two-factor needs an authenticator key (creds totp), a phone for texts, or a readable codes inbox",
+    );
+  // Already on a way we can answer (the page GitHub opened with)?
+  const path = new URL(fp.url()).pathname;
+  let way = usable.find((w) => w.url.test(path));
+  if (!way) {
+    const more = { role: "button", name: "/more options/i" } as const;
+    if (await fp.has(more, RENDER_MS))
+      await fp.act({ kind: "click" }, more, { goal: "show the other two-factor ways" });
+    for (const w of usable)
+      if (await fp.has(w.choice, 2_000)) {
+        await fp.act({ kind: "click" }, w.choice, { goal: `use a ${w.kind} code` });
+        way = w;
+        break;
+      }
+  }
+  if (!way)
+    throw new LoginFailed(
+      site,
+      `two-factor offers none of ${usable.map((w) => w.kind).join(", ")} (never GitHub Mobile)`,
+    );
+  await fp.wait(SETTLE_MS);
+  // A text or email is sent on a button press on some pages.
+  const send = { role: "button", name: "/send|resend/i" } as const;
+  if (way.kind !== "totp" && (await fp.has(send, 2_000)))
+    await fp.act({ kind: "click" }, send, { goal: `send the ${way.kind} code` });
+  await fp.act({ kind: "fill", value: await code(way.kind, "github") }, otp, {
+    goal: `type the ${way.kind} code`,
+  });
+  // GitHub submits six digits on its own; a Verify button is there on some pages.
+  const verify = { role: "button", name: "/^verify$/i" } as const;
+  if (await fp.has(verify, 2_000))
+    await fp.act({ kind: "click" }, verify, { goal: "submit the code" });
+  if (!(await fp.waitForUrl((u) => !/two-factor/.test(u), 15_000)))
+    throw new LoginFailed(site, `still on ${fp.url()} after the ${way.kind} code`);
 }
 
 registerProvider({

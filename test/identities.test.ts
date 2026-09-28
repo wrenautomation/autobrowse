@@ -73,6 +73,9 @@ describe("accounts policy", () => {
   it("an address typed for an account is its own Google profile; a site name stays", () => {
     expect(accountSite("Will@Wren-Automation.com")).toBe("google@will@wren-automation.com");
     expect(accountSite("google@wren")).toBe("google@wren");
+    // A label with a dot is still a label, not an address to wrap again.
+    expect(accountSite("google@wj.dev")).toBe("google@wj.dev");
+    expect(accountSite("github@wj.dev")).toBe("github@wj.dev");
     expect(accountSite("google@will@a.com")).toBe("google@will@a.com");
     expect(accountSite("linkedin")).toBe("linkedin");
   });

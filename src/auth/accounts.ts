@@ -167,7 +167,15 @@ export async function accountsOn(
     out.push({
       name,
       username: c.username || "(no username)",
-      how: c.via ? `via ${c.via}` : c.totpSecret ? "totp" : "password",
+      // Every way in, in the order tried (`methodsOf`).
+      how:
+        [
+          c.password && (c.totpSecret ? "password+totp" : "password"),
+          c.via && `via ${c.via}`,
+          c.passkeys.length > 0 && "passkey",
+        ]
+          .filter(Boolean)
+          .join(", then ") || "no way in stored",
     });
   }
   return out;

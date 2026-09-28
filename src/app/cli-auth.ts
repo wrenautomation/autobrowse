@@ -107,8 +107,19 @@ export function registerAuthCommands(program: Command, settings: Settings): void
         process.exitCode = 1;
         return;
       }
-      await credentialsFor(settings).put(site, parsed.data);
-      console.log(`stored credential for ${site}`);
+      const store = credentialsFor(settings);
+      const had = await store.get(site);
+      // A password joins the account's other ways in (its provider, passkeys); it does not replace them.
+      await store.put(site, {
+        ...parsed.data,
+        ...(had?.via && !raw.via
+          ? { via: had.via, codesInbox: parsed.data.codesInbox ?? had.codesInbox ?? had.username }
+          : {}),
+        ...(had?.passkeys.length && !raw.passkeys ? { passkeys: had.passkeys } : {}),
+      });
+      console.log(
+        `stored credential for ${site}${had?.via && !raw.via ? ` (still signs in via ${had.via} too; the password goes first)` : ""}`,
+      );
     });
   creds
     .command("via <site> <provider>")
@@ -148,14 +159,83 @@ export function registerAuthCommands(program: Command, settings: Settings): void
           if (o.for && !account)
             throw new Error(`no ${provider} account for ${o.for}: autobrowse accounts`);
         }
-        await store.put(site, {
-          username: account ?? providerCred.username,
-          via: provider,
-          ...(o.url ? { url: o.url } : {}),
-        });
-        console.log(`${site} signs in via ${provider}${o.url ? ` at ${o.url}` : ""}`);
+        const address = account ?? providerCred.username;
+        const had = await store.get(site);
+        // A stored password stays: the provider becomes the account's second way in.
+        await store.put(
+          site,
+          had?.password
+            ? { ...had, via: provider, codesInbox: address, ...(o.url ? { url: o.url } : {}) }
+            : { username: address, via: provider, ...(o.url ? { url: o.url } : {}) },
+        );
+        console.log(
+          `${site} signs in via ${provider}${o.url ? ` at ${o.url}` : ""}${had?.password ? " (its password goes first)" : ""}`,
+        );
       },
     );
+  creds
+    .command("rename <from> <to>")
+    .description(
+      "Move an account to a clearer name (google@google@wj.dev → google@wj.dev): its credential and its signed-in browser profile; the old name is kept in history",
+    )
+    .action(async (fromArg: string, toArg: string) => {
+      const [from, to] = [accountSite(fromArg), accountSite(toArg)];
+      const store = credentialsFor(settings);
+      const cred = await store.get(from);
+      if (!cred) throw new Error(`no credential stored for ${from}`);
+      if (await store.get(to))
+        throw new Error(`${to} is taken: \`creds same ${to} ${from}\` merges them`);
+      if (!store.remove) throw new Error("this store cannot remove; nothing moved");
+      await store.put(to, cred);
+      if (!(await store.get(to))) throw new Error(`${to} did not store; ${from} left as is`);
+      await store.remove(from);
+      // The browser profile carries the sign-in: it moves with the name.
+      const { existsSync, renameSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const { expandHome } = await import("../google-auth.js");
+      const dir = expandHome(settings.profilesDir);
+      const [oldDir, newDir] = [join(dir, from), join(dir, to)];
+      const moved = existsSync(oldDir) && !existsSync(newDir);
+      if (moved) renameSync(oldDir, newDir);
+      console.log(
+        `${from} is now ${to}${moved ? ", profile too" : existsSync(oldDir) ? `; its profile stays (${to} has one)` : ""}; creds history ${from} keeps the old one`,
+      );
+    });
+  creds
+    .command("same <site> <other>")
+    .description(
+      "Two stored entries are one account (github and github@jinwi): other's ways in (password, authenticator, passkeys) join site's, and other is removed (kept in history). The password goes first, the provider second",
+    )
+    .action(async (siteArg: string, otherArg: string) => {
+      const site = accountSite(siteArg);
+      const other = accountSite(otherArg);
+      const store = credentialsFor(settings);
+      const [a, b] = [await store.get(site), await store.get(other)];
+      if (!a || !b) throw new Error(`both need a stored credential: ${!a ? site : other}`);
+      const own = a.password ? a : b.password ? b : a;
+      const via = a.via ?? b.via;
+      const address = [a, b].find((c) => c.via)?.username;
+      await store.put(site, {
+        ...own,
+        username: own.password ? own.username : a.username,
+        ...(via ? { via } : {}),
+        ...(address && own.password ? { codesInbox: own.codesInbox ?? address } : {}),
+        totpSecret: a.totpSecret ?? b.totpSecret,
+        recoveryCodes: a.recoveryCodes.length ? a.recoveryCodes : b.recoveryCodes,
+        passkeys: [...a.passkeys, ...b.passkeys],
+      });
+      if (!store.remove)
+        throw new Error("this store cannot remove; the merge is stored, remove the other by hand");
+      await store.remove(other);
+      const ways = [
+        own.password && "password",
+        via && `via ${via}`,
+        (a.passkeys.length || b.passkeys.length) && "passkey",
+      ].filter(Boolean);
+      console.log(
+        `${site}: one account, signs in by ${ways.join(", then ")}; ${other} removed (creds history ${other} keeps it)`,
+      );
+    });
   creds
     .command("made <site>")
     .description(

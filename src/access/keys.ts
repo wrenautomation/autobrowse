@@ -11,7 +11,7 @@
  * key. An agent with a shell on the worker's machine is the owner.
  *
  * Stored as a sha256 of each key, never the key: it is shown once, at
- * `keys add`. A key is 32 random bytes, so a plain hash is enough.
+ * `access grant`. A key is 32 random bytes, so a plain hash is enough.
  */
 import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";

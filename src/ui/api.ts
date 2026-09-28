@@ -41,7 +41,7 @@ import { commandSchema } from "../explore/server.js";
 import { listRecordingSummaries, loadRecording, recordingDir } from "../recorder/store.js";
 import { type Method, SiteError } from "../sites/index.js";
 import { needAffordances, runAffordances, setupAffordances } from "./affordances.js";
-import { accessAuth, bearerAuth, rateLimit } from "./auth.js";
+import { accessAuth, bearerAuth, originGuard, rateLimit } from "./auth.js";
 import { Jobs } from "./jobs.js";
 
 /** The HTTP face: the shared `Backend` port plus what only this transport needs. */
@@ -138,6 +138,7 @@ export function api(deps: ApiDeps): Hono<Env> {
   const find = async (name: string) => (await workflows()).find((w) => w.name === name) ?? null;
   const runOf = (workflow: string, key: string) => deps.ingress.run(workflow, key);
 
+  app.use("/api/*", originGuard(deps.token));
   app.use("/api/*", accessAuth(deps.token, deps.keys));
   // An agent key gets in only where its scope says (`access/fence`).
   app.use("/api/*", async (c, next) => {

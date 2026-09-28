@@ -19,6 +19,13 @@ in ours. Use his actual browser for GitHub. Chrome by default; Safari too.
 - We work in a new tab and close only it. No trace, no passkey stand-in,
   nothing context-wide.
 
+## GitHub (09-27)
+
+The own browser worked, but each connect asks for a click. GitHub now signs
+in headless with its password instead (one account, password first, Google
+second: `methodsOf`). Two-factor: authenticator key, else text or email code,
+never GitHub Mobile. `OWN_BROWSER_SITES` is empty again.
+
 ## Safari
 
 No path that keeps his logins and passes a sign-in page:

@@ -15,6 +15,7 @@ import { summarize } from "../engine/run.js";
 import { DEFAULT_TLDS, domainIdeas } from "../workflows/domain/ideas.js";
 import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
 import { localBackend, proofsOf, workflowsOf } from "./backend.js";
+import { registerAccessCommands } from "./cli-access.js";
 import { registerAccountsCommands } from "./cli-accounts.js";
 import { registerAuthCommands } from "./cli-auth.js";
 import { registerAwsCommands } from "./cli-aws.js";
@@ -22,7 +23,6 @@ import { registerDesktopCommands } from "./cli-desktop.js";
 import { registerDoCommands } from "./cli-do.js";
 import { registerEnvCommands } from "./cli-env.js";
 import { readJson } from "./cli-json.js";
-import { registerKeysCommands } from "./cli-keys.js";
 import { registerLangfuseCommands } from "./cli-langfuse.js";
 import { registerNeedsCommands } from "./cli-needs.js";
 import { registerReachCommands } from "./cli-reach.js";
@@ -353,7 +353,7 @@ registerAccountsCommands(program, () => ({
 registerEnvCommands(program, settings, { store: () => envStoreFor(settings) });
 registerDesktopCommands(program, tmpdir());
 registerWalletCommands(program, settings);
-registerKeysCommands(program, settings);
+registerAccessCommands(program, settings);
 
 program.parseAsync().catch((err: unknown) => {
   // Name the command that failed, so a bare "exit code 1" always says why.

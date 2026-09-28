@@ -50,6 +50,34 @@ export function accessAuth(
   };
 }
 
+const LOOPBACK = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+
+/**
+ * A web page the person happens to open must not drive the worker: a
+ * browser sends any site's POST to 127.0.0.1 and names the page in
+ * `Origin`. Refused unless the origin is ours (the same host) or loopback
+ * (the dev server). Without a token, the Host must be loopback too: a
+ * name that resolves to 127.0.0.1 (DNS rebinding) is someone else's page.
+ */
+export function originGuard(token: string | undefined): MiddlewareHandler {
+  return async (c, next) => {
+    // Every browser sends Host; a request without one is no web page's.
+    const host = c.req.header("host") ?? "";
+    if (token === undefined && host && !LOOPBACK.test(host))
+      return c.json({ error: "local use answers loopback only" }, 403);
+    const origin = c.req.header("origin");
+    if (origin) {
+      let from = "";
+      try {
+        from = new URL(origin).host;
+      } catch {}
+      if (from !== host && !LOOPBACK.test(from))
+        return c.json({ error: "cross-site request refused" }, 403);
+    }
+    return next();
+  };
+}
+
 /** Fixed-window limiter per key, for the inbound hook: a text message is never a flood. */
 export function rateLimit(opts: { perMinute: number; now?: () => number }): MiddlewareHandler {
   const now = opts.now ?? Date.now;

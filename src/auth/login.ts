@@ -153,6 +153,8 @@ export interface CodeStep {
 
 export interface FormLoginSpec {
   start: string;
+  /** A saved-account chooser that hides the form: pressed first, only when it shows. */
+  reveal?: Hints;
   username: Hints;
   /** Two-page forms: press this after the username. */
   next?: Hints;
@@ -195,6 +197,8 @@ export function formLogin(site: string, spec: FormLoginSpec): SiteLogin["signIn"
   return async ({ fp, cred, code }) => {
     const password = passwordOf(site, cred);
     await fp.open(spec.start, { allowWall: true });
+    if (spec.reveal && (await fp.has(spec.reveal)))
+      await fp.act({ kind: "click" }, spec.reveal, { goal: "past the saved-account chooser" });
     await fp.act({ kind: "fill", value: cred.username }, spec.username, { goal: "type username" });
     if (spec.next) await fp.act({ kind: "click" }, spec.next, { goal: "continue past username" });
     await fp.act({ kind: "fill", value: password }, spec.password, { goal: "type password" });
@@ -871,12 +875,12 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
     // The caller knows whose sign-in this is (the account an OAuth consent
     // is for): a second account at the same provider lives as `<site>@<label>`,
     // and that credential — not the site's default one — signs in.
-    if (account && !(cred && sameUser(cred.username, account))) {
+    if (account && !(cred && isUser(cred, account))) {
       const base = known?.credential ?? name;
       for (const other of await opts.credentials.list()) {
         if (!other.startsWith(`${base}@`)) continue;
         const alt = await opts.credentials.get(other);
-        if (!alt || !sameUser(alt.username, account)) continue;
+        if (!alt || !isUser(alt, account)) continue;
         name = other;
         known = resolveLogin(sites, other) ?? known;
         cred = alt;
@@ -884,36 +888,74 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
       }
     }
     if (!cred) return known ? "no-credential" : "unknown-site";
-    // A credential that signs in via a provider takes the generic provider path when the
-    // site's own spec does not know that provider (or there is no spec at all).
-    const login =
-      cred.via && !known?.via?.includes(cred.via as Provider) ? viaLogin(name, cred) : known;
-    if (!login) return "unknown-site";
     const since = now();
-    const ctx = signInContext({
-      fp,
-      site: name,
-      cred,
-      since,
-      credential: known?.credential ?? name,
-      credentials: opts.credentials,
-      codes: opts.codes,
-      domainsFor: (name, c) => passwordDomains(sites, name, c),
-      ...(opts.audit ? { audit: opts.audit } : {}),
-      ...(opts.notify ? { notify: opts.notify } : {}),
-    });
-    const here = login.signInHere;
-    if (here?.at.test(fp.url())) {
-      await here.run(ctx);
-      if (!(await fp.waitForUrl((u) => !here.at.test(u), 30_000)))
-        throw new LoginFailed(name, `still on ${fp.url()} after signing in`);
-      return "signed-in";
+    // One account, several ways in: each method in turn until one signs in.
+    let first: unknown = null;
+    for (const method of methodsOf(cred)) {
+      // A method via a provider takes the generic provider path when the
+      // site's own spec does not know that provider (or there is no spec at all).
+      const login =
+        method.via && !known?.via?.includes(method.via as Provider)
+          ? viaLogin(name, method)
+          : known;
+      if (!login) continue;
+      const ctx = signInContext({
+        fp,
+        site: name,
+        cred: method,
+        since,
+        credential: known?.credential ?? name,
+        credentials: opts.credentials,
+        codes: opts.codes,
+        domainsFor: (name, c) => passwordDomains(sites, name, c),
+        ...(opts.audit ? { audit: opts.audit } : {}),
+        ...(opts.notify ? { notify: opts.notify } : {}),
+      });
+      try {
+        await signInWith(name, login, ctx);
+        return "signed-in";
+      } catch (err) {
+        // Only a refused sign-in moves on; a page that needs a person stops here.
+        if (!(err instanceof LoginFailed)) throw err;
+        first ??= err;
+      }
     }
-    await login.signIn(ctx);
-    if (!(await login.loggedIn(fp)))
-      throw new LoginFailed(name, "sign-in ran but the page is not signed in");
-    return "signed-in";
+    if (first) throw first;
+    return "unknown-site";
   };
+}
+
+async function signInWith(name: string, login: SiteLogin, ctx: SignInContext): Promise<void> {
+  const { fp } = ctx;
+  const here = login.signInHere;
+  if (here?.at.test(fp.url())) {
+    await here.run(ctx);
+    if (!(await fp.waitForUrl((u) => !here.at.test(u), 30_000)))
+      throw new LoginFailed(name, `still on ${fp.url()} after signing in`);
+    return;
+  }
+  await login.signIn(ctx);
+  if (!(await login.loggedIn(fp)))
+    throw new LoginFailed(name, "sign-in ran but the page is not signed in");
+}
+
+/** The account's address: its codes inbox when it signs in with a handle, else the username. */
+export const addressOf = (cred: Pick<Credential, "username" | "codesInbox">): string =>
+  cred.codesInbox ?? cred.username;
+
+const isUser = (cred: Credential, account: string) =>
+  sameUser(cred.username, account) || sameUser(addressOf(cred), account);
+
+/**
+ * The ways one account signs in, in the order tried: its own password
+ * first, then the provider's button (as the account's address there).
+ * A credential with one of them has one method.
+ */
+export function methodsOf(cred: Credential): Credential[] {
+  if (!cred.password || !cred.via) return [cred];
+  const { via: _v, ...own } = cred;
+  const { password: _p, previousPassword: _pp, ...viaOnly } = cred;
+  return [own, { ...viaOnly, username: addressOf(cred) }];
 }
 
 export type LoginProvider = ReturnType<typeof loginProvider>;

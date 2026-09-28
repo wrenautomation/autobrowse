@@ -1,5 +1,5 @@
 /**
- * `autobrowse keys`: one key per agent, naming what it may see and call
+ * `autobrowse access`: one key per agent, naming what it may see and call
  * (`access/keys`). The key is printed once, at `add`; only its hash is kept.
  */
 import type { Command } from "commander";
@@ -13,14 +13,16 @@ const list = (v: string | undefined) =>
     .map((s) => s.trim())
     .filter(Boolean);
 
-export function registerKeysCommands(program: Command, settings: Settings): void {
-  const store = () => fileKeys(expandHome(settings.agentKeysFile));
-  const keys = program
-    .command("keys")
-    .description("agent keys: each agent sees and calls only what its key names");
-  keys
-    .command("add <name>")
-    .description("Make a key (printed once); a second add of a name replaces it")
+export function registerAccessCommands(program: Command, settings: Settings): void {
+  const store = () => fileKeys(expandHome(settings.accessFile));
+  const access = program
+    .command("access")
+    .description(
+      "What each agent may use: one key per agent, naming its sites, workflows and tools",
+    );
+  access
+    .command("grant <name>")
+    .description("Make the agent's key (printed once); granting a name again replaces its key")
     .option("--sites <list>", "sites and accounts: github, github@wren, github@*")
     .option("--workflows <list>", "compiled workflows; a trailing * is a prefix")
     .option("--tools <list>", "command-line tools by name")
@@ -43,16 +45,16 @@ export function registerKeysCommands(program: Command, settings: Settings): void
         );
       },
     );
-  keys
+  access
     .command("list")
     .description("Every key: its name and what it may use (never the key)")
     .action(() => {
       const all = store().list();
-      if (!all.length) console.log("no agent keys");
+      if (!all.length) console.log("no agent has access");
       for (const k of all)
         console.log(`${k.name}  ${describe(k)}  (made ${k.createdAt.slice(0, 10)})`);
     });
-  keys
+  access
     .command("revoke <name>")
     .description("Drop a key: the next request with it is refused")
     .action((name: string) => {

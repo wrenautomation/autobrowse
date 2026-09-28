@@ -1,12 +1,11 @@
-# Agent keys: what each agent may touch
+# Agent access: what each agent may touch
 
 2026-09-27. Status: built (HTTP API). Restate-side checks and spend caps not built.
 
 ## Ask
 
-William: agents that use autobrowse should see only their tools. A designer
-agent gets Higgsfield and what else fits, nothing more. Whose job is that,
-autobrowse's or the client's?
+William: agents that use autobrowse should see only their tools. Whose job
+is that, autobrowse's or the client's?
 
 ## Answer: autobrowse enforces, the client chooses
 
@@ -23,11 +22,11 @@ Same split as AWS IAM: the service enforces, the caller picks the role.
 ## Shape (built)
 
 One key per agent: `abk_<name>_<32 random bytes>`. Stored as a sha256 in
-`~/.config/autobrowse/agent-keys.json` (0600, `AGENT_KEYS_FILE`). Shown once.
+`~/.config/autobrowse/access.json` (0600, `ACCESS_FILE`). Shown once.
 
 ```json
 {
-  "name": "designer",
+  "name": "<agent>",
   "sites": ["higgsfield", "canva@*", "github@wren"],
   "workflows": ["higgsfield-*"],
   "tools": ["ffmpeg"],
@@ -66,8 +65,10 @@ Missing = nothing. `UI_TOKEN` (or local use with no token) is the owner.
 
 ## CLI
 
-`autobrowse keys add designer --sites higgsfield,canva@* --can do,agent`
-prints the key once. `keys list` (never the key), `keys revoke designer`.
+`autobrowse access grant <agent> --sites <list> --can do` prints the key
+once. `access list` (never the key), `access revoke <agent>`. Named
+`access`, not `keys`: sites have keys too (`site setup`), and this is about
+who may use what.
 
 ## Where to attack
 
@@ -80,3 +81,34 @@ prints the key once. `keys list` (never the key), `keys revoke designer`.
    cookies; fine if both keys list that account.
 5. A workflow is granted whole: every site it touches comes with it.
 6. The fence is the API. An agent with a shell on the worker is the owner.
+
+## Security review (2026-09-27)
+
+Tokens:
+- No access/refresh tokens. Those help when the checker can't see a
+  revocation (a signed JWT checked offline). Here every request looks the key
+  up, so `access revoke` bites on the next call. Nothing is signed, so there
+  are no public keys to rotate.
+- Rotation: granting a name again replaces its key. The owner token
+  (`UI_TOKEN`) never expires; rotate it in SSM when it may have leaked.
+
+Model: per-agent allowlists (a capability list), not RBAC. Roles pay off only
+once several agents share one scope; add a named scope then. ABAC-style
+conditions (spend caps, "irreversible needs the owner") are the next layer.
+
+Fixed:
+- The UI bound 0.0.0.0 whenever a token was set: on a laptop, the token
+  crossed the LAN in plain HTTP. Now loopback unless `UI_HOST` says otherwise
+  (the box's compose sets it).
+- Without a token, any web page could POST to 127.0.0.1 (a request with no
+  preflight), or reach it by DNS rebinding. `originGuard` refuses foreign
+  origins and, without a token, non-loopback hosts.
+
+Open:
+- Keys have no expiry or last-used time; no per-key spend cap or rate limit.
+- The key name is not on Restate invocations or ledgers.
+- Chrome and Opera GX have "Allow remote debugging" on. Their Allow prompt
+  is the only guard. Turn it off when no site uses the own browser.
+- `deploy/terraform/terraform.tfstate` lives only on the laptop, in plain
+  text. Move it to an encrypted S3 backend.
+- The hook rate limiter keys on `x-forwarded-for`, which a caller can set.

@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { expandHome } from "../google-auth.js";
+import { PROVIDERS } from "./providers.js";
 
 /** Where the account signs in; decides which sites' consents it can be for. */
 export const IDENTITY_PROVIDERS = ["google", "microsoft"] as const;
@@ -54,11 +55,17 @@ const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLow
 /**
  * What a person types for an account, as its credential and profile name:
  * a bare address (`will@a.com`) is that address's own Google account,
- * `google@will@a.com`; a site or `site@label` (`google@wren`) stays as it is.
+ * `google@will@a.com`; a site or `site@label` (`google@wren`, `google@wj.dev`)
+ * stays as it is.
  */
 export function accountSite(nameOrAddress: string, at: IdentityProvider = "google"): string {
   const v = nameOrAddress.trim();
-  return /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(v) ? `${at}@${v.toLowerCase()}` : v;
+  if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(v)) return v;
+  // `google@wj.dev` is the label `wj.dev` on google, not the address: a
+  // provider's name is never the account part of an address we sign in as.
+  const local = v.slice(0, v.indexOf("@")).toLowerCase();
+  if ((PROVIDERS as readonly string[]).includes(local)) return v;
+  return `${at}@${v.toLowerCase()}`;
 }
 
 /** The account for a purpose: the one that names it, else the default one, else null. */

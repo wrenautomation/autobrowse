@@ -51,7 +51,7 @@ describe("github provider", () => {
       "fill /username or email/i",
       "fill /^password$/i",
       "click /^sign in$/i",
-      "fill /authentication code|verification code|xxxxxx/i",
+      "fill /code|xxxxxx/i",
       "click /^authorize/i",
     ]);
   });
@@ -67,7 +67,26 @@ describe("github provider", () => {
       present: () => true,
       url: "https://github.com/sessions/two-factor/app",
     });
-    await expect(signInToGithub(ctx(noTotp.fp, []))).rejects.toThrow(/store totpSecret/);
+    await expect(signInToGithub(ctx(noTotp.fp, []))).rejects.toThrow(/needs an authenticator key/);
+  });
+
+  it("never waits on GitHub Mobile: More options, then a text code", async () => {
+    let url = "https://github.com/sessions/two-factor/mobile";
+    const { fp, acts } = fakePage({
+      text: ["Two-factor authentication GitHub Mobile", "Dashboard"],
+      present: (h) => !/verify|send|username|password/i.test(String(h.name)),
+      url: () => url,
+      onAct: (n) => {
+        if (n === 2) url = "https://github.com/sessions/two-factor/sms";
+        if (n === 3) url = "https://github.com/";
+      },
+    });
+    await signInToGithub(ctx(fp, ["sms"]));
+    expect(acts.map(line)).toEqual([
+      "click /more options/i",
+      "click /text message|sms/i",
+      "fill /code|xxxxxx/i",
+    ]);
   });
 
   it("answers a device verification code from the inbox", async () => {

@@ -14,9 +14,9 @@ import {
 import type { Ability } from "../src/do/catalog.js";
 import { mayUse } from "../src/do/wire.js";
 
-const designer: Scope = {
+const helper: Scope = {
   owner: false,
-  name: "designer",
+  name: "helper",
   sites: ["higgsfield", "canva@*", "github@wren"],
   workflows: ["higgsfield-*"],
   tools: ["ffmpeg"],
@@ -25,17 +25,17 @@ const designer: Scope = {
 
 describe("agent keys", () => {
   it("a site entry names its accounts: bare = the default one, @x = that one, @* = all", () => {
-    expect(allowsSite(designer, "higgsfield")).toBe(true);
-    expect(allowsSite(designer, "higgsfield@other")).toBe(false);
-    expect(allowsSite(designer, "canva")).toBe(true);
-    expect(allowsSite(designer, "canva@team")).toBe(true);
-    expect(allowsSite(designer, "github@wren")).toBe(true);
-    expect(allowsSite(designer, "github")).toBe(false);
-    expect(seesSite(designer, "github")).toBe(true);
-    expect(allowsSite(designer, "google")).toBe(false);
+    expect(allowsSite(helper, "higgsfield")).toBe(true);
+    expect(allowsSite(helper, "higgsfield@other")).toBe(false);
+    expect(allowsSite(helper, "canva")).toBe(true);
+    expect(allowsSite(helper, "canva@team")).toBe(true);
+    expect(allowsSite(helper, "github@wren")).toBe(true);
+    expect(allowsSite(helper, "github")).toBe(false);
+    expect(seesSite(helper, "github")).toBe(true);
+    expect(allowsSite(helper, "google")).toBe(false);
     expect(allowsSite(OWNER, "google")).toBe(true);
-    expect(allowsWorkflow(designer, "higgsfield-video")).toBe(true);
-    expect(allowsWorkflow(designer, "domain")).toBe(false);
+    expect(allowsWorkflow(helper, "higgsfield-video")).toBe(true);
+    expect(allowsWorkflow(helper, "domain")).toBe(false);
   });
 
   it("the catalog shows only what the key may use", () => {
@@ -58,7 +58,7 @@ describe("agent keys", () => {
       ab("tool", "ffmpeg", null),
       ab("tool", "wrangler", null),
     ];
-    expect(all.filter((a) => mayUse(designer, a)).map((a) => a.name)).toEqual([
+    expect(all.filter((a) => mayUse(helper, a)).map((a) => a.name)).toEqual([
       "higgsfield POST /v1/images",
       "higgsfield-video",
       "ffmpeg",
@@ -68,7 +68,7 @@ describe("agent keys", () => {
   it("stores a hash, never the key; resolves, replaces and revokes", () => {
     const file = join(mkdtempSync(join(tmpdir(), "keys-")), "agent-keys.json");
     const keys = fileKeys(file);
-    const { key } = keys.add("designer", {
+    const { key } = keys.add("helper", {
       sites: ["higgsfield"],
       workflows: [],
       tools: [],
@@ -77,14 +77,14 @@ describe("agent keys", () => {
     expect(readFileSync(file, "utf8")).not.toContain(key.slice(12));
     expect(keys.resolve(key)).toMatchObject({
       owner: false,
-      name: "designer",
+      name: "helper",
       sites: ["higgsfield"],
     });
     expect(keys.resolve(`${key}x`)).toBeNull();
-    const second = keys.add("designer", { sites: [], workflows: [], tools: [], can: [] }).key;
+    const second = keys.add("helper", { sites: [], workflows: [], tools: [], can: [] }).key;
     expect(keys.resolve(key)).toBeNull();
-    expect(keys.resolve(second)?.name).toBe("designer");
-    expect(keys.revoke("designer")).toBe(true);
+    expect(keys.resolve(second)?.name).toBe("helper");
+    expect(keys.revoke("helper")).toBe(true);
     expect(keys.resolve(second)).toBeNull();
     expect(() => keys.add("owner", { sites: [], workflows: [], tools: [], can: [] })).toThrow();
   });
@@ -94,7 +94,7 @@ describe("agent keys", () => {
       sessionSite: (id: string) => (id === "s1" ? "higgsfield" : id === "s2" ? "google" : null),
     };
     const r = (method: string, path: string, query: Record<string, string> = {}) =>
-      refusal(designer, method, path, query, look);
+      refusal(helper, method, path, query, look);
     expect(r("GET", "/api/abilities")).toBeNull();
     expect(r("POST", "/api/do")).toBeNull();
     expect(r("GET", "/api/accounts")).toMatch(/owner/);
@@ -105,7 +105,7 @@ describe("agent keys", () => {
     expect(r("POST", "/api/sites/higgsfield/v1/images")).toMatch(/may not sites/);
     expect(
       refusal(
-        { ...designer, can: ["sites"] },
+        { ...helper, can: ["sites"] },
         "GET",
         "/api/sites/github/user",
         { account: "wren" },
@@ -113,19 +113,19 @@ describe("agent keys", () => {
       ),
     ).toBeNull();
     expect(
-      refusal({ ...designer, can: ["sites"] }, "GET", "/api/sites/github/user", {}, look),
+      refusal({ ...helper, can: ["sites"] }, "GET", "/api/sites/github/user", {}, look),
     ).toMatch(/github/);
     expect(r("POST", "/api/sites/higgsfield/setup/token")).toMatch(/owner/);
     expect(r("POST", "/api/runs/higgsfield-video/k1")).toMatch(/may not run/);
     expect(
-      refusal({ ...designer, can: ["run"] }, "POST", "/api/runs/higgsfield-video/k1", {}, look),
+      refusal({ ...helper, can: ["run"] }, "POST", "/api/runs/higgsfield-video/k1", {}, look),
     ).toBeNull();
-    expect(refusal({ ...designer, can: ["run"] }, "POST", "/api/runs/domain/k1", {}, look)).toMatch(
+    expect(refusal({ ...helper, can: ["run"] }, "POST", "/api/runs/domain/k1", {}, look)).toMatch(
       /domain/,
     );
     expect(
       refusal(
-        { ...designer, can: ["run"] },
+        { ...helper, can: ["run"] },
         "POST",
         "/api/runs/higgsfield-video/k1/approve",
         {},

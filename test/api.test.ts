@@ -866,7 +866,7 @@ describe("api with agent keys", () => {
   it("a key sees and calls only its scope; a wrong key is 401; the owner sees all", async () => {
     const { fileKeys } = await import("../src/access/keys.js");
     const keys = fileKeys(join(await mkdtemp(join(tmpdir(), "keys-")), "agent-keys.json"));
-    const agent = keys.add("designer", {
+    const agent = keys.add("helper", {
       sites: ["tube"],
       workflows: [],
       tools: [],
@@ -898,10 +898,34 @@ describe("api with agent keys", () => {
     ).toBe(403);
     expect((await app.request(post("/api/do", { goal: "upload" }, as(outsider)))).status).toBe(403);
     const job = await (await app.request(post("/api/do", { goal: "upload" }, as(agent)))).json();
-    expect(job.by).toBe("designer");
+    expect(job.by).toBe("helper");
     const theirs = await (await app.request("/api/jobs", { headers: as(outsider) })).json();
-    expect(JSON.stringify(theirs)).not.toContain("designer");
+    expect(JSON.stringify(theirs)).not.toContain("helper");
     const owners = await (await app.request("/api/jobs", { headers: as("owner-token") })).json();
-    expect(JSON.stringify(owners)).toContain("designer");
+    expect(JSON.stringify(owners)).toContain("helper");
+  });
+});
+
+describe("api from a web page", () => {
+  it("refuses a foreign origin and, without a token, a non-loopback host", async () => {
+    const { app } = await setup();
+    const at = (headers: Record<string, string>) => app.request("/api/status", { headers });
+    expect((await at({ host: "127.0.0.1:9080" })).status).toBe(200);
+    expect((await at({ host: "127.0.0.1:9080", origin: "http://localhost:5173" })).status).toBe(
+      200,
+    );
+    expect((await at({ host: "127.0.0.1:9080", origin: "https://evil.example" })).status).toBe(403);
+    // DNS rebinding: evil.example resolves to 127.0.0.1, so origin and host agree.
+    expect(
+      (await at({ host: "evil.example:9080", origin: "http://evil.example:9080" })).status,
+    ).toBe(403);
+    const withToken = (await setup("t")).app;
+    expect(
+      (
+        await withToken.request("/api/status", {
+          headers: { host: "box.internal:9080", authorization: "Bearer t" },
+        })
+      ).status,
+    ).toBe(200);
   });
 });

@@ -7,6 +7,7 @@
  */
 
 import { FACEBOOK_LOGIN_URL, signInToFacebook } from "./facebook.js";
+import { signInToGithub } from "./github.js";
 import { INSTAGRAM_LOGIN_URL, signInToInstagram } from "./instagram.js";
 import { LINKEDIN_LOGIN_URL, signInToLinkedin } from "./linkedin.js";
 import {
@@ -30,6 +31,8 @@ const CLOUDFLARE_HOME = /dash\.cloudflare\.com\/[0-9a-f]{32}/;
 
 const cloudflarePassword = formLogin("cloudflare", {
   start: "https://dash.cloudflare.com/login",
+  // Seen 2026-09-28: a returning browser gets "Continue as … using Google" instead of the form.
+  reveal: { role: "button", name: "Sign in with another profile" },
   username: { role: "textbox", name: "Email" },
   password: { role: "textbox", name: "Password" },
   submit: { role: "button", name: "/^(log|sign) ?in$/i" },
@@ -49,8 +52,46 @@ const cloudflareGoogle = oauthLogin("cloudflare", {
   success: CLOUDFLARE_HOME,
 });
 
+/** A returning browser's saved profile: "Continue as <email> using Google". Seen 2026-09-28. */
+const CLOUDFLARE_SAVED_PROFILE = {
+  role: "button",
+  name: "/^continue as .+ using google$/i",
+} as const;
+const GOOGLE_ACCOUNTS = /^https:\/\/accounts\.google\.com\//;
+
 /**
- * Cloudflare: the stored `cloudflare` credential's password, or, when the
+ * The saved profile rides the profile's live Google session: no secret is
+ * typed. False when the page offers no saved profile. When Google asks for
+ * a password the session is gone, and this stops rather than type one: the
+ * account is personal, and a rejected personal password is never retried.
+ */
+async function cloudflareSavedProfile(ctx: SignInContext): Promise<boolean> {
+  const { fp } = ctx;
+  await fp.open("https://dash.cloudflare.com/login", { allowWall: true });
+  if (!(await fp.has(CLOUDFLARE_SAVED_PROFILE))) return false;
+  const main = fp.page;
+  const popup = fp.nextPage(8_000);
+  await fp.act({ kind: "click" }, CLOUDFLARE_SAVED_PROFILE, {
+    goal: "continue with the saved Google profile",
+  });
+  const page = await popup;
+  if (page) fp.switchTo(page);
+  if (!page && (await fp.waitForUrl(CLOUDFLARE_HOME, 15_000))) return true;
+  // Google's chooser: a tile for an account the profile is signed in as needs no password.
+  if (GOOGLE_ACCOUNTS.test(fp.url()) && (await fp.has({ text: ctx.cred.username }))) {
+    await fp.act({ kind: "click" }, { text: ctx.cred.username }, { goal: "pick the account" });
+  }
+  if (page) fp.switchTo(main);
+  if (await fp.waitForUrl(CLOUDFLARE_HOME, 20_000)) return true;
+  throw new LoginFailed(
+    "cloudflare",
+    "the saved Google session is gone and Google wants a password: sign in to Google once in the cloudflare profile",
+  );
+}
+
+/**
+ * Cloudflare: the browser's saved profile first (no secret typed), then the
+ * stored `cloudflare` credential's password, or, when the
  * account was made with "Sign in with Google", the `google` credential
  * through that button. `via: "google"` in the cloudflare credential's
  * metadata, or no cloudflare credential at all, picks the button.
@@ -64,6 +105,7 @@ const cloudflare: SiteLogin = {
   loggedIn: async (fp) =>
     CLOUDFLARE_HOME.test(fp.url()) && !(await fp.has({ role: "textbox", name: "Password" })),
   async signIn(ctx: SignInContext) {
+    if (await cloudflareSavedProfile(ctx)) return;
     if (ctx.cred.via === "google") return cloudflareGoogle(ctx);
     return cloudflarePassword(ctx);
   },
@@ -448,6 +490,40 @@ const linkedin: SiteLogin = {
   signInHere: { at: LINKEDIN_LOGIN_URL, run: signInToLinkedin },
 };
 
+const GITHUB_LOGIN = /github\.com\/(login|session)/;
+const githubGoogle = oauthLogin("github", {
+  start: "https://github.com/login",
+  button: { text: "/continue with google/i" },
+  success: async (fp) => /github\.com/.test(fp.url()) && !GITHUB_LOGIN.test(fp.url()),
+});
+
+/**
+ * GitHub: its own password (then the authenticator or emailed device code),
+ * or "Continue with Google". One account may hold both: the password goes
+ * first (`methodsOf`). GitHub turns away the Google route from a fresh
+ * profile, so the password is what runs in the background.
+ */
+const github: SiteLogin = {
+  site: "github",
+  // The public home page is no wall; settings is, so opening it starts the sign-in.
+  home: "https://github.com/settings/profile",
+  ask: "Your GitHub login (username, password, authenticator key if set)",
+  via: ["google"],
+  loggedIn: async (fp) =>
+    /github\.com/.test(fp.url()) &&
+    !GITHUB_LOGIN.test(fp.url()) &&
+    !(await fp.has({ role: "link", name: "/^sign in$/i" })),
+  signIn: async (ctx) => {
+    if (ctx.cred.via === "google") return githubGoogle(ctx);
+    await ctx.fp.open("https://github.com/login", { allowWall: true });
+    await signInToGithub(ctx);
+  },
+  signInHere: {
+    at: GITHUB_LOGIN,
+    run: (ctx) => (ctx.cred.via === "google" ? githubGoogle(ctx) : signInToGithub(ctx)),
+  },
+};
+
 /** Instagram: the professional account's own login. Unverified until a credential exists. */
 const instagram: SiteLogin = {
   site: "instagram",
@@ -612,4 +688,5 @@ export const SITE_LOGINS: readonly SiteLogin[] = [
   tiktok,
   outlook,
   npm,
+  github,
 ];

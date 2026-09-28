@@ -331,6 +331,33 @@ describe("loginProvider", () => {
     expect(seen).toEqual(["second", "main"]);
     await expect(login(page(), "u")).rejects.toThrow(/no google credential for nobody@x.com/);
   });
+  it("one account, several ways in: the password first, the provider when it is refused", async () => {
+    const tried: string[] = [];
+    let refuse = false;
+    const both: SiteLogin = {
+      site: "s",
+      home: "https://site.test/",
+      via: ["google"],
+      loggedIn: async () => true,
+      async signIn(ctx) {
+        tried.push(ctx.cred.via ? `via ${ctx.cred.username}` : `password ${ctx.cred.username}`);
+        if (refuse && !ctx.cred.via) throw new LoginFailed("s", "password rejected");
+      },
+    };
+    const login = loginProvider([both], {
+      credentials: memoryCredentials({
+        s: { username: "handle", password: "p", via: "google", codesInbox: "me@x.com" },
+      }),
+      codes: totpSource(),
+    });
+    const page = () => fakePage({ text: [], present: () => true }).fp;
+    expect(await login(page(), "s")).toBe("signed-in");
+    refuse = true;
+    expect(await login(page(), "s")).toBe("signed-in");
+    expect(tried).toEqual(["password handle", "password handle", "via me@x.com"]);
+    // The provider route finds the account by its address too.
+    expect(await login(page(), "s", "me@x.com")).toBe("signed-in");
+  });
   it("reports a missing credential and a missing code", async () => {
     const login = loginProvider([site], {
       credentials: memoryCredentials(),

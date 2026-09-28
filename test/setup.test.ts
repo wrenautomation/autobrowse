@@ -65,6 +65,7 @@ describe("setup", () => {
       "tiktok",
       "microsoft",
       "npm",
+      "github",
     ]);
     expect((await store.get("cloudflare"))?.via).toBe("google");
     expect(asked.filter((q) => q.startsWith("hidden")).length).toBe(2);
@@ -86,10 +87,11 @@ describe("setup", () => {
       tiktok: { username: "wren", password: "t" },
       microsoft: { username: "w@outlook.com", password: "m" },
       npm: { username: "wrenautomation", password: "n" },
+      github: { username: "wren", password: "g" },
     });
     const { io, asked, said } = scripted([]);
     await runSetup(io, store, SITE_LOGINS);
     expect(asked).toEqual([]);
-    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(15);
+    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(16);
   });
 });

@@ -259,12 +259,16 @@ a row; it is work.
   Nothing restarts, only our tab closes, and no trace or passkey stand-in
   touches your other tabs. For sites that refuse a fresh profile (GitHub's
   Google sign-in). Safari can't be attached (`designs/2026-09-27-own-browser.md`).
-- **Agent keys.** `autobrowse keys add designer --sites higgsfield,canva@*
-  --workflows 'higgsfield-*' --can do,agent` prints a key once. An agent
+- **One account, several ways in.** A credential can hold a password and a
+  provider (`creds set` then `creds via`): the password goes first, the
+  provider if it is refused. `creds same github github@x` folds two entries
+  into one; `creds rename <from> <to>` moves a name and its browser profile.
+- **Agent access.** `autobrowse access grant <agent> --sites <site,site@account>
+  --workflows <names> --can do` prints the agent's key once. An agent
   that sends it as its bearer sees and calls only those sites, accounts,
   workflows and tools. Gates, setup, accounts, wallet and settings stay the
-  owner's (`UI_TOKEN`). `keys list`, `keys revoke`. Stored hashed in
-  `AGENT_KEYS_FILE` (`designs/2026-09-27-agent-keys.md`).
+  owner's (`UI_TOKEN`). `access list`, `access revoke`. Stored hashed in
+  `ACCESS_FILE` (`designs/2026-09-27-agent-access.md`).
 
 ## Flows built
 

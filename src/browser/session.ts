@@ -165,7 +165,9 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
 async function openOwn(own: OwnBrowser): Promise<Session> {
   const url = await ownEndpoint(own);
   // The browser asks the person to allow the connection: give them time to.
-  const browser = await (await chromium())
+  // Plain Playwright: their browser needs no stealth patches, and patchright's
+  // request interception on every target dies on the browser's own internal pages.
+  const browser = await (await import("playwright")).chromium
     .connectOverCDP(url, { timeout: 120_000 })
     .catch((err: unknown) => {
       throw new Error(

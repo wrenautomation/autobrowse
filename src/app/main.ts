@@ -157,7 +157,7 @@ startUiServer({
   ...(settings.uiHost ? { host: settings.uiHost } : {}),
   distDir: `${root}/ui/dist`,
   token: settings.uiToken,
-  keys: fileKeys(expandHome(settings.agentKeysFile)),
+  keys: fileKeys(expandHome(settings.accessFile)),
 });
 // Screenshots leave this machine every SHOTS_EVERY_MINUTES and before an idle stop. One run at a time.
 const ship = shipperFor(settings);
