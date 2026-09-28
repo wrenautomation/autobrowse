@@ -18,6 +18,12 @@ describe("own browser", () => {
     expect(runsInOwn(own, "google")).toBe(false);
   });
 
+  it("names Safari's limit instead of failing oddly", async () => {
+    const own = ownBrowserOf("safari", "github");
+    if (!own) throw new Error("no own browser");
+    await expect(ownEndpoint(own)).rejects.toThrow(/no remote debugging/);
+  });
+
   it("says where the switch is when debugging is off", async () => {
     const dir = mkdtempSync(join(tmpdir(), "autobrowse-own-"));
     const own = ownBrowserOf(dir, "github");

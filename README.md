@@ -258,7 +258,7 @@ a row; it is work.
   "Allow remote debugging"; the browser asks you to allow each connection.
   Nothing restarts, only our tab closes, and no trace or passkey stand-in
   touches your other tabs. For sites that refuse a fresh profile (GitHub's
-  Google sign-in).
+  Google sign-in). Safari can't be attached (`designs/2026-09-27-own-browser.md`).
 - **Agent keys.** `autobrowse keys add designer --sites higgsfield,canva@*
   --workflows 'higgsfield-*' --can do,agent` prints a key once. An agent
   that sends it as its bearer sees and calls only those sites, accounts,

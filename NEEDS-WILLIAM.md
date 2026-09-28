@@ -14,11 +14,9 @@ Live list: `pnpm autobrowse needs`. Rows clear themselves. Dated 2026-09-27.
   stored one on 09-27 (one try, a fresh profile). Re-paste it when ready:
   `autobrowse creds paste google`.
 
-Optional: GitHub refuses "Continue with Google" from the automated browser
-("could not validate the response from your social login provider"). Our
-callback is clean; GitHub rejects it server-side. One try in your own Chrome
-tells us if it's the account or the browser. GitHub work goes through `gh`
-meanwhile.
+- **GitHub in your Chrome.** Open Chrome, go to
+  `chrome://inspect/#remote-debugging`, tick "Allow remote debugging". Tell
+  me; I run `autobrowse login github` and you click Allow when Chrome asks.
 
 Optional: `autobrowse creds paste google@will` and a Gmail consent for
 will@williamjin.dev, if autobrowse should read that inbox.
