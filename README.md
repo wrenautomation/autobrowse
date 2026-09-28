@@ -420,6 +420,7 @@ src/app/        settings, composition root (lazy deps), self-registration, statu
 Dockerfile, compose.yml   the deploy unit; designs/2026-09-19-deploy.md
 ui/             React SPA (Vite); ui/dist is served by the worker
 designs/        architecture and per-workflow design docs
+map/            system map: nouns, verbs, what a change hits (map/CLAUDE.md)
 test/           one file per module; restate.test needs Docker
 ```
 
