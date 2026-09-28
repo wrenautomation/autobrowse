@@ -683,6 +683,17 @@ describe("resolveLogin", () => {
     expect(l).toMatchObject({ site: "google@ops", credential: "google@ops", home: "https://g" });
     expect(resolveLogin(sites, "nope@x")).toBeNull();
   });
+  it("an app of a provider signs in as the provider, second accounts too", async () => {
+    expect(resolveLogin(sites, "cf@ops")).toMatchObject({
+      site: "cf@ops",
+      credential: "google@ops",
+    });
+    const { SITE_LOGINS } = await import("../src/auth/sites.js");
+    for (const app of ["gmail", "drive", "calendar", "docs", "sheets"])
+      expect(credentialFor(SITE_LOGINS, app)).toBe("google");
+    expect(credentialFor(SITE_LOGINS, "gmail@will")).toBe("google@will");
+    expect(credentialFor(SITE_LOGINS, "outlook@work")).toBe("microsoft@work");
+  });
 });
 
 describe("aws site login", () => {

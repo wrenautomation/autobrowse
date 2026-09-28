@@ -8,8 +8,9 @@
 import { type Credential, type CredentialStore, credentialSchema } from "credvault";
 import { z } from "zod";
 import { defineFlow, type FlowPage, type FlowRunner } from "../browser/flow.js";
-import { resolveLogin, type SiteLogin, viaLogin } from "./login.js";
+import { credentialFor, resolveLogin, type SiteLogin, viaLogin } from "./login.js";
 import { PROVIDERS } from "./providers.js";
+import { SITE_LOGINS } from "./sites.js";
 
 export interface AccountRow {
   site: string;
@@ -141,6 +142,9 @@ export function accountsOf(opts: {
 /** `instagram@wren` → `instagram`: the platform a credential name is on. */
 export const platformOf = (name: string): string => name.split("@")[0] ?? name;
 
+/** Where a site's accounts are stored: `gmail`, `drive` → `google` (an app of it); else itself. */
+const storedOn = (site: string): string => platformOf(credentialFor(SITE_LOGINS, platformOf(site)));
+
 /** One stored account on a platform: its credential name and whose it is. */
 export interface PlatformAccount {
   name: string;
@@ -154,7 +158,7 @@ export async function accountsOn(
   platform?: string,
 ): Promise<PlatformAccount[]> {
   const names = (await store.list())
-    .filter((n) => !platform || platformOf(n) === platformOf(platform))
+    .filter((n) => !platform || platformOf(n) === storedOn(platform))
     .sort((a, b) => platformOf(a).localeCompare(platformOf(b)) || a.localeCompare(b));
   const out: PlatformAccount[] = [];
   for (const name of names) {
@@ -197,8 +201,9 @@ export async function pickAccount(
 ): Promise<string> {
   const all = await accountsOn(store, site);
   if (site.includes("@") && !which) {
-    if (all.some((a) => a.name === site)) return site;
-    throw new Error(`no credential ${site}${listed(all)}`);
+    const name = credentialFor(SITE_LOGINS, site);
+    if (all.some((a) => a.name === name)) return name;
+    throw new Error(`no credential ${name}${listed(all)}`);
   }
   if (!which) {
     const only = all.length === 1 ? all[0] : undefined;
@@ -211,7 +216,7 @@ export async function pickAccount(
   }
   const w = which.toLowerCase();
   const tiers: ((a: PlatformAccount) => boolean)[] = [
-    (a) => a.name === which || a.name === `${platformOf(site)}@${w}`,
+    (a) => a.name === which || a.name === `${storedOn(site)}@${w}`,
     (a) => a.username.toLowerCase() === w,
     (a) => a.username.toLowerCase().split("@")[0] === w,
     (a) => a.username.toLowerCase().includes(w),

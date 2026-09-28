@@ -168,13 +168,16 @@ function lazy<T extends object>(make: () => T): T {
  * The profile a site's browser work belongs in: its own, or — when its
  * credential signs in through a provider's button — the provider's, where
  * that session already lives. One Google sign-in then answers every
- * "Continue with Google" instead of each site's profile asking again.
+ * "Continue with Google" instead of each site's profile asking again. An
+ * app of a provider (Gmail, Drive) uses the provider's profile the same way.
  */
 export async function profileForSite(settings: Settings, site: string): Promise<string | null> {
   const store = credentialsFor(settings);
-  const cred = await store.get(credentialFor(SITE_LOGINS, site));
-  if (!cred?.via) return null;
-  return (await profileOf(store, cred.via, cred.username)) ?? cred.via;
+  const name = credentialFor(SITE_LOGINS, site);
+  const cred = await store.get(name);
+  if (cred?.via) return (await profileOf(store, cred.via, cred.username)) ?? cred.via;
+  // An app of a provider (gmail → google) is that account's session: its profile.
+  return name !== site ? name : null;
 }
 
 /**

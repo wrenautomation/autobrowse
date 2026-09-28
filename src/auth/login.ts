@@ -737,7 +737,9 @@ export function resolveLogin(sites: readonly SiteLogin[], name: string): SiteLog
   const at = name.indexOf("@");
   const base = sites.find((s) => s.site === (at < 0 ? name : name.slice(0, at)));
   if (!base) return null;
-  return at < 0 ? base : { ...base, site: name, credential: name };
+  if (at < 0) return base;
+  // `gmail@will` signs in as `google@will`: an app's second account is its provider's.
+  return { ...base, site: name, credential: `${base.credential ?? base.site}${name.slice(at)}` };
 }
 
 /**

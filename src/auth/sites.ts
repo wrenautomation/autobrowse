@@ -136,6 +136,52 @@ const google: SiteLogin = {
  * the domains (a personal Gmail signs in fine and then gets "Sign in with
  * an administrator account").
  */
+/**
+ * A Google app (Gmail, Drive, …) is not a login of its own: it signs in
+ * with the Google account, `google` (or `google@<label>` for `gmail@<label>`).
+ * Signed in = the app's own page loads without a detour to accounts.google.com.
+ */
+function googleApp(site: string, home: string, signedIn: RegExp): SiteLogin {
+  return {
+    ...google,
+    site,
+    home,
+    credential: "google",
+    ask: `Your Google account: ${site} signs in with it`,
+    loggedIn: async (fp) => signedIn.test(fp.url()),
+    async signIn(ctx) {
+      await google.signIn(ctx);
+      await ctx.fp.open(home, { allowWall: true });
+      if (!(await ctx.fp.waitForUrl(signedIn, 30_000)))
+        throw new LoginFailed(site, `still on ${ctx.fp.url()} after Google sign-in`);
+    },
+  };
+}
+
+const GOOGLE_APPS: readonly SiteLogin[] = [
+  googleApp("gmail", "https://mail.google.com/mail/u/0/", /^https:\/\/mail\.google\.com\/mail\//),
+  googleApp(
+    "drive",
+    "https://drive.google.com/drive/my-drive",
+    /^https:\/\/drive\.google\.com\/drive\//,
+  ),
+  googleApp(
+    "calendar",
+    "https://calendar.google.com/calendar/r",
+    /^https:\/\/calendar\.google\.com\/calendar\//,
+  ),
+  googleApp(
+    "docs",
+    "https://docs.google.com/document/u/0/",
+    /^https:\/\/docs\.google\.com\/document\//,
+  ),
+  googleApp(
+    "sheets",
+    "https://docs.google.com/spreadsheets/u/0/",
+    /^https:\/\/docs\.google\.com\/spreadsheets\//,
+  ),
+];
+
 const googleAdmin: SiteLogin = {
   site: "google-admin",
   home: "https://admin.google.com/",
@@ -551,6 +597,8 @@ const npm: SiteLogin = {
 export const SITE_LOGINS: readonly SiteLogin[] = [
   cloudflare,
   google,
+  // After google: a lookup by credential name finds google itself first.
+  ...GOOGLE_APPS,
   googleAdmin,
   instantly,
   aws,
