@@ -10,12 +10,17 @@ Live list: `pnpm autobrowse needs`. Rows clear themselves. Dated 2026-09-27.
   william@wrenautomation.com, name "Wren Automation", handle wrenautomation.
   Then tell me. I do the developer app and consent.
 
-- **GitHub login** (CI is off: the org's free Actions minutes ran out in
-  September, all on the retired emails_gen; they come back Oct 1). Copy
-  `email password [authenticator key]` for WilliamJin123, then
-  `autobrowse creds paste github`. If it signs in with Google instead,
-  just say so. I then add ••4445 to the wrenautomation org's billing and
-  set a $10/month Actions budget (one text to you for the yes).
+- **GitHub login** (CI is off until Oct 1 or a card: the org's free Actions
+  minutes ran out, all on the retired emails_gen). "Continue with Google"
+  as your gmail reaches GitHub, and GitHub answers "could not validate the
+  response from your social login provider" (3 tries, 09-27; stopped). Either
+  sign in once yourself (`autobrowse login github --headed`), or paste
+  `email password [authenticator key]` for WilliamJin123 with
+  `autobrowse creds paste github`. Then I add ••4445 to wrenautomation's
+  billing and set a $10/month Actions budget (one text for the yes).
+- **Your Google password** (jinwilliam.jin@gmail.com): Google rejected the
+  stored one on 09-27 (one try, a fresh profile). Re-paste it:
+  `autobrowse creds paste google`.
 
 Optional: `autobrowse creds paste google@will` and a Gmail consent for
 will@williamjin.dev, if autobrowse should read that inbox.
