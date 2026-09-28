@@ -89,7 +89,7 @@ pnpm wren ads watch start                   # the daily guard
 pnpm wren ads insights --preset last_7d
 ```
 
-Guide: `../../wren/walkthrough/03-meta-ads.md`. Every ACTIVE write is a
+Guide: `../../wren/walkthrough/02-meta-ads.md`. Every ACTIVE write is a
 spend on the box: it asks over your channel with the budget, or says yes
 alone under `SPEND_*`.
 
