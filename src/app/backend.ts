@@ -6,8 +6,10 @@
  * its own. Dependency rule: adapters depend on this interface and on
  * `backendFor`; nothing here knows about Hono or commander.
  */
+
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { Scope } from "../access/keys.js";
 import { type HealOutcome, healFailure } from "../agent/heal.js";
 import { type AgentSessions, agentSessions } from "../agent/sessions.js";
 import { type Accounts, accountsOf } from "../auth/accounts.js";
@@ -30,7 +32,7 @@ import type { SecretSink } from "../deps/sink.js";
 import type { Ability } from "../do/catalog.js";
 import type { Doer } from "../do/doer.js";
 import { filePicks } from "../do/memory.js";
-import { doerFor } from "../do/wire.js";
+import { type DoerParts, doerFor, type Verb } from "../do/wire.js";
 import type { RunEvent } from "../engine/events.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import {
@@ -125,6 +127,8 @@ export interface Backend {
   do: Doer;
   /** What `do` can pick from right now. */
   abilities(): Promise<Ability[]>;
+  /** `do` as an agent key sees it: its catalog cut to its scope, each leg checked (`access/keys`). */
+  doAs?(scope: Scope): Verb;
   /** Where secrets went and what the payment gate decided since a time (never a value). */
   ledger?(since: Date): Promise<LedgerWindow>;
   /** What only the person can give, each row with its check; done-marks for decisions. */
@@ -389,7 +393,7 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
       })
     : undefined;
   const recordingsDir = expandHome(settings.recordingsDir);
-  const verb = doerFor({
+  const verbParts: DoerParts = {
     llm: o.llm,
     catalog: app.catalog,
     browser: app.browser,
@@ -401,7 +405,8 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
       workflow: (await compileRecording(await loadRecording(recordingsDir, name), o.llm)).outline
         .name,
     }),
-  });
+  };
+  const verb = doerFor(verbParts);
   return {
     workflows: app.workflows,
     proofs: app.proofs,
@@ -409,6 +414,7 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
     sites: app.sites,
     do: verb,
     abilities: verb.abilities,
+    doAs: (scope) => doerFor({ ...verbParts, scope }),
     screen: app.screen,
     accounts: accountsOf({ store: app.credentials, logins: SITE_LOGINS, runner: app.browser }),
     ...(agent

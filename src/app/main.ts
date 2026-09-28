@@ -2,8 +2,10 @@
 
 import { serve } from "@restatedev/restate-sdk/node";
 import pino from "pino";
+import { fileKeys } from "../access/keys.js";
 import type { FailureRecord } from "../browser/session.js";
 import { httpClient } from "../clients/http.js";
+import { expandHome } from "../google-auth.js";
 import { startUiServer } from "../ui/server.js";
 import { backendFor } from "./backend.js";
 import { ingress } from "./client.js";
@@ -155,6 +157,7 @@ startUiServer({
   ...(settings.uiHost ? { host: settings.uiHost } : {}),
   distDir: `${root}/ui/dist`,
   token: settings.uiToken,
+  keys: fileKeys(expandHome(settings.agentKeysFile)),
 });
 // Screenshots leave this machine every SHOTS_EVERY_MINUTES and before an idle stop. One run at a time.
 const ship = shipperFor(settings);

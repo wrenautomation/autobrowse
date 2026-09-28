@@ -3,6 +3,7 @@
  * the agent. Every catalog it reads (sites, flows, logins) is an option with
  * the built-in as default, so a library caller can hand a narrower world.
  */
+import { allowsSite, allowsTool, allowsWorkflow, can, OWNER, type Scope } from "../access/keys.js";
 import type { AgentSessions } from "../agent/sessions.js";
 import type { SiteLogin } from "../auth/login.js";
 import { SITE_LOGINS } from "../auth/sites.js";
@@ -45,6 +46,20 @@ export interface DoerParts {
   shell?: Shell;
   /** Earlier picks for the model; none = every ask starts cold. */
   memory?: PickMemory;
+  /**
+   * An agent key's scope: the catalog shows only what it may use, and each
+   * leg checks again before it runs. No agent sessions (nothing new built)
+   * unless the scope may `agent`. The owner's when absent.
+   */
+  scope?: Scope;
+}
+
+/** Whether a scope may run this ability: its site (default account), workflow or tool. */
+export function mayUse(scope: Scope, a: Ability): boolean {
+  if (scope.owner) return true;
+  if (a.kind === "workflow") return allowsWorkflow(scope, a.name);
+  if (a.kind === "tool") return allowsTool(scope, a.name);
+  return a.site !== null && allowsSite(scope, a.site);
 }
 
 export interface Verb extends Doer {
@@ -53,11 +68,13 @@ export interface Verb extends Doer {
 }
 
 export function doerFor(p: DoerParts): Verb {
+  const scope = p.scope ?? OWNER;
+  const refuse = (what: string) => new DoError(403, `this key may not use ${what}`);
   const flows = p.flows ?? BROWSER_FLOWS;
   const tools = p.tools ?? TOOLS;
   const shell = p.shell ?? localShell();
   const present = binPresence(shell);
-  const abilities = async (): Promise<Ability[]> => {
+  const all = async (): Promise<Ability[]> => {
     const has = new Map(
       await Promise.all(tools.map(async (t) => [t.bin, await present(t.bin)] as const)),
     );
@@ -70,25 +87,33 @@ export function doerFor(p: DoerParts): Verb {
       ...toolAbilities(tools, (bin) => has.get(bin) ?? false),
     ];
   };
+  const abilities = async (): Promise<Ability[]> =>
+    scope.owner ? all() : (await all()).filter((a) => mayUse(scope, a));
+  const agentOk = scope.owner || can(scope, "agent");
   const verb = doer({
     llm: p.llm,
     abilities,
-    sites: async () => (p.logins ?? SITE_LOGINS).map((l) => l.site),
+    sites: async () =>
+      (p.logins ?? SITE_LOGINS).map((l) => l.site).filter((s) => allowsSite(scope, s)),
     callSite: (site, method, path, input) => {
+      if (!allowsSite(scope, site)) throw refuse(site);
       if (!p.sites) throw new Error("no site apis here");
       return p.sites.call(site, method, path, input);
     },
     runWorkflow: async (name, plan) => {
+      if (!allowsWorkflow(scope, name)) throw refuse(name);
       const found = await p.catalog.get(name);
       if (!found) throw new Error(`no compiled workflow named ${name}`);
       return runCompiled(found.workflow, p.browser, { plan, sink: p.sink });
     },
-    runFlow: (name, input) => {
+    runFlow: async (name, input) => {
+      if (!allowsSite(scope, name.split("/")[0] ?? name)) throw refuse(name);
       const flow = flows[name];
       if (!flow) throw new Error(`no flow named ${name}`);
       return p.browser.run(flow as never, input);
     },
     runTool: async (name, input) => {
+      if (!allowsTool(scope, name)) throw refuse(name);
       const tool = tools.find((t) => t.name === name);
       if (!tool) throw new Error(`no tool named ${name}`);
       try {
@@ -99,8 +124,8 @@ export function doerFor(p: DoerParts): Verb {
       }
     },
     ...(p.memory ? { memory: p.memory } : {}),
-    ...(p.agent ? { agent: p.agent } : {}),
-    ...(p.compile ? { compile: p.compile } : {}),
+    ...(p.agent && agentOk ? { agent: p.agent } : {}),
+    ...(p.compile && agentOk ? { compile: p.compile } : {}),
   });
   return { do: (req) => verb.do(req), abilities };
 }

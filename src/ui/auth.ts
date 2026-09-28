@@ -5,6 +5,7 @@
  */
 import { timingSafeEqual } from "node:crypto";
 import type { MiddlewareHandler } from "hono";
+import { type KeyStore, OWNER, type Scope } from "../access/keys.js";
 
 export function tokenMatches(given: string | undefined, expected: string): boolean {
   if (!given) return false;
@@ -19,6 +20,32 @@ export function bearerAuth(token: string | undefined): MiddlewareHandler {
     const header = c.req.header("authorization") ?? "";
     const given = header.startsWith("Bearer ") ? header.slice(7) : undefined;
     if (!tokenMatches(given, token)) return c.json({ error: "unauthorized" }, 401);
+    return next();
+  };
+}
+
+/**
+ * Who is asking: the owner (the token, or local use with no token and no
+ * bearer) or an agent by its key (`access/keys`). A bearer that is neither
+ * is refused, local or not: a wrong key never falls through to the owner.
+ */
+export function accessAuth(
+  token: string | undefined,
+  keys: KeyStore | null | undefined,
+): MiddlewareHandler<{ Variables: { scope: Scope } }> {
+  return async (c, next) => {
+    const header = c.req.header("authorization") ?? "";
+    const given = header.startsWith("Bearer ") ? header.slice(7) : undefined;
+    const scope =
+      given === undefined
+        ? token === undefined
+          ? OWNER
+          : null
+        : token !== undefined && tokenMatches(given, token)
+          ? OWNER
+          : (keys?.resolve(given) ?? null);
+    if (!scope) return c.json({ error: "unauthorized" }, 401);
+    c.set("scope", scope);
     return next();
   };
 }

@@ -89,6 +89,8 @@ const schema = z.object({
   oauthPort: z.coerce.number().int().default(9400),
   /** Bearer the UI and inbound hooks need for anything that changes a run. Unset = local only, no auth. */
   uiToken: z.string().min(1).optional(),
+  /** Agent keys (hashes and scopes, never a key): who may see and call what (`access/keys`). */
+  agentKeysFile: z.string().min(1).default("~/.config/autobrowse/agent-keys.json"),
   /** Bind address for the UI; see `startUiServer`. */
   uiHost: z.string().min(1).optional(),
   /** Every run event, as JSON, to one URL (iMessage/Slack/dashboards). */
@@ -293,6 +295,7 @@ export const ENV_KEYS = {
   uiPort: "UI_PORT",
   oauthPort: "OAUTH_PORT",
   uiToken: "UI_TOKEN",
+  agentKeysFile: "AGENT_KEYS_FILE",
   uiHost: "UI_HOST",
   webhookUrl: "WEBHOOK_URL",
   webhookToken: "WEBHOOK_TOKEN",

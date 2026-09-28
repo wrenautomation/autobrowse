@@ -22,6 +22,7 @@ import { registerDesktopCommands } from "./cli-desktop.js";
 import { registerDoCommands } from "./cli-do.js";
 import { registerEnvCommands } from "./cli-env.js";
 import { readJson } from "./cli-json.js";
+import { registerKeysCommands } from "./cli-keys.js";
 import { registerLangfuseCommands } from "./cli-langfuse.js";
 import { registerNeedsCommands } from "./cli-needs.js";
 import { registerReachCommands } from "./cli-reach.js";
@@ -352,6 +353,7 @@ registerAccountsCommands(program, () => ({
 registerEnvCommands(program, settings, { store: () => envStoreFor(settings) });
 registerDesktopCommands(program, tmpdir());
 registerWalletCommands(program, settings);
+registerKeysCommands(program, settings);
 
 program.parseAsync().catch((err: unknown) => {
   // Name the command that failed, so a bare "exit code 1" always says why.

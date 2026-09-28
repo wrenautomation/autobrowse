@@ -13,9 +13,11 @@ import { Readable } from "node:stream";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
+import { refusal } from "../access/fence.js";
+import { allowsSite, allowsWorkflow, type KeyStore, type Scope, seesSite } from "../access/keys.js";
 import { proposeWorkflows, readFailures } from "../agent/evaluator.js";
 import { readFailure, repairRequest } from "../agent/repair.js";
-import { summarizeSession } from "../agent/sessions.js";
+import { AGENT, summarizeSession } from "../agent/sessions.js";
 import { type Backend, proofsOf, workflowsOf } from "../app/backend.js";
 import { accountEdit } from "../auth/accounts.js";
 import type { FailureRecord } from "../browser/session.js";
@@ -39,12 +41,14 @@ import { commandSchema } from "../explore/server.js";
 import { listRecordingSummaries, loadRecording, recordingDir } from "../recorder/store.js";
 import { type Method, SiteError } from "../sites/index.js";
 import { needAffordances, runAffordances, setupAffordances } from "./affordances.js";
-import { bearerAuth, rateLimit } from "./auth.js";
+import { accessAuth, bearerAuth, rateLimit } from "./auth.js";
 import { Jobs } from "./jobs.js";
 
 /** The HTTP face: the shared `Backend` port plus what only this transport needs. */
 export interface ApiDeps extends Backend {
   token: string | undefined;
+  /** Agent keys: each sees and calls only its scope (`access/keys`). */
+  keys?: KeyStore | null;
   /** Linq: replies to the operator's iMessages; `secret` verifies the webhook. */
   linq?: { client: LinqClient; to: string; secret?: string };
   /** Called on every request that changes something: a person is here (the idle stop listens). Reads never count. */
@@ -125,14 +129,41 @@ export async function findRow(
   return undefined;
 }
 
-export function api(deps: ApiDeps): Hono {
-  const app = new Hono();
+type Env = { Variables: { scope: Scope } };
+
+export function api(deps: ApiDeps): Hono<Env> {
+  const app = new Hono<Env>();
   const workflows = () => workflowsOf(deps);
   const proofs = () => proofsOf(deps);
   const find = async (name: string) => (await workflows()).find((w) => w.name === name) ?? null;
   const runOf = (workflow: string, key: string) => deps.ingress.run(workflow, key);
 
-  app.use("/api/*", bearerAuth(deps.token));
+  app.use("/api/*", accessAuth(deps.token, deps.keys));
+  // An agent key gets in only where its scope says (`access/fence`).
+  app.use("/api/*", async (c, next) => {
+    const why = refusal(c.get("scope"), c.req.method, c.req.path, c.req.query(), {
+      sessionSite: (id) => deps.agent?.get(id)?.site ?? null,
+    });
+    if (why) return c.json({ error: why }, 403);
+    await next();
+  });
+  const scopeOf = (c: Context<Env>) => c.get("scope");
+  /** A run row or event an agent may see: its workflow, or its session's site. */
+  const visibleRun = (scope: Scope, workflow: string, key: string) => {
+    if (scope.owner) return true;
+    const session = workflow === AGENT ? deps.agent?.get(key) : null;
+    return session ? allowsSite(scope, session.site) : allowsWorkflow(scope, workflow);
+  };
+  /** `do` and its catalog as the scope sees them; an agent never falls back to the owner's. */
+  const verbOf = (scope: Scope): Pick<Backend, "abilities"> & { do: Backend["do"]["do"] } =>
+    scope.owner
+      ? { do: (r) => deps.do.do(r), abilities: () => deps.abilities() }
+      : (deps.doAs?.(scope) ?? {
+          do: async () => {
+            throw new DoError(501, "no scoped do here");
+          },
+          abilities: async () => [],
+        });
   app.use("*", (c, next) => {
     if (c.req.method !== "GET" && c.req.method !== "HEAD") deps.touch?.();
     return next();
@@ -151,7 +182,9 @@ export function api(deps: ApiDeps): Hono {
         ? {
             ...deps.status,
             browser: { ...deps.status.browser, headless: deps.screen.headless },
-            workflows: (await workflows()).map((w) => w.name),
+            workflows: (await workflows())
+              .map((w) => w.name)
+              .filter((n) => allowsWorkflow(scopeOf(c), n)),
             ...(deps.budget ? { budget: deps.budget() } : {}),
           }
         : null,
@@ -178,15 +211,18 @@ export function api(deps: ApiDeps): Hono {
 
   app.get("/api/workflows", async (c) => {
     const proven = await proofs();
+    const scope = scopeOf(c);
     return c.json(
-      (await workflows()).map((w) => ({
-        name: w.name,
-        description: w.description,
-        steps: w.steps.map((s) => ({ name: s.name, irreversible: s.irreversible ?? false })),
-        plan: jsonSchemaOf(w.plan),
-        // Hand-written flows are proven by their tests; compiled ones by one run after compiling.
-        proof: w.name in proven ? (proven[w.name] ?? null) : undefined,
-      })),
+      (await workflows())
+        .filter((w) => allowsWorkflow(scope, w.name))
+        .map((w) => ({
+          name: w.name,
+          description: w.description,
+          steps: w.steps.map((s) => ({ name: s.name, irreversible: s.irreversible ?? false })),
+          plan: jsonSchemaOf(w.plan),
+          // Hand-written flows are proven by their tests; compiled ones by one run after compiling.
+          proof: w.name in proven ? (proven[w.name] ?? null) : undefined,
+        })),
     );
   });
 
@@ -264,20 +300,24 @@ export function api(deps: ApiDeps): Hono {
     url: z.string().nullable().default(null),
     dryRun: z.boolean().default(false),
   });
-  app.get("/api/abilities", async (c) => c.json(await deps.abilities()));
+  app.get("/api/abilities", async (c) => c.json(await verbOf(scopeOf(c)).abilities()));
   app.post("/api/do", async (c) => {
     const body = doBody.safeParse((await c.req.json().catch(() => null)) ?? null);
     if (!body.success) return c.json({ error: "bad body", issues: body.error.issues }, 400);
+    const scope = scopeOf(c);
+    if (body.data.site && !allowsSite(scope, body.data.site))
+      return c.json({ error: `this key may not use ${body.data.site}` }, 403);
+    const verb = verbOf(scope);
     if (body.data.dryRun) {
       try {
-        return c.json(await deps.do.do(body.data));
+        return c.json(await verb.do(body.data));
       } catch (err) {
         if (err instanceof DoError) return c.json({ error: err.message }, err.status as 400);
         throw err;
       }
     }
     return c.json(
-      jobs.start("do", body.data.goal.slice(0, 60), () => deps.do.do(body.data)),
+      jobs.start("do", body.data.goal.slice(0, 60), () => verb.do(body.data), scope.name),
       202,
     );
   });
@@ -318,7 +358,9 @@ export function api(deps: ApiDeps): Hono {
    * Setup steps make the site's keys and tokens (minutes: a job).
    */
   app.get("/api/sites", async (c) =>
-    deps.sites ? c.json(await deps.sites.list()) : c.json({ error: "no site apis here" }, 501),
+    deps.sites
+      ? c.json((await deps.sites.list()).filter((r) => seesSite(scopeOf(c), r.site)))
+      : c.json({ error: "no site apis here" }, 501),
   );
   app.get("/api/sites/:site", async (c) => {
     if (!deps.sites) return c.json({ error: "no site apis here" }, 501);
@@ -367,24 +409,31 @@ export function api(deps: ApiDeps): Hono {
       return siteError(c, err);
     }
   });
-  app.get("/api/jobs", (c) => c.json(jobs.list()));
+  app.get("/api/jobs", (c) => {
+    const scope = scopeOf(c);
+    return c.json(scope.owner ? jobs.list() : jobs.list().filter((j) => j.by === scope.name));
+  });
   /** `?wait=<ms>` (30s at most) holds the answer until the job settles: one request, not a poll loop. */
   app.get("/api/jobs/:id", async (c) => {
     const wait = Math.min(Number(c.req.query("wait") ?? 0) || 0, 30_000);
+    const scope = scopeOf(c);
     const job = await jobs.wait(c.req.param("id"), wait);
-    return job ? c.json(job) : c.json({ error: "no such job" }, 404);
+    return job && (scope.owner || job.by === scope.name)
+      ? c.json(job)
+      : c.json({ error: "no such job" }, 404);
   });
 
   /** Newest first; `?limit=` (100) and `?before=<the last row's cursor>` page through. */
   app.get("/api/runs", async (c) => {
     const limit = Number(c.req.query("limit")) || undefined;
     const before = c.req.query("before");
-    return c.json(
-      await deps.ingress.registry().list({
-        ...(limit ? { limit } : {}),
-        ...(before ? { before } : {}),
-      }),
-    );
+    const scope = scopeOf(c);
+    const rows = await deps.ingress.registry().list({
+      ...(limit ? { limit } : {}),
+      ...(before ? { before } : {}),
+    });
+    // A cut page can come back short: page on with the last row's cursor, not by length.
+    return c.json(scope.owner ? rows : rows.filter((r) => visibleRun(scope, r.workflow, r.key)));
   });
 
   app.get("/api/runs/:workflow/:key", async (c) => {
@@ -426,9 +475,12 @@ export function api(deps: ApiDeps): Hono {
   /** Live feed: everything since `after`, then each new event; a comment every 15s keeps proxies awake. */
   app.get("/api/events", (c) => {
     const after = Number(c.req.query("after") ?? 0) || 0;
+    const scope = scopeOf(c);
     return streamSSE(c, async (stream) => {
-      const send = (seq: number, event: RunEvent) =>
-        stream.writeSSE({ id: String(seq), event: event.type, data: JSON.stringify(event) });
+      const send = async (seq: number, event: RunEvent) => {
+        if (!visibleRun(scope, event.run.workflow, event.run.key)) return;
+        await stream.writeSSE({ id: String(seq), event: event.type, data: JSON.stringify(event) });
+      };
       // Subscribe first so nothing lands between the replay and the live feed; hold those until the replay is out.
       let replaying = true;
       let last = after;
@@ -492,7 +544,13 @@ export function api(deps: ApiDeps): Hono {
     return serveUnder(deps.artifactsDir, resolve(path)) ?? c.json({ error: "not found" }, 404);
   });
 
-  app.get("/api/agent", (c) => c.json((deps.agent?.list() ?? []).map(summarizeSession)));
+  app.get("/api/agent", (c) =>
+    c.json(
+      (deps.agent?.list() ?? [])
+        .filter((v) => allowsSite(scopeOf(c), v.site))
+        .map(summarizeSession),
+    ),
+  );
   /** The evaluator: which recurring needs deserve a workflow, from failures, sessions and recordings. */
   app.get("/api/agent/proposals", async (c) => {
     if (!deps.llm) return c.json({ error: "no model configured: set LLM_PROVIDER" }, 503);
@@ -548,6 +606,8 @@ export function api(deps: ApiDeps): Hono {
     if (!parsed.success)
       return c.json({ error: parsed.error.issues[0]?.message ?? "bad body" }, 400);
     const { url, inputs, maxSteps, ...rest } = parsed.data;
+    if (!allowsSite(scopeOf(c), rest.site))
+      return c.json({ error: `this key may not use ${rest.site}` }, 403);
     return c.json(
       await deps.agent.start({
         ...rest,

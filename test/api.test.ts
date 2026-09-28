@@ -861,3 +861,47 @@ describe("send gate", () => {
     expect(sent).toBe(1);
   });
 });
+
+describe("api with agent keys", () => {
+  it("a key sees and calls only its scope; a wrong key is 401; the owner sees all", async () => {
+    const { fileKeys } = await import("../src/access/keys.js");
+    const keys = fileKeys(join(await mkdtemp(join(tmpdir(), "keys-")), "agent-keys.json"));
+    const agent = keys.add("designer", {
+      sites: ["tube"],
+      workflows: [],
+      tools: [],
+      can: ["do"],
+    }).key;
+    const outsider = keys.add("outsider", { sites: [], workflows: [], tools: [], can: [] }).key;
+    const { app } = await setup("owner-token", {
+      keys,
+      doAs: (scope) => ({
+        do: async () => {
+          throw new Error(`not in this test: ${scope.name}`);
+        },
+        abilities: async () => [],
+      }),
+    });
+    const as = (key: string) => ({ authorization: `Bearer ${key}` });
+    expect((await app.request("/api/status", { headers: as("abk_nope_x") })).status).toBe(401);
+    expect((await app.request("/api/accounts", { headers: as(agent) })).status).toBe(403);
+    expect((await app.request("/api/accounts", { headers: as("owner-token") })).status).toBe(200);
+    // Lists cut to scope: no workflow granted, so no domain runs.
+    const runs = await (await app.request("/api/runs", { headers: as(agent) })).json();
+    expect(JSON.stringify(runs)).not.toContain("domain");
+    expect((await app.request(post("/api/runs/domain/k1/approve", {}, as(agent)))).status).toBe(
+      403,
+    );
+    // The site in the body is checked.
+    expect(
+      (await app.request(post("/api/do", { goal: "x", site: "google" }, as(agent)))).status,
+    ).toBe(403);
+    expect((await app.request(post("/api/do", { goal: "upload" }, as(outsider)))).status).toBe(403);
+    const job = await (await app.request(post("/api/do", { goal: "upload" }, as(agent)))).json();
+    expect(job.by).toBe("designer");
+    const theirs = await (await app.request("/api/jobs", { headers: as(outsider) })).json();
+    expect(JSON.stringify(theirs)).not.toContain("designer");
+    const owners = await (await app.request("/api/jobs", { headers: as("owner-token") })).json();
+    expect(JSON.stringify(owners)).toContain("designer");
+  });
+});
