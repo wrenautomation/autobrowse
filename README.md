@@ -576,6 +576,7 @@ CLI then refreshes its own credentials until the console session expires.
 
 ```sh
 pnpm autobrowse wrangler-login --cwd ../lander   # renew wrangler's Cloudflare OAuth token
+pnpm autobrowse cloudflare-token wren-workers --env WREN_CLOUDFLARE_WORKERS_TOKEN --perm "Account:Workers Scripts:Edit" "Zone:DNS:Edit"   # a scoped API token, minted + verified + stored under its own key
 ```
 
 `wrangler login --browser=false` prints an authorize URL and waits on
