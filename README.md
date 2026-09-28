@@ -246,8 +246,8 @@ a row; it is work.
   a person. The pick is kept once it worked, so it costs a model once per
   new variant. `autobrowse screens [site]` lists what was learned
   (`SCREENS_FILE`); `--forget` once the source knows the screen.
-  `autobrowse login --all` signs in to every stored account: the daily
-  check that keeps sessions warm and meets a changed page on a quiet run.
+  `autobrowse login --all` signs in to every stored account; run it
+  before a batch that must not stop.
 - **Play/pause.** `pause` holds before the next step; `play` runs on. A
   dry run stops before the first irreversible step.
 - **Watched.** The worker serves a UI on `:9080`: runs, the open gate with
