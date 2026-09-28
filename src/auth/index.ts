@@ -13,6 +13,7 @@ export {
 } from "./codes.js";
 export { enrollTotpFlow, readSecretFromPage, storeSeed } from "./enroll.js";
 export { signInToGithub } from "./github.js";
+export { googleWalk, signInToGoogle } from "./google.js";
 export {
   boundPage,
   boundRunner,
@@ -47,7 +48,6 @@ export {
   type SignInParts,
   type SiteLogin,
   signInContext,
-  signInToGoogle,
   siteAllowsHost,
   viaLogin,
 } from "./login.js";

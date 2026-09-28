@@ -239,8 +239,9 @@ a row; it is work.
   one plain-code handler (`browser/screens`). A step whose control is not
   there gets the interrupts handled first: a cookie banner, and any screen
   a repair once clicked past on that site (kept per site, so every flow on
-  it gets it). A flow whose path branches (Cloudflare's sign-in) is a
-  *walk*: its screens and a goal, no script; look, act, look again. A page
+  it gets it). A flow whose path branches (Google's and Cloudflare's
+  sign-ins) is a *walk*: its screens and a goal, no script; look, act,
+  look again. A page
   no screen knows goes down one ladder: learned screens (data) → a model
   that only picks from the walk's own list, or one non-committing click →
   a person. The pick is kept once it worked, so it costs a model once per

@@ -9,6 +9,7 @@
 import { backFrom, clickOpening, type Walk, walk } from "../browser/screens.js";
 import { FACEBOOK_LOGIN_URL, signInToFacebook } from "./facebook.js";
 import { signInToGithub } from "./github.js";
+import { signInToGoogle } from "./google.js";
 import { INSTAGRAM_LOGIN_URL, signInToInstagram } from "./instagram.js";
 import { LINKEDIN_LOGIN_URL, signInToLinkedin } from "./linkedin.js";
 import {
@@ -22,7 +23,6 @@ import {
   type SignInContext,
   type SiteLogin,
   serially,
-  signInToGoogle,
   type TotpSetupSpec,
 } from "./login.js";
 import { MICROSOFT_HOST, signInToMicrosoft } from "./microsoft.js";

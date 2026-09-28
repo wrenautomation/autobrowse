@@ -7,8 +7,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import type { Credential } from "../src/auth/credentials.js";
 import { LoginFailed, type SignInContext } from "../src/auth/login.js";
 import { cloudflareWalk, savedProfileIs } from "../src/auth/sites.js";
-import { defineFlow, type FlowPage, flowRunner, type Op } from "../src/browser/flow.js";
-import { type Hints, namePattern } from "../src/browser/locate.js";
+import { defineFlow, type FlowPage, flowRunner } from "../src/browser/flow.js";
 import type { Repairer } from "../src/browser/repair.js";
 import {
   fileScreens,
@@ -22,66 +21,7 @@ import {
   walk,
 } from "../src/browser/screens.js";
 import { NeedsHuman } from "../src/browser/session.js";
-
-/** A site as states: each has a URL, controls ("button:Log in"), text, and where a click or fill leads. */
-type State = { url?: string; has: string[]; text?: string; on?: Record<string, string> };
-
-function fakeSite(states: Record<string, State>, start: string) {
-  let state = start;
-  const acts: string[] = [];
-  const control = (h: Hints): string | null => {
-    for (const c of (states[state] as State).has) {
-      const [role, name] = [c.slice(0, c.indexOf(":")), c.slice(c.indexOf(":") + 1)];
-      const test = (want: string | undefined) => {
-        if (!want) return true;
-        const p = namePattern(want);
-        return typeof p === "string" ? p === name : p.test(name);
-      };
-      if (h.role && h.role !== role) continue;
-      if (h.text && !test(h.text)) continue;
-      if (!test(h.name ?? undefined)) continue;
-      if (!h.role && !h.text && !h.name) continue;
-      return c;
-    }
-    return null;
-  };
-  const fp: FlowPage = {
-    page: {} as FlowPage["page"],
-    passkeys: {} as FlowPage["passkeys"],
-    captcha: async () => ({ solved: false, kind: null, vendor: null, reason: "fake" }),
-    async open() {},
-    url: () => (states[state] as State).url ?? "https://site.test/login",
-    text: async () => (states[state] as State).text ?? "",
-    html: async () => "",
-    has: async (h) => control(h) !== null,
-    read: async (h) => control(h)?.slice(control(h)?.indexOf(":") ?? 0) ?? "",
-    wait: async () => {},
-    answer: async () => {},
-    waitForUrl: async () => true,
-    nextPage: async () => null,
-    pages: () => [],
-    switchTo() {},
-    async act(op: Op, hints: Hints) {
-      const c = control(hints);
-      if (!c) throw new Error(`nothing matches ${JSON.stringify(hints)} in ${state}`);
-      acts.push(
-        `${op.kind} ${c.slice(c.indexOf(":") + 1)}${op.kind === "fill" ? `=${op.value}` : ""}`,
-      );
-      const next = (states[state] as State).on?.[`${op.kind} ${c}`];
-      if (next) state = next;
-    },
-    async signIn() {
-      return "no-login";
-    },
-    human(reason) {
-      throw new NeedsHuman(reason);
-    },
-  };
-  const go = (s: string) => {
-    state = s;
-  };
-  return { fp, acts, at: () => state, go };
-}
+import { fakeSite } from "./site-fakes.js";
 
 const google: Credential = { username: "will@gmail.com", password: "gpw", passkeys: [] };
 const ctxOf = (fp: FlowPage, cred: Credential): SignInContext => ({

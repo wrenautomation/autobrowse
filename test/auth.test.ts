@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest";
 import type { Settings } from "../src/app/config.js";
 import { credentialsFor } from "../src/app/services.js";
 import {
-  type CodeKind,
   codeSources,
   credentialFor,
   extractCode,
@@ -20,7 +19,6 @@ import {
   resolveLogin,
   type SignInContext,
   type SiteLogin,
-  signInToGoogle,
   totpSource,
   viaLogin,
 } from "../src/auth/index.js";
@@ -534,158 +532,6 @@ describe("landAfterOauth", () => {
     expect(home.acts).toEqual([]);
     const stuck = at(["https://accounts.google.test/", "https://login.x.test/error"]);
     await expect(landAfterOauth("x", spec, stuck.ctx)).rejects.toThrow(/still on .*error/);
-  });
-});
-
-describe("signInToGoogle second step", () => {
-  const base = { username: "u@gmail.com", password: "p", recoveryCodes: [], passkeys: [] };
-  const page = (present: (h: Hints) => boolean) =>
-    fakePage({
-      text: ["2-Step Verification Choose how you want to sign in", "welcome"],
-      present: (h) => !/switch account/i.test(String(h.name)) && present(h),
-      url: "https://accounts.google.com/v3/signin/challenge/selection?x",
-    });
-  const ctx = (
-    fp: FlowPage,
-    kinds: CodeKind[],
-    notify?: (t: string) => Promise<void>,
-  ): SignInContext => ({
-    fp,
-    cred: base,
-    code: async (kind) => (kinds.includes(kind) ? "123456" : Promise.reject(new Error("none"))),
-    offers: (kind) => kinds.includes(kind),
-    inbox: (kind) => (kind === "sms" && kinds.includes(kind) ? "+15555550182" : null),
-    ...(notify ? { notify } : {}),
-    credFor: async () => base,
-    as: () => ctx(fp, kinds, notify),
-  });
-  it("continues past the OAuth consent page", async () => {
-    const { fp, acts } = fakePage({
-      text: ["Loading"],
-      present: (h) => h.name === "/^continue$/i",
-      url: "https://accounts.google.com/signin/oauth/id?authuser=0",
-    });
-    await signInToGoogle(ctx(fp, ["totp"]));
-    expect(acts.map((a) => a.hints.name)).toEqual(["/^continue$/i"]);
-  });
-  it("switches account when the profile is signed in as someone else", async () => {
-    const { fp, acts } = fakePage({
-      text: [
-        "Hi Other other@gmail.com Enter your password",
-        "Choose an account other@gmail.com Use another account",
-        "Sign in Email or phone",
-        "welcome",
-      ],
-      present: (h) => !/password/i.test(String(h.name)) && h.text !== "u@gmail.com",
-      url: "https://accounts.google.com/v3/signin/challenge/pwd?x",
-    });
-    await signInToGoogle(ctx(fp, ["totp"]));
-    expect(acts.slice(0, 3).map((a) => `${a.op.kind} ${a.hints.name ?? a.hints.text}`)).toEqual([
-      "click /switch account/i",
-      "click /use another account/i",
-      "fill /email or phone/i",
-    ]);
-  });
-  const smsPage = (h: Hints) =>
-    !/email|password|phone number/i.test(String(h.name)) &&
-    !/too many|wrong code/i.test(String(h.text));
-  it("asks for the SMS when a phone or Twilio can read it", async () => {
-    const { fp, acts } = page(smsPage);
-    await signInToGoogle(ctx(fp, ["sms"]));
-    expect(acts.map((a) => `${a.op.kind} ${a.hints.name ?? a.hints.css}`)).toEqual([
-      'click :is(a,button,[role=link],[role=button]):not([aria-disabled="true"]):has-text("verification code at"):has-text("••82")',
-      "fill /code/i",
-      "click /^next$/i",
-    ]);
-  });
-  it("a page asking for a phone gets ours, then the code", async () => {
-    const { fp, acts } = page((h) => smsPage(h) || h.name === "/^phone number$/i");
-    await signInToGoogle(ctx(fp, ["sms"]));
-    expect(acts.map((a) => `${a.op.kind} ${a.hints.name}`)).toEqual([
-      "fill /^phone number$/i",
-      "click /^next$/i",
-      "fill /code/i",
-      "click /^next$/i",
-    ]);
-  });
-  it("too many failed attempts ends the sign-in with a plain reason, no guess", async () => {
-    const { fp, acts } = page((h) => smsPage(h) || /too many/i.test(String(h.text)));
-    await expect(signInToGoogle(ctx(fp, ["sms"]))).rejects.toThrow(/try again in a few hours/);
-    expect(acts.some((a) => a.hints.name === "/code/i")).toBe(false);
-  });
-  it("pings the phone for a Tap Yes when only a phone is linked", async () => {
-    const notes: string[] = [];
-    const { fp, acts } = page((h) => !/email|password/i.test(String(h.name)));
-    await signInToGoogle(
-      ctx(fp, [], async (t) => {
-        notes.push(t);
-      }),
-    );
-    expect(acts.map((a) => `${a.op.kind} ${a.hints.css}`)).toEqual([
-      'click :is(a,button,[role=link],[role=button]):not([aria-disabled="true"]):has-text("Tap Yes on your phone")',
-    ]);
-    expect(notes[0]).toMatch(/tap Yes/);
-  });
-  it("a passkey prompt after the password goes to the other steps, then the authenticator", async () => {
-    let n = 0;
-    const { fp, acts } = fakePage({
-      text: [
-        "Hi u@gmail.com Enter your password",
-        "Use your passkey to confirm it's really you More ways to verify",
-        "2-Step Verification Choose how you want to sign in",
-        "welcome",
-      ],
-      present: (h) => !/email|switch account/i.test(String(h.name)),
-      url: () =>
-        n < 2
-          ? "https://accounts.google.com/v3/signin/challenge/pwd?x"
-          : n === 2
-            ? "https://accounts.google.com/v3/signin/challenge/pk/presend?x"
-            : "https://accounts.google.com/v3/signin/challenge/selection?x",
-      onAct: (count) => {
-        n = count;
-      },
-    });
-    await signInToGoogle(ctx(fp, ["totp"]));
-    expect(acts.map((a) => `${a.op.kind} ${a.hints.name ?? a.hints.text ?? a.hints.css}`)).toEqual([
-      "fill /password/i",
-      "click /^next$/i",
-      "click /try another way|more ways to verify/i",
-      'click :is(a,button,[role=link],[role=button]):not([aria-disabled="true"]):has-text("authenticator app")',
-      "fill /code/i",
-      "click /^next$/i",
-    ]);
-  });
-  it("says what to set up when nothing can answer", async () => {
-    const { fp } = page((h) => !/email|password/i.test(String(h.name)));
-    await expect(signInToGoogle(ctx(fp, []))).rejects.toThrow(/enroll TOTP, link a phone/);
-  });
-  it("a passkey we hold answers first; when Google refuses it the error says so", async () => {
-    const pk = {
-      rpId: "google.com",
-      credentialId: "c",
-      privateKey: "k",
-      signCount: 1,
-      isResidentCredential: true,
-    };
-    const { fp, acts } = fakePage({
-      text: [
-        "u@gmail.com Verify it's you Choose a way to verify Use your passkey",
-        "u@gmail.com Something went wrong",
-      ],
-      present: (h) => !/email|password|authenticator|switch account/i.test(String(h.css ?? h.name)),
-      url: "https://accounts.google.com/v3/signin/challenge/selection?x",
-    });
-    // The ceremony never leaves the challenge: Google did not recognise the passkey.
-    fp.waitForUrl = async (p) =>
-      typeof p === "function"
-        ? p("https://accounts.google.com/v3/signin/challenge/pk/error?x")
-        : true;
-    const c = ctx(fp, ["totp"]);
-    await expect(signInToGoogle({ ...c, cred: { ...base, passkeys: [pk] } })).rejects.toThrow(
-      /does not offer the authenticator app here; our passkey was refused/,
-    );
-    expect(acts[0]?.hints.css).toMatch(/Use your passkey/);
   });
 });
 
