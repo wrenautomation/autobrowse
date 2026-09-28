@@ -36,6 +36,13 @@ const schema = z.object({
   browserbaseApiKey: z.string().min(1).optional(),
   browserbaseProjectId: z.string().min(1).optional(),
   browserCdpUrl: z.string().url().optional(),
+  /**
+   * The person's own browser (`opera-gx`, `chrome`, `brave`, `edge`, or its
+   * data dir), attached for the sites in `ownBrowserSites` only. Opt-in.
+   */
+  ownBrowser: z.string().min(1).optional(),
+  /** Comma list of sites that run in the own browser, e.g. `github`. */
+  ownBrowserSites: z.string().optional(),
   /** Persistent browser profiles (logins survive between runs). */
   profilesDir: z.string().min(1).default("~/.config/autobrowse/profiles"),
   /** Local browser: the installed Chrome (default, falls back) or Playwright's chromium (containers). */
@@ -265,6 +272,8 @@ export const ENV_KEYS = {
   browserbaseApiKey: "BROWSERBASE_API_KEY",
   browserbaseProjectId: "BROWSERBASE_PROJECT_ID",
   browserCdpUrl: "BROWSER_CDP_URL",
+  ownBrowser: "OWN_BROWSER",
+  ownBrowserSites: "OWN_BROWSER_SITES",
   profilesDir: "PROFILES_DIR",
   browserChannel: "BROWSER_CHANNEL",
   browserHeadless: "BROWSER_HEADLESS",

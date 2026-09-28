@@ -250,6 +250,14 @@ a row; it is work.
   started with `--remote-debugging-port=9222`; its pages are the site, the
   same flows and agent drive them, and nothing of it is closed on the way
   out. The desktop leg for apps that are web pages inside.
+- **Your own browser, per site.** `OWN_BROWSER=opera-gx` (or `chrome`,
+  `brave`, `edge`, a data dir) with `OWN_BROWSER_SITES=github`: those sites
+  run in a new tab of the browser you use, signed in, with the history a
+  site trusts. Once: open `opera://inspect/#remote-debugging` and turn on
+  "Allow remote debugging"; the browser asks you to allow each connection.
+  Nothing restarts, only our tab closes, and no trace or passkey stand-in
+  touches your other tabs. For sites that refuse a fresh profile (GitHub's
+  Google sign-in).
 
 ## Flows built
 

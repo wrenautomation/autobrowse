@@ -12,6 +12,7 @@ import type { HttpClient } from "../clients/http.js";
 import { expandHome } from "../google-auth.js";
 import { geometry, type Identity, learnIdentity, wearIdentity } from "./identity.js";
 import type { Hints } from "./locate.js";
+import { notReachable, type OwnBrowser, ownEndpoint, runsInOwn } from "./own.js";
 import { reapOrphans, reapTempDirs } from "./reap.js";
 import { type PasskeyRecord, type Passkeys, virtualAuthenticator } from "./webauthn.js";
 
@@ -99,17 +100,25 @@ export interface BrowserOptions {
    * profile would ask for the password again.
    */
   profile?: string;
+  /** The person's own browser, for the sites they opted in (`browser/own`). */
+  own?: OwnBrowser | null;
 }
 
 export interface Session {
   context: BrowserContext;
   page: Page;
+  /**
+   * The person's own browser: the context holds their tabs too, so nothing
+   * context-wide (trace, routes, init scripts) is done to it.
+   */
+  shared?: boolean;
   /** The virtual authenticator: export after an enrollment. */
   passkeys: Passkeys;
   close(): Promise<void>;
 }
 
 export async function openSession(site: string, opts: BrowserOptions): Promise<Session> {
+  if (runsInOwn(opts.own, site)) return openOwn(opts.own);
   let context: BrowserContext;
   let browser: Browser | null = null;
   if (opts.tier === "browserbase") {
@@ -148,6 +157,32 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
       }
       await context.close().catch(() => undefined);
       await browser?.close().catch(() => undefined);
+    },
+  };
+}
+
+/** A tab of our own in the person's browser; closing it leaves the browser and their tabs. */
+async function openOwn(own: OwnBrowser): Promise<Session> {
+  const url = await ownEndpoint(own);
+  // The browser asks the person to allow the connection: give them time to.
+  const browser = await (await chromium())
+    .connectOverCDP(url, { timeout: 120_000 })
+    .catch((err: unknown) => {
+      throw new Error(
+        `${notReachable(own)} (${err instanceof Error ? err.message.split("\n")[0] : err})`,
+      );
+    });
+  const context = browser.contexts()[0] ?? (await browser.newContext());
+  const page = await context.newPage();
+  return {
+    context,
+    page,
+    shared: true,
+    // Their passkeys stay theirs: no virtual authenticator in their browser.
+    passkeys: { export: async () => [] },
+    async close() {
+      await page.close().catch(() => undefined);
+      await browser.close().catch(() => undefined); // disconnects; the browser stays open
     },
   };
 }

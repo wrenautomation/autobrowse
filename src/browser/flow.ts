@@ -388,11 +388,14 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         let acts = 0;
         let actsBefore = 0;
         mkdirSync(artifactsDir, { recursive: true });
-        // Tracing is best effort: a CDP-attached context may refuse it.
-        const tracing = await session.context.tracing
-          .start({ screenshots: true, snapshots: true })
-          .then(() => true)
-          .catch(() => false);
+        // Tracing is best effort: a CDP-attached context may refuse it. Never
+        // in the person's own browser: it would film their other tabs.
+        const tracing =
+          !session.shared &&
+          (await session.context.tracing
+            .start({ screenshots: true, snapshots: true })
+            .then(() => true)
+            .catch(() => false));
         let signingIn = false;
         let triedCaptcha = false;
         let active = session.page;

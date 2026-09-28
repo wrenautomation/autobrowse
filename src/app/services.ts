@@ -57,6 +57,7 @@ import type { FlowRunner } from "../browser/flow.js";
 import { flowRunner } from "../browser/flow.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { HUMAN_PACE, type Pace } from "../browser/human/index.js";
+import { ownBrowserOf } from "../browser/own.js";
 import { SessionPark } from "../browser/park.js";
 import { llmRepairer, noRepairer, rememberingRepairer } from "../browser/repair.js";
 import type { BrowserOptions, FailureRecord } from "../browser/session.js";
@@ -248,6 +249,7 @@ export function browserOptions(
     },
     tier: settings.browser,
     cdpUrl: settings.browserCdpUrl ?? null,
+    own: ownBrowserOf(settings.ownBrowser, settings.ownBrowserSites),
     profilesDir: settings.profilesDir,
     channel: settings.browserChannel,
     artifactsDir: settings.artifactsDir,
