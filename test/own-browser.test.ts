@@ -9,7 +9,7 @@ import { openSession } from "../src/browser/session.js";
 describe("own browser", () => {
   it("is opt-in per site, and covers the site's accounts", () => {
     expect(ownBrowserOf("opera-gx", undefined)).toBeNull();
-    expect(ownBrowserOf(undefined, "github")).toBeNull();
+    expect(ownBrowserOf(undefined, "github")?.name).toBe("Chrome");
     const own = ownBrowserOf("opera-gx", "github, cloudflare");
     expect(own).toMatchObject({ name: "Opera GX", sites: ["github", "cloudflare"] });
     expect(own?.inspectUrl).toBe("opera://inspect/#remote-debugging");

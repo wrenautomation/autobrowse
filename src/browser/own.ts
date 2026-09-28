@@ -49,8 +49,9 @@ export function ownBrowserOf(
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  if (!which || list.length === 0) return null;
-  const known = KNOWN[which];
+  if (list.length === 0) return null;
+  // Chrome unless told otherwise: the browser a person's logins usually live in.
+  const known = KNOWN[which ?? "chrome"];
   return known
     ? {
         name: known.name,
@@ -59,8 +60,8 @@ export function ownBrowserOf(
         sites: list,
       }
     : {
-        name: which,
-        dataDir: which,
+        name: which ?? "chrome",
+        dataDir: which ?? "chrome",
         inspectUrl: "chrome://inspect/#remote-debugging",
         sites: list,
       };

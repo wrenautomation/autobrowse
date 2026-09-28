@@ -37,8 +37,8 @@ const schema = z.object({
   browserbaseProjectId: z.string().min(1).optional(),
   browserCdpUrl: z.string().url().optional(),
   /**
-   * The person's own browser (`opera-gx`, `chrome`, `brave`, `edge`, or its
-   * data dir), attached for the sites in `ownBrowserSites` only. Opt-in.
+   * The person's own browser (`chrome`, the default; `opera-gx`, `brave`,
+   * `edge`, or its data dir), attached for the sites in `ownBrowserSites` only.
    */
   ownBrowser: z.string().min(1).optional(),
   /** Comma list of sites that run in the own browser, e.g. `github`. */
