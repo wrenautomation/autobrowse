@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { Command } from "commander";
 import { fileFixes } from "../browser/fixes.js";
+import { fileScreens } from "../browser/screens.js";
 import { readSteps, watchedRuns } from "../browser/watch.js";
 import { expandHome } from "../google-auth.js";
 import type { Settings } from "./config.js";
@@ -103,6 +104,41 @@ export function registerRepairsCommands(program: Command, settings: Settings): v
       for (const f of rows)
         console.log(
           `${f.flow}  ${f.goal}\n  was ${JSON.stringify(f.failed)}\n  now ${JSON.stringify(f.hints)}  (${f.reason}; found ${f.found.slice(0, 10)}, used ${f.used}×)`,
+        );
+    });
+}
+
+/**
+ * `autobrowse screens [site]`: pages a site showed that no flow knew, and
+ * what worked on them (kept from a model's one answer; runs use them with
+ * no model since). Each row is a screen to write into the source, then
+ * `--forget`.
+ */
+export function registerScreensCommands(program: Command, settings: Settings): void {
+  program
+    .command("screens [site]")
+    .description(
+      "Pages learned on each site and what gets past them (runs use them already); --forget once the source knows the screen",
+    )
+    .option("--forget", "drop the site's learned screens: the source now knows them")
+    .action(async (site: string | undefined, o: { forget?: boolean }) => {
+      const learned = fileScreens(expandHome(settings.screensFile));
+      if (o.forget) {
+        if (!site) throw new Error("--forget needs a site: screens <site> --forget");
+        const n = learned.forget(site);
+        console.log(`forgot ${n} screen${n === 1 ? "" : "s"} for ${site}`);
+        return;
+      }
+      const rows = learned.list().filter((r) => !site || r.site === site.split("@")[0]);
+      if (!rows.length) {
+        console.log(
+          site ? `no learned screens for ${site}` : "no learned screens: every page met was known",
+        );
+        return;
+      }
+      for (const r of rows)
+        console.log(
+          `${r.site}  ${r.url}\n  shows ${r.landmarks.join(" | ")}\n  ${r.screen ? `is "${r.screen}" of ${r.walk}` : `click ${JSON.stringify(r.click)}`}  (${r.reason}; found ${r.found.slice(0, 10)}, used ${r.used}×)`,
         );
     });
 }

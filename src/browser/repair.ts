@@ -14,6 +14,7 @@ import { z } from "zod";
 import { completeJson, type Llm } from "../llm/types.js";
 import type { Memory } from "../memory/types.js";
 import type { Hints } from "./locate.js";
+import type { ScreenReader } from "./screens.js";
 
 export interface RepairRequest {
   site: string;
@@ -123,6 +124,44 @@ export function llmRepairer(llm: Llm): Repairer {
       for (const [k, v] of Object.entries(value.hints))
         if (v) (hints as Record<string, string>)[k] = v;
       return { hints, reason: value.reason, ...(value.detour ? { detour: true } : {}) };
+    },
+  };
+}
+
+const readingSchema = z.object({
+  screen: z.string().nullable().optional(),
+  click: proposalSchema.shape.hints.nullable().optional(),
+  reason: z.string(),
+});
+
+const READ_SYSTEM = `A browser automation walks a site's screens toward a goal. It is on a page none of its screens recognized. You get the goal, the screens it knows (name: what each looks like), the URL and the page's interactive elements. If the page is one of the known screens (a variant, a redesign), reply with its exact name in "screen". If not, and something is in the way of the goal (an intermediate screen, a dialog, a banner), name the one click that gets past it in "click" as hints (role + name, text, testId, placeholder or id); never a click that buys, pays, sends, submits, deletes or confirms. If neither, reply with neither. You never act: you only pick.`;
+
+/** A model that names an unknown page from a walk's own screens, or one click past it (`browser/screens`). */
+export function llmScreenReader(llm: Llm): ScreenReader {
+  return {
+    id: `llm:${llm.id}`,
+    async read(req) {
+      const { value } = await completeJson(llm, readingSchema, {
+        system: READ_SYSTEM,
+        prompt: [
+          `Goal: ${req.goal}`,
+          "Known screens:",
+          ...req.known.map((s) => `- ${s.name}: ${s.looks}`),
+          `URL: ${req.url}`,
+          "Elements:",
+          req.snapshot,
+          'Reply: {"screen": "<name>" | null, "click": {...} | null, "reason": "..."}',
+        ].join("\n"),
+        maxTokens: 300,
+      });
+      const click: Hints = {};
+      for (const [k, v] of Object.entries(value.click ?? {}))
+        if (v) (click as Record<string, string>)[k] = v;
+      return {
+        ...(value.screen ? { screen: value.screen } : {}),
+        ...(Object.keys(click).length ? { click } : {}),
+        reason: value.reason,
+      };
     },
   };
 }

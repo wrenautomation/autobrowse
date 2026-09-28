@@ -33,6 +33,18 @@ import {
   snapshotPage,
 } from "./repair.js";
 import {
+  INTERRUPTS,
+  isOn,
+  keepOf,
+  type LearnedScreens,
+  lookAt,
+  memoryScreens,
+  type PageLook,
+  type Screen,
+  type ScreenHelp,
+  type ScreenReader,
+} from "./screens.js";
+import {
   type Artifacts,
   type BrowserOptions,
   bodyText,
@@ -133,6 +145,8 @@ export interface FlowPage {
   captcha(): Promise<CaptchaOutcome>;
   /** Stop here and ask a person. */
   human(reason: string): never;
+  /** What a screens walk asks of the runner: the page's shape, learned screens, a model (`browser/screens`). */
+  screens?: ScreenHelp;
 }
 
 export interface BrowserFlow<I, O> {
@@ -221,6 +235,10 @@ export interface RunnerOptions {
   onRepair?: (report: RepairReport) => void;
   /** Repairs that worked, tried before the source's own hints on the next run (`browser/fixes`). */
   fixes?: Fixes;
+  /** Pages seen before on each site and what worked on them: walks' screens, clicks past interrupts (`browser/screens`). */
+  learnedScreens?: LearnedScreens;
+  /** Names a page a walk does not know, from the walk's own screens. Absent = such a page fails the walk. */
+  screenReader?: ScreenReader | null;
   /** Irreversible acts a durable call already did: a retry never does them twice (`browser/attempt`). */
   done?: DoneActs;
   /** Every failure record written (kind failed/human/interrupted): what healing starts from. */
@@ -241,6 +259,8 @@ export interface RunnerOptions {
 }
 
 const ACT_TIMEOUT_MS = 15_000;
+/** How often a step waiting for its control looks for something in the way. */
+const POLL_MS = 250;
 /** Clicks past what is in the way before one act gives up: a new screen or two, not a new flow. */
 const MAX_DETOURS = 3;
 
@@ -399,6 +419,15 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         let signingIn = false;
         let triedCaptcha = false;
         let active = session.page;
+        const learned = runner.learnedScreens ?? memoryScreens();
+        const help: ScreenHelp = {
+          look: () => lookAt(active),
+          snapshot: () => snapshotPage(active),
+          learned,
+          reader: runner.screenReader ?? null,
+        };
+        // The URL whose overlays were last looked for: once per page, not per act.
+        let overlaysAt: string | null = null;
         const watch: Watch | null = watches(runner.watch ?? opts.watchFlows, flow.site, flow.name)
           ? watchSteps(join(artifactsDir, stamp))
           : null;
@@ -504,7 +533,83 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             throw new NeedsHuman(`${flow.site}: ${reason}`);
           },
           passkeys: session.passkeys,
+          screens: help,
         };
+        /** An interrupt the page shows now: a coded one, else a click learned on this site. */
+        async function interruptHere(overlaysOnly: boolean): Promise<Screen | null> {
+          for (const s of INTERRUPTS)
+            if ((!overlaysOnly || s.overlay) && (await isOn(s, { fp }))) return s;
+          if (overlaysOnly || !learned.has(flow.site)) return null;
+          const row = learned.find(flow.site, null, await lookAt(active));
+          const click = row?.click;
+          if (!row || !click) return null;
+          return {
+            name: `learned click on ${row.url}`,
+            looks: row.reason,
+            is: async () => true,
+            act: () =>
+              doOp(active, click, { kind: "click" }, ACT_TIMEOUT_MS, hands).then(
+                () => learned.used(row),
+                (err: unknown) => {
+                  learned.drop(row);
+                  throw err;
+                },
+              ),
+          };
+        }
+        /**
+         * Handle an interrupt; false when its handler failed. Its clicks are
+         * not the flow's acts: they neither count (an irreversible act is
+         * known by its place in the flow) nor take the step's goal.
+         */
+        async function handle(s: Screen, goal: string, hints: Hints): Promise<boolean> {
+          const bare: FlowPage = {
+            ...fp,
+            page: active,
+            act: (op, h) => doOp(active, h, op, ACT_TIMEOUT_MS, hands),
+          };
+          const ok = await (s.act?.({ fp: bare }) ?? Promise.resolve()).then(
+            () => true,
+            () => false,
+          );
+          lastGoal = goal;
+          lastHints = hints;
+          return ok;
+        }
+        /**
+         * Before an act: wait for its control, handling what shows up in the
+         * way. An overlay (a cookie banner) is looked for once per page even
+         * when the control shows. Returns the time left for the act.
+         */
+        async function clearWay(hints: Hints, op: Op, goal: string, timeout: number) {
+          const start = Date.now();
+          const url = active.url();
+          if (url !== overlaysAt) {
+            overlaysAt = url;
+            const s = await interruptHere(true);
+            if (s) await handle(s, goal, hints);
+          }
+          // A file input is hidden on purpose.
+          if (op.kind === "upload") return timeout;
+          let target: Locator;
+          try {
+            target = locate(active, hints);
+          } catch {
+            return timeout;
+          }
+          let handled = 0;
+          while (Date.now() - start < timeout) {
+            if (await target.isVisible().catch(() => false)) break;
+            const s = handled < MAX_DETOURS ? await interruptHere(false) : null;
+            if (s) {
+              handled += 1;
+              await handle(s, goal, hints);
+              continue;
+            }
+            await active.waitForTimeout(POLL_MS);
+          }
+          return Math.max(timeout - (Date.now() - start), 1_000);
+        }
         /** One act: the recorded locator, else the repairer's; "repaired" when the second found it. */
         async function actOnce(
           op: Op,
@@ -529,14 +634,24 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             }
           }
           try {
-            await doOp(page, hints, op, timeout, hands);
+            await doOp(page, hints, op, await clearWay(hints, op, a.goal, timeout), hands);
             return "ok";
           } catch (err) {
             if (!mayRepair)
               throw new NeedsHuman(`${flow.site}: ${a.goal} (irreversible, not repaired)`);
+            // Something on top that came late: handled, then the op once more.
+            const late = await interruptHere(false);
+            if (late && (await handle(late, a.goal, hints)))
+              try {
+                await doOp(page, hints, op, timeout, hands);
+                return "ok";
+              } catch {
+                // the long way
+              }
             // On the live page, from where the run is: a few clicks past what is in
             // the way, then the op. The run goes on from there; nothing replays.
             const detours: Hints[] = [];
+            const passed: { look: PageLook; reason: string }[] = [];
             for (;;) {
               const proposal = await repairer.propose({
                 site: flow.site,
@@ -550,8 +665,10 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               if (proposal.detour) {
                 const name = `${proposal.hints.name ?? ""} ${proposal.hints.text ?? ""}`;
                 if (detours.length >= MAX_DETOURS || COMMITTING.test(name)) throw err;
+                const look = await lookAt(page);
                 await doOp(page, proposal.hints, { kind: "click" }, timeout, hands);
                 detours.push(proposal.hints);
+                passed.push({ look, reason: proposal.reason });
                 continue;
               }
               const report: RepairReport = {
@@ -567,6 +684,16 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               try {
                 await doOp(page, proposal.hints, op, timeout, hands);
                 report.ok = true;
+                // Each screen clicked past is an interrupt for every flow on the site from now on.
+                passed.forEach(({ look, reason }, i) => {
+                  learned.keep({
+                    site: flow.site,
+                    url: look.url,
+                    landmarks: keepOf(look),
+                    click: detours[i] as Hints,
+                    reason,
+                  });
+                });
               } finally {
                 runner.onRepair?.(report);
                 runner.fixes?.learn(report);
@@ -701,6 +828,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           throw new FlowFailed(`${flow.site}/${flow.name}`, err, artifacts);
         } finally {
           runner.fixes?.flush();
+          learned.flush();
           // A watched run keeps its trace whatever happened; a failure saved one already.
           if (tracing)
             await session.context.tracing

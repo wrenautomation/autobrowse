@@ -6,11 +6,13 @@
  * live on 2026-09-21 (headless explore): github, microsoft (first page), linkedin.
  */
 
+import { backFrom, clickOpening, type Walk, walk } from "../browser/screens.js";
 import { FACEBOOK_LOGIN_URL, signInToFacebook } from "./facebook.js";
 import { signInToGithub } from "./github.js";
 import { INSTAGRAM_LOGIN_URL, signInToInstagram } from "./instagram.js";
 import { LINKEDIN_LOGIN_URL, signInToLinkedin } from "./linkedin.js";
 import {
+  addressOf,
   formLogin,
   LoginFailed,
   oauthLogin,
@@ -24,77 +26,167 @@ import {
   type TotpSetupSpec,
 } from "./login.js";
 import { MICROSOFT_HOST, signInToMicrosoft } from "./microsoft.js";
+import { providerOf } from "./providers.js";
 import { signInToTiktok, TIKTOK_LOGIN_URL } from "./tiktok.js";
 import { signInToX, X_LOGIN_URL } from "./x.js";
 
 const CLOUDFLARE_HOME = /dash\.cloudflare\.com\/[0-9a-f]{32}/;
-
-const cloudflarePassword = formLogin("cloudflare", {
-  start: "https://dash.cloudflare.com/login",
-  // Seen 2026-09-28: a returning browser gets "Continue as … using Google" instead of the form.
-  reveal: { role: "button", name: "Sign in with another profile" },
-  username: { role: "textbox", name: "Email" },
-  password: { role: "textbox", name: "Password" },
-  submit: { role: "button", name: "/^(log|sign) ?in$/i" },
-  code: {
-    kind: "totp",
-    asks: /authenticator|verification code|two-factor|2fa/i,
-    field: { role: "textbox", name: "/code/i" },
-    submit: { role: "button", name: "/continue|verify/i" },
-  },
-  rejected: /incorrect email or password|invalid credentials/i,
-  success: CLOUDFLARE_HOME,
-});
-
-const cloudflareGoogle = oauthLogin("cloudflare", {
-  start: "https://dash.cloudflare.com/login",
-  button: { role: "button", name: "/google/i" },
-  success: CLOUDFLARE_HOME,
-});
-
-/** A returning browser's saved profile: "Continue as <email> using Google". Seen 2026-09-28. */
-const CLOUDFLARE_SAVED_PROFILE = {
-  role: "button",
-  name: "/^continue as .+ using google$/i",
-} as const;
+const CLOUDFLARE_LOGIN = "https://dash.cloudflare.com/login";
 const GOOGLE_ACCOUNTS = /^https:\/\/accounts\.google\.com\//;
 
+/** A returning browser's saved profile: "Continue as <email> using Google". Seen 2026-09-28. */
+const SAVED_PROFILE = { role: "button", name: "/^continue as .+ using google$/i" } as const;
+const OTHER_PROFILE = { role: "button", name: "Sign in with another profile" } as const;
+const EMAIL = { role: "textbox", name: "Email" } as const;
+const PASSWORD = { role: "textbox", name: "Password" } as const;
+const LOG_IN = { role: "button", name: "/^(log|sign) ?in$/i" } as const;
+const CODE = { role: "textbox", name: "/code/i" } as const;
+
 /**
- * The saved profile rides the profile's live Google session: no secret is
- * typed. False when the page offers no saved profile. When Google asks for
- * a password the session is gone, and this stops rather than type one: the
- * account is personal, and a rejected personal password is never retried.
+ * Whether a saved profile's label names this address. Cloudflare cuts a
+ * long one short ("jinwi…@gmail.com", "jinwi…"): the shown parts, in order.
  */
-async function cloudflareSavedProfile(ctx: SignInContext): Promise<boolean> {
-  const { fp } = ctx;
-  await fp.open("https://dash.cloudflare.com/login", { allowWall: true });
-  if (!(await fp.has(CLOUDFLARE_SAVED_PROFILE))) return false;
-  const main = fp.page;
-  const popup = fp.nextPage(8_000);
-  await fp.act({ kind: "click" }, CLOUDFLARE_SAVED_PROFILE, {
-    goal: "continue with the saved Google profile",
-  });
-  const page = await popup;
-  if (page) fp.switchTo(page);
-  if (!page && (await fp.waitForUrl(CLOUDFLARE_HOME, 15_000))) return true;
-  // Google's chooser: a tile for an account the profile is signed in as needs no password.
-  if (GOOGLE_ACCOUNTS.test(fp.url()) && (await fp.has({ text: ctx.cred.username }))) {
-    await fp.act({ kind: "click" }, { text: ctx.cred.username }, { goal: "pick the account" });
-  }
-  if (page) fp.switchTo(main);
-  if (await fp.waitForUrl(CLOUDFLARE_HOME, 20_000)) return true;
-  throw new LoginFailed(
-    "cloudflare",
-    "the saved Google session is gone and Google wants a password: sign in to Google once in the cloudflare profile",
-  );
+export function savedProfileIs(label: string, address: string): boolean {
+  const shown = label
+    .match(/continue as (.+?) using google/i)?.[1]
+    ?.trim()
+    .toLowerCase();
+  if (!shown || !address) return false;
+  const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const cut = /(…|\.\.\.)$/.test(shown);
+  const parts = shown.split(/…|\.\.\./).map(esc);
+  return new RegExp(`^${parts.join(".*")}${cut ? "" : "$"}`).test(address.trim().toLowerCase());
 }
 
 /**
- * Cloudflare: the browser's saved profile first (no secret typed), then the
- * stored `cloudflare` credential's password, or, when the
- * account was made with "Sign in with Google", the `google` credential
- * through that button. `via: "google"` in the cloudflare credential's
- * metadata, or no cloudflare credential at all, picks the button.
+ * Cloudflare's sign-in as screens: whichever way the page comes (the form,
+ * a saved profile, Google in a popup or a redirect, a code), the walk
+ * does the right thing there and looks again.
+ *
+ * - A saved profile for this account rides the browser's live Google
+ *   session: no secret typed. If Google then wants a password the session
+ *   is gone, and the walk stops rather than type one (the account is
+ *   personal; a rejected personal password is never retried).
+ * - A saved profile for someone else: "Sign in with another profile".
+ * - The form: the password, or the Google button when the account signs
+ *   in via Google (the credential's `via`, or no password).
+ */
+export function cloudflareWalk(ctx: SignInContext): Walk<SignInContext> {
+  const { cred } = ctx;
+  const main = ctx.fp.page;
+  const byGoogle = cred.via === "google" || !cred.password;
+  const ours = (label: string) =>
+    savedProfileIs(label, addressOf(cred)) || savedProfileIs(label, cred.username);
+  let riding = false;
+  let typedPrevious = false;
+  const fail = (why: string): never => {
+    throw new LoginFailed("cloudflare", why);
+  };
+  return {
+    site: "cloudflare",
+    name: "sign-in",
+    goal: "signed in to the Cloudflare dashboard",
+    fail,
+    screens: [
+      {
+        name: "dashboard",
+        looks: "the Cloudflare dashboard, signed in",
+        at: CLOUDFLARE_HOME,
+        hides: [PASSWORD],
+        goal: true,
+      },
+      {
+        name: "google",
+        looks: "Google's own sign-in: account chooser, email, password or 2-step",
+        at: GOOGLE_ACCOUNTS,
+        async act(c) {
+          const { fp } = c;
+          if (riding) {
+            // A tile for an account the profile is signed in as needs no password.
+            const tile = { text: addressOf(cred) } as const;
+            if (await fp.has(tile, 3_000))
+              await fp.act({ kind: "click" }, tile, { goal: "pick the account" });
+            else if (await fp.has({ role: "textbox", name: "/password/i" }))
+              fail(
+                "the saved Google session is gone and Google wants a password: sign in to Google once in the cloudflare profile",
+              );
+          } else {
+            const google = await c.credFor(
+              "google",
+              cred.via === "google" ? cred.username : undefined,
+            );
+            await providerOf("google").signIn(c.as(google));
+          }
+          await backFrom(fp, main);
+          await fp.waitForUrl(CLOUDFLARE_HOME, 30_000);
+        },
+      },
+      {
+        name: "saved profile",
+        looks: "'Continue as <email> using Google', with 'Sign in with another profile'",
+        shows: [SAVED_PROFILE],
+        async act({ fp }) {
+          if (ours(await fp.read(SAVED_PROFILE))) {
+            riding = true;
+            return clickOpening(fp, SAVED_PROFILE, "continue with the saved Google profile");
+          }
+          await fp.act({ kind: "click" }, OTHER_PROFILE, { goal: "sign in with another profile" });
+        },
+      },
+      {
+        name: "rejected",
+        looks: "the login form saying the email or password is wrong",
+        shows: [PASSWORD],
+        says: /incorrect email or password|invalid credentials/i,
+        async act({ fp }) {
+          // A rotation the site took without saying so: the one before still works once.
+          if (!cred.previousPassword || typedPrevious) fail("password rejected");
+          typedPrevious = true;
+          await fp.act({ kind: "fill", value: cred.previousPassword as string }, PASSWORD, {
+            goal: "type the previous password",
+          });
+          await fp.act({ kind: "click" }, LOG_IN, { goal: "submit login form" });
+        },
+      },
+      {
+        name: "code",
+        looks: "a box asking for an authenticator or two-factor code",
+        shows: [CODE],
+        says: /authenticator|verification code|two-factor|2fa/i,
+        async act(c) {
+          const code = await c.code("totp");
+          await c.fp.act({ kind: "fill", value: code }, CODE, { goal: "type verification code" });
+          await c.fp.act(
+            { kind: "click" },
+            { role: "button", name: "/continue|verify/i" },
+            {
+              goal: "submit verification code",
+            },
+          );
+        },
+      },
+      {
+        name: "login form",
+        looks: "the Cloudflare login form: email and password boxes, and 'Sign in with Google'",
+        shows: [EMAIL],
+        async act({ fp }) {
+          if (byGoogle)
+            return clickOpening(fp, { role: "button", name: "/google/i" }, "sign in with google");
+          await fp.act({ kind: "fill", value: cred.username }, EMAIL, { goal: "type username" });
+          await fp.act({ kind: "fill", value: passwordOf("cloudflare", cred) }, PASSWORD, {
+            goal: "type password",
+          });
+          await fp.act({ kind: "click" }, LOG_IN, { goal: "submit login form" });
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Cloudflare: the stored `cloudflare` credential, by password or through
+ * Google (`via: "google"`, or no password). One account can hold both;
+ * the password goes first (`methodsOf`).
  */
 const cloudflare: SiteLogin = {
   site: "cloudflare",
@@ -105,9 +197,8 @@ const cloudflare: SiteLogin = {
   loggedIn: async (fp) =>
     CLOUDFLARE_HOME.test(fp.url()) && !(await fp.has({ role: "textbox", name: "Password" })),
   async signIn(ctx: SignInContext) {
-    if (await cloudflareSavedProfile(ctx)) return;
-    if (ctx.cred.via === "google") return cloudflareGoogle(ctx);
-    return cloudflarePassword(ctx);
+    await ctx.fp.open(CLOUDFLARE_LOGIN, { allowWall: true });
+    await walk(ctx, cloudflareWalk(ctx));
   },
 };
 

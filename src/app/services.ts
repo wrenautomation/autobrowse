@@ -59,7 +59,13 @@ import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { HUMAN_PACE, type Pace } from "../browser/human/index.js";
 import { ownBrowserOf } from "../browser/own.js";
 import { SessionPark } from "../browser/park.js";
-import { llmRepairer, noRepairer, rememberingRepairer } from "../browser/repair.js";
+import {
+  llmRepairer,
+  llmScreenReader,
+  noRepairer,
+  rememberingRepairer,
+} from "../browser/repair.js";
+import { fileScreens } from "../browser/screens.js";
 import type { BrowserOptions, FailureRecord } from "../browser/session.js";
 import {
   type Channel,
@@ -1025,6 +1031,8 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       captcha: captchaFor(settings, http),
       repairIrreversible: !guards.has("irreversible"),
       fixes: fileFixes(expandHome(settings.fixesFile)),
+      learnedScreens: fileScreens(expandHome(settings.screensFile)),
+      screenReader: llm ? llmScreenReader(llm) : null,
       done: fileDoneActs(join(expandHome(settings.artifactsDir), "done-acts")),
       onRepair: (r) =>
         log.warn(

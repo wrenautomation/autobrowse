@@ -27,6 +27,8 @@ import {
 } from "../auth/index.js";
 import { CRED_ENV } from "../auth/keep.js";
 import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
+import { fileScreens } from "../browser/screens.js";
+import { expandHome } from "../google-auth.js";
 
 /** A copied secret lives on the clipboard for a minute, then is emptied if untouched. */
 const CLIPBOARD_MS = 60_000;
@@ -192,7 +194,6 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       // The browser profile carries the sign-in: it moves with the name.
       const { existsSync, renameSync } = await import("node:fs");
       const { join } = await import("node:path");
-      const { expandHome } = await import("../google-auth.js");
       const dir = expandHome(settings.profilesDir);
       const [oldDir, newDir] = [join(dir, from), join(dir, to)];
       const moved = existsSync(oldDir) && !existsSync(newDir);
@@ -657,40 +658,66 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       },
     );
 
+  /** Open the site's home in its profile: a wall there is the sign-in; "signed in" when the home shows signed in. */
+  const checkLogin = async (siteArg: string, headedRun: boolean): Promise<string> => {
+    const site = accountSite(siteArg);
+    const login = await loginOrVia(settings, site);
+    const opts = await browserFor(settings, site, headedRun ? headed : undefined);
+    const credName = login.credential ?? site;
+    const cred = await credentialsFor(settings).get(credName);
+    if (!cred && !headedRun)
+      throw new Error(
+        `no credential for ${site}: \`autobrowse creds set ${credName}\`, or --headed to log in by hand`,
+      );
+    const runner = flowRunner(opts, {
+      login: loginFor(settings, gmailFor(settings)),
+      captcha: captchaFor(settings),
+      learnedScreens: fileScreens(expandHome(settings.screensFile)),
+    });
+    const check = defineFlow<undefined, string>({
+      site,
+      name: "login",
+      async run(fp: FlowPage) {
+        if (!login.home) fp.human(`no home page known for ${site}: creds via ${site} ... --url`);
+        await fp.open(login.home); // a wall here triggers the sign-in
+        if (await login.loggedIn(fp)) return "signed in";
+        if (!headedRun) fp.human("not signed in after opening the home page");
+        console.log("log in, then close the browser window");
+        await new Promise<void>((resolve) => fp.page.context().on("close", () => resolve()));
+        return "closed";
+      },
+    });
+    return runner.run(check, undefined);
+  };
+
   program
-    .command("login <site>")
+    .command("login [site]")
     .description(
       `Sign in to a site with the stored credential (headless). With --headed and no credential, a person logs in and closes the window. Sites: ${KNOWN}, or any site stored with \`creds via\``,
     )
     .option("--headed", "show the browser")
-    .action(async (siteArg: string, o: { headed?: boolean }) => {
-      const site = accountSite(siteArg);
-      const login = await loginOrVia(settings, site);
-      const opts = await browserFor(settings, site, o.headed ? headed : undefined);
-      const credName = login.credential ?? site;
-      const cred = await credentialsFor(settings).get(credName);
-      if (!cred && !o.headed)
-        throw new Error(
-          `no credential for ${site}: \`autobrowse creds set ${credName}\`, or --headed to log in by hand`,
-        );
-      const runner = flowRunner(opts, {
-        login: loginFor(settings, gmailFor(settings)),
-        captcha: captchaFor(settings),
-      });
-      const check = defineFlow<undefined, string>({
-        site,
-        name: "login",
-        async run(fp: FlowPage) {
-          if (!login.home) fp.human(`no home page known for ${site}: creds via ${site} ... --url`);
-          await fp.open(login.home); // a wall here triggers the sign-in
-          if (await login.loggedIn(fp)) return "signed in";
-          if (!o.headed) fp.human("not signed in after opening the home page");
-          console.log("log in, then close the browser window");
-          await new Promise<void>((resolve) => fp.page.context().on("close", () => resolve()));
-          return "closed";
-        },
-      });
-      console.log(await runner.run(check, undefined));
+    .option(
+      "--all",
+      "every stored account, one after another: the daily check that keeps sessions warm and meets a changed page on a quiet run, not mid-task",
+    )
+    .action(async (siteArg: string | undefined, o: { headed?: boolean; all?: boolean }) => {
+      if (!o.all) {
+        if (!siteArg) throw new Error("login <site>, or login --all");
+        console.log(await checkLogin(siteArg, o.headed === true));
+        return;
+      }
+      const store = credentialsFor(settings);
+      let failed = 0;
+      for (const name of await store.list()) {
+        const cred = await store.get(name).catch(() => null);
+        if (!cred || cred.canary) continue;
+        const got = await checkLogin(name, false).catch((err: unknown) => {
+          failed += 1;
+          return `FAILED: ${err instanceof Error ? err.message : String(err)}`;
+        });
+        console.log(`${name}: ${got}`);
+      }
+      if (failed) process.exitCode = 1;
     });
 
   program

@@ -88,6 +88,10 @@ const hostOf = (url: string): string => {
 export function boundPage(fp: FlowPage, b: BindOptions): FlowPage {
   return {
     ...fp,
+    // Live, not copied: after `switchTo` (a popup) it is the page acted on now.
+    get page() {
+      return fp.page;
+    },
     async act(op, hints, opts) {
       const match = op.kind === "fill" ? b.secretOf(op.value) : null;
       if (match) {

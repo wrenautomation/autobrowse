@@ -234,6 +234,20 @@ a row; it is work.
   stale locator asks the repairer (a model, later Stagehand) for new hints
   for the same goal, tries once, reports the repair. Irreversible ops are
   never repaired; they hand off.
+- **Screens.** Sites branch on state (a remembered account, a first-visit
+  banner, a new device), so a page is known by its URL and landmarks and has
+  one plain-code handler (`browser/screens`). A step whose control is not
+  there gets the interrupts handled first: a cookie banner, and any screen
+  a repair once clicked past on that site (kept per site, so every flow on
+  it gets it). A flow whose path branches (Cloudflare's sign-in) is a
+  *walk*: its screens and a goal, no script; look, act, look again. A page
+  no screen knows goes down one ladder: learned screens (data) → a model
+  that only picks from the walk's own list, or one non-committing click →
+  a person. The pick is kept once it worked, so it costs a model once per
+  new variant. `autobrowse screens [site]` lists what was learned
+  (`SCREENS_FILE`); `--forget` once the source knows the screen.
+  `autobrowse login --all` signs in to every stored account: the daily
+  check that keeps sessions warm and meets a changed page on a quiet run.
 - **Play/pause.** `pause` holds before the next step; `play` runs on. A
   dry run stops before the first irreversible step.
 - **Watched.** The worker serves a UI on `:9080`: runs, the open gate with
