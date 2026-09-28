@@ -613,6 +613,29 @@ export function paceFor(settings: Settings): Pace | null {
  * store (SSM) in prod; elsewhere the env file in front of it, so a token
  * minted on the laptop is on the box and survives the laptop.
  */
+/** The bootstrap workflow's deps; the worker and `autobrowse cloudflare-token` share them. */
+export function bootstrapDepsFor(
+  settings: Settings,
+  browser: FlowRunner,
+  sink: EnvStore,
+  http: HttpClient = httpClient(),
+): BootstrapDeps {
+  return {
+    browser,
+    sink,
+    current: () => ({
+      cloudflareAccountId:
+        process.env.CLOUDFLARE_ACCOUNT_ID ?? settings.cloudflareAccountId ?? null,
+    }),
+    stored: async (key) =>
+      process.env[key] ??
+      (key === "CLOUDFLARE_API_TOKEN" ? settings.cloudflareApiToken : undefined) ??
+      (await sink.get(key).catch(() => null)) ??
+      null,
+    verifyCloudflareToken: (token) => verifyCloudflareToken(http, token),
+  };
+}
+
 export function sinkFor(settings: Settings, ssm: SSMClient = ssmFor(settings)): EnvStore {
   const shared = envStoreFor(settings, ssm);
   return settings.secretSink === "ssm"
@@ -1053,16 +1076,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   };
 
   const sink = sinkFor(settings, ssm);
-  const bootstrapDeps: BootstrapDeps = {
-    browser,
-    sink,
-    current: () => ({
-      cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN ?? settings.cloudflareApiToken ?? null,
-      cloudflareAccountId:
-        process.env.CLOUDFLARE_ACCOUNT_ID ?? settings.cloudflareAccountId ?? null,
-    }),
-    verifyCloudflareToken: (token) => verifyCloudflareToken(http, token),
-  };
+  const bootstrapDeps = bootstrapDepsFor(settings, browser, sink, http);
 
   const host = { emit: (e: Parameters<Channel["deliver"]>[0]) => channel.deliver(e) };
   /** The catalog is read on every listing; a broken flow is said once per distinct error, not per request. */

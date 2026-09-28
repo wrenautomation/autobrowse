@@ -7,41 +7,30 @@
 import { defineFlow, type FlowPage } from "../flow.js";
 
 /**
- * One permission row, mapped 2026-09-19 in explore mode. Rows repeat the
- * same three controls, so row i is the i-th of each:
- *   button "Resources"            Downshift; options carry role=option
- *   textbox "Permissions"         Downshift with a typed filter
- *   combobox "Permissions levels" React Select; its input is hidden, so
- *                                 the `.react-select__control` that owns
- *                                 it is clicked; the menu is `.react-select__menu`
+ * One permission row. Remapped 2026-09-28 in explore mode (the form moved
+ * to Base UI): every control is a combobox named "Resources",
+ * "Permissions" or "Permissions levels", repeated per row, so row i is the
+ * i-th of each. A click opens the list and every option is rendered, so an
+ * option is clicked by its name (a plain string matches exactly): no typed filter (typing into an open
+ * list times out behind its overlay).
  * Everything goes through `fp.act`: paced, repaired, in the artifacts.
  */
 async function fillPermissionRow(fp: FlowPage, i: number, p: TokenPermission): Promise<void> {
-  const option = (text: string) => ({ css: `[role=listbox] [role=option]:text-is("${text}")` });
-  await fp.act(
-    { kind: "click" },
-    { role: "button", name: "Resources", nth: i },
-    { goal: `row ${i}: open the scope menu` },
-  );
-  await fp.act({ kind: "click" }, option(p.scope), { goal: `row ${i}: scope ${p.scope}` });
-  await fp.act(
-    { kind: "fill", value: p.name },
-    { role: "textbox", name: "Permissions", nth: i },
-    { goal: `row ${i}: filter permissions` },
-  );
-  await fp.act({ kind: "click" }, option(p.name), { goal: `row ${i}: permission ${p.name}` });
-  await fp.act(
-    { kind: "click" },
-    {
-      css: `input[aria-label="Permissions levels"] >> nth=${i} >> xpath=ancestor::*[contains(@class,'react-select__control')][1]`,
-    },
-    { goal: `row ${i}: open the level menu` },
-  );
-  await fp.act(
-    { kind: "click" },
-    { css: `.react-select__menu >> text="${p.level}"` },
-    { goal: `row ${i}: level ${p.level}` },
-  );
+  const pick = async (control: string, value: string, goal: string) => {
+    await fp.act(
+      { kind: "click" },
+      { role: "combobox", name: control, nth: i },
+      { goal: `row ${i}: open ${goal}` },
+    );
+    await fp.act(
+      { kind: "click" },
+      { role: "option", name: value },
+      { goal: `row ${i}: ${goal} ${value}` },
+    );
+  };
+  await pick("Resources", p.scope, "scope");
+  await pick("Permissions", p.name, "permission");
+  await pick("Permissions levels", p.level, "level");
 }
 
 /** A signed-in dashboard URL carries the account id. */
@@ -95,10 +84,9 @@ export const cloudflareApiToken = defineFlow<TokenInput, TokenResult>({
       { role: "button", name: "/get started/i" },
       { goal: "choose the custom token template" },
     );
-    // The name box has no label; it is the form's `name` input.
     await fp.act(
       { kind: "fill", value: name },
-      { css: 'input[name="name"]' },
+      { role: "textbox", name: "Token name" },
       { goal: "name the token" },
     );
     for (const [i, p] of permissions.entries()) {

@@ -22,10 +22,9 @@ function deps(
   const d: BootstrapDeps = {
     browser,
     sink,
-    current: () => ({
-      cloudflareApiToken: over.have?.token ?? null,
-      cloudflareAccountId: over.have?.account ?? null,
-    }),
+    current: () => ({ cloudflareAccountId: over.have?.account ?? null }),
+    stored: async (key) =>
+      key === "CLOUDFLARE_API_TOKEN" ? (over.have?.token ?? null) : (sink.values[key] ?? null),
     verifyCloudflareToken: async () => over.verify ?? true,
     ...over,
   };
@@ -73,6 +72,18 @@ describe("bootstrap workflow", () => {
     const out = await runFlow(fakeEffects().fx, bootstrapWorkflow, d, plan());
     expect(out.status).toBe("failed");
     expect(sink.values.CLOUDFLARE_API_TOKEN).toBeUndefined();
+  });
+  it("another envKey mints a second token and leaves the first alone", async () => {
+    const { d, calls, sink } = deps({ have: { token: "x", account: "y" } });
+    const out = await runFlow(
+      fakeEffects().fx,
+      bootstrapWorkflow,
+      d,
+      plan({ tokenName: "wren-workers", envKey: "WREN_WORKERS_TOKEN" }),
+    );
+    expect(out.results["api-token"]?.status).toBe("done");
+    expect(calls).toEqual(["mint wren-workers"]);
+    expect(sink.values).toEqual({ WREN_WORKERS_TOKEN: "t".repeat(40) });
   });
   it("dry run stops before minting", async () => {
     const { d, calls } = deps();

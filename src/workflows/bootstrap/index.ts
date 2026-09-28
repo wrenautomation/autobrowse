@@ -2,6 +2,8 @@
  * The credential ladder for one provider: sign in with what the store
  * has, mint what the API clients need, write it where the worker reads
  * it. After this runs, the domain workflow has its `CLOUDFLARE_*`.
+ * `envKey` mints a second token beside it (another tool's permissions)
+ * without touching the first.
  */
 import { z } from "zod";
 import type { FlowRunner } from "../../browser/flow.js";
@@ -36,6 +38,11 @@ export const bootstrapPlan = z.object({
     )
     .default(CLOUDFLARE_PERMISSIONS)
     .describe("One row per permission on the token"),
+  envKey: z
+    .string()
+    .regex(/^[A-Z][A-Z0-9_]*$/)
+    .default("CLOUDFLARE_API_TOKEN")
+    .describe("Where the token is stored; another key keeps autobrowse's own token untouched"),
   force: z
     .boolean()
     .default(false)
@@ -48,7 +55,9 @@ export interface BootstrapDeps {
   browser: FlowRunner;
   sink: SecretSink;
   /** What the worker has now, so a finished ladder is a no-op. */
-  current: () => { cloudflareApiToken: string | null; cloudflareAccountId: string | null };
+  current: () => { cloudflareAccountId: string | null };
+  /** The token stored under a key now, if any. */
+  stored: (key: string) => Promise<string | null>;
   /** The API's own verdict on a token; the page saying so is not proof. */
   verifyCloudflareToken: (token: string) => Promise<boolean>;
 }
@@ -83,7 +92,7 @@ const apiToken: Step<"api-token"> = {
   // Creates a credential; a dry run stops here.
   irreversible: true,
   async run({ fx, deps, plan }) {
-    const have = deps.current().cloudflareApiToken;
+    const have = await fx.run(`read ${plan.envKey}`, () => deps.stored(plan.envKey));
     if (
       have &&
       !plan.force &&
@@ -97,11 +106,11 @@ const apiToken: Step<"api-token"> = {
         permissions: plan.permissions,
       });
       if (!(await deps.verifyCloudflareToken(token))) return "minted a token the API rejects";
-      await deps.sink.put("CLOUDFLARE_API_TOKEN", token);
+      await deps.sink.put(plan.envKey, token);
       return "ok";
     });
     if (outcome !== "ok") throw new Error(outcome);
-    return done(`token "${plan.tokenName}" minted, verified, stored`);
+    return done(`token "${plan.tokenName}" minted, verified, stored as ${plan.envKey}`);
   },
 };
 
