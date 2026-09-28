@@ -13,7 +13,7 @@ Where run events reach people and systems, and where their replies come back as 
 
 ## Why this shape
 
-One shape for delivery and one parser for replies, so a `yes` by SMS, email or webhook is the same command. Fan-out never lets one channel's failure stop a run (`channels(list)`, `src/channels/types.ts:18-30`). `note` is a bare line to a person outside any run ("tap Yes on your phone").
+One shape for delivery and one parser for replies, so a `yes` by SMS, email or webhook is the same command. Fan-out never lets one channel's failure stop a run (`channels(list)`, `src/channels/types.ts:18-28`). `note` is a bare line to a person outside any run ("tap Yes on your phone").
 
 ## Shape
 

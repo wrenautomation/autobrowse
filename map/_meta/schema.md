@@ -16,3 +16,4 @@ Closed set of card types. When practice and this file disagree, reconcile the sa
 - Hits / Does not hit are first-order only. "Does not hit" names the obvious wrong neighbour.
 - `[[slug]]` links name another card by its file name without the cluster.
 - Generated, never hand-edited: `objects/_index.md`, `AGENTS.md`, `routing.md`. Run `_meta/rebuild.sh` after adding or changing a card or `CLAUDE.md`.
+- `pnpm lint` runs `_meta/rebuild.sh --check`: it fails on a stale generated file, a cited file that is gone, or a cited line past the end of its file. It cannot tell a line that moved; re-read a card after editing the code it cites.

@@ -31,11 +31,11 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | From | Into | How it breaks |
 |---|---|---|
 | wren `packages/core/src/content/restate.ts` and its channel packages | Restate services `sites` (`call`, `status`, `setup`), `do`, `browser` | a renamed service or handler, a changed route path or input shape |
-| wren `packages/config/src/index.ts` (`WREN_AUTOBROWSE_INSTANCE_ID`) | the box | a new instance id; `box.sh` semantics (a wake must not stop a person's box) |
+| wren `packages/config/src/index.ts` (`WREN_AUTOBROWSE_INSTANCE_ID`) | the box | a new instance id; `deploy/scripts/box.sh` semantics (a wake must not stop a person's box) |
 | wren `TokenRenewal`, credvault `syncedEnvStore` | SSM `/autobrowse/config` names (`accountEnv`) | a renamed token or account suffix |
 | `.claude/skills/autobrowse/scripts/*.sh` | `pnpm -s autobrowse explore` and the explore command set | a renamed CLI verb or command field |
 | `src/workflows/*/index.ts` (rendered) | `src/index.ts` exports (`COMPILED_LIB`) | an export removed or renamed |
 | `Dockerfile`, `deploy/compose.prod.yml`, first boot's user data | `src/app/main.ts`, env names | a moved entry file or a renamed variable |
-| GitHub repo secrets `AWS_DEPLOY_ROLE_ARN`, `ECR_REPOSITORY`, `INSTANCE_ID` | `deploy.yml` | infra recreated without updating them |
+| GitHub repo secrets `AWS_DEPLOY_ROLE_ARN`, `ECR_REPOSITORY`, `INSTANCE_ID` | `.github/workflows/deploy.yml` | infra recreated without updating them |
 | `deploy/terraform/` local state (never committed) | the box, CI role, shots bucket | a second machine has no state; read before apply |
 | `NEEDS-WILLIAM.md` (hand-kept) | mirrors `autobrowse needs` | drift when a need clears in code but not in prose |

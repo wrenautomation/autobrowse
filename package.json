@@ -41,7 +41,7 @@
   },
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || true",
-    "lint": "biome check .",
+    "lint": "biome check . && sh map/_meta/rebuild.sh --check",
     "lint:fix": "biome check --write .",
     "typecheck": "tsc --noEmit && tsc -p ui --noEmit",
     "build": "tsc",

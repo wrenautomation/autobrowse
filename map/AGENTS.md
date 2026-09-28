@@ -30,7 +30,7 @@ Nouns, verbs, and what a change hits, for an agent editing this repo. The code i
 | site | a browser profile name: `x`, `x@wren` (`Site = string`, `src/browser/flow.ts:61`) | `SiteApi`, the official-API facade (`src/sites/types.ts:142`); `SiteLogin`, the sign-in spec (`src/auth/login.ts:54`) |
 | workflow / flow / walk | engine `Workflow` = steps + gates on Restate; `BrowserFlow` = one browser leg; walk = a screens loop inside a sign-in | a compiled workflow wraps flows; none of the three is another |
 | step | engine `StepDef`; an outline step (compiler); a watched `Step` (`browser/watch`); an agent `StepRecord` | |
-| screen | `browser/screens` = a page a walk knows; `app/screen.ts` = headed or headless | |
+| screen | `browser/screens` = a page a walk knows; `src/app/screen.ts` = headed or headless | |
 | repair / fix / heal | repair = the runner retries one act through a `Repairer`; fix = a repair kept in `fixes.json`; heal = the agent rewrites a compiled step | |
 | gate | engine `GateName` on a run (purchase, password, send, choose, human); `PaymentGate` = one browser act that spends | guards (`src/engine/guards.ts`) switch engine gates off; they never touch the payment gate |
 | identity | `auth/identities` = an account with purposes; `browser/identity` = the browser's UA and geometry | |
