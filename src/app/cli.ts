@@ -312,7 +312,7 @@ program
 registerRecordCommands(program, settings, local);
 registerSiteCommands(program, local);
 registerUnsubscribe(program, local);
-registerAwsCommands(program, local);
+registerAwsCommands(program, local, settings);
 registerLangfuseCommands(program, () => envStoreFor(settings));
 registerReachCommands(program, () => envStoreFor(settings), local);
 registerShotsCommands(program, settings);

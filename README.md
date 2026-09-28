@@ -555,6 +555,16 @@ straight into the CLI's stdin: nothing prints it, no file holds it. The
 CLI then refreshes its own credentials until the console session expires.
 `src/chores/aws-login.ts`, flow `src/browser/flows/aws-cli-login.ts`.
 
+```sh
+pnpm autobrowse wrangler-login --cwd ../lander   # renew wrangler's Cloudflare OAuth token
+```
+
+`wrangler login --browser=false` prints an authorize URL and waits on
+localhost:8976. The Cloudflare session (the Google profile, since Cloudflare
+signs in via Google) opens it and clicks Authorize; wrangler keeps its own
+token. Run it on the machine the browser runs on. `--scopes` narrows the
+grant. `src/chores/wrangler-login.ts`, flow `src/browser/flows/wrangler-login.ts`.
+
 ## Use as a library
 
 Every layer is a plain function over explicit parts; only the composers
