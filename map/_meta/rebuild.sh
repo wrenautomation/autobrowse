@@ -30,6 +30,7 @@ citations() {
   for c in $(grep -rhoE '`(src|test|ui|deploy|scripts|designs|walkthrough|\.github)/[A-Za-z0-9_./-]+(:[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*)?`' --include='*.md' . | tr -d '`' | sort -u); do
     f=../${c%%:*}
     if [ ! -e "$f" ]; then echo "map: cited file missing: $c"; bad=1; continue; fi
+    if git check-ignore -q "$f"; then echo "map: cited file is gitignored (missing in CI): $c"; bad=1; continue; fi
     [ "${c#*:}" = "$c" ] && continue
     n=$(wc -l < "$f")
     for r in $(echo "${c#*:}" | tr ',-' '  '); do
