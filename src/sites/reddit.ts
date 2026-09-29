@@ -1,0 +1,142 @@
+/**
+ * Reddit under its Data API's shapes (oauth.reddit.com): the account, its
+ * submissions, a thing by id, a post's comments, a subreddit's rules, a
+ * submit and a comment. Reddit refused Wren an API client on 2026-09-29, so
+ * every route is a browser leg on old.reddit.com (flows in
+ * `browser/flows/reddit.ts`); an `api` leg joins a route if a client is ever
+ * granted. Reddit bot-checks a datacenter IP, so these legs run on a machine
+ * with a home IP (the Mac's desk worker, `src/app/desk.ts`), paced and
+ * capped per account like a person posting.
+ */
+import { z } from "zod";
+import { route, type SiteApi } from "./types.js";
+
+export const REDDIT_ORIGIN = "https://oauth.reddit.com";
+
+const limit = z.coerce.number().int().min(1).max(100).default(25);
+const query = (o: Record<string, unknown>) =>
+  Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Record<
+    string,
+    string | number
+  >;
+
+const submitted = z.object({
+  username: z.string().regex(/^[A-Za-z0-9_-]{3,20}$/, "a Reddit username"),
+  limit,
+  sort: z.enum(["new", "hot", "top", "controversial"]).default("new"),
+  after: z.string().optional(),
+});
+const info = z.object({ id: z.string().regex(/^(t[1-6]_[a-z0-9]+)(,t[1-6]_[a-z0-9]+)*$/) });
+const comments = z.object({
+  article: z.string().regex(/^[a-z0-9]{1,12}$/, "a post id without t3_"),
+  limit,
+  depth: z.coerce.number().int().min(1).max(10).default(1),
+  sort: z.enum(["confidence", "top", "new", "controversial", "old", "qa"]).default("new"),
+});
+/** A form value ("true"/"false") or a boolean; `z.coerce` would read "false" as true. */
+const flag = z.preprocess((v) => (v === "true" ? true : v === "false" ? false : v), z.boolean());
+const rules = z.object({ subreddit: z.string().regex(/^[A-Za-z0-9_]{2,21}$/) });
+const submit = z
+  .object({
+    api_type: z.literal("json").default("json"),
+    /** A subreddit without r/, or `u_<name>` for the account's own profile. */
+    sr: z.string().regex(/^(r\/)?[A-Za-z0-9_]{2,21}$|^u[_/][A-Za-z0-9_-]{3,20}$/),
+    title: z.string().min(1).max(300),
+    kind: z.enum(["self", "link"]),
+    text: z.string().max(40_000).optional(),
+    url: z.string().url().optional(),
+    flair_id: z.string().optional(),
+    resubmit: flag.optional(),
+    sendreplies: flag.default(true),
+  })
+  .refine((s) => s.kind !== "link" || s.url, "a link post needs url");
+const comment = z.object({
+  api_type: z.literal("json").default("json"),
+  thing_id: z.string().regex(/^t[13]_[a-z0-9]+$/, "t1_ (a comment) or t3_ (a post)"),
+  text: z.string().min(1).max(10_000),
+});
+
+const read = "reddit/read";
+
+export const reddit: SiteApi = {
+  site: "reddit",
+  origin: REDDIT_ORIGIN,
+  // No client: every route is a browser leg, signed in as the account's own profile.
+  auth: { open: true },
+  caps: { reads: 300, posts: 3, comments: 20 },
+  pace: { gapMs: 20_000, jitterMs: 40_000 },
+  routes: [
+    route({
+      method: "GET",
+      path: "/api/v1/me",
+      request: z.object({}),
+      meter: () => ({ reads: 1 }),
+      browser: { flow: read, input: () => ({ path: "/api/me" }) },
+      summary: "The signed-in account: name, karma, created, verified email",
+    }),
+    route({
+      method: "GET",
+      path: "/user/{username}/submitted",
+      request: submitted,
+      meter: () => ({ reads: 1 }),
+      browser: {
+        flow: read,
+        input: ({ username, ...q }) => ({ path: `/user/${username}/submitted`, query: query(q) }),
+      },
+      summary: "A user's posts, newest first by default (a Listing of t3)",
+    }),
+    route({
+      method: "GET",
+      path: "/api/info",
+      request: info,
+      meter: () => ({ reads: 1 }),
+      browser: { flow: read, input: ({ id }) => ({ path: "/api/info", query: { id } }) },
+      summary: "Things by fullname (`t3_abc,t1_def`): score, comment count, permalink",
+    }),
+    route({
+      method: "GET",
+      path: "/comments/{article}",
+      request: comments,
+      meter: () => ({ reads: 1 }),
+      browser: {
+        flow: read,
+        input: ({ article, ...q }) => ({ path: `/comments/${article}`, query: query(q) }),
+      },
+      summary: "A post and its comments: [Listing of the post, Listing of comments]",
+    }),
+    route({
+      method: "GET",
+      path: "/r/{subreddit}/about/rules",
+      request: rules,
+      meter: () => ({ reads: 1 }),
+      browser: {
+        flow: read,
+        input: ({ subreddit }) => ({ path: `/r/${subreddit}/about/rules` }),
+      },
+      summary: "A subreddit's rules: read before posting there",
+    }),
+    route({
+      method: "POST",
+      path: "/api/submit",
+      request: submit,
+      irreversible: true,
+      meter: () => ({ posts: 1 }),
+      browser: {
+        flow: "reddit/submit",
+        input: (s) => ({ ...s, sr: s.sr.replace(/^r\//, "") }),
+      },
+      summary:
+        "! A text or link post into a subreddit (or u_<name>, the profile); answers {json:{errors,data:{id,name,url}}}",
+    }),
+    route({
+      method: "POST",
+      path: "/api/comment",
+      request: comment,
+      irreversible: true,
+      meter: () => ({ comments: 1 }),
+      browser: { flow: "reddit/comment" },
+      summary: "! A comment on a post (t3_) or a reply to a comment (t1_)",
+    }),
+  ],
+  setup: [],
+};

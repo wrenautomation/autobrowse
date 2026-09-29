@@ -48,6 +48,7 @@
     "build:check": "tsc && node scripts/build-check.mjs",
     "test": "vitest run",
     "worker": "tsx src/app/main.ts",
+    "desk": "tsx src/app/desk.ts",
     "autobrowse": "tsx src/app/cli.ts",
     "record": "tsx src/app/cli-record.ts",
     "gates": "pnpm lint && pnpm typecheck && pnpm test",

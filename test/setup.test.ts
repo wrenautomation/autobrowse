@@ -66,6 +66,7 @@ describe("setup", () => {
       "microsoft",
       "npm",
       "github",
+      "reddit",
     ]);
     expect((await store.get("cloudflare"))?.via).toBe("google");
     expect(asked.filter((q) => q.startsWith("hidden")).length).toBe(2);
@@ -88,10 +89,11 @@ describe("setup", () => {
       microsoft: { username: "w@outlook.com", password: "m" },
       npm: { username: "wrenautomation", password: "n" },
       github: { username: "wren", password: "g" },
+      reddit: { username: "WrenAutomation", password: "r" },
     });
     const { io, asked, said } = scripted([]);
     await runSetup(io, store, SITE_LOGINS);
     expect(asked).toEqual([]);
-    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(16);
+    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(17);
   });
 });

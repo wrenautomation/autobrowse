@@ -33,6 +33,15 @@ export {
 } from "./npm-granular-token.js";
 export { googleOauthConsent, type OauthConsentInput, redirectOf } from "./oauth-consent.js";
 export { outlookOauthConsent } from "./outlook-oauth-consent.js";
+export {
+  type CommentInput as RedditCommentInput,
+  OLD as REDDIT_OLD,
+  type ReadInput as RedditReadInput,
+  redditComment,
+  redditRead,
+  redditSubmit,
+  type SubmitInput as RedditSubmitInput,
+} from "./reddit.js";
 export { type ResetProbeInput, resetMailProbe } from "./reset-mail-probe.js";
 export { tiktokOauthConsent } from "./tiktok-oauth-consent.js";
 export { xOauthConsent } from "./x-oauth-consent.js";

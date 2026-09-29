@@ -34,6 +34,7 @@ import { npmGranularToken } from "../browser/flows/npm-granular-token.js";
 import { npmTrustedPublisher } from "../browser/flows/npm-trusted-publisher.js";
 import { googleOauthConsent } from "../browser/flows/oauth-consent.js";
 import { outlookOauthConsent } from "../browser/flows/outlook-oauth-consent.js";
+import { redditComment, redditRead, redditSubmit } from "../browser/flows/reddit.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { tiktokOauthConsent } from "../browser/flows/tiktok-oauth-consent.js";
 import { xOauthConsent } from "../browser/flows/x-oauth-consent.js";
@@ -96,6 +97,9 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     xPosts,
     xProfile,
     xSearch,
+    redditRead,
+    redditSubmit,
+    redditComment,
     outlookOauthConsent,
     youtubeCommunityPost,
     fingerprint,

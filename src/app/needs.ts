@@ -340,6 +340,26 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
       check: () => holds(ctx, accountEnv(youtubeOAuth.refreshToken, WREN_ADDRESS)),
     },
     {
+      id: "google-app-published",
+      kind: "consent",
+      what: "The Google OAuth app published (Cloud project wren-509223, on your personal account): in Testing, every YouTube and Gmail token dies after 7 days",
+      unlocks: "YouTube uploads that keep working past a week",
+      how: [
+        "console.cloud.google.com → project wren-509223 → Google Auth Platform → Audience → Publish app → Confirm",
+        "then: autobrowse site setup youtube consent --account william@wrenautomation.com; autobrowse needs done google-app-published",
+      ],
+    },
+    {
+      id: "desk-disk-access",
+      kind: "mac",
+      what: "Full Disk Access for node, so launchd can keep the desk worker up (the repo is under ~/Documents)",
+      unlocks: "Reddit posts and reads from wren without a terminal open",
+      how: [
+        "System Settings → Privacy & Security → Full Disk Access → + → Cmd-Shift-G → the node path `deploy/desk/install.sh` prints → on",
+        "then: deploy/desk/install.sh; autobrowse needs done desk-disk-access",
+      ],
+    },
+    {
       id: "linkedin-page",
       kind: "decision",
       what: "Which LinkedIn Page the developer app attaches to (or: make one for Wren Automation)",

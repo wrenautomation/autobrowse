@@ -183,6 +183,7 @@ describe("instagram and tiktok consents and OAuth shapes", () => {
       "langfuse",
       "meta",
       "x",
+      "reddit",
       "npm",
       "calcom",
       "web",

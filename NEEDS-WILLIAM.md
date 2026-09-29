@@ -10,6 +10,15 @@ Live list: `pnpm autobrowse needs`. Rows clear themselves. Dated 2026-09-27.
   william@wrenautomation.com, name "Wren Automation", handle wrenautomation.
   Then tell me. I do the developer app and consent.
 
+- **Publish the Google app.** YouTube's token died today: the app is in
+  Testing, so tokens last 7 days. console.cloud.google.com → project
+  wren-509223 (your personal account) → Google Auth Platform → Audience →
+  Publish app → Confirm. I re-consented, so YouTube works until 10-06.
+- **Full Disk Access for node.** Lets the Mac's desk worker (Reddit) run
+  without a terminal. System Settings → Privacy & Security → Full Disk
+  Access → + → Cmd-Shift-G →
+  `/opt/homebrew/Cellar/node/25.2.1/bin/node` → on. Then tell me.
+
 - **Your Google password** (jinwilliam.jin@gmail.com): Google rejected the
   stored one on 09-27 (one try, a fresh profile). Re-paste it when ready:
   `autobrowse creds paste google`.

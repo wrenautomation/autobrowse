@@ -27,7 +27,7 @@ One shape for everyone (CLI, HTTP, Restate `sites`, wren): the caller never know
 5. API leg: `accessTokens` mints from the refresh token or reads the key by `accountEnv`, a miss reloads the env store once — `src/sites/oauth.ts:74-129`, `src/sites/wire.ts:53-66`; then `http(...)` with `safeUrl` (never a key in a URL) — `src/clients/http.ts:52-60`
 6. Browser leg: `{ flow }` → `flow(name, input)` on the worker's runner, `{ workflow }` → `compiled.run(name, plan)` (gates approved by the caller) — `src/sites/types.ts:31-43`, `src/workflows/proof.ts:49`
 7. `setup(site, step, …)` mints a token the same way and keeps it through the sink under the account's name — `src/sites/facade.ts:132`, `src/sites/oauth.ts:197`
-8. Restate face: `sites/call`, `sites/status`, `sites/setup`, `sites/renew` — `src/sites/service.ts:55-95`
+8. Restate face: `sites/call`, `sites/status`, `sites/setup`, `sites/renew` — `src/sites/service.ts:58-100`; the same handlers as `desk/*` from the Mac (`src/app/desk.ts`) for legs a site refuses from the box's IP (Reddit)
 
 ## If you change this
 

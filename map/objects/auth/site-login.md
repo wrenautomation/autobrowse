@@ -9,7 +9,7 @@ entity: src/auth/login.ts
 
 # Site login
 
-How one site is signed into and where its password may be typed: `SiteLogin` in `src/auth/login.ts`; the list is `SITE_LOGINS` in `src/auth/sites.ts:764`.
+How one site is signed into and where its password may be typed: `SiteLogin` in `src/auth/login.ts`; the list is `SITE_LOGINS` in `src/auth/sites.ts:798`.
 
 ## Why this shape
 

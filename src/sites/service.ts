@@ -13,6 +13,11 @@ import type { SiteFacade } from "./facade.js";
 import { SiteError } from "./types.js";
 
 export const SITES_SERVICE = "sites";
+/**
+ * The same facade served from the Mac (`src/app/desk.ts`): legs a site
+ * refuses from the box's datacenter IP (Reddit) run on a home IP.
+ */
+export const DESK_SERVICE = "desk";
 
 const READ_RETRY = {
   maxRetryAttempts: 300,
@@ -49,15 +54,16 @@ async function terminalOnSiteError<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-export function sitesService(facade: SiteFacade) {
+/** `name`: `sites` on the box, `desk` on the Mac; one shape, two machines. */
+export function sitesService(facade: SiteFacade, name: string = SITES_SERVICE) {
   return restate.service({
-    name: SITES_SERVICE,
+    name,
     handlers: {
       status: async (ctx: restate.Context, raw: unknown) => {
-        const { site: name } = parse(site, raw);
+        const { site: which } = parse(site, raw);
         return ctx.run(
-          `sites status ${name}`,
-          () => terminalOnSiteError(() => facade.status(name)),
+          `sites status ${which}`,
+          () => terminalOnSiteError(() => facade.status(which)),
           READ_RETRY,
         );
       },

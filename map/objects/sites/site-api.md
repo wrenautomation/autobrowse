@@ -9,15 +9,15 @@ entity: src/sites/types.ts
 
 # Site API
 
-A site served under its official API's shape, with the steps that make its keys: `SiteApi` in `src/sites/types.ts`; the list is `SITES` in `src/sites/index.ts:42` (linkedin, youtube, instagram, tiktok, outlook, gmail, langfuse, meta, x, npm, calcom, web).
+A site served under its official API's shape, with the steps that make its keys: `SiteApi` in `src/sites/types.ts`; the list is `SITES` in `src/sites/index.ts:46` (linkedin, youtube, instagram, tiktok, outlook, gmail, langfuse, meta, x, reddit, npm, calcom, web).
 
 ## Why this shape
 
-Callers speak the official REST shape. A route has an `api` leg and, only where the API lacks the call, a `browser` leg (a hand-written flow or a compiled workflow). A route marked `prefer: "browser"` answers from its browser leg even with a token: X bills every API read, so its profile, posts, one-post and search reads run on the signed-in page (`src/browser/flows/x-read.ts`, proven 2026-09-29 as x@wren) in v2's shapes, `since_id` as the cursor. Setup steps make tokens the same way (`src/sites/types.ts:45-100`). `auth: {open: true}` is a keyless site (`web`: search and read, `src/sites/web.ts`), every api leg runs.
+Callers speak the official REST shape. A route has an `api` leg and, only where the API lacks the call, a `browser` leg (a hand-written flow or a compiled workflow). A route marked `prefer: "browser"` answers from its browser leg even with a token: X bills every API read, so its profile, posts, one-post and search reads run on the signed-in page (`src/browser/flows/x-read.ts`, proven 2026-09-29 as x@wren) in v2's shapes, `since_id` as the cursor. Setup steps make tokens the same way (`src/sites/types.ts:45-100`). `auth: {open: true}` is a keyless site (`web`: search and read, `src/sites/web.ts`), every api leg runs. Reddit refused Wren an API client (2026-09-29), so `src/sites/reddit.ts` is all browser legs in the Data API's shapes, on old.reddit.com (`src/browser/flows/reddit.ts`); they need a home IP, so wren calls them on the Mac's `desk` service ([[app]]).
 
 ## Shape
 
-- `SiteApi { site, origin, auth: {token}|{oauth}|{open}, routes, setup, purpose?, probe?, caps?, accountCaps?, pace? }` — `src/sites/types.ts:154-183`; `caps` = most a route's `meter` may use per account per day (LinkedIn: profile 80, search 25, company 40; X: profile 150, posts 100, search 50); `accountCaps` = one credential's own caps over those (LinkedIn's `linkedin`, William's own profile: profile 40, search 15); `pace` = gap between one account's browser calls (X 5s + up to 10s, LinkedIn 10s + up to 20s)
+- `SiteApi { site, origin, auth: {token}|{oauth}|{open}, routes, setup, purpose?, probe?, caps?, accountCaps?, pace? }` — `src/sites/types.ts:154-183`; `caps` = most a route's `meter` may use per account per day (LinkedIn: profile 80, search 25, company 40; X: profile 150, posts 100, search 50); `accountCaps` = one credential's own caps over those (LinkedIn's `linkedin`, William's own profile: profile 40, search 15); `pace` = gap between one account's browser calls (X 5s + up to 10s, LinkedIn 10s + up to 20s, Reddit 20s + up to 40s; Reddit caps posts 3, comments 20 a day, attempts included)
 - `SiteRoute { method, path ({param}), request (zod), api?, browser?, irreversible?, spends?, meter?, prefer?, summary }` — `:45-75`; `ApiLeg { token, http, env }` — `:19-24`; `Leg = {flow}|{workflow}`, `BrowserLeg` — `:31-43`
 - `SetupStep { name, makes, needs?, how: Leg+input | {oauth}, summary, purpose? }` — `:85-100`; `OAuthSpec` — `:102-152`; `SiteError { status, retryAfter? }` — `:180-190`
 - Per-site files: `src/sites/<site>.ts`; `route()` erases types — `:193`

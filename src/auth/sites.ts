@@ -761,6 +761,40 @@ const npm: SiteLogin = {
   }),
 };
 
+/**
+ * Reddit: the account's own login (the handle, then the password). Mapped
+ * 2026-09-29 in headless explore: /login/ is a "Log In" dialog, textbox
+ * "Email or username", textbox "Password", button "Log In" (disabled until
+ * both are filled). A new device may be asked for an emailed code: unverified.
+ * The front page is public, so `home` is settings: signed out, it is a wall.
+ * Headless, Reddit's bot check refuses the right password as "Invalid
+ * username or password": sign in with `autobrowse login reddit@wren --headed`
+ * (2026-09-29, first try); the session then serves headless legs.
+ */
+const REDDIT_LOGIN_URL = /reddit\.com\/(login|account\/login)/;
+const reddit: SiteLogin = {
+  site: "reddit",
+  home: "https://www.reddit.com/settings/",
+  ask: "Your Reddit login (username, password)",
+  loggedIn: async (fp) =>
+    !REDDIT_LOGIN_URL.test(fp.url()) && !(await fp.has({ role: "link", name: "/^log in$/i" })),
+  signIn: formLogin("reddit", {
+    start: "https://www.reddit.com/login/",
+    username: { role: "textbox", name: "Email or username" },
+    password: { role: "textbox", name: "Password" },
+    submit: { role: "button", name: "/^log in$/i" },
+    code: {
+      kind: "email",
+      asks: /verification code|check your (email|inbox)|enter the code/i,
+      field: { role: "textbox", name: "/code/i" },
+      submit: { role: "button", name: "/continue|verify|log in/i" },
+      hint: "reddit",
+    },
+    rejected: /incorrect username or password|invalid username or password/i,
+    success: /reddit\.com\/(?!login|account\/login)/,
+  }),
+};
+
 export const SITE_LOGINS: readonly SiteLogin[] = [
   cloudflare,
   google,
@@ -780,4 +814,5 @@ export const SITE_LOGINS: readonly SiteLogin[] = [
   outlook,
   npm,
   github,
+  reddit,
 ];

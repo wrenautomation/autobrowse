@@ -18,7 +18,8 @@ export { meta, metaOAuth } from "./meta.js";
 export { createRegistryUser, NPM_TOKEN, npm } from "./npm.js";
 export { accessTokens, accountEnv, runConsent } from "./oauth.js";
 export { outlook } from "./outlook.js";
-export { SITES_SERVICE, type SitesService, sitesService } from "./service.js";
+export { REDDIT_ORIGIN, reddit } from "./reddit.js";
+export { DESK_SERVICE, SITES_SERVICE, type SitesService, sitesService } from "./service.js";
 export { tiktok } from "./tiktok.js";
 export * from "./types.js";
 export { web } from "./web.js";
@@ -34,6 +35,7 @@ import { linkedin } from "./linkedin.js";
 import { meta } from "./meta.js";
 import { npm } from "./npm.js";
 import { outlook } from "./outlook.js";
+import { reddit } from "./reddit.js";
 import { tiktok } from "./tiktok.js";
 import type { SiteApi } from "./types.js";
 import { web } from "./web.js";
@@ -51,6 +53,7 @@ export const SITES: readonly SiteApi[] = [
   langfuse,
   meta,
   x,
+  reddit,
   npm,
   calcom,
   web,

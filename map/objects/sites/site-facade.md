@@ -21,7 +21,7 @@ One place picks the account, mints the bearer, matches the path, books the accou
 - `SiteFacadeDeps { http, env, sink, runner, flow, compiled?, oauthPort?, profileFor?, providerOf?, accountFor?, approve?, caps?, sleep?, accountOf? }` — `:33-82`; `matchPath` — `:187`; `checkSite` — `:157`
 - `SiteParts` (what `sitesFor` needs, including `reload` for tokens minted elsewhere) — `src/sites/wire.ts:29-66`; `usernameOf` — `:134-142`
 - `DailyCaps { take, slot, today }`, `Pace { gapMs, jitterMs?, maxWaitMs? }`, `fileCaps` (`CAPS_FILE`, `/data/caps.json` on the box), `memoryCaps` — `src/sites/caps.ts:26-49`
-- Restate: `SITES_SERVICE = "sites"`, `sitesService(facade)` — `src/sites/service.ts:15-95`
+- Restate: `SITES_SERVICE = "sites"`, `DESK_SERVICE = "desk"` (the Mac), `sitesService(facade, name)` — `src/sites/service.ts:15-101`
 - Paths are interpolated by the caller; a template path plus a param in the input is HTTP 400
 
 ## Connected to

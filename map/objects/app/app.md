@@ -21,6 +21,7 @@ Deps are made in one file so the CLI, the worker and tests share the same wiring
 - Factories: `browserOptions` `:242`, `llmFor` `:322`, `credentialsFor` `:410`, `codesFor` `:536`, `loginFor` `:579`, `envStoreFor` `:815`, `approverFor` `:906`, `channelsFor` `:975`, wallet and profiles `:669-698`
 - `src/app/main.ts`: `buildApp` → Restate endpoint (`planEndpoint`, `registerDeployment` `src/app/register.ts:11`) → `startUiServer` (`src/ui/server.ts:34`) → `scheduleIdleStop` (`src/app/idle.ts:70`) and `selfStopper` (the box stops its own instance, `src/app/box.ts:67`)
 - Restate services registered: run objects (hand-written), `Compiled`, `Runs`, `browser`, `sites`, `do`
+- `src/app/desk.ts`: the Mac's lean worker, only `sitesService(app.sites, "desk")` (`src/sites/service.ts:58`) on its own tunnel name in the box's Restate environment; no UI, idle stop or evaluator. launchd keeps it up (`deploy/desk/install.sh`); the agent needs node to have Full Disk Access (the repo is under ~/Documents)
 - Library surface for other code: `src/index.ts` and the package `exports` (`.`, `./sites`, `./auth`, `./do`, `./agent`, `./flows`, `./llm`); bin `dist/app/cli.js`
 
 ## Connected to
@@ -39,6 +40,7 @@ Deps are made in one file so the CLI, the worker and tests share the same wiring
 | Surface | Role |
 |---|---|
 | worker (`tsx src/app/main.ts`, `deploy/worker-entry.sh`) | builds once |
+| desk (`pnpm desk`, launchd on the Mac) | builds once, serves `desk` |
 | CLI | builds what a verb needs |
 
 ## See
