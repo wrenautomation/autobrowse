@@ -70,6 +70,10 @@ describe("browser service", () => {
       "outlook/oauth-consent",
       "tiktok/oauth-consent",
       "x/oauth-consent",
+      "x/post",
+      "x/posts",
+      "x/profile",
+      "x/search",
     ]);
     const svc = browserService({ runner: { run: async () => "ok" as never } });
     expect(svc.name).toBe("browser");

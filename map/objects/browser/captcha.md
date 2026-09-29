@@ -13,12 +13,12 @@ A wall the runner solves before it goes to a person: `findCaptcha` / `solveCaptc
 
 ## Why this shape
 
-Checkboxes are solved by the hands alone; pictures need `Eyes` (a model that sees, cropped in memory only). `attempts` whole solves, then `NeedsHuman` (`RunnerOptions.captcha`, `src/browser/flow.ts:226-231`).
+Checkboxes are solved by the hands alone; pictures need `Eyes` (a model that sees, cropped in memory only). `attempts` whole solves, then `NeedsHuman` (`RunnerOptions.captcha`, `src/browser/flow.ts:228-233`).
 
 ## Shape
 
 - `Captcha { kind: checkbox|grid|text|slider, vendor: recaptcha|hcaptcha|turnstile|generic … }` — `src/browser/captcha/index.ts:23-31`; `Eyes`, `CaptchaOutcome`, `SolveOptions` — `:32-45`
-- Wired by `captchaFor` — `src/app/services.ts:304`
+- Wired by `captchaFor` — `src/app/services.ts:306`
 
 ## Connected to
 
@@ -27,7 +27,7 @@ Checkboxes are solved by the hands alone; pictures need `Eyes` (a model that see
 
 ## If you change this
 
-- **Hits:** `src/browser/flow.ts`, `src/explore/server.ts`, `src/app/services.ts:304`.
+- **Hits:** `src/browser/flow.ts`, `src/explore/server.ts`, `src/app/services.ts:306`.
 - **Does not hit:** sign-ins (a captcha is answered before the wall hook), the engine.
 
 ## Surfaces

@@ -27,7 +27,7 @@ Evidence, not aspiration: a proposal carries `occurrences` and `covered`, so wha
 
 ## If you change this
 
-- **Hits:** `src/agent/builder.ts`, UI `/api/agent/proposals` (`src/ui/api.ts:556`), `src/app/cli-do.ts` (if it lists proposals).
+- **Hits:** `src/agent/builder.ts`, UI `/api/agent/proposals` (`src/ui/api.ts:565`), `src/app/cli-do.ts` (if it lists proposals).
 - **Does not hit:** heal (works from one failure, not the set).
 
 ## Surfaces

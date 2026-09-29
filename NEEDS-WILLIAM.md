@@ -19,3 +19,9 @@ Live list: `pnpm autobrowse needs`. Rows clear themselves. Dated 2026-09-27.
 Optional: `autobrowse creds paste google@will` and a Gmail consent for
 will@williamjin.dev, if autobrowse should read that inbox.
 
+
+Optional, only if X or LinkedIn reads run on the box: a static ISP proxy
+(~$3-5/mo per IP; your spend). The box has a datacenter IP these sites
+flag; the Mac's home IP is fine. Then copy its URL and run
+`autobrowse env set BROWSER_PROXY --clipboard`, plus
+`echo x,linkedin | autobrowse env set BROWSER_PROXY_SITES`.

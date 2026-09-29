@@ -13,11 +13,11 @@ The Restate service `browser` that runs one hand-written flow as a durable step:
 
 ## Why this shape
 
-A flow under `ctx.run` retries when the browser dies, but `NeedsHuman` and `FlowFailed` become terminal errors with codes 460 and 461 so the original meaning survives the journal (`src/engine/browser-service.ts:41-42,98-118`).
+A flow under `ctx.run` retries when the browser dies, but `NeedsHuman` and `FlowFailed` become terminal errors with codes 460 and 461 so the original meaning survives the journal (`src/engine/browser-service.ts:42-43,103-123`).
 
 ## Shape
 
-- `BROWSER_SERVICE = "browser"`; `flow({ name, input })` over `BROWSER_FLOWS` plus a catalog — `src/engine/browser-service.ts:41-59,91-152`
+- `BROWSER_SERVICE = "browser"`; `flow({ name, input })` over `BROWSER_FLOWS` plus a catalog — `src/engine/browser-service.ts:42-60,96-157`
 - Retry policy: same as the run object — `:44-49`
 - Irreversible acts done on an earlier try are not redone: `DoneActs` keyed by durable call (`src/browser/attempt.ts:31-45`)
 

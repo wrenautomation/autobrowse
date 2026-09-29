@@ -57,7 +57,16 @@ export interface ApiDeps extends Backend {
 
 /** A site error keeps its status (404 route, 400 request, 501 no leg, 409 blocked); the site's own HTTP error keeps its status too. */
 function siteError(c: Context, err: unknown) {
-  if (err instanceof SiteError) return c.json({ error: err.message }, err.status as 400);
+  if (err instanceof SiteError) {
+    if (err.retryAfter !== undefined) c.header("Retry-After", String(err.retryAfter));
+    return c.json(
+      {
+        error: err.message,
+        ...(err.retryAfter !== undefined ? { retryAfter: err.retryAfter } : {}),
+      },
+      err.status as 400,
+    );
+  }
   if (err instanceof HttpError) return c.json({ error: err.message }, (err.status || 502) as 502);
   throw err;
 }

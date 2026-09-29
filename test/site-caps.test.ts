@@ -1,6 +1,7 @@
 import type { Credential, CredentialStore } from "credvault";
 import { describe, expect, it } from "vitest";
 import { linkedinCompanyJobs } from "../src/browser/flows/linkedin-reach.js";
+import { xProfile, xSearch } from "../src/browser/flows/x-read.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import { memoryCaps } from "../src/sites/caps.js";
@@ -58,7 +59,8 @@ describe("a named account", () => {
       return { companyId: "1", jobs: [] };
     });
     const caps = memoryCaps(() => noon);
-    const sites = siteFacade([linkedin], {
+    // Unpaced, so forty calls at one frozen instant all get a slot.
+    const sites = siteFacade([{ ...linkedin, pace: { gapMs: 0 } }], {
       http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
       env: () => undefined,
       sink: memorySink(),
@@ -97,24 +99,88 @@ describe("web and x reads", () => {
     await expect(sites.call("web", "GET", "/search", {})).rejects.toMatchObject({ status: 400 });
   });
 
-  it("x looks a user up by username", async () => {
-    const api = fakeFetch(({ url }) => {
-      expect(url.pathname).toBe("/2/users/by/username/wren_ai");
-      expect(url.searchParams.get("user.fields")).toContain("public_metrics");
-      return { body: { data: { id: "9", username: "wren_ai" } } };
+  it("x reads go to the signed-in page even with a token, so they never pay", async () => {
+    const api = fakeFetch(() => {
+      throw new Error("the API was called");
     });
+    const browser = fakeBrowser([]);
+    browser.on(xProfile, async ({ username }) => ({
+      data: {
+        id: "9",
+        username,
+        name: "Wren",
+        public_metrics: { followers_count: 1, following_count: 2, tweet_count: 3 },
+      },
+    }));
     const sites = siteFacade([x], {
       http: httpClient({ fetch: api.fetch }),
       env: (n) => (n === "X_ACCESS_TOKEN" ? "tok" : undefined),
       sink: memorySink(),
-      runner: fakeBrowser([]),
-      flow: () => null,
+      runner: browser,
+      flow: (n) => (n === "x/profile" ? (xProfile as never) : null),
     });
-    expect(await sites.call("x", "GET", "/2/users/by/username/wren_ai", {})).toEqual({
+    const row = (await sites.status("x")).routes.find((r) => r.path.includes("by/username"));
+    expect(row?.via).toBe("browser");
+    expect(await sites.call("x", "GET", "/2/users/by/username/wren_ai", {})).toMatchObject({
       data: { id: "9", username: "wren_ai" },
     });
+    expect(api.calls).toHaveLength(0);
     await expect(
       sites.call("x", "GET", "/2/users/by/username/not a name", {}),
     ).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe("pace", () => {
+  it("books one slot per account a gap plus jitter apart, and refuses past the longest wait", () => {
+    let t = noon;
+    const caps = memoryCaps(
+      () => t,
+      () => 0.5,
+    );
+    const pace = { gapMs: 5_000, jitterMs: 10_000, maxWaitMs: 20_000 };
+    expect(caps.slot("x", "A@x.com", pace)).toEqual({ ok: true, waitMs: 0 });
+    // Next slot is 5s + half of 10s after the first.
+    expect(caps.slot("x", "a@x.com", pace)).toEqual({ ok: true, waitMs: 10_000 });
+    expect(caps.slot("x", "a@x.com", pace)).toEqual({ ok: true, waitMs: 20_000 });
+    expect(caps.slot("x", "a@x.com", pace)).toEqual({ ok: false, waitMs: 30_000, retryAfter: 30 });
+    // Another account, and the same account on another site, have their own slots.
+    expect(caps.slot("x", "b@x.com", pace).waitMs).toBe(0);
+    expect(caps.slot("linkedin", "a@x.com", pace).waitMs).toBe(0);
+    // A booked slot outlives the day turning.
+    t = Date.UTC(2026, 8, 29, 23, 59, 59);
+    const late = caps.slot("x", "c@x.com", pace);
+    expect(late.waitMs).toBe(0);
+    t += 1_000;
+    expect(caps.slot("x", "c@x.com", pace)).toEqual({ ok: true, waitMs: 9_000 });
+  });
+
+  it("the facade waits for the slot before the browser runs, and 429s a long queue", async () => {
+    const order: string[] = [];
+    const browser = fakeBrowser([]);
+    browser.on(xSearch, async () => {
+      order.push("run");
+      return { data: [], meta: { result_count: 0 } };
+    });
+    const sites = siteFacade([{ ...x, pace: { gapMs: 60_000, maxWaitMs: 90_000 } }], {
+      http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+      env: () => undefined,
+      sink: memorySink(),
+      runner: browser,
+      flow: (n) => (n === "x/search" ? (xSearch as never) : null),
+      caps: memoryCaps(() => noon),
+      sleep: async (ms) => {
+        order.push(`sleep ${ms}`);
+      },
+    });
+    const search = () => sites.call("x", "GET", "/2/tweets/search/recent", { query: "wren" });
+    await search();
+    await search();
+    expect(order).toEqual(["run", "sleep 60000", "run"]);
+    // The next slot is two minutes out: past the longest wait, so a 429 and nothing runs.
+    const err = await search().catch((e: unknown) => e);
+    expect(err).toMatchObject({ status: 429, retryAfter: 120 });
+    expect(order).toHaveLength(3);
+    expect(String((err as Error).message)).toMatch(/retry after \d+s/);
   });
 });

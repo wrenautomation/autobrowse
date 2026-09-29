@@ -25,7 +25,7 @@ Deterministic first, model last: the model chooses among named abilities and nev
 3. `dryRun` → the pick and why, nothing runs — `src/do/doer.ts:249-262`
 4. By kind: `callSite` → [[site-call]]; `runWorkflow` → `runCompiled` with gates approved; `runFlow`; `runTool` — `src/do/doer.ts:59-84`
 5. No ability, or not ready: `explore` starts an agent session on the site, waits, `save` + `compile` — `src/do/doer.ts:163-222`
-6. Restate face `do` for orchestrators; HTTP `/api/do`; CLI `autobrowse do <goal>` — `src/do/service.ts:12`, `src/ui/api.ts:304-325`, `src/app/cli-do.ts:12`
+6. Restate face `do` for orchestrators; HTTP `/api/do`; CLI `autobrowse do <goal>` — `src/do/service.ts:12`, `src/ui/api.ts:313-334`, `src/app/cli-do.ts:12`
 
 ## If you change this
 

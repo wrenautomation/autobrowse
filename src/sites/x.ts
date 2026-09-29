@@ -3,9 +3,10 @@
  * its timeline, a post's metrics, and media upload (an image in one
  * request; a video in chunks with a processing wait). OAuth 2.0 with PKCE
  * and a refresh token (`offline.access`); the token endpoint takes the
- * client as HTTP Basic. Reads beyond the account's own posts are paid
- * tiers on X's side. Written from the docs 2026-09-22; unproven until a
- * developer app and an account exist.
+ * client as HTTP Basic. X bills every API read, so the read routes answer
+ * from the signed-in page (`prefer: "browser"`, flows in x-read.ts), capped
+ * per day and paced per account; writes keep the API. Written from the docs
+ * 2026-09-22; browser reads proven 2026-09-29 as x@wren.
  */
 import { basename, extname } from "node:path";
 import { z } from "zod";
@@ -33,9 +34,12 @@ const post = z.object({
 });
 const one = z.object({ id });
 const timeline = z.object({
-  id,
+  /** A numeric user id; the browser leg also takes a handle. */
+  id: z.string().regex(/^([0-9]+|[A-Za-z0-9_]{1,15})$/, "a numeric X id or a handle"),
   max_results: z.coerce.number().int().min(5).max(100).default(10),
   pagination_token: z.string().optional(),
+  /** Only posts newer than this one: the cursor a caller keeps. */
+  since_id: id.optional(),
   "tweet.fields": z.string().default("id,text,created_at,public_metrics"),
   exclude: z.string().optional(),
 });
@@ -54,6 +58,7 @@ const search = z.object({
   max_results: z.coerce.number().int().min(10).max(100).default(10),
   "tweet.fields": z.string().default("id,text,created_at,public_metrics,author_id"),
   next_token: z.string().optional(),
+  since_id: id.optional(),
 });
 const upload = z.object({
   /** A local image or video file. */
@@ -212,6 +217,9 @@ export const x: SiteApi = {
   origin: X_ORIGIN,
   probe: { path: "/2/users/me" },
   auth: { oauth: xOAuth },
+  // Well under what a person scrolls in a day; reads look like one reader, not a scraper.
+  caps: { profile: 150, posts: 100, search: 50 },
+  pace: { gapMs: 5_000, jitterMs: 10_000 },
   routes: [
     route({
       method: "GET",
@@ -223,8 +231,12 @@ export const x: SiteApi = {
     route({
       method: "GET",
       path: "/2/users/by/username/{username}",
-      summary: "A user by handle: id, bio, location, link, follower counts (`user.fields`)",
+      summary:
+        "A user by handle: id, bio, location, link, follower counts (free: the signed-in page)",
       request: byUsername,
+      prefer: "browser",
+      meter: () => ({ profile: 1 }),
+      browser: { flow: "x/profile" },
       api: ({ username, ...q }, leg) => get(leg, `/2/users/by/username/${username}`, q),
     }),
     route({
@@ -246,23 +258,33 @@ export const x: SiteApi = {
     route({
       method: "GET",
       path: "/2/tweets/{id}",
-      summary: "One post with its metrics (`tweet.fields`)",
+      summary: "One post with its metrics (free: the signed-in page)",
       request: lookup,
+      prefer: "browser",
+      meter: () => ({ posts: 1 }),
+      browser: { flow: "x/post" },
       api: ({ id: tweetId, ...q }, leg) => get(leg, `/2/tweets/${tweetId}`, q),
     }),
     route({
       method: "GET",
       path: "/2/users/{id}/tweets",
       summary:
-        "A user's posts, newest first (`max_results`, `pagination_token`, `exclude=replies,retweets`)",
+        "A user's posts, newest first (`max_results`, `since_id` cursor, `exclude=retweets`; `id` may be a handle; free: the signed-in page)",
       request: timeline,
+      prefer: "browser",
+      meter: () => ({ posts: 1 }),
+      browser: { flow: "x/posts" },
       api: ({ id: userId, ...q }, leg) => get(leg, `/2/users/${userId}/tweets`, q),
     }),
     route({
       method: "GET",
       path: "/2/tweets/search/recent",
-      summary: "Posts from the last 7 days matching `query` (a paid tier on X's side)",
+      summary:
+        "Latest posts matching `query` (X search operators, `max_results`, `since_id` cursor; free: the signed-in page)",
       request: search,
+      prefer: "browser",
+      meter: () => ({ search: 1 }),
+      browser: { flow: "x/search" },
       api: (q, leg) => get(leg, "/2/tweets/search/recent", q),
     }),
     route({

@@ -19,17 +19,17 @@ Plain files a person can open, one concern each; secrets sealed; shared truth in
 
 | Path | Holds | Card |
 |---|---|---|
-| `~/.config/autobrowse/credentials.json` | sealed sign-ins (`src/app/config.ts:182`) | [[credential]] |
+| `~/.config/autobrowse/credentials.json` | sealed sign-ins (`src/app/config.ts:186`) | [[credential]] |
 | `~/.config/autobrowse/wallet.sealed` | sealed cards (`:182`) | [[card]] |
 | `~/.config/autobrowse/accounts.json` | identities and purposes (`:202`) | [[account]] |
 | `~/.config/autobrowse/access.json` | hashed agent keys (`:95`) | [[access-key]] |
 | `~/.config/autobrowse/fixes.json` | kept repairs (`:73`) | [[fix]] |
 | `~/.config/autobrowse/screens.json` | learned screens (`:75`) | [[screen]] |
-| `~/.config/autobrowse/caps.json` | today's use of each account's daily caps, keyed site, account, bucket (`:77`; `/data/caps.json` on the box) | [[site-facade]] |
+| `~/.config/autobrowse/caps.json` | today's use of each account's daily caps, keyed site, account, bucket, and `next`: each site|account's next paced slot, kept across the day turning (`:77`; `/data/caps.json` on the box) | [[site-facade]] |
 | `~/.config/autobrowse/steps.jsonl` | agent step ledger (`src/agent/ledger.ts`) | [[agent-session]] |
 | `~/.config/autobrowse/needs-done.json` | decisions marked done (`src/app/owed.ts:79`) | [[need]] |
 | `~/.config/autobrowse/profiles/<site>` | browser profiles | [[session]] |
-| `~/.config/autobrowse/artifacts/` | shots, aria, traces, `*.failure.json`, watched steps (`src/app/services.ts:478`) | [[failure-record]], [[watch-step]] |
+| `~/.config/autobrowse/artifacts/` | shots, aria, traces, `*.failure.json`, watched steps (`src/app/services.ts:480`) | [[failure-record]], [[watch-step]] |
 | `recordings/` (repo, gitignored) | recordings, explore journals | [[recording]], [[explore-session]] |
 | `src/workflows/<name>/` (repo, committed) | compiled modules, outline, proof | [[compiled-workflow]] |
 | SSM `/autobrowse/config` | site tokens, env store (credvault `EnvStore`) | [[token]] |

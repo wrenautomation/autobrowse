@@ -30,7 +30,7 @@ The journal is the one input to the compiler. Typed values are redacted at captu
 
 ## If you change this
 
-- **Hits:** `src/compiler/structure.ts:135`, `src/recorder/store.ts`, `src/explore/server.ts`, `src/agent/sessions.ts`, UI `/api/recordings` (`src/ui/api.ts:511-540`), `src/agent/builder.ts:41`.
+- **Hits:** `src/compiler/structure.ts:135`, `src/recorder/store.ts`, `src/explore/server.ts`, `src/agent/sessions.ts`, UI `/api/recordings` (`src/ui/api.ts:520-549`), `src/agent/builder.ts:41`.
 - **Does not hit:** rendered workflows (the outline and source are their own after render).
 
 ## Surfaces

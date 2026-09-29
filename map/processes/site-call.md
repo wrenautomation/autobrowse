@@ -20,17 +20,18 @@ One shape for everyone (CLI, HTTP, Restate `sites`, wren): the caller never know
 
 ## Steps
 
-1. `call(site, method, path, input, account?)` → `matchPath(route.path, path)` — `src/sites/facade.ts:115-142,182`
+1. `call(site, method, path, input, account?)` → `matchPath(route.path, path)` — `src/sites/facade.ts:120-147,187`
 2. Account: `accountFor(site, purpose, account)` → `accountForSite`, `policyAccount` — `src/sites/wire.ts:82-103`
-3. `route.spends` → `approve` (the payment gate policed by the spend policy) before anything runs — `src/sites/facade.ts:30-77`, `src/gates/spend.ts:197`
-4. API leg: `accessTokens` mints from the refresh token or reads the key by `accountEnv`, a miss reloads the env store once — `src/sites/oauth.ts:74-129`, `src/sites/wire.ts:53-66`; then `http(...)` with `safeUrl` (never a key in a URL) — `src/clients/http.ts:52-60`
-5. Browser leg: `{ flow }` → `flow(name, input)` on the worker's runner, `{ workflow }` → `compiled.run(name, plan)` (gates approved by the caller) — `src/sites/types.ts:30-42`, `src/workflows/proof.ts:49`
-6. `setup(site, step, …)` mints a token the same way and keeps it through the sink under the account's name — `src/sites/facade.ts:127`, `src/sites/oauth.ts:197`
-7. Restate face: `sites/call`, `sites/status`, `sites/setup`, `sites/renew` — `src/sites/service.ts:55-95`
+3. Leg: the API when a token is in hand, unless the route has `prefer: "browser"` (X reads: the API bills them). A browser-leg call books its `pace` slot (429 past 2 minutes out), then takes its `meter` from the day's `caps` (429 over) — `src/sites/facade.ts:391-417`, `src/sites/caps.ts:96-112`; it sleeps until the slot just before the browser runs
+4. `route.spends` → `approve` (the payment gate policed by the spend policy) before anything runs — `src/sites/facade.ts:33-82`, `src/gates/spend.ts:197`
+5. API leg: `accessTokens` mints from the refresh token or reads the key by `accountEnv`, a miss reloads the env store once — `src/sites/oauth.ts:74-129`, `src/sites/wire.ts:53-66`; then `http(...)` with `safeUrl` (never a key in a URL) — `src/clients/http.ts:52-60`
+6. Browser leg: `{ flow }` → `flow(name, input)` on the worker's runner, `{ workflow }` → `compiled.run(name, plan)` (gates approved by the caller) — `src/sites/types.ts:31-43`, `src/workflows/proof.ts:49`
+7. `setup(site, step, …)` mints a token the same way and keeps it through the sink under the account's name — `src/sites/facade.ts:132`, `src/sites/oauth.ts:197`
+8. Restate face: `sites/call`, `sites/status`, `sites/setup`, `sites/renew` — `src/sites/service.ts:55-95`
 
 ## If you change this
 
-- **Hits:** `src/sites/wire.ts`, `src/sites/service.ts`, `src/app/cli-site.ts`, `src/ui/api.ts:361-410`, `src/do/doer.ts` (`callSite`), wren's channel packages (they call these paths over the ingress).
+- **Hits:** `src/sites/wire.ts`, `src/sites/service.ts`, `src/app/cli-site.ts`, `src/ui/api.ts:370-419`, `src/do/doer.ts` (`callSite`), wren's channel packages (they call these paths over the ingress).
 - **Does not hit:** sign-ins (a browser leg gets the wall hook from the runner); the run object.
 
 ## Surfaces

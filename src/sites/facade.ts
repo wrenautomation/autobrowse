@@ -14,6 +14,9 @@ import type { Approver } from "../gates/payment.js";
 import type { Proof, RunAs } from "../workflows/proof.js";
 import type { DailyCaps } from "./caps.js";
 import { accessTokens, accountEnv, pointTo, runConsent } from "./oauth.js";
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 import type { RenewReport } from "./renew.js";
 import {
   type Leg,
@@ -66,8 +69,10 @@ export interface SiteFacadeDeps {
    * without a channel.
    */
   approve?: Approver | null;
-  /** Counts routes' `meter` against the site's `caps`, per account per day; absent: nothing is capped. */
+  /** Counts routes' `meter` against the site's `caps`, per account per day, and books `pace` slots; absent: nothing is capped. */
   caps?: DailyCaps;
+  /** How a paced call waits for its slot (tests pass a fake). */
+  sleep?: (ms: number) => Promise<void>;
   /**
    * The username behind a credential name the caller used for an account
    * (`linkedin@research`, or `linkedin` for the site's own): null when the
@@ -311,10 +316,10 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       spends: Boolean(r.spends),
       request: jsonSchemaOf(r.request),
     };
-    if (r.api && hasToken(s, account)) return { ...base, via: "api" };
+    const recorded = r.browser ? Boolean(await legOf(r.browser)) : false;
+    if (r.api && r.prefer !== "browser" && hasToken(s, account)) return { ...base, via: "api" };
     if (r.browser) {
-      if (!(await legOf(r.browser)))
-        return { ...base, via: "none", missing: `${legName(r.browser)} not recorded` };
+      if (!recorded) return { ...base, via: "none", missing: `${legName(r.browser)} not recorded` };
       return { ...base, via: "browser" };
     }
     if (r.api) return { ...base, via: "none", missing: `no token for ${s.site}` };
@@ -383,9 +388,21 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       const chosen = account ?? (await deps.accountFor?.(s)) ?? null;
       const oneKey = !s.setup.some((st) => "oauth" in st.how);
       const fallback = !account && chosen && (deps.providerOf?.(s) || oneKey);
-      const token = r.api
-        ? ((await tokenFor(s, chosen)) ?? (fallback ? await tokenFor(s, null) : null))
-        : null;
+      // A route that prefers the browser never reaches the API, so never pays for a read.
+      const token =
+        r.api && r.prefer !== "browser"
+          ? ((await tokenFor(s, chosen)) ?? (fallback ? await tokenFor(s, null) : null))
+          : null;
+      const byBrowser = !(r.api && token !== null) && Boolean(r.browser);
+      // Paced before counted: a refusal here spends none of the day's cap.
+      const slot =
+        byBrowser && s.pace && deps.caps ? deps.caps.slot(s.site, chosen ?? s.site, s.pace) : null;
+      if (slot && !slot.ok)
+        throw new SiteError(
+          429,
+          `${s.site} pace for ${chosen ?? "the default account"}: too many calls queued; retry after ${slot.retryAfter}s`,
+          slot.retryAfter,
+        );
       const use = r.meter?.(parsed.data as never);
       if (use && s.caps && deps.caps) {
         const t = deps.caps.take(s.site, chosen ?? s.site, use, s.caps);
@@ -432,6 +449,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
             501,
             `${method} ${r.path}: ${legName(r.browser)} not recorded yet; explore it`,
           );
+        if (slot?.waitMs) await (deps.sleep ?? sleep)(slot.waitMs);
         const input = r.browser.input
           ? r.browser.input(parsed.data as never, deps.env)
           : parsed.data;

@@ -3,6 +3,11 @@
  * so many profiles a day before it restricts the account, and one account's
  * reads never spend another's. A call takes all its buckets or none; over a
  * cap it is refused with the seconds until the day turns (UTC), never queued.
+ *
+ * Pace: a person does not open ten profiles in ten seconds. A paced site
+ * books each call a slot at least `gapMs` (plus up to `jitterMs`, random)
+ * after the last one for that account; the caller sleeps until it. A slot
+ * further out than `maxWaitMs` is refused like a cap, with its seconds.
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -17,6 +22,22 @@ export interface Taken {
   retryAfter?: number;
 }
 
+/** Spacing between one account's calls to a site. */
+export interface Pace {
+  gapMs: number;
+  jitterMs?: number;
+  /** A wait past this is a refusal (429) instead: default two minutes. */
+  maxWaitMs?: number;
+}
+
+export interface Slot {
+  ok: boolean;
+  /** Milliseconds to sleep before the call, when booked. */
+  waitMs: number;
+  /** Seconds until a slot this far out would be booked, when refused. */
+  retryAfter?: number;
+}
+
 export interface DailyCaps {
   take(
     site: string,
@@ -24,6 +45,8 @@ export interface DailyCaps {
     use: Record<string, number>,
     caps: Record<string, number>,
   ): Taken;
+  /** Book the next slot for `site|account` under `pace`; nothing is booked when refused. */
+  slot(site: string, account: string, pace: Pace): Slot;
   /** What each bucket has used today, by `site|account|bucket`. */
   today(): Record<string, number>;
 }
@@ -31,7 +54,11 @@ export interface DailyCaps {
 interface Day {
   day: string;
   used: Record<string, number>;
+  /** The earliest next call per `site|account`, epoch ms; it outlives the day. */
+  next?: Record<string, number>;
 }
+
+const MAX_WAIT_MS = 120_000;
 
 const dayOf = (t: number) => new Date(t).toISOString().slice(0, 10);
 const untilTomorrow = (t: number) => {
@@ -39,11 +66,17 @@ const untilTomorrow = (t: number) => {
   return Math.ceil((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1) - t) / 1000);
 };
 
-function capsOn(load: () => Day | null, save: (d: Day) => void, now: () => number): DailyCaps {
+function capsOn(
+  load: () => Day | null,
+  save: (d: Day) => void,
+  now: () => number,
+  random: () => number,
+): DailyCaps {
   const current = (): Day => {
     const d = load();
     const day = dayOf(now());
-    return d && d.day === day ? d : { day, used: {} };
+    if (d && d.day === day) return d;
+    return { day, used: {}, ...(d?.next ? { next: d.next } : {}) };
   };
   return {
     take(site, account, use, caps) {
@@ -60,12 +93,29 @@ function capsOn(load: () => Day | null, save: (d: Day) => void, now: () => numbe
       save(d);
       return { ok: true };
     },
+    slot(site, account, pace) {
+      const d = current();
+      const key = `${site}|${account.trim().toLowerCase()}`;
+      const t = now();
+      const at = Math.max(t, d.next?.[key] ?? 0);
+      const waitMs = at - t;
+      if (waitMs > (pace.maxWaitMs ?? MAX_WAIT_MS))
+        return { ok: false, waitMs, retryAfter: Math.ceil(waitMs / 1000) };
+      const gap = pace.gapMs + Math.round(random() * (pace.jitterMs ?? 0));
+      d.next = { ...d.next, [key]: at + gap };
+      save(d);
+      return { ok: true, waitMs };
+    },
     today: () => current().used,
   };
 }
 
 /** Kept in a file, so a restart (or a redeploy, with the file on the volume) never resets a day. */
-export function fileCaps(path: string, now: () => number = Date.now): DailyCaps {
+export function fileCaps(
+  path: string,
+  now: () => number = Date.now,
+  random: () => number = Math.random,
+): DailyCaps {
   return capsOn(
     () => {
       try {
@@ -81,10 +131,14 @@ export function fileCaps(path: string, now: () => number = Date.now): DailyCaps 
       renameSync(tmp, path);
     },
     now,
+    random,
   );
 }
 
-export function memoryCaps(now: () => number = Date.now): DailyCaps {
+export function memoryCaps(
+  now: () => number = Date.now,
+  random: () => number = Math.random,
+): DailyCaps {
   let kept: Day | null = null;
   return capsOn(
     () => kept,
@@ -92,5 +146,6 @@ export function memoryCaps(now: () => number = Date.now): DailyCaps {
       kept = d;
     },
     now,
+    random,
   );
 }

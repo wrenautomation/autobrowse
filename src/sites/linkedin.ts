@@ -133,6 +133,7 @@ export const linkedin: SiteApi = {
   auth: { oauth: linkedinOAuth },
   // Reads a person could do in a day without LinkedIn restricting the account, per account.
   caps: { profile: 80, search: 25, company: 40 },
+  pace: { gapMs: 10_000, jitterMs: 20_000 },
   routes: [
     route({
       method: "GET",

@@ -17,13 +17,13 @@ Robustness lives in one place: a pause to read, a curved reach, typing in runs w
 
 ## Shape
 
-- `Pace` — `src/browser/human/index.ts:50`; `Hands { think, click, type, press … }` — `:113`; `handsFor` — `:240`
+- `Pace` — `src/browser/human/index.ts:50`; `Hands { think, click, type, press, scroll … }` — `:113`; `handsFor` — `:243`
 - Mouse, scroll, typing styles in the sibling files
-- Chosen from settings: `paceFor` — `src/app/services.ts:613`
+- Chosen from settings: `paceFor` — `src/app/services.ts:615`
 
 ## Connected to
 
-- **owned-by:** the runner (`RunnerOptions.pace`, `src/browser/flow.ts:214`)
+- **owned-by:** the runner (`RunnerOptions.pace`, `src/browser/flow.ts:216`)
 - **joins:** [[flow]], the captcha solver (`src/browser/captcha/index.ts:152`), the explore session
 
 ## If you change this

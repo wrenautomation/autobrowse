@@ -20,17 +20,17 @@ If flows signed in themselves, every flow would carry every site's quirks and ev
 
 ## Steps
 
-1. The runner sees a wall after navigation and calls `runner.login(fp, site, account)`; a second wall while signing in is not retried — `src/browser/flow.ts:97-100,509-520`
+1. The runner sees a wall after navigation and calls `runner.login(fp, site, account)`; a second wall while signing in is not retried — `src/browser/flow.ts:97-100,512-523`
 2. `loginProvider` resolves the spec (`resolveLogin`), lists methods (`methodsOf`: password first, then each `via`) — `src/auth/login.ts:536-619,407,621`
 3. `signInContext` binds the credential, the code sources and the phone notifier — `src/auth/login.ts:464`; codes: `src/auth/codes.ts:65-139`, inbox lock `:174`
 4. The page is bound to the spec's origins (`boundPage`, `passwordDomains`) so a fill of the password on any other host is refused and recorded — `src/auth/guard.ts:88`, `src/auth/login.ts:383`
 5. `spec.signIn(ctx)`: `formLogin` for a form (`src/auth/login.ts:193`), `oauthLogin` presses the provider button and hands to `providerOf(via).signIn` (`:272`, `src/auth/providers.ts:31`), a walk for a branching site (`googleWalk`, `src/auth/google.ts`; `walk()`, `src/browser/screens.ts:409`)
 6. A method that throws `LoginFailed` yields to the next; none left → `no-credential` — `src/auth/login.ts:174,563-603`
-7. The runner retries the open; a wall still there is a person's (`NeedsHuman`) — `src/browser/flow.ts:509-530`
+7. The runner retries the open; a wall still there is a person's (`NeedsHuman`) — `src/browser/flow.ts:512-533`
 
 ## If you change this
 
-- **Hits:** every spec in `src/auth/sites.ts`, `src/auth/google.ts`, `src/app/services.ts:580` (`loginFor`), compiled workflows and site browser legs (they meet walls through the same hook), `autobrowse login`, `accounts check`, `test/google.test.ts`, `test/site-fakes.ts`.
+- **Hits:** every spec in `src/auth/sites.ts`, `src/auth/google.ts`, `src/app/services.ts:582` (`loginFor`), compiled workflows and site browser legs (they meet walls through the same hook), `autobrowse login`, `accounts check`, `test/google.test.ts`, `test/site-fakes.ts`.
 - **Does not hit:** API legs (tokens, never a wall), the engine.
 
 ## Surfaces

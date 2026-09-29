@@ -35,4 +35,5 @@ export { outlookOauthConsent } from "./outlook-oauth-consent.js";
 export { type ResetProbeInput, resetMailProbe } from "./reset-mail-probe.js";
 export { tiktokOauthConsent } from "./tiktok-oauth-consent.js";
 export { xOauthConsent } from "./x-oauth-consent.js";
+export { type Tweet, type User as XUser, xPost, xPosts, xProfile, xSearch } from "./x-read.js";
 export { youtubeCommunityPost } from "./youtube-community-post.js";

@@ -19,13 +19,13 @@ Sign-ins branch. Determinism is per known screen, not per fixed sequence: a walk
 
 - `Screen { name, looks, at?, shows?, hides?, says?, is?, act?, goal?, overlay? }` — `src/browser/screens.ts:34-56`; `isOn` needs at least one check — `:275`
 - `Walk` (screens, `maxSteps` default 12, `fail`) — `:320`; `walk(ctx, w)` — `:409`
-- `LearnedScreen { site, url, landmarks, walk?, screen?, click?, reason, found, used }` and `LearnedScreens` store — `:64-94`; file `SCREENS_FILE` = `~/.config/autobrowse/screens.json` (`src/app/config.ts:75`)
+- `LearnedScreen { site, url, landmarks, walk?, screen?, click?, reason, found, used }` and `LearnedScreens` store — `:64-94`; file `SCREENS_FILE` = `~/.config/autobrowse/screens.json` (`src/app/config.ts:79`)
 - `ScreenReader` (a model names an unknown page) — `:102`, `llmScreenReader` `src/browser/repair.ts:140`
 - Walks in force: Google (`src/auth/google.ts`), Cloudflare (`src/auth/sites.ts`); runner interrupts (a cookie banner) share the file
 
 ## Connected to
 
-- **owned-by:** a walk ([[site-login]], [[identity-provider]]); the runner for interrupts (`RunnerOptions.learnedScreens`, `src/browser/flow.ts:239`)
+- **owned-by:** a walk ([[site-login]], [[identity-provider]]); the runner for interrupts (`RunnerOptions.learnedScreens`, `src/browser/flow.ts:241`)
 - **joins:** [[hints]], [[state-files]]
 - **looks-like-but-is-not:** [[fix]] (per op, per flow); `Screen` in `src/app/screen.ts:9` (headed or headless)
 

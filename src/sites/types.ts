@@ -11,6 +11,7 @@
 import type { z } from "zod";
 import type { HttpClient } from "../clients/http.js";
 import type { Amount } from "../gates/spend.js";
+import type { Pace } from "./caps.js";
 
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -65,6 +66,11 @@ export interface SiteRoute<I = unknown, O = unknown> {
    * over a cap the call is a 429 and nothing runs.
    */
   meter?: (input: I) => Record<string, number>;
+  /**
+   * "browser": the browser leg answers even when a token is in hand (the API
+   * charges per read and the signed-in page shows the same thing for free).
+   */
+  prefer?: "browser";
   summary: string;
 }
 
@@ -167,6 +173,8 @@ export interface SiteApi {
   probe?: { path: string; input?: Record<string, unknown> };
   /** Most a route's `meter` may use per account per day, by bucket (`{ profile: 80, search: 25 }`). */
   caps?: Record<string, number>;
+  /** Spacing between one account's browser-leg calls, so its reads look like a person's. */
+  pace?: Pace;
 }
 
 export class SiteError extends Error {

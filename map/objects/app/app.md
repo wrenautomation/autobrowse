@@ -17,7 +17,7 @@ Deps are made in one file so the CLI, the worker and tests share the same wiring
 
 ## Shape
 
-- `App { services, channel, workflows(), proofs(), catalog, browser, bus, memory, sink, sites, idle, screen, credentials, onFailure, doer }` — `src/app/services.ts:363-403`; `buildApp(settings, log)` — `:999`
+- `App { services, channel, workflows(), proofs(), catalog, browser, bus, memory, sink, sites, idle, screen, credentials, onFailure, doer }` — `src/app/services.ts:365-405`; `buildApp(settings, log)` — `:999`
 - Factories: `browserOptions` `:242`, `llmFor` `:322`, `credentialsFor` `:410`, `codesFor` `:536`, `loginFor` `:579`, `envStoreFor` `:815`, `approverFor` `:906`, `channelsFor` `:975`, wallet and profiles `:669-698`
 - `src/app/main.ts`: `buildApp` → Restate endpoint (`planEndpoint`, `registerDeployment` `src/app/register.ts:11`) → `startUiServer` (`src/ui/server.ts:34`) → `scheduleIdleStop` (`src/app/idle.ts:70`) and `selfStopper` (the box stops its own instance, `src/app/box.ts:67`)
 - Restate services registered: run objects (hand-written), `Compiled`, `Runs`, `browser`, `sites`, `do`

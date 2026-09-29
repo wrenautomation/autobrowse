@@ -43,6 +43,10 @@ const schema = z.object({
   ownBrowser: z.string().min(1).optional(),
   /** Comma list of sites that run in the own browser, e.g. `github`. */
   ownBrowserSites: z.string().optional(),
+  /** A static ISP/residential proxy URL with its login (`browser/proxy`); never printed. */
+  browserProxy: z.string().min(1).optional(),
+  /** Comma list of sites whose local browser goes through `browserProxy`, e.g. `x,linkedin`. */
+  browserProxySites: z.string().optional(),
   /** Persistent browser profiles (logins survive between runs). */
   profilesDir: z.string().min(1).default("~/.config/autobrowse/profiles"),
   /** Local browser: the installed Chrome (default, falls back) or Playwright's chromium (containers). */
@@ -280,6 +284,8 @@ export const ENV_KEYS = {
   browserCdpUrl: "BROWSER_CDP_URL",
   ownBrowser: "OWN_BROWSER",
   ownBrowserSites: "OWN_BROWSER_SITES",
+  browserProxy: "BROWSER_PROXY",
+  browserProxySites: "BROWSER_PROXY_SITES",
   profilesDir: "PROFILES_DIR",
   browserChannel: "BROWSER_CHANNEL",
   browserHeadless: "BROWSER_HEADLESS",

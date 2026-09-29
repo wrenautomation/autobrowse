@@ -32,7 +32,7 @@ A step whose gate has no answer throws `GateOpen`; the host records it and retur
 
 ## If you change this
 
-- **Hits:** `src/engine/run.ts` (advance, applyAnswer), `src/engine/object.ts:148-160` (approve/reject handlers), `src/channels/commands.ts:31`, UI `/api/runs/:workflow/:key/:action` (`src/ui/api.ts:459`), `src/compiler/render.ts` (renders `send` gates).
+- **Hits:** `src/engine/run.ts` (advance, applyAnswer), `src/engine/object.ts:148-160` (approve/reject handlers), `src/channels/commands.ts:31`, UI `/api/runs/:workflow/:key/:action` (`src/ui/api.ts:468`), `src/compiler/render.ts` (renders `send` gates).
 - **Does not hit:** `src/gates/payment.ts`, `src/gates/spend.ts`, the site facade's `spends` check.
 
 ## Surfaces

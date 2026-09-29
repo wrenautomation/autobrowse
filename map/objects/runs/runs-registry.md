@@ -29,7 +29,7 @@ Restate has no cross-object query. A registry fed by events answers "what runs e
 
 ## If you change this
 
-- **Hits:** `src/engine/rows.ts`, CLI `runs` (`src/app/cli.ts:299`), UI `/api/runs` (`src/ui/api.ts:428`), `src/app/client.ts`.
+- **Hits:** `src/engine/rows.ts`, CLI `runs` (`src/app/cli.ts:299`), UI `/api/runs` (`src/ui/api.ts:437`), `src/app/client.ts`.
 - **Does not hit:** run state; channels.
 
 ## Surfaces

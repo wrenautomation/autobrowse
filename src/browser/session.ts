@@ -13,6 +13,7 @@ import { expandHome } from "../google-auth.js";
 import { geometry, type Identity, learnIdentity, wearIdentity } from "./identity.js";
 import type { Hints } from "./locate.js";
 import { notReachable, type OwnBrowser, ownEndpoint, runsInOwn } from "./own.js";
+import type { BrowserProxy, ProxyFor } from "./proxy.js";
 import { reapOrphans, reapTempDirs } from "./reap.js";
 import { type PasskeyRecord, type Passkeys, virtualAuthenticator } from "./webauthn.js";
 
@@ -102,6 +103,8 @@ export interface BrowserOptions {
   profile?: string;
   /** The person's own browser, for the sites they opted in (`browser/own`). */
   own?: OwnBrowser | null;
+  /** A local browser's proxy, by profile (`browser/proxy`); none goes out directly. */
+  proxy?: ProxyFor;
 }
 
 export interface Session {
@@ -138,7 +141,7 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
     // A browser left by a dead owner would hold this profile; stop those first.
     await reapOrphans(expandHome(opts.profilesDir));
     void reapTempDirs(); // files a crashed upload left, in the background
-    context = await launchLocal(profileDir, opts);
+    context = await launchLocal(profileDir, opts, opts.proxy?.(opts.profile ?? site) ?? null);
     if (opts.headless === false) keepOutOfTheWay();
     // `navigator.webdriver` is already false (LOCAL_ARGS). No init-script shim: an own
     // `webdriver` property on navigator, reading undefined, is itself a tell.
@@ -227,7 +230,11 @@ const LOCAL_ARGS = ["--disable-blink-features=AutomationControlled"];
 /** The headed identity of this host's Chrome, learned on the first headless launch. */
 let headedIdentity: Identity | null = null;
 
-async function launchLocal(profileDir: string, opts: BrowserOptions): Promise<BrowserContext> {
+async function launchLocal(
+  profileDir: string,
+  opts: BrowserOptions,
+  proxy: BrowserProxy | null,
+): Promise<BrowserContext> {
   const headless = opts.headless ?? true;
   const { args: sizeArgs, ...size } = geometry(headless);
   // Headless says the headed identity (identity.ts). Not through Playwright's
@@ -239,6 +246,7 @@ async function launchLocal(profileDir: string, opts: BrowserOptions): Promise<Br
     ...size,
     args: [...LOCAL_ARGS, ...sizeArgs, ...uaArgs(ua)],
     ignoreDefaultArgs: ["--enable-automation"],
+    ...(proxy ? { proxy } : {}),
   });
   const launch = async (o: ReturnType<typeof base>) => {
     if (opts.channel !== "chromium") {

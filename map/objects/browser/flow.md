@@ -13,15 +13,16 @@ One browser leg with a name and a site: `BrowserFlow<I,O>` run by the `FlowRunne
 
 ## Why this shape
 
-Every act goes through `fp.act` with a goal in words, so the repairer, the trace, the watch, the payment gate and the secret guard all see the same thing. The runner, not the flow, owns walls (sign-in), captchas, repair, kept fixes and learned screens (`RunnerOptions`, `src/browser/flow.ts:207-240`).
+Every act goes through `fp.act` with a goal in words, so the repairer, the trace, the watch, the payment gate and the secret guard all see the same thing. The runner, not the flow, owns walls (sign-in), captchas, repair, kept fixes and learned screens (`RunnerOptions`, `src/browser/flow.ts:209-242`).
 
 ## Shape
 
-- `BrowserFlow { site, name, run(fp, input) }`; `defineFlow` — `src/browser/flow.ts:152-161`
-- `FlowPage { page, passkeys, open, act, read … }` — `:92-150`; `Op` (click, fill, select, press, upload) — `:70-76`; `ActOptions { goal, irreversible, timeoutMs }` — `:78-84`
-- `FlowInterrupted` (browser died: host retries whole flow) and `FlowFailed` — `:172-206`
-- `RunnerOptions`: `repairer`, `pace`, `login`, `captcha`, `fixes`, `learnedScreens`, `onRepair` — `:207-240`
-- The hand-written catalog: `src/browser/flows/index.ts` (OAuth consents, posts, tokens, LinkedIn reach)
+- `BrowserFlow { site, name, run(fp, input) }`; `defineFlow` — `src/browser/flow.ts:154-163`
+- `FlowPage { page, passkeys, open, act, read, scroll … }` — `:92-152`; `Op` (click, fill, select, press, upload) — `:70-76`; `ActOptions { goal, irreversible, timeoutMs }` — `:78-84`
+- `FlowInterrupted` (browser died: host retries whole flow) and `FlowFailed` — `:174-207`
+- `RunnerOptions`: `repairer`, `pace`, `login`, `captcha`, `fixes`, `learnedScreens`, `onRepair` — `:209-261`
+- The hand-written catalog: `src/browser/flows/index.ts` (OAuth consents, posts, tokens, LinkedIn reach, X reads)
+- Feeds: `scrollCollect(fp, {read, key, max, stop?, skip?})` — `src/browser/scroll-collect.ts`: read what is on screen, scroll most of a window, keep rows by key (feeds are virtualized); ends at `max`, the cursor row, or after idle scrolls
 
 ## Connected to
 
@@ -39,7 +40,7 @@ Every act goes through `fp.act` with a goal in words, so the repairer, the trace
 
 | Surface | Role |
 |---|---|
-| runner (`flowRunner`, `src/browser/flow.ts:382`) | runs |
+| runner (`flowRunner`, `src/browser/flow.ts:384`) | runs |
 | explore, agent | drive a `FlowPage` one command at a time |
 
 ## See

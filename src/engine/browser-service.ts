@@ -36,6 +36,7 @@ import { outlookOauthConsent } from "../browser/flows/outlook-oauth-consent.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { tiktokOauthConsent } from "../browser/flows/tiktok-oauth-consent.js";
 import { xOauthConsent } from "../browser/flows/x-oauth-consent.js";
+import { xPost, xPosts, xProfile, xSearch } from "../browser/flows/x-read.js";
 import { youtubeCommunityPost } from "../browser/flows/youtube-community-post.js";
 import { NeedsHuman } from "../browser/session.js";
 
@@ -85,6 +86,10 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     facebookOauthConsent,
     tiktokOauthConsent,
     xOauthConsent,
+    xPost,
+    xPosts,
+    xProfile,
+    xSearch,
     outlookOauthConsent,
     youtubeCommunityPost,
   ].map((f) => [`${f.site}/${f.name}`, f as BrowserFlow<never, unknown>]),

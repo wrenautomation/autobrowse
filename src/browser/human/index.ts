@@ -122,6 +122,8 @@ export interface Hands {
   paste(target: Locator, text: string, o: ActTimeout): Promise<void>;
   /** Press at `from`, carry to `to`, let go: points inside the control from its top-left (a slider, a captcha piece). */
   drag(target: Locator, from: Point, to: Point, o: ActTimeout): Promise<void>;
+  /** Move the page down by about `dy` px (up when negative): a feed read, flick by flick. */
+  scroll(page: Page, dy: number): Promise<void>;
 }
 
 /** A control's box on the page, or a clear error: a drag needs real coordinates. */
@@ -147,6 +149,7 @@ export const instantHands: Hands = {
     await mouse.move(box.x + to.x, box.y + to.y, { steps: 12 });
     await mouse.up();
   },
+  scroll: (page, dy) => page.mouse.wheel(0, dy),
 };
 
 /** Where each page's pointer is: Playwright's mouse has no getter. Dies with the page. */
@@ -295,6 +298,15 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
       await glide(page, end, size, pace, random);
       await rest(page, pace.mouse.hover, pace, random);
       await page.mouse.up();
+    },
+    async scroll(page, dy) {
+      if (pace.showPointer) await showOn(page);
+      const at = await pointerOf(page, random);
+      await page.mouse.move(at.x, at.y);
+      for (const step of wheelPlan(dy, pace.scroll, random)) {
+        await page.mouse.wheel(0, step.dy);
+        await page.waitForTimeout(step.after);
+      }
     },
     async type(target, text, o) {
       const page = isPage(target) ? target : target.page();

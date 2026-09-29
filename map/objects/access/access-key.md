@@ -18,8 +18,8 @@ The owner's UI token does everything; a key does only what its scope lists. Keys
 ## Shape
 
 - `VERBS = do | run | sites | agent`; `scopeSchema { sites (site, site@label, site@*), workflows (prefix*), tools, can }`; `Scope` (owner or rules) — `src/access/keys.ts:22-37`; `allowsSite` — `:51`
-- `StoredKey { name, hash, createdAt … }`; `KeyStore { list, add, revoke, resolve }`; `KEY_NAME` — `:73-92`; file `~/.config/autobrowse/access.json` (`src/app/config.ts:97`)
-- `refusal(scope, method, path, query, lookups)` — `src/access/fence.ts:28`; applied per request in the API — `src/ui/api.ts:145-151`
+- `StoredKey { name, hash, createdAt … }`; `KeyStore { list, add, revoke, resolve }`; `KEY_NAME` — `:73-92`; file `~/.config/autobrowse/access.json` (`src/app/config.ts:101`)
+- `refusal(scope, method, path, query, lookups)` — `src/access/fence.ts:28`; applied per request in the API — `src/ui/api.ts:154-160`
 
 ## Connected to
 
@@ -29,7 +29,7 @@ The owner's UI token does everything; a key does only what its scope lists. Keys
 
 ## If you change this
 
-- **Hits:** `src/ui/api.ts:134-160`, `src/ui/auth.ts`, `src/app/backend.ts:130` (`doAs`), `src/app/cli-access.ts`.
+- **Hits:** `src/ui/api.ts:143-169`, `src/ui/auth.ts`, `src/app/backend.ts:130` (`doAs`), `src/app/cli-access.ts`.
 - **Does not hit:** Restate handlers (the ingress has its own auth), sign-ins.
 
 ## Surfaces
