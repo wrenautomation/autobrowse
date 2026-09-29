@@ -371,11 +371,44 @@ export function pickRole(roles: Role[], hints: Array<string | undefined>): Role 
   return pool.find((r) => said.some((h) => h.includes(r.company.toLowerCase()))) ?? pool[0];
 }
 
+const ABOUT_LABELS = new Set([
+  "Website",
+  "Phone",
+  "Industry",
+  "Company size",
+  "Headquarters",
+  "Founded",
+  "Type",
+  "Specialties",
+]);
+
+/**
+ * The About page's labels and values from its text. Since 2026-09-29 the
+ * page has no `dt`/`dd`: under "Overview" each label is a line and its value
+ * the next ("Company size", "5,001-10,000 employees").
+ */
+export function aboutFieldsOf(text: string): Record<string, string> {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const out: Record<string, string> = {};
+  for (let i = Math.max(0, lines.indexOf("Overview")); i < lines.length - 1; i++) {
+    const label = lines[i] as string;
+    if (ABOUT_LABELS.has(label) && !(label in out)) out[label] = lines[i + 1] as string;
+  }
+  return out;
+}
+
+/** The company's name heading: `h1` on the old page, the first `h2` on the new. */
+const NAME = "main h1, main h2";
+
 async function readCompany(fp: FlowPage, handle: string): Promise<Company | null> {
   const id = /\/company\/([^/?#]+)/.exec(handle)?.[1] ?? handle;
   await go(fp, `${WEB}/company/${encodeURIComponent(id)}/about/`);
-  if (!(await fp.has({ css: "main h1" }, RENDER_MS))) return null;
-  const { url, name, fields } = await fp.page.evaluate(() => {
+  if (!(await fp.has({ css: NAME }, RENDER_MS))) return null;
+  await fp.wait(SETTLE_MS);
+  const { url, name, text, fields } = await fp.page.evaluate((sel) => {
     const fields: Record<string, string> = {};
     for (const dt of document.querySelectorAll("main dt")) {
       const dd = dt.nextElementSibling;
@@ -383,11 +416,12 @@ async function readCompany(fp: FlowPage, handle: string): Promise<Company | null
     }
     return {
       url: location.href,
-      name: document.querySelector("main h1")?.innerText ?? "",
+      name: document.querySelector(sel)?.innerText ?? "",
+      text: document.querySelector("main")?.innerText ?? "",
       fields,
     };
-  });
-  return companyOf(url, name, fields);
+  }, NAME);
+  return companyOf(url, name, { ...aboutFieldsOf(text), ...fields });
 }
 
 export const linkedinProfile = defineFlow<ProfileInput, Profile>({
@@ -474,6 +508,160 @@ export const linkedinCompanyPeople = defineFlow<CompanyPeopleInput, { people: Pe
     return { people: people.slice(0, max) };
   },
 });
+
+export interface CompanyJobsInput {
+  /** The `/company/<slug>/` handle, or LinkedIn's numeric company id. */
+  company: string;
+  max?: number;
+  /** Where the roles are: "Worldwide" (the default), "United States", "Toronto". */
+  location?: string;
+}
+
+/** An open role: a hiring signal. `postedAt` is the date LinkedIn lists it (YYYY-MM-DD). */
+export interface Job {
+  id: string;
+  title: string;
+  url: string;
+  company?: string;
+  location?: string;
+  postedAt?: string;
+}
+
+/** A job card's fields as the page gives them. */
+export interface RawJob {
+  urn: string;
+  title: string;
+  company: string;
+  location: string;
+  datetime: string;
+}
+
+const squash = (s: string) => s.replace(/\s+/g, " ").trim();
+
+const ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
+const decode = (s: string) =>
+  s
+    .replace(/<[^>]*>/g, "")
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) =>
+      e[0] === "#"
+        ? String.fromCodePoint(
+            e[1] === "x" || e[1] === "X" ? Number.parseInt(e.slice(2), 16) : Number(e.slice(1)),
+          )
+        : (ENTITIES[e.toLowerCase()] ?? m),
+    );
+
+/** The text inside the first element whose class list holds `cls`. */
+const inner = (html: string, cls: string) =>
+  decode(
+    new RegExp(`class="[^"]*\\b${cls}\\b[^"]*"[^>]*>([\\s\\S]*?)</(h3|h4|span|a)>`).exec(
+      html,
+    )?.[1] ?? "",
+  );
+
+/** The public jobs list's cards (`<li>` each) as the page gives them. */
+export function jobCardsOf(html: string): RawJob[] {
+  return html
+    .split(/<li[\s>]/)
+    .filter((c) => c.includes("jobPosting:"))
+    .map((c) => ({
+      urn: /data-entity-urn="([^"]+)"/.exec(c)?.[1] ?? "",
+      title: inner(c, "base-search-card__title"),
+      company: inner(c, "base-search-card__subtitle"),
+      location: inner(c, "job-search-card__location"),
+      datetime: /<time[^>]*datetime="([^"]+)"/.exec(c)?.[1] ?? "",
+    }));
+}
+
+/** Job cards as jobs, once each, in the order listed. */
+export function jobsOf(raws: RawJob[]): Job[] {
+  const out: Job[] = [];
+  const seen = new Set<string>();
+  for (const r of raws) {
+    const id = /jobPosting:(\d+)/.exec(r.urn)?.[1];
+    const title = squash(r.title);
+    if (!id || !title || seen.has(id)) continue;
+    seen.add(id);
+    const job: Job = { id, title, url: `${WEB}/jobs/view/${id}/` };
+    if (squash(r.company)) job.company = squash(r.company);
+    if (squash(r.location)) job.location = squash(r.location);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(r.datetime)) job.postedAt = r.datetime;
+    out.push(job);
+  }
+  return out;
+}
+
+/**
+ * The numeric id a company page links by: its jobs link carries `f_C=<id>`,
+ * its employees link `currentCompany=["<id>"]`.
+ */
+export function companyIdOf(url: string, hrefs: string[]): string | null {
+  for (const h of [url, ...hrefs]) {
+    const m = /[?&]f_C=(\d+)/.exec(h) ?? /currentCompany=(?:%5B%22|\[")(\d+)/.exec(h);
+    if (m?.[1]) return m[1];
+  }
+  return null;
+}
+
+/** LinkedIn's public jobs list: ten cards a page, paged by `start`. */
+const JOBS_PAGE = 10;
+const jobsPath = (id: string, start: number, location: string) =>
+  `/jobs-guest/jobs/api/seeMoreJobPostings/search?f_C=${id}&location=${encodeURIComponent(location)}&start=${start}`;
+
+/**
+ * A company's open roles. Mapped 2026-09-29: the logged-in jobs UI (and the
+ * public list with the session's cookies) is geo-filtered to the account's
+ * city, so this reads the public list without cookies from inside the page,
+ * a page at a time, and with them only when the public list is throttled. The page's Trusted Types refuse DOMParser, so the cards
+ * come back as HTML and are read here.
+ */
+export const linkedinCompanyJobs = defineFlow<CompanyJobsInput, { companyId: string; jobs: Job[] }>(
+  {
+    site: "linkedin",
+    name: "company-jobs",
+    async run(fp, input) {
+      const max = input.max ?? 50;
+      const handle = /\/company\/([^/?#]+)/.exec(input.company)?.[1] ?? input.company;
+      await go(fp, `${WEB}/company/${encodeURIComponent(handle)}/about/`);
+      let id = /^\d+$/.test(handle) ? handle : null;
+      if (!id && (await fp.has({ css: "a[href*='currentCompany'], a[href*='f_C=']" }, RENDER_MS))) {
+        const { url, hrefs } = await fp.page.evaluate(() => ({
+          url: location.href,
+          hrefs: [...document.querySelectorAll("a[href]")].map((a) => a.href),
+        }));
+        id = companyIdOf(url, hrefs);
+      }
+      if (!id) return fp.human(`no company id for ${input.company} (${fp.url()})`);
+      const raws: RawJob[] = [];
+      let jobs: Job[] = [];
+      for (let start = 0; jobs.length < max && start < 1000; start += JOBS_PAGE) {
+        if (start) await fp.wait(SETTLE_MS);
+        const page = await fp.page.evaluate(
+          async (path) => {
+            // Signed out first (not geo-filtered); signed in when the public list is throttled.
+            let res = await fetch(path, { credentials: "omit" });
+            if (!res.ok) res = await fetch(path, { credentials: "include" });
+            return { status: res.status, html: res.ok ? await res.text() : "" };
+          },
+          jobsPath(id, start, input.location ?? "Worldwide"),
+        );
+        if (page.status !== 200 && !jobs.length)
+          return fp.human(`LinkedIn's jobs list answered ${page.status} for company ${id}`);
+        const cards = jobCardsOf(page.html);
+        if (!cards.length) break;
+        raws.push(...cards);
+        jobs = jobsOf(raws);
+      }
+      return { companyId: id, jobs: jobs.slice(0, max) };
+    },
+  },
+);
 
 export interface ConnectInput {
   vanity: string;

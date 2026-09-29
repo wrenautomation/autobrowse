@@ -126,6 +126,7 @@ import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
 import { type Charge, type ChargeRow, reportCharge } from "../money/charges.js";
 import { s3BlobStore } from "../shots/s3.js";
 import { keepArtifact, keepRecording, type ShipReport, shipShots } from "../shots/ship.js";
+import { fileCaps } from "../sites/caps.js";
 import {
   accessTokens,
   accountEnv,
@@ -1123,6 +1124,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       identities: () => identitiesFor(settings).list(),
       kept: () => sink.list(),
       reload: (have) => missingEntries(sink, have),
+      caps: fileCaps(expandHome(settings.capsFile)),
     }),
   );
   const late: { doer: Doer | null } = { doer: null };

@@ -102,6 +102,11 @@ const companyPeople = z.object({
   keywords: z.string().optional(),
   max: z.coerce.number().int().min(1).max(200).default(30),
 });
+const companyJobs = z.object({
+  company: handle,
+  location: z.string().min(2).max(100).optional(),
+  max: z.coerce.number().int().min(1).max(200).default(50),
+});
 const connect = z.object({ vanity, note: z.string().min(1).max(200).optional() });
 const message = z.object({ vanity, text: z.string().min(1).max(8000) });
 
@@ -126,6 +131,8 @@ export const linkedin: SiteApi = {
   origin: LINKEDIN_ORIGIN,
   probe: { path: "/v2/userinfo" },
   auth: { oauth: linkedinOAuth },
+  // Reads a person could do in a day without LinkedIn restricting the account, per account.
+  caps: { profile: 80, search: 25, company: 40 },
   routes: [
     route({
       method: "GET",
@@ -274,6 +281,7 @@ export const linkedin: SiteApi = {
       summary:
         "People search (`keywords`, `page`, `pages`, `network` F/S/O): name, headline, location, the role that matched, profile handle",
       request: peopleSearch,
+      meter: (q) => ({ search: q.pages }),
       browser: { flow: "linkedin/search-people" },
     }),
     route({
@@ -282,6 +290,7 @@ export const linkedin: SiteApi = {
       summary:
         "One profile: headline, location, about; `experience=true` adds every role, `company=true` also the current employer's page (website, size)",
       request: profile,
+      meter: (q) => ({ profile: 1, ...(q.company ? { company: 1 } : {}) }),
       browser: { flow: "linkedin/profile" },
     }),
     route({
@@ -289,13 +298,24 @@ export const linkedin: SiteApi = {
       path: "/company/{company}",
       summary: "A company's About page: website, phone, industry, size, headquarters, founded",
       request: z.object({ company: handle }),
+      meter: () => ({ company: 1 }),
       browser: { flow: "linkedin/company" },
+    }),
+    route({
+      method: "GET",
+      path: "/company/{company}/jobs",
+      summary:
+        "A company's open roles, worldwide: title, location, posted date, URL (`max`, default 50)",
+      request: companyJobs,
+      meter: () => ({ company: 1 }),
+      browser: { flow: "linkedin/company-jobs" },
     }),
     route({
       method: "GET",
       path: "/company/{company}/people",
       summary: "A company's people (`keywords` narrows: founder, partner; `max`, default 30)",
       request: companyPeople,
+      meter: () => ({ company: 1 }),
       browser: { flow: "linkedin/company-people" },
     }),
     route({

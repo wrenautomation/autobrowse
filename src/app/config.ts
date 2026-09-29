@@ -73,6 +73,8 @@ const schema = z.object({
   fixesFile: z.string().min(1).default("~/.config/autobrowse/fixes.json"),
   /** Pages seen before on each site and what worked on them (`screens`): a walk's screen, a click past an interrupt. */
   screensFile: z.string().min(1).default("~/.config/autobrowse/screens.json"),
+  /** Today's use of each site's daily caps, per account (LinkedIn reads). */
+  capsFile: z.string().min(1).default("~/.config/autobrowse/caps.json"),
   /** Raw Playwright codegen output from `record --flow`; may hold typed secrets, never committed. */
   recordingsDir: z.string().min(1).default("recordings"),
   /** Bucket screenshots ship to (with their aria and failure JSON); unset = they stay local. */
@@ -288,6 +290,7 @@ export const ENV_KEYS = {
   artifactsDir: "ARTIFACTS_DIR",
   fixesFile: "FIXES_FILE",
   screensFile: "SCREENS_FILE",
+  capsFile: "CAPS_FILE",
   recordingsDir: "RECORDINGS_DIR",
   shotsBucket: "SHOTS_BUCKET",
   shotsEndpoint: "SHOTS_ENDPOINT",

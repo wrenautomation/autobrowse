@@ -20,6 +20,7 @@ import { BROWSER_FLOWS } from "../engine/browser-service.js";
 import type { Approver } from "../gates/payment.js";
 import type { CompiledCatalog } from "../workflows/compiled.js";
 import { runCompiled } from "../workflows/proof.js";
+import type { DailyCaps } from "./caps.js";
 import { type SiteFacade, siteFacade } from "./facade.js";
 import { SITES } from "./index.js";
 import { nextLapse, renewals, renewDue, renewWording } from "./renew.js";
@@ -56,6 +57,8 @@ export interface SiteParts {
    * Only the missing ones: every value read from SSM is a KMS decrypt.
    */
   reload?: (have: (name: string) => boolean) => Promise<EnvEntry[]>;
+  /** Per-account daily caps on metered routes (LinkedIn reads); absent: uncapped. */
+  caps?: DailyCaps;
 }
 
 /** How long a store read on a token miss stands before a miss reads again. */
@@ -123,6 +126,21 @@ export async function profileOf(
   return byInbox.length === 1 ? (byInbox[0]?.[0] ?? null) : null;
 }
 
+/**
+ * The username of a credential the caller named as the account: the site's
+ * own (`linkedin`) or one of its `site@label` / `site-label` logins. Null for
+ * anything else, which is then an address.
+ */
+export async function usernameOf(
+  credentials: CredentialStore,
+  site: string,
+  name: string,
+): Promise<string | null> {
+  const n = name.trim().toLowerCase();
+  if (n !== site && !n.startsWith(`${site}@`) && !n.startsWith(`${site}-`)) return null;
+  return (await credentials.get(n))?.username ?? null;
+}
+
 export function sitesFor(p: SiteParts): SiteFacade {
   // What setup keeps is visible to the next call at once, whichever sink is behind it.
   const made = new Map<string, string>();
@@ -151,10 +169,12 @@ export function sitesFor(p: SiteParts): SiteFacade {
     },
     oauthPort: p.oauthPort,
     approve: p.approve ?? null,
+    ...(p.caps ? { caps: p.caps } : {}),
     ...(p.credentials
       ? {
           profileFor: (site, account) => profileOf(p.credentials as CredentialStore, site, account),
           providerOf: consentProviderOf,
+          accountOf: (site, name) => usernameOf(p.credentials as CredentialStore, site, name),
         }
       : {}),
     ...(p.identities

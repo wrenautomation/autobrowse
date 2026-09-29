@@ -59,6 +59,12 @@ export interface SiteRoute<I = unknown, O = unknown> {
    * (a paused campaign), `null` when it does but the amount is not on it.
    */
   spends?: (input: I) => Amount | null | false;
+  /**
+   * What one call uses of the site's daily caps (`SiteApi.caps`), by bucket:
+   * a search of three pages is `{ search: 3 }`. Counted per account per day;
+   * over a cap the call is a 429 and nothing runs.
+   */
+  meter?: (input: I) => Record<string, number>;
   summary: string;
 }
 
@@ -143,8 +149,12 @@ export interface SiteApi {
   site: string;
   /** The official API's origin, for the api legs: `https://api.linkedin.com`. */
   origin: string;
-  /** Env name of the bearer, or an OAuth spec to mint one from a refresh token. */
-  auth: { token: string } | { oauth: OAuthSpec };
+  /**
+   * Env name of the bearer, or an OAuth spec to mint one from a refresh
+   * token, or `open`: no bearer, every api leg runs (a site whose backends
+   * read their own keys, like `web`).
+   */
+  auth: { token: string } | { oauth: OAuthSpec } | { open: true };
   routes: readonly SiteRoute<never, unknown>[];
   setup: readonly SetupStep[];
   /**
@@ -155,14 +165,19 @@ export interface SiteApi {
   purpose?: string;
   /** A cheap who-am-I read on the API leg (a concrete GET path): `site check` calls it to prove the token works. */
   probe?: { path: string; input?: Record<string, unknown> };
+  /** Most a route's `meter` may use per account per day, by bucket (`{ profile: 80, search: 25 }`). */
+  caps?: Record<string, number>;
 }
 
 export class SiteError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) {
+  /** Seconds until the call can succeed (a 429 over a daily cap). */
+  readonly retryAfter?: number;
+  constructor(status: number, message: string, retryAfter?: number) {
     super(message);
     this.name = "SiteError";
     this.status = status;
+    if (retryAfter !== undefined) this.retryAfter = retryAfter;
   }
 }
 

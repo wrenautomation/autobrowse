@@ -9,18 +9,18 @@ entity: src/sites/types.ts
 
 # Site API
 
-A site served under its official API's shape, with the steps that make its keys: `SiteApi` in `src/sites/types.ts`; the list is `SITES` in `src/sites/index.ts:42` (linkedin, youtube, instagram, tiktok, outlook, gmail, langfuse, meta, x, npm, calcom).
+A site served under its official API's shape, with the steps that make its keys: `SiteApi` in `src/sites/types.ts`; the list is `SITES` in `src/sites/index.ts:42` (linkedin, youtube, instagram, tiktok, outlook, gmail, langfuse, meta, x, npm, calcom, web).
 
 ## Why this shape
 
-Callers speak the official REST shape. A route has an `api` leg and, only where the API lacks the call, a `browser` leg (a hand-written flow or a compiled workflow). Setup steps make tokens the same way (`src/sites/types.ts:44-88`).
+Callers speak the official REST shape. A route has an `api` leg and, only where the API lacks the call, a `browser` leg (a hand-written flow or a compiled workflow). Setup steps make tokens the same way (`src/sites/types.ts:44-94`). `auth: {open: true}` is a keyless site (`web`: search and read, `src/sites/web.ts`), every api leg runs.
 
 ## Shape
 
-- `SiteApi { site, origin, auth: {token}|{oauth}, routes, setup, purpose?, probe? }` — `src/sites/types.ts:142-158`
-- `SiteRoute { method, path ({param}), request (zod), api?, browser?, irreversible?, spends?, summary }` — `:44-69`; `ApiLeg { token, http, env }` — `:18-24`; `Leg = {flow}|{workflow}`, `BrowserLeg` — `:30-42`
-- `SetupStep { name, makes, needs?, how: Leg+input | {oauth}, summary, purpose? }` — `:73-88`; `OAuthSpec` — `:90-140`
-- Per-site files: `src/sites/<site>.ts`; `route()` erases types — `:170`
+- `SiteApi { site, origin, auth: {token}|{oauth}|{open}, routes, setup, purpose?, probe?, caps? }` — `src/sites/types.ts:148-170`; `caps` = most a route's `meter` may use per account per day (LinkedIn: profile 80, search 25, company 40)
+- `SiteRoute { method, path ({param}), request (zod), api?, browser?, irreversible?, spends?, meter?, summary }` — `:44-69`; `ApiLeg { token, http, env }` — `:18-24`; `Leg = {flow}|{workflow}`, `BrowserLeg` — `:30-42`
+- `SetupStep { name, makes, needs?, how: Leg+input | {oauth}, summary, purpose? }` — `:79-94`; `OAuthSpec` — `:96-146`; `SiteError { status, retryAfter? }` — `:172-182`
+- Per-site files: `src/sites/<site>.ts`; `route()` erases types — `:185`
 
 ## Connected to
 

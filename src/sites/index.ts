@@ -21,6 +21,7 @@ export { outlook } from "./outlook.js";
 export { SITES_SERVICE, type SitesService, sitesService } from "./service.js";
 export { tiktok } from "./tiktok.js";
 export * from "./types.js";
+export { web } from "./web.js";
 export { profileOf, type SiteParts, sitesFor } from "./wire.js";
 export { x, xOAuth } from "./x.js";
 export { youtube } from "./youtube.js";
@@ -35,6 +36,7 @@ import { npm } from "./npm.js";
 import { outlook } from "./outlook.js";
 import { tiktok } from "./tiktok.js";
 import type { SiteApi } from "./types.js";
+import { web } from "./web.js";
 import { x } from "./x.js";
 import { youtube } from "./youtube.js";
 
@@ -51,4 +53,5 @@ export const SITES: readonly SiteApi[] = [
   x,
   npm,
   calcom,
+  web,
 ];

@@ -30,7 +30,7 @@ Cards never pass through a model or a log: `place{secret:"card.number"}` reads t
 
 ## If you change this
 
-- **Hits:** `src/explore/server.ts:298-319`, `src/money/profile.ts`, `src/money/charges.ts`, `src/app/services.ts:669-790` (`walletFor`, `profilesFor`, `cardsFor`, `chargesFor`), `src/app/cli-wallet.ts`, `src/auth/ingest.ts`.
+- **Hits:** `src/explore/server.ts:298-319`, `src/money/profile.ts`, `src/money/charges.ts`, `src/app/services.ts:670-791` (`walletFor`, `profilesFor`, `cardsFor`, `chargesFor`), `src/app/cli-wallet.ts`, `src/auth/ingest.ts`.
 - **Does not hit:** the credential vault; site API tokens.
 
 ## Surfaces

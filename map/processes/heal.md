@@ -20,7 +20,7 @@ A broken flow must get fixed in the flow (fallback paths, a remapped locator), n
 
 ## Steps
 
-1. The runner writes `*.failure.json`; `App.onFailure` hands it to `healer` — `src/browser/session.ts:50`, `src/app/services.ts:392`, `src/app/backend.ts:213`
+1. The runner writes `*.failure.json`; `App.onFailure` hands it to `healer` — `src/browser/session.ts:50`, `src/app/services.ts:393`, `src/app/backend.ts:213`
 2. `locateFailure(record, root)`: which compiled dir, which outline step, which op (`brokenOp`) — `src/agent/heal.ts:72`, `src/compiler/patch.ts:29`
 3. `healRequest` → the agent runs from that page toward the step's goal — `src/agent/heal.ts:103`, `src/agent/explorer.ts:140`
 4. `swapHints` / `replaceOp` patches the outline; `render` writes the module — `src/compiler/patch.ts:63-90`, `src/compiler/render.ts:256`

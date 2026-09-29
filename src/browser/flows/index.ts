@@ -14,7 +14,9 @@ export {
 export { linkedinOauthConsent } from "./linkedin-oauth-consent.js";
 export {
   type Company as LinkedInCompany,
+  type Job as LinkedInJob,
   linkedinCompany,
+  linkedinCompanyJobs,
   linkedinCompanyPeople,
   linkedinConnect,
   linkedinMessage,

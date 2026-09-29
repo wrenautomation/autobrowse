@@ -20,12 +20,12 @@ One shape for everyone (CLI, HTTP, Restate `sites`, wren): the caller never know
 
 ## Steps
 
-1. `call(site, method, path, input, account?)` → `matchPath(route.path, path)` — `src/sites/facade.ts:106-133,173`
-2. Account: `accountFor(site, purpose, account)` → `accountForSite`, `policyAccount` — `src/sites/wire.ts:79-100`
-3. `route.spends` → `approve` (the payment gate policed by the spend policy) before anything runs — `src/sites/facade.ts:29-68`, `src/gates/spend.ts:197`
-4. API leg: `accessTokens` mints from the refresh token or reads the key by `accountEnv`, a miss reloads the env store once — `src/sites/oauth.ts:74-129`, `src/sites/wire.ts:52-63`; then `http(...)` with `safeUrl` (never a key in a URL) — `src/clients/http.ts:52-60`
+1. `call(site, method, path, input, account?)` → `matchPath(route.path, path)` — `src/sites/facade.ts:115-142,182`
+2. Account: `accountFor(site, purpose, account)` → `accountForSite`, `policyAccount` — `src/sites/wire.ts:82-103`
+3. `route.spends` → `approve` (the payment gate policed by the spend policy) before anything runs — `src/sites/facade.ts:30-77`, `src/gates/spend.ts:197`
+4. API leg: `accessTokens` mints from the refresh token or reads the key by `accountEnv`, a miss reloads the env store once — `src/sites/oauth.ts:74-129`, `src/sites/wire.ts:53-66`; then `http(...)` with `safeUrl` (never a key in a URL) — `src/clients/http.ts:52-60`
 5. Browser leg: `{ flow }` → `flow(name, input)` on the worker's runner, `{ workflow }` → `compiled.run(name, plan)` (gates approved by the caller) — `src/sites/types.ts:30-42`, `src/workflows/proof.ts:49`
-6. `setup(site, step, …)` mints a token the same way and keeps it through the sink under the account's name — `src/sites/facade.ts:118`, `src/sites/oauth.ts:197`
+6. `setup(site, step, …)` mints a token the same way and keeps it through the sink under the account's name — `src/sites/facade.ts:127`, `src/sites/oauth.ts:197`
 7. Restate face: `sites/call`, `sites/status`, `sites/setup`, `sites/renew` — `src/sites/service.ts:55-95`
 
 ## If you change this

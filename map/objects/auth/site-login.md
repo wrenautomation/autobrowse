@@ -20,7 +20,7 @@ The runner meets a wall and calls one hook (`RunnerOptions.login`); the spec say
 - `SiteLogin { site, home, credential?, ask?, via?, loggedIn, signIn, signInHere?, totpSetup?, passwordChange?, passkeySetup?, recoveryCodes?, origins? }` — `src/auth/login.ts:54-95`
 - Builders: `formLogin` `:193`, `oauthLogin` `:272`, `viaLogin` `:313`; `LoginFailed` (this method failed, try the next) `:174`
 - `loginProvider(sites, opts)` = the runner's hook: resolves the site, picks methods, signs in, returns `signed-in | no-credential | unknown-site` — `:533-616`
-- Wired: `loginFor` — `src/app/services.ts:579`
+- Wired: `loginFor` — `src/app/services.ts:580`
 
 ## Connected to
 
@@ -31,7 +31,7 @@ The runner meets a wall and calls one hook (`RunnerOptions.login`); the spec say
 
 ## If you change this
 
-- **Hits:** `src/auth/sites.ts`, `src/app/services.ts:579`, `src/auth/accounts.ts` (`check`), `src/app/needs.ts:82`, `src/auth/enroll.ts`, `src/auth/rotate.ts`, `src/auth/recovery.ts`, `src/auth/passkey.ts`, `src/auth/exists.ts`.
+- **Hits:** `src/auth/sites.ts`, `src/app/services.ts:580`, `src/auth/accounts.ts` (`check`), `src/app/needs.ts:82`, `src/auth/enroll.ts`, `src/auth/rotate.ts`, `src/auth/recovery.ts`, `src/auth/passkey.ts`, `src/auth/exists.ts`.
 - **Does not hit:** site API routes; compiled workflows (they meet the wall through the same runner hook, unchanged).
 
 ## Surfaces

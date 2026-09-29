@@ -18,10 +18,10 @@ The vault is its own repo and npm package (public). Changing a name in `src/auth
 ## Shape
 
 - Names: Keychain service `autobrowse` (seal key), env prefix `AUTOBROWSE_CRED_`, secret prefix `AUTOBROWSE_`, SSM path `/autobrowse/config` — `src/auth/keep.ts:7-13`
-- Store: env layer first, then the sealed file `~/.config/autobrowse/credentials.json` (`src/app/config.ts:180`); armed with a canary whose read is refused and reported — `src/app/services.ts:410-460`
+- Store: env layer first, then the sealed file `~/.config/autobrowse/credentials.json` (`src/app/config.ts:182`); armed with a canary whose read is refused and reported — `src/app/services.ts:411-461`
 - A credential is keyed `<site>` or `<site>@<label>`; `via` names an identity provider instead of a password (`methodsOf`, `src/auth/login.ts:618`)
 - Minted on signup: `accountKey`, `mintCredential`, `mintPassword` — `src/auth/signup.ts:222-310`
-- Every typed secret is audited (`SecretAudit`, `auditFor` `src/app/services.ts:500`; window read by `ledgerSince` `src/auth/ledger.ts:18`)
+- Every typed secret is audited (`SecretAudit`, `auditFor` `src/app/services.ts:501`; window read by `ledgerSince` `src/auth/ledger.ts:18`)
 
 ## Connected to
 
@@ -31,7 +31,7 @@ The vault is its own repo and npm package (public). Changing a name in `src/auth
 
 ## If you change this
 
-- **Hits:** `src/app/services.ts:410`, `src/auth/login.ts`, `src/auth/accounts.ts`, `src/auth/signup.ts`, `src/app/needs.ts`, `src/app/cli-auth.ts` (`creds`), the wren repo (reads the same SSM path through credvault).
+- **Hits:** `src/app/services.ts:411`, `src/auth/login.ts`, `src/auth/accounts.ts`, `src/auth/signup.ts`, `src/app/needs.ts`, `src/app/cli-auth.ts` (`creds`), the wren repo (reads the same SSM path through credvault).
 - **Does not hit:** the wallet; site API tokens.
 
 ## Surfaces

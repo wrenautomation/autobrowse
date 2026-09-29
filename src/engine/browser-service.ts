@@ -22,6 +22,7 @@ import { linkedinCreatePost } from "../browser/flows/linkedin-create-post.js";
 import { linkedinOauthConsent } from "../browser/flows/linkedin-oauth-consent.js";
 import {
   linkedinCompany,
+  linkedinCompanyJobs,
   linkedinCompanyPeople,
   linkedinConnect,
   linkedinMessage,
@@ -73,6 +74,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinSearchPeople,
     linkedinProfile,
     linkedinCompany,
+    linkedinCompanyJobs,
     linkedinCompanyPeople,
     linkedinConnect,
     linkedinMessage,

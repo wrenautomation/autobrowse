@@ -18,7 +18,7 @@ Rendered source is the truth from then on (the header in each module says so). O
 ## Shape
 
 - `CompiledWorkflow { workflow, dir, proof }`; `loadCompiledWorkflows(root)`; `HAND_WRITTEN` — `src/workflows/compiled.ts:27-70`; `COMPILED_OBJECT`, `splitCompiledKey`, `CompiledCatalog`, `compiledCatalog` — `:71-103`
-- Dir: `COMPILED_DIR = "src/workflows"`, modules import the library as `COMPILED_LIB = "../../index.js"` — `src/app/services.ts:359-360`
+- Dir: `COMPILED_DIR = "src/workflows"`, modules import the library as `COMPILED_LIB = "../../index.js"` — `src/app/services.ts:360-361`
 - Deps a rendered module gets: `CompiledDeps { browser, secrets, shell, desktop, sink }`, browser bound to the flow's site — `src/workflows/compiled-deps.ts:18-40`
 - Render → check → finish: `render` `src/compiler/render.ts:256`; `checkCompiled` (tsc + vitest) `src/compiler/check.ts:14`; `finish` (a model fills plan inputs, send gate, proof reads, `dropped()` guard) `src/compiler/finish.ts:131-205`; `compileRecording`, `finishCompiled` `src/app/backend.ts:161-211`
 - Files per dir: `index.ts`, `index.test.ts`, `outline.json`, `proof.json`
@@ -32,7 +32,7 @@ Rendered source is the truth from then on (the header in each module says so). O
 
 ## If you change this
 
-- **Hits:** `src/compiler/render.ts` (what future modules look like), `src/index.ts` (what rendered modules import; an export removed there breaks every module), `src/workflows/compiled-deps.ts`, `src/workflows/proof.ts`, `src/agent/heal.ts`, `src/do/catalog.ts`, `src/sites/facade.ts` (`compiled.run`), `src/app/services.ts:359`.
+- **Hits:** `src/compiler/render.ts` (what future modules look like), `src/index.ts` (what rendered modules import; an export removed there breaks every module), `src/workflows/compiled-deps.ts`, `src/workflows/proof.ts`, `src/agent/heal.ts`, `src/do/catalog.ts`, `src/sites/facade.ts` (`compiled.run`), `src/app/services.ts:360`.
 - **Does not hit:** `src/workflows/domain`, `src/workflows/bootstrap`; the browser service.
 
 ## Surfaces

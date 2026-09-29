@@ -28,7 +28,7 @@ A proof never buys: gates are declined. The same runner with gates approved is h
 
 ## If you change this
 
-- **Hits:** `src/workflows/compiled.ts` (catalog reads it), `src/app/backend.ts:147`, `src/sites/facade.ts:70`, `src/do/doer.ts` (`runWorkflow`), UI `/api/workflows/:name/prove` (`src/ui/api.ts:326`), `src/agent/heal.ts` (`prove`).
+- **Hits:** `src/workflows/compiled.ts` (catalog reads it), `src/app/backend.ts:147`, `src/sites/facade.ts:79`, `src/do/doer.ts` (`runWorkflow`), UI `/api/workflows/:name/prove` (`src/ui/api.ts:326`), `src/agent/heal.ts` (`prove`).
 - **Does not hit:** the run object; hand-written workflows.
 
 ## Surfaces

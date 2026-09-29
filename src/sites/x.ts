@@ -39,6 +39,12 @@ const timeline = z.object({
   "tweet.fields": z.string().default("id,text,created_at,public_metrics"),
   exclude: z.string().optional(),
 });
+const byUsername = z.object({
+  username: z.string().regex(/^[A-Za-z0-9_]{1,15}$/, "an X handle without the @"),
+  "user.fields": z
+    .string()
+    .default("id,name,username,description,location,url,created_at,public_metrics,verified"),
+});
 const lookup = z.object({
   id,
   "tweet.fields": z.string().default("id,text,created_at,public_metrics,non_public_metrics"),
@@ -213,6 +219,13 @@ export const x: SiteApi = {
       summary: "Who the token is (`user.fields`)",
       request: me,
       api: (q, leg) => get(leg, "/2/users/me", q),
+    }),
+    route({
+      method: "GET",
+      path: "/2/users/by/username/{username}",
+      summary: "A user by handle: id, bio, location, link, follower counts (`user.fields`)",
+      request: byUsername,
+      api: ({ username, ...q }, leg) => get(leg, `/2/users/by/username/${username}`, q),
     }),
     route({
       method: "POST",

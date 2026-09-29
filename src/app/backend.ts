@@ -46,6 +46,7 @@ import { expandHome } from "../google-auth.js";
 import type { Llm } from "../llm/types.js";
 import { loadRecording } from "../recorder/store.js";
 import type { Recording } from "../recorder/types.js";
+import { fileCaps } from "../sites/caps.js";
 import { type SiteFacade, sitesFor } from "../sites/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import type { Jobs } from "../ui/jobs.js";
@@ -349,6 +350,7 @@ export function localParts(settings: Settings, o: { headless?: boolean } = {}): 
       identities: () => identitiesFor(settings).list(),
       kept: () => sink.list(),
       reload: (have) => missingEntries(sink, have),
+      caps: fileCaps(expandHome(settings.capsFile)),
     }),
     credentials: credentialsFor(settings),
     bus: eventBus(),

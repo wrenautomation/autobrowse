@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { FlowRunner } from "../src/browser/flow.js";
 import {
+  aboutFieldsOf,
+  companyIdOf,
   companyOf,
+  jobCardsOf,
+  jobsOf,
   linkedinConnect,
   type Person,
   type Profile,
@@ -312,5 +316,106 @@ describe("linkedin reach: which role", () => {
     ).toBe("Founder and CEO");
     expect(pickRole(roles, [])?.title).toBe("Hospitalist");
     expect(pickRole([role("Resident", "UT Health", false)], [])?.title).toBe("Resident");
+  });
+});
+
+describe("company about", () => {
+  it("reads labels and values from the page text, under Overview", () => {
+    const text = [
+      "Stripe",
+      "Technology, Information and Internet",
+      "Overview",
+      "Stripe builds programmable financial services.",
+      "Website",
+      "https://stripe.com",
+      "Verified page",
+      "August 15, 2023",
+      "Company size",
+      "5,001-10,000 employees",
+      "15,705 associated members",
+      "Headquarters",
+      "South San Francisco, California",
+      "Founded",
+      "2010",
+    ].join("\n\n");
+    expect(aboutFieldsOf(text)).toEqual({
+      Website: "https://stripe.com",
+      "Company size": "5,001-10,000 employees",
+      Headquarters: "South San Francisco, California",
+      Founded: "2010",
+    });
+    expect(
+      companyOf("https://www.linkedin.com/company/stripe/about/", "Stripe", aboutFieldsOf(text)),
+    ).toMatchObject({ handle: "stripe", website: "https://stripe.com", founded: "2010" });
+  });
+});
+
+describe("company jobs", () => {
+  it("reads the numeric id from the jobs or employees link", () => {
+    const about = "https://www.linkedin.com/company/stripe/about/";
+    expect(
+      companyIdOf(about, [
+        "https://www.linkedin.com/company/stripe/",
+        "https://www.linkedin.com/search/results/people/?currentCompany=%5B%222135371%22%5D",
+      ]),
+    ).toBe("2135371");
+    expect(companyIdOf("https://www.linkedin.com/jobs/search/?f_C=42&geoId=1", [])).toBe("42");
+    expect(companyIdOf(about, [about])).toBeNull();
+  });
+
+  it("reads cards from the public list's HTML", () => {
+    const li = (id: string, title: string) =>
+      `<li> <div class="base-card relative base-search-card job-search-card" data-entity-urn="urn:li:jobPosting:${id}" data-row="1"> <a class="base-card__full-link absolute" href="https://ca.linkedin.com/jobs/view/x-${id}?position=1&amp;pageNum=0"> <span class="sr-only"> ${title} </span> </a> <div class="base-search-card__info"> <h3 class="base-search-card__title"> ${title} </h3> <h4 class="base-search-card__subtitle"> <a class="hidden-nested-link" href="https://www.linkedin.com/company/stripe?trk=x"> Stripe </a> </h4> <div class="base-search-card__metadata"> <span class="job-search-card__location"> Toronto, Ontario, Canada </span> <time class="job-search-card__listdate" datetime="2026-09-21"> 1 week ago </time> </div> </div> </div> </li>`;
+    expect(
+      jobCardsOf(`${li("1", "Risk &amp; Compliance")}\n${li("2", "Engineer &#39;Payments&#x27;")}`),
+    ).toEqual([
+      {
+        urn: "urn:li:jobPosting:1",
+        title: " Risk & Compliance ",
+        company: "  Stripe ",
+        location: " Toronto, Ontario, Canada ",
+        datetime: "2026-09-21",
+      },
+      {
+        urn: "urn:li:jobPosting:2",
+        title: " Engineer 'Payments' ",
+        company: "  Stripe ",
+        location: " Toronto, Ontario, Canada ",
+        datetime: "2026-09-21",
+      },
+    ]);
+    expect(jobCardsOf("")).toEqual([]);
+  });
+
+  it("shapes cards once each, whitespace squashed, dates only when they are dates", () => {
+    const card = {
+      urn: "urn:li:jobPosting:4469959807",
+      title: "\n   Manager, Global Sanctions\n ",
+      company: "  Stripe ",
+      location: " Toronto, Ontario, Canada ",
+      datetime: "2026-09-21",
+    };
+    expect(
+      jobsOf([
+        card,
+        { ...card, title: "dupe" },
+        { ...card, urn: "urn:li:jobPosting:1", company: "", location: "", datetime: "1 week ago" },
+        { ...card, urn: "urn:li:fsd_company:2" },
+      ]),
+    ).toEqual([
+      {
+        id: "4469959807",
+        title: "Manager, Global Sanctions",
+        url: "https://www.linkedin.com/jobs/view/4469959807/",
+        company: "Stripe",
+        location: "Toronto, Ontario, Canada",
+        postedAt: "2026-09-21",
+      },
+      {
+        id: "1",
+        title: "Manager, Global Sanctions",
+        url: "https://www.linkedin.com/jobs/view/1/",
+      },
+    ]);
   });
 });

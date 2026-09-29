@@ -13,13 +13,14 @@ The one instance that runs a site call, a setup step or a renewal, shared by the
 
 ## Why this shape
 
-One place picks the account, mints the bearer, matches the path, asks the spend policy, and falls to the browser leg. The Restate face (`sitesService`) means an orchestrator on the same Restate queues a call while the box is down and a write runs once.
+One place picks the account, mints the bearer, matches the path, takes the account's daily cap, asks the spend policy, and falls to the browser leg. A named account (`linkedin@research`) resolves to its credential's address (`usernameOf`) and never falls back; over a cap the call is refused 429 with `retryAfter` (seconds to UTC midnight), never queued. The Restate face (`sitesService`) means an orchestrator on the same Restate queues a call while the box is down and a write runs once.
 
 ## Shape
 
-- `SiteFacade { list, status, call(site, method, path, input, account?), setup(site, step, account?, profile?, input?), renew? }` — `src/sites/facade.ts:106-133`
-- `SiteFacadeDeps { http, env, sink, runner, flow, compiled?, oauthPort?, profileFor?, providerOf?, accountFor?, approve? }` — `:29-68`; `matchPath` — `:173`; `checkSite` — `:144`
-- `SiteParts` (what `sitesFor` needs, including `reload` for tokens minted elsewhere) — `src/sites/wire.ts:28-63`
+- `SiteFacade { list, status, call(site, method, path, input, account?), setup(site, step, account?, profile?, input?), renew? }` — `src/sites/facade.ts:115-142`
+- `SiteFacadeDeps { http, env, sink, runner, flow, compiled?, oauthPort?, profileFor?, providerOf?, accountFor?, approve?, caps?, accountOf? }` — `:30-77`; `matchPath` — `:182`; `checkSite` — `:153`
+- `SiteParts` (what `sitesFor` needs, including `reload` for tokens minted elsewhere) — `src/sites/wire.ts:29-66`; `usernameOf` — `:134-142`
+- `DailyCaps { take, today }`, `fileCaps` (`CAPS_FILE`, `/data/caps.json` on the box), `memoryCaps` — `src/sites/caps.ts`
 - Restate: `SITES_SERVICE = "sites"`, `sitesService(facade)` — `src/sites/service.ts:15-95`
 - Paths are interpolated by the caller; a template path plus a param in the input is HTTP 400
 

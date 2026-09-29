@@ -20,8 +20,8 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./
 COPY --from=build /app/src ./src
 COPY --from=build /app/ui/dist ./ui/dist
-# Profiles, artifacts, recordings and locator fixes live on a volume; the image is stateless.
-ENV PROFILES_DIR=/data/profiles ARTIFACTS_DIR=/data/artifacts RECORDINGS_DIR=/data/recordings FIXES_FILE=/data/fixes.json
+# Profiles, artifacts, recordings, locator fixes, learned screens and daily caps live on a volume; the image is stateless.
+ENV PROFILES_DIR=/data/profiles ARTIFACTS_DIR=/data/artifacts RECORDINGS_DIR=/data/recordings FIXES_FILE=/data/fixes.json SCREENS_FILE=/data/screens.json CAPS_FILE=/data/caps.json
 VOLUME ["/data"]
 EXPOSE 9080 9081
 USER pwuser

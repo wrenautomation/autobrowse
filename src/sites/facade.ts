@@ -12,6 +12,7 @@ import { type JsonSchema, jsonSchemaOf } from "../engine/inputs.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import type { Approver } from "../gates/payment.js";
 import type { Proof, RunAs } from "../workflows/proof.js";
+import type { DailyCaps } from "./caps.js";
 import { accessTokens, accountEnv, pointTo, runConsent } from "./oauth.js";
 import type { RenewReport } from "./renew.js";
 import {
@@ -65,6 +66,14 @@ export interface SiteFacadeDeps {
    * without a channel.
    */
   approve?: Approver | null;
+  /** Counts routes' `meter` against the site's `caps`, per account per day; absent: nothing is capped. */
+  caps?: DailyCaps;
+  /**
+   * The username behind a credential name the caller used for an account
+   * (`linkedin@research`, or `linkedin` for the site's own): null when the
+   * name is not one, and the account is taken as an address.
+   */
+  accountOf?: (site: string, name: string) => Promise<string | null>;
 }
 
 export type CompiledRun = Pick<Proof, "status" | "steps" | "output">;
@@ -240,11 +249,14 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     return s;
   };
   const tokenFor = async (s: SiteApi, account?: string | null): Promise<string | null> =>
-    "token" in s.auth
-      ? (deps.env(accountEnv(s.auth.token, account)) ?? null)
-      : minted(s.auth.oauth, account);
+    "open" in s.auth
+      ? ""
+      : "token" in s.auth
+        ? deps.env(accountEnv(s.auth.token, account)) || null
+        : minted(s.auth.oauth, account);
   /** A token under the site's plain name, or under the account (the policy's when none is named). */
   const hasToken = (s: SiteApi, account: string | null = null) => {
+    if ("open" in s.auth) return true;
     if ("token" in s.auth) return Boolean(deps.env(s.auth.token));
     const o = s.auth.oauth;
     const held = (as: string | null) =>
@@ -343,8 +355,12 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
   return {
     list: () => Promise.all(sites.map(status)),
     status: (name) => status(site(name)),
-    async call(name, method, path, input, account) {
+    async call(name, method, path, input, named) {
       const s = site(name);
+      // A credential name (`linkedin@research`) is the account whose username it holds.
+      const account = named
+        ? ((await deps.accountOf?.(deps.providerOf?.(s) ?? s.site, named)) ?? named)
+        : named;
       let hit: { r: SiteRoute<never, unknown>; params: Record<string, string> } | null = null;
       for (const r of s.routes) {
         const params = r.method === method ? matchPath(r.path, path) : null;
@@ -370,6 +386,16 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       const token = r.api
         ? ((await tokenFor(s, chosen)) ?? (fallback ? await tokenFor(s, null) : null))
         : null;
+      const use = r.meter?.(parsed.data as never);
+      if (use && s.caps && deps.caps) {
+        const t = deps.caps.take(s.site, chosen ?? s.site, use, s.caps);
+        if (!t.ok)
+          throw new SiteError(
+            429,
+            `${s.site} ${t.bucket} cap for ${chosen ?? "the default account"} is used (${t.used}/${t.cap} today); retry after ${t.retryAfter}s`,
+            t.retryAfter,
+          );
+      }
       const amount = r.spends ? r.spends(parsed.data as never) : false;
       if (amount !== false) {
         const what = `${method} ${path} on ${name}, which spends`;
@@ -386,7 +412,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         });
         if (!ok) throw new SiteError(403, `${what}: refused`);
       }
-      if (r.api && token)
+      if (r.api && token !== null)
         return r.api(parsed.data as never, { token, http: deps.http, env: deps.env });
       if (r.browser) {
         // The same account the API leg would have used: its profile, so a browser
