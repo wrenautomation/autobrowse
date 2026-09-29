@@ -48,6 +48,7 @@ describe("browser service", () => {
       "account/reset-mail-probe",
       "calcom/api-key",
       "facebook/oauth-consent",
+      "fingerprint/check",
       "google-admin/dkim-generate",
       "google-admin/dkim-start",
       "google-admin/workspace-logo",

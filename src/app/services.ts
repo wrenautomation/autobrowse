@@ -259,6 +259,8 @@ export function browserOptions(
     cdpUrl: settings.browserCdpUrl ?? null,
     own: ownBrowserOf(settings.ownBrowser, settings.ownBrowserSites),
     proxy: proxyFor(settings.browserProxy, settings.browserProxySites),
+    ...(settings.browserTimezone ? { timezone: settings.browserTimezone } : {}),
+    ...(settings.browserProxyTimezone ? { proxyTimezone: settings.browserProxyTimezone } : {}),
     profilesDir: settings.profilesDir,
     channel: settings.browserChannel,
     artifactsDir: settings.artifactsDir,

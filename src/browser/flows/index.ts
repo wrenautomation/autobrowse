@@ -2,6 +2,7 @@
 export { CALCOM_API_KEY, type CalcomKeyInput, calcomApiKey } from "./calcom-api-key.js";
 export { type ConsentWalk, consentFlow } from "./consent-walker.js";
 export { facebookOauthConsent } from "./facebook-oauth-consent.js";
+export { type Fingerprint, fingerprint, tellsOf } from "./fingerprint.js";
 export { googleDkimGenerate, googleDkimStart } from "./google-dkim.js";
 export { googleProfilePhoto } from "./google-profile-photo.js";
 export { googleWorkspaceLogo } from "./google-workspace-logo.js";

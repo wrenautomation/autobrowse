@@ -1,5 +1,6 @@
 /** Restate ingress clients for the CLI and the UI server: one place that knows the object names. */
 import * as clients from "@restatedev/restate-sdk-clients";
+import type { BrowserService } from "../engine/browser-service.js";
 import type { RunObject } from "../engine/object.js";
 import { REGISTRY, REGISTRY_KEY, type RunsRegistry } from "../engine/registry.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
@@ -22,6 +23,8 @@ export function ingress(opts: IngressOptions) {
         ? conn.objectClient<RunObject<AnyWorkflow>>({ name: workflow }, key)
         : conn.objectClient<RunObject<AnyWorkflow>>(COMPILED_OBJECT, compiledKey(workflow, key)),
     registry: () => conn.objectClient<RunsRegistry>(REGISTRY, REGISTRY_KEY),
+    /** The worker's browser legs (`browser/flow`): a flow run on the box, not here. */
+    browser: () => conn.serviceClient<BrowserService>({ name: "browser" } as BrowserService),
   };
 }
 

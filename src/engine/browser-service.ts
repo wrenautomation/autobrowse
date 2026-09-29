@@ -13,6 +13,7 @@ import { withCall } from "../browser/attempt.js";
 import { type BrowserFlow, FlowFailed, type FlowRunner } from "../browser/flow.js";
 import { calcomApiKey } from "../browser/flows/calcom-api-key.js";
 import { facebookOauthConsent } from "../browser/flows/facebook-oauth-consent.js";
+import { fingerprint } from "../browser/flows/fingerprint.js";
 import { googleDkimGenerate, googleDkimStart } from "../browser/flows/google-dkim.js";
 import { googleProfilePhoto } from "../browser/flows/google-profile-photo.js";
 import { googleWorkspaceLogo } from "../browser/flows/google-workspace-logo.js";
@@ -55,6 +56,11 @@ const file = z.object({ file: z.string().min(1) });
 const named = z.object({
   name: z.string().regex(/^[a-z][a-z0-9-]+(\/[a-z][a-z0-9-]+)?$/),
   input: z.unknown(),
+  /** The profile to run in, when not the flow's own site: `x@wren` for an `x/…` flow. */
+  profile: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9.-]*(@[a-z0-9.-]+)?$/)
+    .optional(),
 });
 
 /** What `flow({name, input})` can run; the fixed handlers are sugar over these. */
@@ -92,6 +98,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     xSearch,
     outlookOauthConsent,
     youtubeCommunityPost,
+    fingerprint,
   ].map((f) => [`${f.site}/${f.name}`, f as BrowserFlow<never, unknown>]),
 );
 
@@ -147,11 +154,12 @@ export function browserService(deps: BrowserServiceDeps) {
         leg(googleWorkspaceLogo)(ctx, file.parse(raw)),
       /** Any flow in the catalog by name; the input is the flow's own. */
       flow: async (ctx: restate.Context, raw: unknown) => {
-        const { name, input } = named.parse(raw);
+        const { name, input, profile } = named.parse(raw);
         const flow = deps.catalog?.[name] ?? BROWSER_FLOWS[name];
         if (!flow)
           throw new restate.TerminalError(`no browser flow named ${name}`, { errorCode: 404 });
-        return leg(flow as BrowserFlow<unknown, unknown>)(ctx, input);
+        const sited = profile ? { ...flow, site: profile } : flow;
+        return leg(sited as BrowserFlow<unknown, unknown>)(ctx, input);
       },
     },
   });

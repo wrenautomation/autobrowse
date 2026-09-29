@@ -18,7 +18,7 @@ The owner's UI token does everything; a key does only what its scope lists. Keys
 ## Shape
 
 - `VERBS = do | run | sites | agent`; `scopeSchema { sites (site, site@label, site@*), workflows (prefix*), tools, can }`; `Scope` (owner or rules) — `src/access/keys.ts:22-37`; `allowsSite` — `:51`
-- `StoredKey { name, hash, createdAt … }`; `KeyStore { list, add, revoke, resolve }`; `KEY_NAME` — `:73-92`; file `~/.config/autobrowse/access.json` (`src/app/config.ts:101`)
+- `StoredKey { name, hash, createdAt … }`; `KeyStore { list, add, revoke, resolve }`; `KEY_NAME` — `:73-92`; file `~/.config/autobrowse/access.json` (`src/app/config.ts:112`)
 - `refusal(scope, method, path, query, lookups)` — `src/access/fence.ts:28`; applied per request in the API — `src/ui/api.ts:154-160`
 
 ## Connected to

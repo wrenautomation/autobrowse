@@ -18,7 +18,7 @@ Checkboxes are solved by the hands alone; pictures need `Eyes` (a model that see
 ## Shape
 
 - `Captcha { kind: checkbox|grid|text|slider, vendor: recaptcha|hcaptcha|turnstile|generic … }` — `src/browser/captcha/index.ts:23-31`; `Eyes`, `CaptchaOutcome`, `SolveOptions` — `:32-45`
-- Wired by `captchaFor` — `src/app/services.ts:306`
+- Wired by `captchaFor` — `src/app/services.ts:308`
 
 ## Connected to
 
@@ -27,7 +27,7 @@ Checkboxes are solved by the hands alone; pictures need `Eyes` (a model that see
 
 ## If you change this
 
-- **Hits:** `src/browser/flow.ts`, `src/explore/server.ts`, `src/app/services.ts:306`.
+- **Hits:** `src/browser/flow.ts`, `src/explore/server.ts`, `src/app/services.ts:308`.
 - **Does not hit:** sign-ins (a captcha is answered before the wall hook), the engine.
 
 ## Surfaces

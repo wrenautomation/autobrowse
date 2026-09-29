@@ -105,6 +105,13 @@ export interface BrowserOptions {
   own?: OwnBrowser | null;
   /** A local browser's proxy, by profile (`browser/proxy`); none goes out directly. */
   proxy?: ProxyFor;
+  /**
+   * The time zone a local browser says (`America/New_York`): the one where its
+   * IP is, or a site sees a Virginia IP on UTC. `proxyTimezone` for a proxied
+   * profile (the proxy's city), `timezone` for the rest; the machine's own when unset.
+   */
+  timezone?: string;
+  proxyTimezone?: string;
 }
 
 export interface Session {
@@ -227,6 +234,13 @@ function keepOutOfTheWay(): void {
 /** Launch flags that keep a site from telling the browser apart from a person's. */
 const LOCAL_ARGS = ["--disable-blink-features=AutomationControlled"];
 
+/**
+ * Behind a proxy, WebRTC would still ask STUN over UDP from the machine's
+ * own address and show the page the IP the proxy hides; only proxied UDP
+ * (none, for an HTTP proxy) is allowed.
+ */
+const PROXIED_ARGS = ["--webrtc-ip-handling-policy=disable_non_proxied_udp"];
+
 /** The headed identity of this host's Chrome, learned on the first headless launch. */
 let headedIdentity: Identity | null = null;
 
@@ -241,12 +255,15 @@ async function launchLocal(
   // `userAgent`: that rebuilds the client hints from the UA string and sends
   // `Sec-CH-UA-Arch: "x86"` and platform version "10_15_7" from an arm Mac on 26.x.
   const uaArgs = (ua: string | null) => (headless && ua ? [`--user-agent=${ua}`] : []);
+  // Chrome takes its zone from TZ: Date, Intl and workers agree, where a CDP override covers pages only.
+  const tz = proxy ? (opts.proxyTimezone ?? opts.timezone) : opts.timezone;
   const base = (ua: string | null) => ({
     headless,
     ...size,
-    args: [...LOCAL_ARGS, ...sizeArgs, ...uaArgs(ua)],
+    args: [...LOCAL_ARGS, ...(proxy ? PROXIED_ARGS : []), ...sizeArgs, ...uaArgs(ua)],
     ignoreDefaultArgs: ["--enable-automation"],
     ...(proxy ? { proxy } : {}),
+    ...(tz ? { env: { ...process.env, TZ: tz } } : {}),
   });
   const launch = async (o: ReturnType<typeof base>) => {
     if (opts.channel !== "chromium") {

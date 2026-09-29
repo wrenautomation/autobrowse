@@ -6,6 +6,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
 
+/** An IANA zone Chrome knows (`America/New_York`); a typo would leave the browser on UTC unsaid. */
+const timeZone = z
+  .string()
+  .refine((tz) => tz === "UTC" || Intl.supportedValuesOf("timeZone").includes(tz), {
+    message: "not an IANA time zone (America/New_York)",
+  });
+
 const schema = z.object({
   /** Restate Cloud ingress: autobrowse's own objects and wren's loops share the env. */
   restateIngressUrl: z.string().url(),
@@ -47,6 +54,10 @@ const schema = z.object({
   browserProxy: z.string().min(1).optional(),
   /** Comma list of sites whose local browser goes through `browserProxy`, e.g. `x,linkedin`. */
   browserProxySites: z.string().optional(),
+  /** The zone a local browser says, where its IP is (`America/New_York` on us-east-1); the machine's when unset. */
+  browserTimezone: timeZone.optional(),
+  /** The zone a proxied browser says: the proxy's city. */
+  browserProxyTimezone: timeZone.optional(),
   /** Persistent browser profiles (logins survive between runs). */
   profilesDir: z.string().min(1).default("~/.config/autobrowse/profiles"),
   /** Local browser: the installed Chrome (default, falls back) or Playwright's chromium (containers). */
@@ -286,6 +297,8 @@ export const ENV_KEYS = {
   ownBrowserSites: "OWN_BROWSER_SITES",
   browserProxy: "BROWSER_PROXY",
   browserProxySites: "BROWSER_PROXY_SITES",
+  browserTimezone: "BROWSER_TIMEZONE",
+  browserProxyTimezone: "BROWSER_PROXY_TIMEZONE",
   profilesDir: "PROFILES_DIR",
   browserChannel: "BROWSER_CHANNEL",
   browserHeadless: "BROWSER_HEADLESS",

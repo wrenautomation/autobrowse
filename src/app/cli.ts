@@ -325,6 +325,46 @@ registerWatchedCommands(program, settings);
 registerRepairsCommands(program, settings);
 registerScreensCommands(program, settings);
 program
+  .command("fingerprint [profile]")
+  .description(
+    "How a browser looks to X, LinkedIn and Cloudflare: its IP's network and time zone, its page, and what gives it away. Runs in the profile, through its proxy",
+  )
+  .option("--headed", "show the browser")
+  .option("--box", "run it on the worker behind Restate (the box: deploy/scripts/box.sh start)")
+  .option("--json", "the whole reading as JSON")
+  .action(
+    async (profile: string | undefined, o: { headed?: boolean; box?: boolean; json?: boolean }) => {
+      const { fingerprint } = await import("../browser/flows/fingerprint.js");
+      const flow = profile ? { ...fingerprint, site: profile } : fingerprint;
+      const got = o.box
+        ? await patient(
+            api
+              .browser()
+              .flow({ name: "fingerprint/check", input: {}, ...(profile ? { profile } : {}) }),
+          )
+        : await local({ headless: o.headed ? false : settings.browserHeadless }).parts.browser.run(
+            flow,
+            {},
+          );
+      const f = got as import("../browser/flows/fingerprint.js").Fingerprint;
+      if (o.json) return console.log(JSON.stringify(f, null, 2));
+      const ip = f.ip;
+      console.log(
+        `ip       ${ip ? `${ip.ip}  ${ip.org ?? "?"}  ${[ip.region, ip.country].filter(Boolean).join(", ")}  ${ip.timezone ?? ""}` : "unknown"}`,
+      );
+      const p = f.page;
+      console.log(`browser  ${p.userAgent}`);
+      console.log(
+        `         ${p.timezone} · ${p.languages.join(",")} · ${p.cores} cores · ${p.screen.width}x${p.screen.height} · h264 ${p.h264 ? "yes" : "no"} · plugins ${p.plugins}`,
+      );
+      console.log(`webgl    ${p.webgl.renderer ?? "none"}`);
+      console.log(`webrtc   ${p.webrtc.join(", ") || "no public IP"}`);
+      console.log(f.tells.length ? `tells    ${f.tells.join("\n         ")}` : "tells    none");
+      if (f.tells.length) process.exitCode = 1;
+    },
+  );
+
+program
   .command("reap")
   .description(
     "Stop browsers whose owner died (they hold their profile); a live owner's browser is never touched",

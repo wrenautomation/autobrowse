@@ -30,7 +30,7 @@ If flows signed in themselves, every flow would carry every site's quirks and ev
 
 ## If you change this
 
-- **Hits:** every spec in `src/auth/sites.ts`, `src/auth/google.ts`, `src/app/services.ts:582` (`loginFor`), compiled workflows and site browser legs (they meet walls through the same hook), `autobrowse login`, `accounts check`, `test/google.test.ts`, `test/site-fakes.ts`.
+- **Hits:** every spec in `src/auth/sites.ts`, `src/auth/google.ts`, `src/app/services.ts:584` (`loginFor`), compiled workflows and site browser legs (they meet walls through the same hook), `autobrowse login`, `accounts check`, `test/google.test.ts`, `test/site-fakes.ts`.
 - **Does not hit:** API legs (tokens, never a wall), the engine.
 
 ## Surfaces
