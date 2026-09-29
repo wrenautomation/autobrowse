@@ -10,13 +10,18 @@ services:
       UI_PORT: "9080"
       UI_HOST: 0.0.0.0 # the host side stays loopback; UI_TOKEN in the env is still required
       BROWSER: ${BROWSER:-local}
-      BROWSER_CHANNEL: chromium
+      # Headed Google Chrome on the image's virtual screen: headless and bundled Chromium
+      # both leave tells (`autobrowse fingerprint --box`). The zone is the box's region.
+      BROWSER_CHANNEL: chrome
+      BROWSER_HEADLESS: "false"
+      BROWSER_TIMEZONE: America/New_York
       SHOTS_MACHINE: box # first segment of every shot key
     ports:
       - "127.0.0.1:9080:9080"
     volumes:
       - /data:/data
     shm_size: 1g
+    init: true # reaps Chrome's children; Xvfb runs beside the worker
     restart: unless-stopped
     logging:
       driver: json-file

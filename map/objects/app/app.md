@@ -38,7 +38,7 @@ Deps are made in one file so the CLI, the worker and tests share the same wiring
 
 | Surface | Role |
 |---|---|
-| worker (`tsx src/app/main.ts`, `Dockerfile:28`) | builds once |
+| worker (`tsx src/app/main.ts`, `deploy/worker-entry.sh`) | builds once |
 | CLI | builds what a verb needs |
 
 ## See

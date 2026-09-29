@@ -20,7 +20,7 @@ for name, v in json.load(sys.stdin):
     if "\n" in v or v.lstrip().startswith("{"):
         path = f"/data/env/{k.lower()}.json"
         with open(path, "w") as f: f.write(v)
-        os.chmod(path, 0o600); os.chown(path, 1000, 1000)
+        os.chmod(path, 0o600)
         v = path
     # compose interpolates `$VAR` inside env_file values (a secret with a `$` got truncated
     # once); `$$` is the escape for a literal dollar.
@@ -34,6 +34,16 @@ running="$(docker inspect --format '{{.Config.Image}}' "$(docker compose ps -q w
 docker images --format '{{.Repository}}:{{.Tag}}' | grep "/autobrowse-prod:" | grep -vxF "${running:-none}" | grep -vxF "$ECR_IMAGE" \
   | xargs -r docker rmi >/dev/null 2>&1 || true
 docker compose pull --quiet
+# The state is the image's pwuser's, by its uid in this image: it moved from 1000 to 1001
+# once, and every profile, cap and service-account read failed with EACCES. /data itself
+# too (fixes.json, caps.json, screens.json live at its top). The env dir stays root's; the
+# worker reaches its JSON files by name.
+owner="$(docker run --rm --entrypoint sh "$ECR_IMAGE" -c 'echo "$(id -u pwuser):$(id -g pwuser)"')"
+mkdir -p /data/profiles /data/artifacts /data/recordings
+chown "$owner" /data
+chown -R "$owner" /data/profiles /data/artifacts /data/recordings
+find /data/env -maxdepth 1 -name '*.json' -exec chown "$owner" {} +
+chmod 711 /data/env
 docker compose up -d --remove-orphans
 docker image prune -f >/dev/null
 echo "deployed $ECR_IMAGE with $(grep -c . /data/env/.env) env keys"
