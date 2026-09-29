@@ -44,7 +44,9 @@ export function proxyFor(url: string | undefined, sites: string | undefined): Pr
   if (!url || !listed.size) return () => null;
   const proxy = proxyOf(url);
   return (profile) => {
-    const base = profile.split("@")[0]?.toLowerCase() ?? "";
-    return listed.has(base) || listed.has("*") ? proxy : null;
+    // A site (`x`: every x profile) or one profile (`linkedin@research`, not his own `linkedin`).
+    const name = profile.toLowerCase();
+    const base = name.split("@")[0] ?? "";
+    return listed.has(name) || listed.has(base) || listed.has("*") ? proxy : null;
   };
 }

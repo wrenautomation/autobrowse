@@ -166,6 +166,10 @@ describe("browser proxy", () => {
     expect(of("google")).toBeNull();
     expect(proxyFor(undefined, "x")("x")).toBeNull();
     expect(proxyFor("http://h:1", "")("x")).toBeNull();
+    // One profile, not the whole site: his own `linkedin` stays on its own IP.
+    const one = proxyFor("http://h:1", "linkedin@research");
+    expect(one("linkedin@research")).not.toBeNull();
+    expect(one("linkedin")).toBeNull();
   });
 
   it("a bad URL is refused without echoing it", () => {

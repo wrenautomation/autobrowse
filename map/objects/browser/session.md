@@ -19,7 +19,7 @@ A profile per site name keeps sign-ins between runs. Three tiers say where the b
 
 - `Session { context, page, shared?, passkeys, close }` — `src/browser/session.ts:117-128`
 - `BrowserOptions` — `:79`; `NeedsHuman` (a person is needed; artifacts set by the runner) — `:30-37`; `Artifacts` — `:39-49`
-- Proxy (opt-in, `BROWSER_PROXY` + `BROWSER_PROXY_SITES`): a local launch for a listed site goes out through it, by the profile's base site (`x@wren` → `x`) — `src/browser/proxy.ts`; X and LinkedIn flag datacenter IPs (the box), so a static ISP proxy is the fix there, one per account. A proxied launch blocks WebRTC's unproxied UDP (it would show the page the real IP) and says `BROWSER_PROXY_TIMEZONE`; others say `BROWSER_TIMEZONE` (Chrome reads `TZ`)
+- Proxy (opt-in, `BROWSER_PROXY` + `BROWSER_PROXY_SITES`): a local launch for a listed site (`x`: every x profile) or profile (`linkedin@research` only) goes out through it — `src/browser/proxy.ts`; X and LinkedIn flag datacenter IPs (the box), so a static ISP proxy is the fix there, one per account. A proxied launch blocks WebRTC's unproxied UDP (it would show the page the real IP) and says `BROWSER_PROXY_TIMEZONE`; others say `BROWSER_TIMEZONE` (Chrome reads `TZ`)
 - How real it looks, measured: `autobrowse fingerprint [profile] [--box]` (the `fingerprint/check` flow, `src/browser/flows/fingerprint.ts`) reads the IP's network and zone and the page (UA, WebGL, codecs, WebRTC) and lists the tells
 - `Wall` and `looksLikeWall` (login or captcha) — `:364-376`
 - Kept warm between calls by `SessionPark` (`src/browser/park.ts:25`); orphans reaped (`src/browser/reap.ts:25-79`)

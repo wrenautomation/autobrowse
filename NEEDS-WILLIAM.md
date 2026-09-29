@@ -29,6 +29,6 @@ Optional, only if X or LinkedIn reads run on the box: a static ISP proxy
 flag; the Mac's home IP is fine. Buy an HTTP one (Chrome takes no login
 on socks5), in one US city. Then copy its URL and run
 `autobrowse env set BROWSER_PROXY --clipboard`,
-`echo x,linkedin | autobrowse env set BROWSER_PROXY_SITES`, and
+`echo x@wren,linkedin@research | autobrowse env set BROWSER_PROXY_SITES`, and
 `echo America/Chicago | autobrowse env set BROWSER_PROXY_TIMEZONE` (the
 proxy city's zone). `autobrowse fingerprint x --box` then shows no tells.
