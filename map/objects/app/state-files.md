@@ -19,7 +19,7 @@ Plain files a person can open, one concern each; secrets sealed; shared truth in
 
 | Path | Holds | Card |
 |---|---|---|
-| `~/.config/autobrowse/credentials.json` | sealed sign-ins (`src/app/config.ts:197`) | [[credential]] |
+| `~/.config/autobrowse/credentials.json` | sealed sign-ins (`src/app/config.ts:205`) | [[credential]] |
 | `~/.config/autobrowse/wallet.sealed` | sealed cards (`:182`) | [[card]] |
 | `~/.config/autobrowse/accounts.json` | identities and purposes (`:202`) | [[account]] |
 | `~/.config/autobrowse/access.json` | hashed agent keys (`:95`) | [[access-key]] |

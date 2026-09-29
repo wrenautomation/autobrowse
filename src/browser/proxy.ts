@@ -26,7 +26,7 @@ export function proxyOf(url: string): BrowserProxy {
   }
   if (!/^(https?|socks5):$/.test(u.protocol) || !u.hostname)
     throw new Error("BROWSER_PROXY needs http, https or socks5 and a host");
-  if (u.protocol === "socks5:" && u.username)
+  if (u.protocol === "socks5:" && (u.username || u.password))
     throw new Error("BROWSER_PROXY: Chrome takes no login on a socks5 proxy; use http");
   const p: BrowserProxy = { server: `${u.protocol}//${u.host}` };
   if (u.username) p.username = decodeURIComponent(u.username);

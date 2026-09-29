@@ -6,12 +6,20 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
 
-/** An IANA zone Chrome knows (`America/New_York`); a typo would leave the browser on UTC unsaid. */
-const timeZone = z
-  .string()
-  .refine((tz) => tz === "UTC" || Intl.supportedValuesOf("timeZone").includes(tz), {
-    message: "not an IANA time zone (America/New_York)",
-  });
+/** An IANA zone Chrome knows (`America/New_York`, or an alias like `Asia/Kolkata`); a typo would leave the browser on UTC unsaid. */
+const timeZone = z.string().refine(
+  (tz) => {
+    // Intl takes any case; Chrome reads TZ as a file name on Linux, so `america/new_york` fails there.
+    if (!tz.split("/").every((part) => /^[A-Z]/.test(part))) return false;
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: tz });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  { message: "not an IANA time zone (America/New_York)" },
+);
 
 const schema = z.object({
   /** Restate Cloud ingress: autobrowse's own objects and wren's loops share the env. */

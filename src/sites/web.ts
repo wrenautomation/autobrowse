@@ -18,12 +18,13 @@ const final = (e: unknown): never => {
 const order = z
   .string()
   .optional()
-  .transform((v) =>
-    v
+  .transform((v) => {
+    const list = v
       ?.split(",")
       .map((s) => s.trim())
-      .filter(Boolean),
-  );
+      .filter(Boolean);
+    return list?.length ? list : undefined; // `via=,` means the default order
+  });
 
 export const web: SiteApi = {
   site: "web",

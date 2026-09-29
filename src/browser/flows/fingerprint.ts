@@ -49,28 +49,53 @@ export interface Fingerprint {
 
 /** Clouds and hosts a site scores as "not a person": the org ipinfo names. */
 const DATACENTER =
-  /amazon|aws|google cloud|google llc|microsoft|azure|digitalocean|hetzner|ovh|linode|akamai|oracle|vultr|choopa|m247|datacamp|contabo|scaleway|leaseweb|racknerd|colocrossing|cloudflare/i;
+  /\b(amazon|aws|google cloud|google llc|microsoft|azure|digitalocean|hetzner|ovh|linode|akamai|oracle|vultr|choopa|m247|datacamp|contabo|scaleway|leaseweb|racknerd|colocrossing|cloudflare)\b/i;
 
 /** WebGL drawn in software: a machine with no GPU (a VM, a container). */
 const SOFTWARE_GL = /swiftshader|llvmpipe|softpipe|mesa offscreen|software/i;
 
-/** `203.0.113.7` → `203.0.x.x`; v6 keeps its first two groups. */
+/** `203.0.113.7` (a port too) → `203.0.x.x`; v6 keeps its first two groups; anything else is hidden whole. */
 export function maskIp(ip: string): string {
+  const v4 = /^(\d+)\.(\d+)\.\d+\.\d+(:\d+)?$/.exec(ip);
+  if (v4) return `${v4[1]}.${v4[2]}.x.x`;
   if (ip.includes(":")) return `${ip.split(":").slice(0, 2).join(":")}:…`;
-  const [a, b] = ip.split(".");
-  return `${a}.${b}.x.x`;
+  return ip ? "…" : "";
+}
+
+/** One spelling per address: `2001:0db8:0:0::9` and `2001:db8::9` are the same. */
+function sameIp(a: string, b: string): boolean {
+  const norm = (ip: string) => {
+    if (!ip.includes(":")) return ip;
+    try {
+      return new URL(`http://[${ip}]`).hostname;
+    } catch {
+      return ip;
+    }
+  };
+  return norm(a) === norm(b);
+}
+
+/** One name per zone: `Asia/Kolkata` and `Asia/Calcutta` are the same place. */
+function zoneOf(tz: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: tz }).resolvedOptions().timeZone;
+  } catch {
+    return tz;
+  }
 }
 
 const platformOfUa = (ua: string): string | null =>
   /Windows/.test(ua)
     ? "Windows"
-    : /Mac OS X|Macintosh/.test(ua)
-      ? "macOS"
-      : /Android/.test(ua)
-        ? "Android"
-        : /Linux|X11/.test(ua)
-          ? "Linux"
-          : null;
+    : /CrOS/.test(ua)
+      ? "Chrome OS"
+      : /Mac OS X|Macintosh/.test(ua)
+        ? "macOS"
+        : /Android/.test(ua)
+          ? "Android"
+          : /Linux|X11/.test(ua)
+            ? "Linux"
+            : null;
 
 /** What gives this browser away, in words; empty when nothing does. Full IPs in, masked out. */
 export function tellsOf(ip: IpLook | null, p: PageLook): string[] {
@@ -95,9 +120,9 @@ export function tellsOf(ip: IpLook | null, p: PageLook): string[] {
   if (p.window.outer[1] > 0 && p.window.outer[1] <= p.window.inner[1])
     t.push("no browser frame around the page (headless window)");
   if (ip?.org && DATACENTER.test(ip.org)) t.push(`datacenter IP (${ip.org})`);
-  if (ip?.timezone && ip.timezone !== p.timezone)
+  if (ip?.timezone && zoneOf(ip.timezone) !== zoneOf(p.timezone))
     t.push(`time zone ${p.timezone}, but the IP is in ${ip.timezone}`);
-  const leaks = ip ? p.webrtc.filter((w) => w !== ip.ip) : [];
+  const leaks = ip ? p.webrtc.filter((w) => !sameIp(w, ip.ip)) : [];
   if (leaks.length) t.push(`WebRTC shows ${leaks.map(maskIp).join(", ")}, not the IP pages see`);
   return t;
 }

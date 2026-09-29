@@ -19,7 +19,7 @@ Sign-ins branch. Determinism is per known screen, not per fixed sequence: a walk
 
 - `Screen { name, looks, at?, shows?, hides?, says?, is?, act?, goal?, overlay? }` — `src/browser/screens.ts:34-56`; `isOn` needs at least one check — `:275`
 - `Walk` (screens, `maxSteps` default 12, `fail`) — `:320`; `walk(ctx, w)` — `:409`
-- `LearnedScreen { site, url, landmarks, walk?, screen?, click?, reason, found, used }` and `LearnedScreens` store — `:64-94`; file `SCREENS_FILE` = `~/.config/autobrowse/screens.json` (`src/app/config.ts:90`)
+- `LearnedScreen { site, url, landmarks, walk?, screen?, click?, reason, found, used }` and `LearnedScreens` store — `:64-94`; file `SCREENS_FILE` = `~/.config/autobrowse/screens.json` (`src/app/config.ts:98`)
 - `ScreenReader` (a model names an unknown page) — `:102`, `llmScreenReader` `src/browser/repair.ts:140`
 - Walks in force: Google (`src/auth/google.ts`), Cloudflare (`src/auth/sites.ts`); runner interrupts (a cookie banner) share the file
 

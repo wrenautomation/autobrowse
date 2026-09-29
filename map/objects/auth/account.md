@@ -17,7 +17,7 @@ Purposes decide which account a site call or consent runs as when nobody names o
 
 ## Shape
 
-- `Identity { address, at: google|microsoft, for: string[], note? }` — `src/auth/identities.ts:40-48`; store `fileIdentities` / `envIdentities` (`AUTOBROWSE_ACCOUNTS` on the box) / `layeredIdentities` — `:151-178`; file `~/.config/autobrowse/accounts.json` (`src/app/config.ts:219`)
+- `Identity { address, at: google|microsoft, for: string[], note? }` — `src/auth/identities.ts:40-48`; store `fileIdentities` / `envIdentities` (`AUTOBROWSE_ACCOUNTS` on the box) / `layeredIdentities` — `:151-178`; file `~/.config/autobrowse/accounts.json` (`src/app/config.ts:227`)
 - `accountSite(nameOrAddress)`: a bare address is `google@<address>` — `:61`
 - `AccountRow { site, known, ask, username, via, url, has{…} }`, `Accounts { list, save, check }` — `src/auth/accounts.ts:15-52`
 - New accounts: `NewAccount`, `accountKey` (which credential name), `signupGoal` — `src/auth/signup.ts:193-336`; `lookForAccount` asks the site first — `src/auth/exists.ts:78`

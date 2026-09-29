@@ -74,10 +74,14 @@ async function firstOf<T>(
   order: readonly string[],
   run: Record<string, () => Promise<T>>,
 ): Promise<{ value: T; via: string; tried: Tried[] }> {
+  if (!order.length)
+    throw new WebMiss(`no backend asked; there are ${Object.keys(run).join(", ")}`, 400);
+  const unknown = order.find((via) => !run[via]);
+  if (unknown)
+    throw new WebMiss(`no backend ${unknown}; there are ${Object.keys(run).join(", ")}`, 400);
   const tried: Tried[] = [];
   for (const via of order) {
-    const go = run[via];
-    if (!go) throw new WebMiss(`no backend ${via}; there are ${Object.keys(run).join(", ")}`, 400);
+    const go = run[via] as () => Promise<T>;
     try {
       return { value: await go(), via, tried };
     } catch (e) {
