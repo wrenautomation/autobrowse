@@ -1,6 +1,6 @@
 # A realistic browser for X, LinkedIn and Cloudflare
 
-2026-09-29. Status: built. Box runs headed Google Chrome; proxy seam hardened.
+2026-09-29. Status: built, then deferred (William, 2026-09-29). X and LinkedIn run on the Mac's Google Chrome for now; the box and proxy wait.
 Open: an IP that is not a datacenter's (William's spend or hardware).
 
 ## Ask

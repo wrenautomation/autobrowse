@@ -24,7 +24,7 @@ Optional: `autobrowse creds paste google@will` and a Gmail consent for
 will@williamjin.dev, if autobrowse should read that inbox.
 
 
-Optional, only if X or LinkedIn reads run on the box: a static ISP proxy
+Deferred (your call, 09-29: X and LinkedIn run on the Mac's Chrome). Later, if they move to the box: a static ISP proxy
 (~$3-5/mo per IP; your spend). The box has a datacenter IP these sites
 flag; the Mac's home IP is fine. Buy an HTTP one (Chrome takes no login
 on socks5), in one US city. Then copy its URL and run
