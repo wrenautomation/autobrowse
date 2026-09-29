@@ -22,7 +22,7 @@ One shape for everyone (CLI, HTTP, Restate `sites`, wren): the caller never know
 
 1. `call(site, method, path, input, account?)` → `matchPath(route.path, path)` — `src/sites/facade.ts:120-147,187`
 2. Account: `accountFor(site, purpose, account)` → `accountForSite`, `policyAccount` — `src/sites/wire.ts:82-103`
-3. Leg: the API when a token is in hand, unless the route has `prefer: "browser"` (X reads: the API bills them). A browser-leg call books its `pace` slot (429 past 2 minutes out), then takes its `meter` from the day's `caps` (429 over) — `src/sites/facade.ts:391-417`, `src/sites/caps.ts:96-112`; it sleeps until the slot just before the browser runs
+3. Leg: the API when a token is in hand, unless the route has `prefer: "browser"` (X reads: the API bills them). A browser-leg call books its `pace` slot (429 past 2 minutes out), then takes its `meter` from the day's `caps`, the account's `accountCaps` over them (429 over) — `src/sites/facade.ts:401-428`, `src/sites/caps.ts:96-112`; it sleeps until the slot just before the browser runs
 4. `route.spends` → `approve` (the payment gate policed by the spend policy) before anything runs — `src/sites/facade.ts:33-82`, `src/gates/spend.ts:197`
 5. API leg: `accessTokens` mints from the refresh token or reads the key by `accountEnv`, a miss reloads the env store once — `src/sites/oauth.ts:74-129`, `src/sites/wire.ts:53-66`; then `http(...)` with `safeUrl` (never a key in a URL) — `src/clients/http.ts:52-60`
 6. Browser leg: `{ flow }` → `flow(name, input)` on the worker's runner, `{ workflow }` → `compiled.run(name, plan)` (gates approved by the caller) — `src/sites/types.ts:31-43`, `src/workflows/proof.ts:49`

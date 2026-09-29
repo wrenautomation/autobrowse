@@ -79,6 +79,37 @@ describe("a named account", () => {
     expect(err).toMatchObject({ status: 429, retryAfter: 12 * 3600 });
     expect(calls.filter((c) => c.startsWith("jobs"))).toHaveLength(40);
   });
+
+  it("the person's own account reads under its own lower caps; a work account keeps the site's", async () => {
+    const browser = fakeBrowser([]);
+    browser.on(linkedinCompanyJobs, async () => ({ companyId: "1", jobs: [] }));
+    const caps = memoryCaps(() => noon);
+    const sites = siteFacade(
+      [{ ...linkedin, pace: { gapMs: 0 }, accountCaps: { linkedin: { company: 2 } } }],
+      {
+        http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+        env: () => undefined,
+        sink: memorySink(),
+        runner: browser,
+        flow: (n) => (n === "linkedin/company-jobs" ? (linkedinCompanyJobs as never) : null),
+        caps,
+        accountOf: async (_site, name) =>
+          ({ linkedin: "Me@x.com", "linkedin@research": "r@x.com" })[name] ?? null,
+      },
+    );
+    const jobs = (who: string) => sites.call("linkedin", "GET", "/company/stripe/jobs", {}, who);
+    // Named by credential or by address, it is the same account and the same two reads.
+    await jobs("linkedin");
+    await jobs("me@x.com");
+    await expect(jobs("linkedin")).rejects.toMatchObject({ status: 429 });
+    for (let i = 0; i < 3; i++) await jobs("linkedin@research");
+    expect(caps.today()["linkedin|r@x.com|company"]).toBe(3);
+  });
+
+  it("linkedin's own profile: 40 profiles and 15 search pages a day", () => {
+    expect(linkedin.accountCaps?.linkedin).toEqual({ profile: 40, search: 15 });
+    expect(linkedin.caps).toMatchObject({ company: 40 });
+  });
 });
 
 describe("web and x reads", () => {

@@ -173,6 +173,11 @@ export interface SiteApi {
   probe?: { path: string; input?: Record<string, unknown> };
   /** Most a route's `meter` may use per account per day, by bucket (`{ profile: 80, search: 25 }`). */
   caps?: Record<string, number>;
+  /**
+   * One account's own caps over `caps`, by credential name (`linkedin`,
+   * `linkedin@research`): a person's own profile reads less than a work one.
+   */
+  accountCaps?: Record<string, Record<string, number>>;
   /** Spacing between one account's browser-leg calls, so its reads look like a person's. */
   pace?: Pace;
 }

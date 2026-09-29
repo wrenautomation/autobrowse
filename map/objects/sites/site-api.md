@@ -17,7 +17,7 @@ Callers speak the official REST shape. A route has an `api` leg and, only where 
 
 ## Shape
 
-- `SiteApi { site, origin, auth: {token}|{oauth}|{open}, routes, setup, purpose?, probe?, caps?, pace? }` — `src/sites/types.ts:154-178`; `caps` = most a route's `meter` may use per account per day (LinkedIn: profile 80, search 25, company 40; X: profile 150, posts 100, search 50); `pace` = gap between one account's browser calls (X 5s + up to 10s, LinkedIn 10s + up to 20s)
+- `SiteApi { site, origin, auth: {token}|{oauth}|{open}, routes, setup, purpose?, probe?, caps?, accountCaps?, pace? }` — `src/sites/types.ts:154-183`; `caps` = most a route's `meter` may use per account per day (LinkedIn: profile 80, search 25, company 40; X: profile 150, posts 100, search 50); `accountCaps` = one credential's own caps over those (LinkedIn's `linkedin`, William's own profile: profile 40, search 15); `pace` = gap between one account's browser calls (X 5s + up to 10s, LinkedIn 10s + up to 20s)
 - `SiteRoute { method, path ({param}), request (zod), api?, browser?, irreversible?, spends?, meter?, prefer?, summary }` — `:45-75`; `ApiLeg { token, http, env }` — `:19-24`; `Leg = {flow}|{workflow}`, `BrowserLeg` — `:31-43`
 - `SetupStep { name, makes, needs?, how: Leg+input | {oauth}, summary, purpose? }` — `:85-100`; `OAuthSpec` — `:102-152`; `SiteError { status, retryAfter? }` — `:180-190`
 - Per-site files: `src/sites/<site>.ts`; `route()` erases types — `:193`

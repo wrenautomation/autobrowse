@@ -357,6 +357,16 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       ...(s.probe ? { probe: s.probe } : {}),
     };
   };
+  /** The chosen account's own caps (`SiteApi.accountCaps`), its credential names read as addresses. */
+  const capsOfAccount = async (s: SiteApi, chosen: string | null) => {
+    if (!s.accountCaps || !chosen) return {};
+    const who = chosen.trim().toLowerCase();
+    for (const [name, caps] of Object.entries(s.accountCaps)) {
+      const address = (await deps.accountOf?.(deps.providerOf?.(s) ?? s.site, name)) ?? name;
+      if (address.trim().toLowerCase() === who) return caps;
+    }
+    return {};
+  };
   return {
     list: () => Promise.all(sites.map(status)),
     status: (name) => status(site(name)),
@@ -405,7 +415,8 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         );
       const use = r.meter?.(parsed.data as never);
       if (use && s.caps && deps.caps) {
-        const t = deps.caps.take(s.site, chosen ?? s.site, use, s.caps);
+        const limits = { ...s.caps, ...(await capsOfAccount(s, chosen)) };
+        const t = deps.caps.take(s.site, chosen ?? s.site, use, limits);
         if (!t.ok)
           throw new SiteError(
             429,
