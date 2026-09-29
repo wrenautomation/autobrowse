@@ -20,7 +20,7 @@ Recording is the one input, so a build never depends on anyone's memory of what 
 
 ## Steps
 
-1. Explore: `startExplore(opts)`, commands journaled to `recordings/.explore-<site>/` — `src/explore/server.ts:413,350`; the agent drives the same session — `src/agent/explorer.ts:140`, `src/agent/sessions.ts:72`
+1. Explore: `startExplore(opts)`, commands journaled to `recordings/.explore-<site>/` — `src/explore/server.ts:434,371`; the agent drives the same session — `src/agent/explorer.ts:140`, `src/agent/sessions.ts:72`
 2. `save` → `saveRecording` (`manifest.json`; typed values redacted, `keep` carries only the env name) — `src/recorder/store.ts:20`, `src/recorder/redact.ts`
 3. `compileRecording(rec, llm)`: `structure` → `polish` → `render` → `saveOutline` — `src/app/backend.ts:161-186`, `src/compiler/structure.ts:135`, `src/compiler/polish.ts:55`, `src/compiler/render.ts:256`, `src/compiler/index.ts:26-45`
 4. `checkCompiled(dir)`: tsc and vitest on the rendered dir — `src/compiler/check.ts:14`

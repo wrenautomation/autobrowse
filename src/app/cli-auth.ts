@@ -680,6 +680,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       async run(fp: FlowPage) {
         if (!login.home) fp.human(`no home page known for ${site}: creds via ${site} ... --url`);
         await fp.open(login.home); // a wall here triggers the sign-in
+        // A single-page app draws its sign-in form after load: judge the page it settles on.
+        await fp.page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
         if (await login.loggedIn(fp)) return "signed in";
         if (!headedRun) fp.human("not signed in after opening the home page");
         console.log("log in, then close the browser window");

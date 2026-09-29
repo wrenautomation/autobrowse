@@ -161,6 +161,7 @@ describe("explore mode", () => {
     const unknown = await send({ cmd: "place", hints: { css: "#d" }, secret: "nope" });
     expect(unknown.status).toBe(500);
     expect(unknown.body.error).toMatch(/nope is not available now/);
+    expect(unknown.body.error).toMatch(/no flag gives "nope"/);
     // A page off the bound hosts never gets the value; the refusal is in the ledger, the value is not.
     allowHost = () => false;
     await send({ cmd: "fill", hints: { css: "#d" }, value: "" });
@@ -496,4 +497,62 @@ describe("pageChange", () => {
     const many = Array.from({ length: 45 }, (_, i) => `r${i}`);
     expect(pageChange([], many)).toMatchObject({ gone: 0, more: 5 });
   });
+});
+
+describe("help without a pause", () => {
+  it("a person's acts between two commands are journaled and the next answer says so, once", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "explore-help-"));
+    const port = 9800 + Math.floor(Math.random() * 150);
+    const ex = await startExplore({
+      site: "scratch",
+      port,
+      recordingsDir: join(dir, "recordings"),
+      browser: {
+        tier: "local",
+        channel: "chromium",
+        profilesDir: join(dir, "profiles"),
+        artifactsDir: join(dir, "artifacts"),
+        headless: true,
+      },
+    });
+    try {
+      await ex.exec({ cmd: "open", url: PAGE });
+      // The agent's own act is never help.
+      const own = (await ex.exec({
+        cmd: "fill",
+        hints: { role: "textbox", name: "Domain" },
+        value: "x.com",
+      })) as object;
+      expect(own).not.toHaveProperty("helped");
+      // A person types a code and clicks on, after the agent's command has ended.
+      await ex.exec({
+        cmd: "eval",
+        js: `setTimeout(() => { const i = document.querySelector('#d'); i.focus(); i.value = '123456'; i.dispatchEvent(new Event('input', {bubbles: true})); i.dispatchEvent(new Event('change', {bubbles: true})); const b = document.querySelector('#co'); b.textContent = 'Verified'; b.click(); }, 1200)`,
+      });
+      await new Promise((r) => setTimeout(r, 2000));
+      const next = (await ex.exec({ cmd: "count", hints: { role: "button" } })) as {
+        helped?: { acts: number; note: string; changed?: { added: string[] } };
+        count: number;
+      };
+      expect(next.count).toBeGreaterThan(0);
+      expect(next.helped?.acts).toBeGreaterThanOrEqual(1);
+      expect(next.helped?.note).toMatch(/do not redo/);
+      expect(next.helped?.changed?.added.join(" ")).toContain("Verified");
+      const again = (await ex.exec({ cmd: "count", hints: { role: "button" } })) as object;
+      expect(again).not.toHaveProperty("helped");
+      const journal = (await ex.exec({ cmd: "journal" })) as {
+        actions: Array<{ kind: string; text?: string }>;
+      };
+      const kinds = journal.actions.map((a) => a.kind);
+      expect(kinds).toContain("input");
+      expect(journal.actions.some((a) => a.kind === "note" && /by hand/.test(a.text ?? ""))).toBe(
+        true,
+      );
+    } finally {
+      await ex.exec({ cmd: "close" }).catch(() => undefined);
+      await ex.done;
+      await new Promise((r) => setTimeout(r, 500));
+      await rm(dir, { recursive: true, force: true, maxRetries: 5 });
+    }
+  }, 60_000);
 });

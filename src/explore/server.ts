@@ -213,6 +213,27 @@ const LOOKS = new Set<Command["cmd"]>([
 ]);
 /** Session controls and nesting stay out of a batch. */
 const UNBATCHABLE = new Set<Command["cmd"]>(["batch", "close", "pause", "resume", "save"]);
+/** How long after a command its own late DOM events are still the agent's, not a person's. */
+/** Which explore flag gives a `place` secret, for the error when it is missing. */
+export function placeHint(secret: string): string {
+  const dot = secret.lastIndexOf(".");
+  if (dot > 0)
+    return `${secret} needs the session opened with --login ${secret.slice(0, dot)} (a stored login for that site)`;
+  switch (secret) {
+    case "phone":
+    case "phoneLocal":
+    case "email":
+      return `${secret} needs the session opened with --signup <address>`;
+    case "password":
+      return "password needs --signup <address> or --new-password <address>";
+    case "code":
+      return "code needs --codes <inbox> or --signup <address>";
+    default:
+      return `no flag gives "${secret}": names are phone, phoneLocal, email, password, code, <site>.username|password|code|phone|phoneLocal, card.*`;
+  }
+}
+
+const HAND_GRACE_MS = 750;
 /** Rows the diff returns; `snapshot` has the rest. */
 const CHANGED_ROWS = 40;
 
@@ -503,6 +524,19 @@ async function serve(
   let waiters: Array<() => void> = [];
   /** Acts a person did by hand since the last `pause`. */
   let handActs = 0;
+  /**
+   * Help without a pause: a person at a headed browser types the code the
+   * agent could not get, or clicks past the screen it was stuck on, between
+   * two commands. Those acts are journaled like paused ones and counted here
+   * until the next command, whose answer says so (`helped`).
+   */
+  let helpedActs = 0;
+  /** Commands in flight, and when the last one's own late DOM events stop counting as a person's. */
+  let busy = 0;
+  let quietAt = 0;
+  /** Where the agent last left the page: the url, and the rows when its last act diffed them. */
+  let left: { url: string; rows: string[] | null } | null = null;
+  const byHand = () => paused || (busy === 0 && now() >= quietAt);
   const resume = () => {
     paused = false;
     for (const w of waiters) w();
@@ -526,8 +560,9 @@ async function serve(
   await page
     .context()
     .exposeBinding(BINDING, (_src, raw: RawAction) => {
-      if (!paused) return;
-      handActs++;
+      if (!byHand()) return;
+      if (paused) handActs++;
+      else helpedActs++;
       journal(redactRaw(raw));
     })
     .catch(() => undefined);
@@ -535,8 +570,10 @@ async function serve(
     .context()
     .addInitScript(OBSERVER_SCRIPT)
     .catch(() => undefined);
+  // A load between commands is a person's only when they also acted (a slow redirect is not).
   page.on("framenavigated", (frame) => {
-    if (paused && frame === page.mainFrame()) journal({ kind: "navigate" });
+    if ((paused || (helpedActs && byHand())) && frame === page.mainFrame())
+      journal({ kind: "navigate" });
   });
 
   type Target = z.infer<typeof targetSchema>;
@@ -767,11 +804,48 @@ async function serve(
       .map((r) => redactText(r));
   const runOne = async (c: Command, wait: boolean): Promise<unknown> => {
     page = fp.page;
-    if (!LOOKS.has(c.cmd)) return act(c, wait);
+    if (IMMEDIATE.has(c.cmd)) return act(c, wait);
+    busy++;
+    try {
+      const helped = await helpedSince();
+      const out = await looked(c, wait);
+      left = { url: page.url(), rows: out.rows ?? left?.rows ?? null };
+      return helped && out.answer && typeof out.answer === "object" && !Array.isArray(out.answer)
+        ? { helped, ...out.answer }
+        : out.answer;
+    } finally {
+      busy--;
+      quietAt = now() + HAND_GRACE_MS;
+    }
+  };
+  const looked = async (c: Command, wait: boolean) => {
+    if (!LOOKS.has(c.cmd)) return { answer: await act(c, wait), rows: null };
     const before = await rows();
     const out = await act(c, wait);
     page = fp.page;
-    return { ...(out as object), changed: pageChange(before, await rows()) };
+    const after = await rows();
+    return { answer: { ...(out as object), changed: pageChange(before, after) }, rows: after };
+  };
+  /**
+   * What a person did since the agent's last command, once: the count, where
+   * the page was and is, and what changed on it. The agent reads this as
+   * "someone got me past it": it re-reads the page instead of redoing the step.
+   */
+  const helpedSince = async () => {
+    if (!helpedActs || paused) return null;
+    const acts = helpedActs;
+    helpedActs = 0;
+    journal({ kind: "note", text: `a person did ${acts} act(s) by hand here, unpaused` });
+    const now_ = await rows();
+    const out = {
+      acts,
+      ...(left ? { from: shortUrl(left.url) } : {}),
+      url: shortUrl(page.url()),
+      ...(left?.rows ? { changed: pageChange(left.rows, now_) } : {}),
+      note: "A person acted in the browser since your last command. The page is where they left it: read it, do not redo their step.",
+    };
+    left = { url: page.url(), rows: now_ };
+    return out;
   };
   const act = async (c: Command, wait: boolean): Promise<unknown> => {
     page = fp.page;
@@ -821,11 +895,12 @@ async function serve(
       case "place": {
         const card = cardSecret(c.secret);
         if (card) return placeCard(c, card, wait);
-        if (!opts.secrets) throw new Error("place needs secrets (a signup or a login gives them)");
+        if (!opts.secrets)
+          throw new Error(`place: no secrets in this session; ${placeHint(c.secret)}`);
         const value = await opts.secrets(c.secret);
         if (!value)
           throw new Error(
-            `place: ${c.secret} is not available now (a code: the site's message has not arrived in the inbox this run reads; else no secret has that name)`,
+            `place: ${c.secret} is not available now (a code: the site's message has not arrived in the inbox this run reads yet, wait and retry); ${placeHint(c.secret)}`,
           );
         const host = new URL(page.url()).host;
         const allowed = opts.secretHosts ? opts.secretHosts(host, c.secret) : true;

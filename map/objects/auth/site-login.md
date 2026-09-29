@@ -26,7 +26,7 @@ The runner meets a wall and calls one hook (`RunnerOptions.login`); the spec say
 
 - **owns:** its walk or form
 - **owned-by:** `SITE_LOGINS`
-- **joins:** [[credential]], [[identity-provider]] (`via`), [[sign-in-context]], [[screen]] (walks), [[guard]] (`passwordDomains`, `src/auth/login.ts:380`), [[need]]
+- **joins:** [[credential]], [[identity-provider]] (`via`), [[sign-in-context]], [[screen]] (walks), [[guard]] (`passwordDomains`, `src/auth/login.ts:383`), [[need]]
 - **looks-like-but-is-not:** [[site-api]] (the official API), `SITES` in `src/browser/flow.ts:63`
 
 ## If you change this

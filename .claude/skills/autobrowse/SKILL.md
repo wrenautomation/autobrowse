@@ -14,7 +14,7 @@ Scripts live beside this file (`scripts/`); run them from anywhere.
 ## Session
 
 ```bash
-scripts/start.sh <site> [url] [port]   # default port 9090; prints "port N" when ready
+scripts/start.sh <site> [url] [port] [flags]   # default port 9090; prints "port N" when ready
 scripts/cmd.sh <port> '<json>'         # one command, JSON back
 scripts/stop.sh <port>                 # close browser + socket
 ```
@@ -29,8 +29,26 @@ are listed by `pnpm autobrowse creds list`. Start one session per site;
 A session that died (crash, idle close) left its journal: `start.sh <site> "" <same port>`
 resumes it on its last page, so `save` still has every act. `stop.sh` ends it for good.
 
-Login is the profile's job. Never type a password, TOTP or code yourself.
+Login is the profile's job. Never type a password, TOTP or code yourself: `place` does it.
 If a wall stays up, say so and stop.
+
+Before a signup, look for the site's own agent path: `/agent-signup.md`,
+`/.well-known/agent-access.json`, `/llms.txt` (`autobrowse read <url>`). Telnyx has one.
+
+`place` secrets exist only when the session was opened with the flag that gives them
+(flags go after the port in `start.sh`):
+
+| Secret | Flag |
+|---|---|
+| `email`, `password`, `phone` (E.164), `phoneLocal` (no country code), `code` | `--signup <address>` |
+| `code` (newest code that inbox got) | `--codes <inbox>` |
+| `password` | `--new-password <address>` |
+| `<site>.username`, `.password`, `.code`, `.phone`, `.phoneLocal` | `--login <site>[,<site>…]` |
+| `card.number`, `.exp`, `.expMonth`, `.expYear`, `.cvc`, `.name`, `.postal` (`card@<label>.…`) | none: payment-gated |
+
+A missing secret's error names the flag. Phone: a separate country picker → pick the country,
+then `phoneLocal`. One box that reads the country from the digits (a flag changes as you type)
+→ `phone`; the local number there is read as another country.
 
 ## Commands
 
@@ -49,6 +67,7 @@ Act (journaled):
 - `{"cmd":"click","hints":{"role":"button","name":"Create"},"goal":"…"}`
 - `{"cmd":"fill","hints":{…},"value":"…"}`, `select`, `press` (`"key":"Enter"`), `upload`.
 - `{"cmd":"type","text":"…"}`, `{"cmd":"key","key":"Escape"}` — into whatever is focused.
+- `{"cmd":"place","hints":{…},"secret":"code"}` — types a secret this session holds (table above); the value never reaches you.
 - `{"cmd":"read","hints":{…},"as":"fieldName"}` — text off the page into the flow's output.
 - `{"cmd":"keep","hints":{…},"env":"X_API_KEY"}` — a secret the site just showed goes straight to the secret sink (`.env` locally, SSM in prod). The journal keeps the element and env name, never the value. This is how keys get set up.
 - `{"cmd":"os","act":{…}}` — desktop: `{"kind":"apps"}`, `{"kind":"open","app":"Finder"}`, `{"kind":"tree"}`, `{"kind":"click","role":"AXButton","name":"OK"}`, `{"kind":"type","text":"…","secret":true}`, `{"kind":"key","combo":"cmd+shift+4"}`, `{"kind":"shot"}`, `{"kind":"shell","command":"…","root":true}`, `{"kind":"wait","ms":500}`. Needs Accessibility granted to the terminal; root needs `pnpm autobrowse desktop setup` done once.
@@ -60,6 +79,9 @@ Act (journaled):
 
 Session:
 - `{"cmd":"pause"}` / `{"cmd":"resume"}` — a person acts by hand in between; those acts land in the journal too.
+- No pause needed in a headed session: when William does a step by hand between two of your commands
+  (types a code, clicks through), it is journaled and your next answer carries
+  `helped: {acts, url, changed, note}`. He got you past it: read the page he left, never redo his step.
 - `{"cmd":"journal","last":5}` — what is recorded so far (`total` and the newest `last`; omit `last` for all).
 - `{"cmd":"save","name":"site-what-it-does"}` — writes `recordings/<name>/`. Then `pnpm autobrowse compile <name>`.
 - `{"cmd":"close"}`.
@@ -86,6 +108,8 @@ pnpm -s autobrowse people founder --company <handle> --enrich            # a fir
 pnpm -s autobrowse site call linkedin GET "/in/<vanity>?company=true"   # roles + current employer's page
 pnpm -s autobrowse site call linkedin GET "/company/<handle>"           # website, size, industry, HQ, phone
 pnpm -s autobrowse site call linkedin GET "/company/<handle>/people?keywords=founder&max=30"
+pnpm -s autobrowse site call linkedin GET "/company/<handle>/jobs?max=50"     # open roles; location= narrows
+pnpm -s autobrowse site call web GET "/search?q=…&n=5"                      # same as search/read, over the facade
 pnpm -s autobrowse doctor                                            # what works right now
 ```
 
@@ -107,7 +131,9 @@ Every look costs tokens. Look once, then let the acts tell you what changed.
 4. Several acts you are sure of (fill a form, then submit) go in one `{"cmd":"batch","cmds":[…]}`. It stops at the first failure: `failed: {at, cmd, error}`, with `done` holding what ran. Keep a paying click out of a batch; send it alone.
 5. Prefer `role`+`name`; fall back to `css`+`nth`. Errors come back as `{"error","url"}`; a failed act is not journaled. Change the hints, do not repeat.
 6. Secrets: use `keep`. Never `raw:true` on a page showing a key. Never echo a value, never put one in a URL or a message.
-7. Done: `note` what was achieved, `save` with a kebab name, `stop.sh`.
+7. Stuck on a step you cannot do (a code only William has, a puzzle)? Say what the step is and wait;
+   in a headed session he does it by hand and your next answer carries `helped`.
+8. Done: `note` what was achieved, `save` with a kebab name, `stop.sh`.
 
 Money is William's call. A billing field (card, CVC, tax id, billing address) or a button that
 spends (Buy, Pay, Subscribe, Add funds, Start trial) is gated: the session texts him and `cmd.sh`

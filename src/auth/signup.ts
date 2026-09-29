@@ -317,7 +317,7 @@ export function signupGoal(a: NewAccount, phone?: string | null): string {
     `Create a new ${a.site} account and end signed in to it.`,
     `Sign up with the email address when the site offers it. Fill the email address with place{secret:"email"}, every password field with place{secret:"password"}, a code the site emailed or texted with place{secret:"code"}, and a phone number field with place{secret:"phone"}.`,
     phone
-      ? `When the phone field has its own country-code picker, pick ${phoneCountry(phone)} and place{secret:"phoneLocal"} (the number without the country code) instead.`
+      ? `When the phone field has a separate country-code picker, pick ${phoneCountry(phone)} and place{secret:"phoneLocal"} (the number without the country code) instead. When one box reads the country from what is typed (a flag that changes as you type), keep place{secret:"phone"}: the local number there gets read as another country.`
       : null,
     facts.length ? `Other details: ${facts.join(", ")}.` : null,
     `Decline optional extras (contacts, ads, trials). Click a checkbox captcha ("I'm not a robot"). At an image or puzzle challenge, or a step you cannot fill, return human{reason}.`,

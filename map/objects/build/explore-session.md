@@ -17,9 +17,10 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 
 ## Shape
 
-- `Command` (open, click, fill, place, keep, aria, read, note, save, os …) — `src/explore/server.ts:198`; `ExploreOptions` — `:274-344`; `Explorer` — `:366`
-- Journal: `journalFileFor(recordingsDir, site, id)` under `recordings/.explore-<site>/` — `:350`; `readJournal` — `:346`; `DEFAULT_IDLE_MINUTES` 30 — `:360`
-- Money and secrets on this path: `secrets`/`secretHosts` (place by name), `cards`, `cardsOnFile`, `charges`, `approve`, `audit` — `:288-326`
+- `Command` (open, click, fill, place, keep, aria, read, note, save, os …) — `src/explore/server.ts:198`; `ExploreOptions` — `:295-360`; `Explorer` — `:387`
+- Journal: `journalFileFor(recordingsDir, site, id)` under `recordings/.explore-<site>/` — `:363`; `readJournal` — `:367`; `DEFAULT_IDLE_MINUTES` 30 — `:381`
+- Money and secrets on this path: `secrets`/`secretHosts` (place by name), `cards`, `cardsOnFile`, `charges`, `approve`, `audit` — `:310-344`; `placeHint` names the flag a missing secret needs — `:218-234`
+- Help by hand, no pause: acts a person does between two commands count (`byHand`, `HAND_GRACE_MS` — `:236`, `:533-540`); the next answer carries `helped {acts, url, changed, note}` — `helpedSince` `:834`
 - Opened by `explorerOpener` — `src/app/backend.ts:243`; the CLI `record`/`explore` verbs in `src/app/cli-record.ts`
 
 ## Connected to

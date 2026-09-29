@@ -20,11 +20,11 @@ A fill whose value is a secret is checked against the page's host before anythin
 - `SecretLeak`, `hostUnder`, `registrable`, `urlWithoutQuery` — `src/auth/guard.ts:12-44`
 - `GuardOptions { name, cred, domains, site, by, audit?, fallback? }` — `:45-57`; `BindOptions { secretOf, allow, site, by, audit }` — `:64-75`
 - `boundPage(fp, b)` — `:88`; `guardedPage(fp, g)` — `:127`; `boundRunner(runner, o)` — `:160`
-- Domains come from the login spec (`origins`, `home`) via `passwordDomains` — `src/auth/login.ts:380`
+- Domains come from the login spec (`origins`, `home`) via `passwordDomains` — `src/auth/login.ts:383`
 
 ## Connected to
 
-- **owned-by:** `loginProvider`; `compiledDeps` (`src/workflows/compiled-deps.ts:31-37`); the explore server (`secretHosts`, `src/explore/server.ts:291`)
+- **owned-by:** `loginProvider`; `compiledDeps` (`src/workflows/compiled-deps.ts:31-37`); the explore server (`secretHosts`, `src/explore/server.ts:312`)
 - **joins:** [[credential]] (audit), [[flow]], [[site-login]]
 
 ## If you change this

@@ -312,8 +312,11 @@ export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signI
  */
 export function viaLogin(site: string, cred: Credential): SiteLogin {
   const provider = providerOf(cred.via as Provider);
+  // A page that still holds a password field is a sign-in form under some other URL (Telnyx, 2026-09-29).
   const signedIn = async (fp: FlowPage) =>
-    !provider.host.test(fp.url()) && wallOf(fp.url(), (await fp.text()).slice(0, 4000)) === null;
+    !provider.host.test(fp.url()) &&
+    wallOf(fp.url(), (await fp.text()).slice(0, 4000)) === null &&
+    !(await fp.has({ css: "input[type=password]" }, 500));
   return {
     site,
     home: cred.url ?? "",

@@ -13,6 +13,8 @@
  * A stale sign-in cookie makes AWS answer "400 Bad Request … clear your
  * cookies" (2026-09-25, twice). Then the AWS cookies (this profile only) are
  * cleared, the console signs in fresh, and the card is tried once more.
+ * A lapsed console session (2026-09-29) is renewed first: the console opens
+ * before the authorize URL, so its login wall signs in with stored credentials.
  */
 import { defineFlow, type FlowPage } from "../flow.js";
 import { inPage } from "../in-page.js";
@@ -76,7 +78,10 @@ async function continueSession(
   url: string,
   user: string | undefined,
 ): Promise<"code" | "stale"> {
-  // The authorize URL is on the sign-in host: land on it on purpose, then sign in through the console if no session is active.
+  // A lapsed console session still shows its card, and the card then leads to a sign-in page, not the code
+  // (2026-09-29): open the console first so the runner signs in on its wall. The authorize URL is on the
+  // sign-in host: land on it on purpose.
+  await fp.open("https://console.aws.amazon.com/");
   await fp.open(url, { allowWall: true });
   if (await fp.has(BAD_REQUEST, 2_000)) return "stale";
   const card = { text: user ?? "/./" } as const;
