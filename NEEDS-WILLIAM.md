@@ -19,6 +19,9 @@ Live list: `pnpm autobrowse needs`. Rows clear themselves. Dated 2026-09-27.
   Access → + → Cmd-Shift-G →
   `/opt/homebrew/Cellar/node/25.2.1/bin/node` → on. Then tell me.
 
+- **Loom plan.** The 14-day trial ends ~10-13. After it, Starter caps at 25
+  videos of 5 minutes. Upgrade only if that's too small (your spend).
+
 - **Your Google password** (jinwilliam.jin@gmail.com): Google rejected the
   stored one on 09-27 (one try, a fresh profile). Re-paste it when ready:
   `autobrowse creds paste google`.
