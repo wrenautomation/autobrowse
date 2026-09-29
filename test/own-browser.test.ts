@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -42,14 +42,32 @@ describe("own browser", () => {
     const dir = mkdtempSync(join(tmpdir(), "autobrowse-own-"));
     const exe = (await import("patchright")).chromium.executablePath();
     // A browser the person runs: its own data dir, debugging on, its start tab open.
+    // CI's Linux runners refuse Chrome's sandbox; a person's own browser has one.
+    const sandbox = process.platform === "linux" ? ["--no-sandbox"] : [];
     proc = spawn(
       exe,
-      [`--user-data-dir=${dir}`, "--remote-debugging-port=0", "--headless=new", "--no-first-run"],
+      [
+        `--user-data-dir=${dir}`,
+        "--remote-debugging-port=0",
+        "--headless=new",
+        "--no-first-run",
+        ...sandbox,
+      ],
       { stdio: "ignore" },
     );
-    const port = join(dir, "DevToolsActivePort");
-    for (let i = 0; i < 100 && !existsSync(port); i++) await new Promise((r) => setTimeout(r, 100));
     const own = ownBrowserOf(dir, "github");
+    if (!own) throw new Error("no own browser");
+    // Until the port file is whole, not just there.
+    for (let i = 0; i < 150; i++) {
+      if (
+        await ownEndpoint(own).then(
+          () => true,
+          () => false,
+        )
+      )
+        break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
     const opts = {
       tier: "local" as const,
       profilesDir: join(dir, "profiles"),
