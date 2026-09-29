@@ -133,7 +133,7 @@ export class PaymentGate extends Error {
         : reason === "denied"
           ? `payment step refused: ${what}`
           : reason === "asked"
-            ? `payment step asked: ${what}; the person has been texted, send the same command again after they answer`
+            ? `payment step asked: ${what}; the person has been texted; to hold until they answer, send the same command to ?wait=1 (cmd.sh does), or send it again after they answer`
             : `payment step unanswered: ${what}; no reply in time, send the same command again to ask again`,
     );
   }

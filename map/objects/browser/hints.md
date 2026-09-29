@@ -17,7 +17,7 @@ One vocabulary is captured by the recorder, kept in outlines, typed in flows, pr
 
 ## Shape
 
-- Fields: `tag, role, name, text, placeholder, id, testId, href, inputType`; last resorts `css`, `nth`; `frame` for a cross-origin iframe — `src/recorder/types.ts:9-41`
+- Fields: `tag, role, name, text, placeholder, id, testId, href, inputType`; last resorts `css`, `nth`; `frame` for a cross-origin iframe — `src/recorder/types.ts:9-41`; explore fills a missing `frame` from the visible iframes (`withFrame`, `src/browser/frames.ts`)
 - `planLocator(h) → LocatorPlan | null`; `locate`, `locateAll`, `renderLocator` — `src/browser/locate.ts:27-120`
 - Captured in the page by the observer script — `src/recorder/observer.ts:9-25`
 

@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { chromium } from "playwright";
 import { describe, expect, it } from "vitest";
 import { digest, hintsFor } from "../src/agent/digest.js";
-import { ariaWithFrames } from "../src/browser/frames.js";
+import { ariaWithFrames, withFrame } from "../src/browser/frames.js";
 import { HUMAN_PACE, handsFor } from "../src/browser/human/index.js";
 import { locate } from "../src/browser/locate.js";
 
@@ -41,6 +41,39 @@ describe("iframes in the outline", () => {
       const target = locate(page, hintsFor(box as NonNullable<typeof box>));
       await handsFor({ ...HUMAN_PACE, think: [0, 1] }).click(target, { timeout: 5_000 });
       expect(await target.getAttribute("aria-checked")).toBe("true");
+    } finally {
+      await browser.close();
+      srv.close();
+    }
+  });
+
+  it("a target the page lacks is found in a card provider's iframe, and left alone otherwise", async () => {
+    const srv = createServer((req, res) => {
+      res.setHeader("content-type", "text/html");
+      if (req.url === "/pay")
+        res.end(`<label>Name <input></label>
+          <iframe id="braintree-hosted-field-number" width="300" height="60" src="http://localhost:${port}/field"></iframe>`);
+      else res.end(`<input aria-label="Credit Card Number">`);
+    }).listen(0);
+    const port = (srv.address() as AddressInfo).port;
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      await page.goto(`http://127.0.0.1:${port}/pay`);
+      await page.frameLocator("iframe").locator("input").waitFor();
+      const card = await withFrame(page, { role: "textbox", name: "Credit Card Number" });
+      expect(card.frame).toBe("iframe#braintree-hosted-field-number");
+      await locate(page, card).fill("4242");
+      expect(await locate(page, card).inputValue()).toBe("4242");
+      // On the page itself: no frame added. Nowhere: unchanged, so the miss says what was asked.
+      expect(await withFrame(page, { role: "textbox", name: "Name" })).toEqual({
+        role: "textbox",
+        name: "Name",
+      });
+      expect(await withFrame(page, { role: "button", name: "Pay" })).toEqual({
+        role: "button",
+        name: "Pay",
+      });
     } finally {
       await browser.close();
       srv.close();

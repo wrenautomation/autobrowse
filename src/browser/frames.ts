@@ -11,6 +11,7 @@
  * that finds anything inside it again (`page.frameLocator(chain)`).
  */
 import type { Frame, Page } from "playwright";
+import { type Hints, locateAll } from "./locate.js";
 
 /** The DOM an iframe element shows us; no DOM lib in this build. */
 interface FrameElement {
@@ -68,33 +69,63 @@ async function selectorOf(frame: Frame): Promise<string | null> {
     .finally(() => el.dispose());
 }
 
-async function frameSections(
+/** Every visible frame, outermost first, with its selector chain from the page. */
+async function visibleFrames(
   frame: Frame,
   chain: string | null,
   depth: number,
-  out: string[],
-): Promise<void> {
-  if (depth > MAX_DEPTH) return;
+  out: Array<{ frame: Frame; chain: string }>,
+): Promise<typeof out> {
+  if (depth > MAX_DEPTH) return out;
   for (const child of frame.childFrames()) {
     const own = await selectorOf(child);
     if (!own) continue;
     const at = chain ? `${chain} >> internal:control=enter-frame >> ${own}` : own;
-    const tree = await child
-      .locator("body")
-      .ariaSnapshot({ timeout: 3_000 })
-      .catch(() => "");
-    if (tree.trim())
-      out.push(`- iframe ${JSON.stringify(at)}:`, ...tree.split("\n").map((l) => `  ${l}`));
-    await frameSections(child, at, depth + 1, out);
+    out.push({ frame: child, chain: at });
+    await visibleFrames(child, at, depth + 1, out);
   }
+  return out;
 }
 
 /** The page's snapshot, then each visible frame's under `- iframe "<chain>":`. */
 export async function ariaWithFrames(page: Page): Promise<string> {
   const tree = await page.locator("body").ariaSnapshot();
   const sections: string[] = [];
-  await frameSections(page.mainFrame(), null, 1, sections);
+  for (const { frame, chain } of await visibleFrames(page.mainFrame(), null, 1, [])) {
+    const own = await frame
+      .locator("body")
+      .ariaSnapshot({ timeout: 3_000 })
+      .catch(() => "");
+    if (own.trim())
+      sections.push(`- iframe ${JSON.stringify(chain)}:`, ...own.split("\n").map((l) => `  ${l}`));
+  }
   return sections.length ? `${tree}\n${sections.join("\n")}` : tree;
+}
+
+/**
+ * Hints that name no frame and match nothing on the page, pointed at the
+ * first visible frame that holds a match: a card field in a payment
+ * provider's iframe (Braintree, Stripe) is found without the caller
+ * reading the frame chain off the outline. Unchanged otherwise.
+ */
+export async function withFrame(page: Page, hints: Hints): Promise<Hints> {
+  if (
+    hints.frame ||
+    (await locateAll(page, hints)
+      .count()
+      .catch(() => 0))
+  )
+    return hints;
+  for (const { chain } of await visibleFrames(page.mainFrame(), null, 1, [])) {
+    const inside = { ...hints, frame: chain };
+    if (
+      await locateAll(page, inside)
+        .count()
+        .catch(() => 0)
+    )
+      return inside;
+  }
+  return hints;
 }
 
 /** The frame chain an outline section names: `- iframe "<chain>":` → chain. */

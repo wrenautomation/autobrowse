@@ -21,6 +21,7 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 - Journal: `journalFileFor(recordingsDir, site, id)` under `recordings/.explore-<site>/` — `:363`; `readJournal` — `:367`; `DEFAULT_IDLE_MINUTES` 30 — `:381`
 - Money and secrets on this path: `secrets`/`secretHosts` (place by name), `cards`, `cardsOnFile`, `charges`, `approve`, `audit` — `:310-344`; `placeHint` names the flag a missing secret needs — `:218-234`
 - Help by hand, no pause: acts a person does between two commands count (`byHand`, `HAND_GRACE_MS` — `:236`, `:533-540`); the next answer carries `helped {acts, url, changed, note}` — `helpedSince` `:834`
+- A target with no `frame` the page lacks is looked for in each visible iframe (`withFrame`, `src/browser/frames.ts`), so `place` on a card provider's hosted field (Braintree) works with plain role/name hints — `:852-856`
 - Opened by `explorerOpener` — `src/app/backend.ts:243`; the CLI `record`/`explore` verbs in `src/app/cli-record.ts`
 
 ## Connected to

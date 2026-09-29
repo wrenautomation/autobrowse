@@ -36,7 +36,7 @@ import {
   flowRunner,
   type RunnerOptions,
 } from "../browser/flow.js";
-import { ariaWithFrames } from "../browser/frames.js";
+import { ariaWithFrames, withFrame } from "../browser/frames.js";
 import { handsFor } from "../browser/human/index.js";
 import { inPage } from "../browser/in-page.js";
 import { type Hints, locate, locateAll, textOf } from "../browser/locate.js";
@@ -847,8 +847,13 @@ async function serve(
     left = { url: page.url(), rows: now_ };
     return out;
   };
-  const act = async (c: Command, wait: boolean): Promise<unknown> => {
+  const act = async (cmd: Command, wait: boolean): Promise<unknown> => {
     page = fp.page;
+    // A target on no frame that the page lacks is looked for in its iframes (card fields).
+    const c =
+      "hints" in cmd && cmd.hints && !cmd.hints.frame
+        ? ({ ...cmd, hints: await withFrame(page, cmd.hints as Hints) } as Command)
+        : cmd;
     switch (c.cmd) {
       case "open": {
         // Through the runner: a login wall is signed through. A captcha comes back as the
