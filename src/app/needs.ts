@@ -270,6 +270,18 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
       check: () => holds(ctx, "INSTANTLY_API_KEY"),
     },
     {
+      id: "web-search-key",
+      kind: "keys",
+      what: "A web search key: Exa (free signup credits) or Brave Search",
+      unlocks:
+        "web search on the box (DuckDuckGo bot-checks its datacenter IP): wren's `crm` research over `sites web GET /search`",
+      how: [
+        "dashboard.exa.ai → API keys → copy; autobrowse env set EXA_API_KEY --clipboard",
+        "or api-dashboard.search.brave.com → copy; autobrowse env set BRAVE_API_KEY --clipboard",
+      ],
+      check: async () => (await holds(ctx, "EXA_API_KEY")) || (await holds(ctx, "BRAVE_API_KEY")),
+    },
+    {
       id: "anthropic-credits",
       kind: "money",
       what: "Anthropic API credits ($5 min)",

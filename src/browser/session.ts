@@ -232,7 +232,12 @@ function keepOutOfTheWay(): void {
 }
 
 /** Launch flags that keep a site from telling the browser apart from a person's. */
-const LOCAL_ARGS = ["--disable-blink-features=AutomationControlled"];
+/**
+ * A Linux box has no GPU, and headed Chrome there has no WebGL at all (it dropped the
+ * software fallback): a rarer tell than the software renderer this turns back on.
+ */
+const NO_GPU_ARGS = process.platform === "linux" ? ["--enable-unsafe-swiftshader"] : [];
+const LOCAL_ARGS = ["--disable-blink-features=AutomationControlled", ...NO_GPU_ARGS];
 
 /**
  * Behind a proxy, WebRTC would still ask STUN over UDP from the machine's

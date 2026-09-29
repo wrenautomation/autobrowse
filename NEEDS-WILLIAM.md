@@ -16,6 +16,10 @@ Live list: `pnpm autobrowse needs`. Rows clear themselves. Dated 2026-09-27.
 
 
 
+- **A web search key.** The box can't search: DuckDuckGo bot-checks its IP and
+  no key is set. Exa's free signup credits do: copy the key,
+  `autobrowse env set EXA_API_KEY --clipboard`.
+
 Optional: `autobrowse creds paste google@will` and a Gmail consent for
 will@williamjin.dev, if autobrowse should read that inbox.
 
