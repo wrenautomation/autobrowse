@@ -21,7 +21,7 @@ Every act goes through `fp.act` with a goal in words, so the repairer, the trace
 - `FlowPage { page, passkeys, open, act, read, scroll … }` — `:92-152`; `Op` (click, fill, select, press, upload) — `:70-76`; `ActOptions { goal, irreversible, timeoutMs }` — `:78-84`
 - `FlowInterrupted` (browser died: host retries whole flow) and `FlowFailed` — `:174-207`
 - `RunnerOptions`: `repairer`, `pace`, `login`, `captcha`, `fixes`, `learnedScreens`, `onRepair` — `:209-261`
-- The hand-written catalog: `src/browser/flows/index.ts` (OAuth consents, posts, tokens, LinkedIn reach, X reads, Reddit reads/submit/comment on old.reddit.com)
+- The hand-written catalog: `src/browser/flows/index.ts` (OAuth consents, posts, tokens, LinkedIn reach, X reads, Reddit reads/submit/comment on old.reddit.com, Loom upload/rename/delete)
 - Feeds: `scrollCollect(fp, {read, key, max, stop?, skip?})` — `src/browser/scroll-collect.ts`: read what is on screen, scroll most of a window, keep rows by key (feeds are virtualized); ends at `max`, the cursor row, or after idle scrolls
 
 ## Connected to

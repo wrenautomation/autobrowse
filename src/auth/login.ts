@@ -13,6 +13,7 @@ import type { Credential, CredentialStore, SecretAudit } from "credvault";
 import type { FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
 import { wallOf } from "../browser/session.js";
+import { safeUrls } from "../clients/http.js";
 import { type CodeKind, type CodeSource, inboxLock } from "./codes.js";
 import { guardedPage, hostUnder, registrable } from "./guard.js";
 import { type IdentityProvider, type Provider, providerOf } from "./providers.js";
@@ -173,7 +174,7 @@ export interface FormLoginSpec {
 
 export class LoginFailed extends Error {
   constructor(site: string, reason: string) {
-    super(`${site}: ${reason}`);
+    super(safeUrls(`${site}: ${reason}`));
     this.name = "LoginFailed";
   }
 }

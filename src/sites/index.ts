@@ -14,6 +14,7 @@ export { gmail, gmailOAuth } from "./gmail.js";
 export { instagram } from "./instagram.js";
 export { langfuse } from "./langfuse.js";
 export { linkedin } from "./linkedin.js";
+export { LOOM_ORIGIN, loom } from "./loom.js";
 export { meta, metaOAuth } from "./meta.js";
 export { createRegistryUser, NPM_TOKEN, npm } from "./npm.js";
 export { accessTokens, accountEnv, runConsent } from "./oauth.js";
@@ -32,6 +33,7 @@ import { gmail } from "./gmail.js";
 import { instagram } from "./instagram.js";
 import { langfuse } from "./langfuse.js";
 import { linkedin } from "./linkedin.js";
+import { loom } from "./loom.js";
 import { meta } from "./meta.js";
 import { npm } from "./npm.js";
 import { outlook } from "./outlook.js";
@@ -54,6 +56,7 @@ export const SITES: readonly SiteApi[] = [
   meta,
   x,
   reddit,
+  loom,
   npm,
   calcom,
   web,

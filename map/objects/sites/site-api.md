@@ -9,11 +9,11 @@ entity: src/sites/types.ts
 
 # Site API
 
-A site served under its official API's shape, with the steps that make its keys: `SiteApi` in `src/sites/types.ts`; the list is `SITES` in `src/sites/index.ts:46` (linkedin, youtube, instagram, tiktok, outlook, gmail, langfuse, meta, x, reddit, npm, calcom, web).
+A site served under its official API's shape, with the steps that make its keys: `SiteApi` in `src/sites/types.ts`; the list is `SITES` in `src/sites/index.ts:48` (linkedin, youtube, instagram, tiktok, outlook, gmail, langfuse, meta, x, reddit, loom, npm, calcom, web).
 
 ## Why this shape
 
-Callers speak the official REST shape. A route has an `api` leg and, only where the API lacks the call, a `browser` leg (a hand-written flow or a compiled workflow). A route marked `prefer: "browser"` answers from its browser leg even with a token: X bills every API read, so its profile, posts, one-post and search reads run on the signed-in page (`src/browser/flows/x-read.ts`, proven 2026-09-29 as x@wren) in v2's shapes, `since_id` as the cursor. Setup steps make tokens the same way (`src/sites/types.ts:45-100`). `auth: {open: true}` is a keyless site (`web`: search and read, `src/sites/web.ts`), every api leg runs. Reddit refused Wren an API client (2026-09-29), so `src/sites/reddit.ts` is all browser legs in the Data API's shapes, on old.reddit.com (`src/browser/flows/reddit.ts`); they need a home IP, so wren calls them on the Mac's `desk` service ([[app]]).
+Callers speak the official REST shape. A route has an `api` leg and, only where the API lacks the call, a `browser` leg (a hand-written flow or a compiled workflow). A route marked `prefer: "browser"` answers from its browser leg even with a token: X bills every API read, so its profile, posts, one-post and search reads run on the signed-in page (`src/browser/flows/x-read.ts`, proven 2026-09-29 as x@wren) in v2's shapes, `since_id` as the cursor. Setup steps make tokens the same way (`src/sites/types.ts:45-100`). `auth: {open: true}` is a keyless site (`web`: search and read, `src/sites/web.ts`), every api leg runs. Reddit refused Wren an API client (2026-09-29), so `src/sites/reddit.ts` is all browser legs in the Data API's shapes, on old.reddit.com (`src/browser/flows/reddit.ts`); they need a home IP, so wren calls them on the Mac's `desk` service ([[app]]). Loom has no owner API: `src/sites/loom.ts` reads a video through open oEmbed and uploads, retitles and deletes through the web app (`src/browser/flows/loom.ts`); the upload's share link is the post.
 
 ## Shape
 

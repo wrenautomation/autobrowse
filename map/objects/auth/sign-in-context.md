@@ -17,7 +17,7 @@ Codes come from sources the site never sees (TOTP from the vault, an inbox, a ph
 
 ## Shape
 
-- `SignInContext { fp, cred, code(kind, hint?, after?), serial?, offers(kind), inbox(kind), notify?, credFor(site, account?), as(cred) }` — `src/auth/login.ts:20-53`; built by `signInContext` — `:461`
+- `SignInContext { fp, cred, code(kind, hint?, after?), serial?, offers(kind), inbox(kind), notify?, credFor(site, account?), as(cred) }` — `src/auth/login.ts:21-54`; built by `signInContext` — `:461`
 - `CodeKind = totp | email | sms`; `CodeSource { get, offers, inbox }`; `totpSource`, `messageSource`, `codeSources`; `MessageReader` — `src/auth/codes.ts:10-139`; `inboxLock` — `:174`
 - Readers: Gmail (`src/clients/gmail.ts`), the paired phone (`phoneReader`, `src/devices/phone.ts:78`), Twilio (`src/clients/twilio.ts`); wired by `codesFor` — `src/app/services.ts:541`
 
@@ -40,4 +40,4 @@ Codes come from sources the site never sees (TOTP from the vault, an inbox, a ph
 
 ## See
 
-- Source: `src/auth/login.ts:20`, `src/auth/codes.ts`
+- Source: `src/auth/login.ts:21`, `src/auth/codes.ts`

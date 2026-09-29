@@ -27,6 +27,15 @@ export {
   type Profile as LinkedInProfile,
 } from "./linkedin-reach.js";
 export {
+  LOOM,
+  loomDelete,
+  loomRename,
+  loomUpload,
+  type RenameInput as LoomRenameInput,
+  type UploadInput as LoomUploadInput,
+  type Video as LoomVideo,
+} from "./loom.js";
+export {
   type GranularTokenInput,
   type GranularTokenResult,
   npmGranularToken,

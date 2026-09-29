@@ -66,6 +66,11 @@ export function safeUrl(url: string): string {
   }
 }
 
+/** Every URL in a message down to origin + path: an error names the page, never its tokens. */
+export function safeUrls(text: string): string {
+  return text.replace(/https?:\/\/[^\s"'<>)]*[^\s"'<>).,;:!?]/gi, safeUrl);
+}
+
 export function httpClient(opts: HttpOptions = {}): HttpClient {
   const doFetch = opts.fetch ?? ((u, i) => fetch(u, i));
   const timeoutMs = opts.timeoutMs ?? 30_000;

@@ -21,11 +21,11 @@ If flows signed in themselves, every flow would carry every site's quirks and ev
 ## Steps
 
 1. The runner sees a wall after navigation and calls `runner.login(fp, site, account)`; a second wall while signing in is not retried — `src/browser/flow.ts:97-100,512-523`
-2. `loginProvider` resolves the spec (`resolveLogin`), lists methods (`methodsOf`: password first, then each `via`) — `src/auth/login.ts:536-619,407,621`
-3. `signInContext` binds the credential, the code sources and the phone notifier — `src/auth/login.ts:464`; codes: `src/auth/codes.ts:65-139`, inbox lock `:174`
-4. The page is bound to the spec's origins (`boundPage`, `passwordDomains`) so a fill of the password on any other host is refused and recorded — `src/auth/guard.ts:88`, `src/auth/login.ts:383`
-5. `spec.signIn(ctx)`: `formLogin` for a form (`src/auth/login.ts:193`), `oauthLogin` presses the provider button and hands to `providerOf(via).signIn` (`:272`, `src/auth/providers.ts:31`), a walk for a branching site (`googleWalk`, `src/auth/google.ts`; `walk()`, `src/browser/screens.ts:409`)
-6. A method that throws `LoginFailed` yields to the next; none left → `no-credential` — `src/auth/login.ts:174,563-603`
+2. `loginProvider` resolves the spec (`resolveLogin`), lists methods (`methodsOf`: password first, then each `via`) — `src/auth/login.ts:537-620,408,622`
+3. `signInContext` binds the credential, the code sources and the phone notifier — `src/auth/login.ts:465`; codes: `src/auth/codes.ts:65-139`, inbox lock `:174`
+4. The page is bound to the spec's origins (`boundPage`, `passwordDomains`) so a fill of the password on any other host is refused and recorded — `src/auth/guard.ts:88`, `src/auth/login.ts:384`
+5. `spec.signIn(ctx)`: `formLogin` for a form (`src/auth/login.ts:194`), `oauthLogin` presses the provider button and hands to `providerOf(via).signIn` (`:272`, `src/auth/providers.ts:31`), a walk for a branching site (`googleWalk`, `src/auth/google.ts`; `walk()`, `src/browser/screens.ts:409`)
+6. A method that throws `LoginFailed` yields to the next; none left → `no-credential` — `src/auth/login.ts:175,564-604`
 7. The runner retries the open; a wall still there is a person's (`NeedsHuman`) — `src/browser/flow.ts:512-533`
 
 ## If you change this

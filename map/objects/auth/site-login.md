@@ -17,7 +17,7 @@ The runner meets a wall and calls one hook (`RunnerOptions.login`); the spec say
 
 ## Shape
 
-- `SiteLogin { site, home, credential?, ask?, via?, loggedIn, signIn, signInHere?, totpSetup?, passwordChange?, passkeySetup?, recoveryCodes?, origins? }` — `src/auth/login.ts:54-95`
+- `SiteLogin { site, home, credential?, ask?, via?, loggedIn, signIn, signInHere?, totpSetup?, passwordChange?, passkeySetup?, recoveryCodes?, origins? }` — `src/auth/login.ts:55-96`
 - Builders: `formLogin` `:193`, `oauthLogin` `:272`, `viaLogin` `:313`; `LoginFailed` (this method failed, try the next) `:174`
 - `loginProvider(sites, opts)` = the runner's hook: resolves the site, picks methods, signs in, returns `signed-in | no-credential | unknown-site` — `:533-616`
 - Wired: `loginFor` — `src/app/services.ts:584`
@@ -26,7 +26,7 @@ The runner meets a wall and calls one hook (`RunnerOptions.login`); the spec say
 
 - **owns:** its walk or form
 - **owned-by:** `SITE_LOGINS`
-- **joins:** [[credential]], [[identity-provider]] (`via`), [[sign-in-context]], [[screen]] (walks), [[guard]] (`passwordDomains`, `src/auth/login.ts:383`), [[need]]
+- **joins:** [[credential]], [[identity-provider]] (`via`), [[sign-in-context]], [[screen]] (walks), [[guard]] (`passwordDomains`, `src/auth/login.ts:384`), [[need]]
 - **looks-like-but-is-not:** [[site-api]] (the official API), `SITES` in `src/browser/flow.ts:63`
 
 ## If you change this

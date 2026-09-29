@@ -29,7 +29,7 @@ A sign-in reused by every site that shows its button: `IdentityProvider` in `src
 
 ## If you change this
 
-- **Hits:** `src/auth/login.ts:272-338` (`oauthLogin`, `landAfterOauth`), `src/auth/sites.ts`, `src/browser/flows/*-oauth-consent.ts`, `src/sites/wire.ts:68` (`consentProviderOf`), `test/google.test.ts`.
+- **Hits:** `src/auth/login.ts:273-339` (`oauthLogin`, `landAfterOauth`), `src/auth/sites.ts`, `src/browser/flows/*-oauth-consent.ts`, `src/sites/wire.ts:68` (`consentProviderOf`), `test/google.test.ts`.
 - **Does not hit:** `src/auth/identities.ts`; site API tokens.
 
 ## Surfaces

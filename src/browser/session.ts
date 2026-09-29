@@ -8,7 +8,7 @@
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import type { Browser, BrowserContext, Page } from "playwright";
-import type { HttpClient } from "../clients/http.js";
+import { type HttpClient, safeUrls } from "../clients/http.js";
 import { expandHome } from "../google-auth.js";
 import { geometry, type Identity, learnIdentity, wearIdentity } from "./identity.js";
 import type { Hints } from "./locate.js";
@@ -31,7 +31,7 @@ export class NeedsHuman extends Error {
   /** Set by the runner, not the flow: where the screenshot and trace went. */
   artifacts: Artifacts = {};
   constructor(reason: string) {
-    super(reason);
+    super(safeUrls(reason));
     this.name = "NeedsHuman";
   }
 }
