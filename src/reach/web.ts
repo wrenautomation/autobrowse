@@ -49,6 +49,20 @@ const TIMEOUT_MS = 30_000;
 
 class Skip extends Error {}
 
+/**
+ * No backend could answer, or the caller named one that does not exist: a final
+ * answer, not a blip to retry. 501 when every backend was skipped (no key set),
+ * 502 when they ran and failed, 400 for an unknown `via`.
+ */
+export class WebMiss extends Error {
+  readonly status: 400 | 501 | 502;
+  constructor(message: string, status: 400 | 501 | 502) {
+    super(message);
+    this.name = "WebMiss";
+    this.status = status;
+  }
+}
+
 async function get(f: typeof fetch, url: string, init: RequestInit = {}): Promise<Response> {
   const res = await f(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -63,7 +77,7 @@ async function firstOf<T>(
   const tried: Tried[] = [];
   for (const via of order) {
     const go = run[via];
-    if (!go) throw new Error(`no backend ${via}; there are ${Object.keys(run).join(", ")}`);
+    if (!go) throw new WebMiss(`no backend ${via}; there are ${Object.keys(run).join(", ")}`, 400);
     try {
       return { value: await go(), via, tried };
     } catch (e) {
@@ -74,7 +88,11 @@ async function firstOf<T>(
       });
     }
   }
-  throw new Error(`nothing answered: ${tried.map((t) => `${t.via} (${t.why})`).join("; ")}`);
+  const skipped = tried.every((t) => t.why.startsWith("skipped:"));
+  throw new WebMiss(
+    `nothing answered: ${tried.map((t) => `${t.via} (${t.why})`).join("; ")}`,
+    skipped ? 501 : 502,
+  );
 }
 
 /* ---------------- read ---------------- */

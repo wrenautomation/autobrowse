@@ -7,8 +7,13 @@
  * when unset. `via` reorders them for one call.
  */
 import { z } from "zod";
-import { readPage, search } from "../reach/web.js";
-import { route, type SiteApi } from "./types.js";
+import { readPage, search, WebMiss } from "../reach/web.js";
+import { route, type SiteApi, SiteError } from "./types.js";
+
+/** No backend answering is the caller's to read, not a retry: Restate would replay it forever. */
+const final = (e: unknown): never => {
+  throw e instanceof WebMiss ? new SiteError(e.status, e.message) : e;
+};
 
 const order = z
   .string()
@@ -36,7 +41,9 @@ export const web: SiteApi = {
         via: order,
       }),
       api: ({ q, n, via }, leg) =>
-        search(q, { env: async (k) => leg.env(k) }, { n, ...(via ? { order: via } : {}) }),
+        search(q, { env: async (k) => leg.env(k) }, { n, ...(via ? { order: via } : {}) }).catch(
+          final,
+        ),
     }),
     route({
       method: "GET",
@@ -49,7 +56,11 @@ export const web: SiteApi = {
         via: order,
       }),
       api: ({ url, max, via }, leg) =>
-        readPage(url, { env: async (k) => leg.env(k) }, { max, ...(via ? { order: via } : {}) }),
+        readPage(
+          url,
+          { env: async (k) => leg.env(k) },
+          { max, ...(via ? { order: via } : {}) },
+        ).catch(final),
     }),
   ],
   setup: [],

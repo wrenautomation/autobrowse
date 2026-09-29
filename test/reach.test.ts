@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { duckduckgoHits, htmlText, readPage, search } from "../src/reach/web.js";
+import { duckduckgoHits, htmlText, readPage, search, WebMiss } from "../src/reach/web.js";
+import { type ApiLeg, SiteError } from "../src/sites/types.js";
+import { web } from "../src/sites/web.js";
 
 type Call = { url: string; headers: Record<string, string> };
 function fakeFetch(answer: (url: string) => Response) {
@@ -59,6 +61,30 @@ describe("search", () => {
     expect(r.tried).toEqual([{ via: "exa", why: "skipped: no EXA_API_KEY" }]);
     expect(calls[0]?.url).not.toContain("k1");
     expect(calls[0]?.headers["X-Subscription-Token"]).toBe("k1");
+  });
+
+  it("nothing answering is final: 502 when backends failed, 501 when all lacked keys, 400 for an unknown one", async () => {
+    const { f } = fakeFetch(() => new Response("bot check", { status: 403 }));
+    const miss = (p: Promise<unknown>) =>
+      p.then(
+        () => null,
+        (e: unknown) => e as WebMiss,
+      );
+    const failed = await miss(search("q", { env: env({ BRAVE_API_KEY: "k" }), fetch: f }));
+    expect(failed).toBeInstanceOf(WebMiss);
+    expect(failed?.status).toBe(502);
+    expect(
+      (await miss(search("q", { env: env({}), fetch: f }, { order: ["exa", "brave"] })))?.status,
+    ).toBe(501);
+    expect((await miss(search("q", { env: env({}), fetch: f }, { order: ["bing"] })))?.status).toBe(
+      400,
+    );
+    // Through the site: a SiteError, which the Restate face makes terminal (no endless retry).
+    const leg = { token: "", http: {} as ApiLeg["http"], env: () => undefined } as ApiLeg;
+    const api = web.routes[0]?.api as (i: unknown, l: ApiLeg) => Promise<unknown>;
+    const err = await api({ q: "q", n: 5, via: ["exa", "brave"] }, leg).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SiteError);
+    expect((err as SiteError).status).toBe(501);
   });
 
   it("reads DuckDuckGo's html results, ads left out", () => {
