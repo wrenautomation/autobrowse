@@ -10,8 +10,8 @@ import { memorySink } from "../src/deps/sink.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
 import type { Approval } from "../src/gates/payment.js";
 import { siteFacade } from "../src/sites/facade.js";
-import { META_REDIRECT, meta, metaOAuth } from "../src/sites/meta.js";
-import { runConsent } from "../src/sites/oauth.js";
+import { meta, metaOAuth } from "../src/sites/meta.js";
+import { runConsent, WEB_REDIRECT } from "../src/sites/oauth.js";
 import { fakePage } from "./auth-fakes.js";
 
 const base = { username: "w@x.dev", password: "p", recoveryCodes: [], passkeys: [] };
@@ -250,8 +250,8 @@ describe("meta site", () => {
           expect(u.origin + u.pathname).toBe("https://www.facebook.com/v23.0/dialog/oauth");
           expect(u.searchParams.get("scope")).toBe(metaOAuth.scopes.join(","));
           // Meta enforces HTTPS: nothing listens, the browser answers and the flow returns the URL.
-          expect(u.searchParams.get("redirect_uri")).toBe(META_REDIRECT);
-          return { landed: `${META_REDIRECT}?code=c&state=${u.searchParams.get("state")}#_=_` };
+          expect(u.searchParams.get("redirect_uri")).toBe(WEB_REDIRECT);
+          return { landed: `${WEB_REDIRECT}?code=c&state=${u.searchParams.get("state")}#_=_` };
         },
       }),
     ).resolves.toEqual({ refreshToken: null, accessToken: "long", expiresIn: 5_184_000 });

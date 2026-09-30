@@ -10,8 +10,7 @@ import { httpClient } from "../src/clients/http.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
 import { SITES } from "../src/sites/index.js";
 import { instagram, instagramOAuth } from "../src/sites/instagram.js";
-import { META_REDIRECT } from "../src/sites/meta.js";
-import { accessTokens, runConsent } from "../src/sites/oauth.js";
+import { accessTokens, runConsent, WEB_REDIRECT } from "../src/sites/oauth.js";
 import { tiktok, tiktokOAuth } from "../src/sites/tiktok.js";
 import { fakePage } from "./auth-fakes.js";
 
@@ -266,12 +265,9 @@ describe("instagram and tiktok consents and OAuth shapes", () => {
             expect(u.searchParams.get("scope")).toBe(spec.scopes.join(","));
           }
           const state = u.searchParams.get("state");
-          // Instagram, like Meta, refuses loopback: the browser lands on the https redirect.
-          if (spec === instagramOAuth) {
-            expect(u.searchParams.get("redirect_uri")).toBe(META_REDIRECT);
-            return { landed: `${META_REDIRECT}?code=c&state=${state}` };
-          }
-          await fetch(`http://127.0.0.1:${port}/oauth/callback?code=c&state=${state}`);
+          // Both, like Meta, refuse loopback: the browser lands on the https redirect.
+          expect(u.searchParams.get("redirect_uri")).toBe(WEB_REDIRECT);
+          return { landed: `${WEB_REDIRECT}?code=c&state=${state}` };
         },
       });
     await expect(consent(tiktokOAuth, 9421)).resolves.toEqual({

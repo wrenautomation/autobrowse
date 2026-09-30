@@ -64,6 +64,12 @@ function clientFields(
   return { fields: { [idParam]: id, client_secret: secret }, headers: {} };
 }
 
+/**
+ * The https redirect a site that refuses http or localhost registers (Meta,
+ * Instagram, TikTok). The browser answers it, so nothing on the site serves it.
+ */
+export const WEB_REDIRECT = "https://wrenautomation.com/oauth/callback";
+
 /** PKCE: a verifier and its S256 challenge. */
 export function pkcePair(): { verifier: string; challenge: string } {
   const verifier = randomBytes(48).toString("base64url");

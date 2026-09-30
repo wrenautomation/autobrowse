@@ -412,11 +412,9 @@ export const WREN_SIGNUPS: readonly {
     handoff: "the web signup hits X's app-only risk wall, headed or not",
     appOnly: true,
   },
-  {
-    site: "tiktok",
-    handoff: "the web signup's 'Send code' never sends (a silent risk check), headed or not",
-    appOnly: true,
-  },
+  // The web's email signup never sends its code (a silent risk check); Continue
+  // with Google on the web works (2026-09-29).
+  { site: "tiktok", handoff: null },
 ];
 
 /** Needs for Wren's own accounts: one per signup not yet stored, plus the profile steps after. */

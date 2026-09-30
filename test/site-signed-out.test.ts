@@ -5,6 +5,7 @@ import { defineFlow } from "../src/browser/flow.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import { perplexity, route, type SiteApi, siteFacade, web, youtube } from "../src/sites/index.js";
+import type { OAuthSpec } from "../src/sites/types.js";
 import { consentProviderOf } from "../src/sites/wire.js";
 import { fakeFetch } from "./fakes.js";
 
@@ -90,6 +91,58 @@ describe("signed-out sites", () => {
     await sites.call("web", "GET", "/look", { q: "x" });
     expect(asked).toEqual(["web"]);
     expect(ran).toEqual(["web@policy"]);
+  });
+});
+
+describe("consent of a site made via a provider", () => {
+  it("opens in the account's provider profile, where its browser legs run", async () => {
+    const redirect = "https://wren.test/cb";
+    const ran: string[] = [];
+    const consent = defineFlow<{ url: string }, { landed: string }>({
+      site: "vs",
+      name: "oauth-consent",
+      async run(_fp, { url }) {
+        return { landed: `${redirect}?code=c&state=${new URL(url).searchParams.get("state")}` };
+      },
+    });
+    const runner = {
+      async run(flow: BrowserFlow<unknown, unknown>, input: unknown) {
+        ran.push(flow.site);
+        return flow.run({} as never, input);
+      },
+    } as FlowRunner;
+    const oauth: OAuthSpec = {
+      authorizeUrl: "https://vs/auth",
+      tokenUrl: "https://vs/token",
+      scopes: ["a"],
+      clientId: "VS_ID",
+      clientSecret: "VS_SECRET",
+      refreshToken: "VS_REFRESH",
+      redirect,
+      consent: { flow: "vs/oauth-consent" },
+    };
+    const vs: SiteApi = {
+      site: "vs",
+      origin: "https://vs",
+      via: "google",
+      auth: { oauth },
+      routes: [],
+      setup: [{ name: "consent", how: { oauth }, makes: ["VS_REFRESH"], summary: "" }],
+    };
+    const sites = siteFacade([vs], {
+      http: httpClient({
+        fetch: fakeFetch(() => ({ body: { access_token: "t", refresh_token: "r" } })).fetch,
+      }),
+      env: (n) => (n === "VS_ID" || n === "VS_SECRET" ? "x" : undefined),
+      sink: memorySink(),
+      runner,
+      flow: (n) => (n === "vs/oauth-consent" ? (consent as never) : null),
+      accountFor: async () => "me@wren.test",
+      providerOf: consentProviderOf,
+      profileFor: async (at, account) => `${at}@${account.split("@")[0]}`,
+    });
+    await sites.setup("vs", "consent");
+    expect(ran).toEqual(["google@me"]);
   });
 });
 

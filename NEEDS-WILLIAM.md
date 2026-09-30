@@ -1,12 +1,16 @@
 # Needs William
 
-Live list: `pnpm autobrowse needs`. Rows clear themselves. Dated 2026-09-27.
+Live list: `pnpm autobrowse needs`. Rows clear themselves. Dated 2026-09-30.
 
 ## To do
 
-- **TikTok.** In the phone app: sign up → Continue with Google →
-  william@wrenautomation.com, name "Wren Automation", handle wrenautomation.
-  Then tell me. I do the developer app and consent.
+- **Gmail token on your personal account lapsed** (Google revoked it). Wren
+  mail still reads fine. Only if autobrowse should read that inbox again:
+  `autobrowse site setup gmail consent --account <your gmail>`.
+
+- **Heads-up, no action.** TikTok is live through a sandbox app: posts stay
+  private until TikTok reviews the app, and the review needs a demo video.
+  Say when you want public TikTok posts; I make the video and apply.
 
 - **Loom plan.** The 14-day trial ends ~10-13. After it, Starter caps at 25
   videos of 5 minutes. Upgrade only if that's too small (your spend).

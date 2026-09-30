@@ -506,7 +506,11 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       const spec = step.how.oauth;
       const implicit = !account ? ((await deps.accountFor?.(s, step)) ?? null) : null;
       const as = account ?? implicit;
-      const at = "flow" in spec.consent ? (spec.consent.flow.split("/")[0] ?? name) : null;
+      // A site made through a provider (TikTok via Google) consents in that account's
+      // provider profile, where its browser legs run too.
+      const at =
+        deps.providerOf?.(s) ??
+        ("flow" in spec.consent ? (spec.consent.flow.split("/")[0] ?? name) : null);
       const profile = asProfile ?? (as && at ? await deps.profileFor?.(at, as) : null);
       // A named account with no credential of its own would consent in the default profile,
       // as whoever that is (a person's own account, once): refuse instead.

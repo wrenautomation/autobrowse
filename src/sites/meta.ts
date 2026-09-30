@@ -12,6 +12,7 @@
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
 import type { Amount } from "../gates/spend.js";
+import { WEB_REDIRECT } from "./oauth.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 
 export const META_ORIGIN = "https://graph.facebook.com";
@@ -242,13 +243,6 @@ function budgetOf(i: {
   return null;
 }
 
-/**
- * The redirect URI the Meta app registers (Facebook Login for Business →
- * Settings; wrenautomation.com is in App domains). Meta takes neither http
- * nor localhost; the browser answers it, so nothing on the site serves it.
- */
-export const META_REDIRECT = "https://wrenautomation.com/oauth/callback";
-
 export const metaOAuth: OAuthSpec = {
   authorizeUrl: `https://www.facebook.com/${META_VERSION}/dialog/oauth`,
   tokenUrl: `${META_ORIGIN}/${META_VERSION}/oauth/access_token`,
@@ -280,7 +274,7 @@ export const metaOAuth: OAuthSpec = {
     clientIdParam: "client_id",
   },
   identity: { url: v("me?fields=name"), field: "name" },
-  redirect: META_REDIRECT,
+  redirect: WEB_REDIRECT,
   consent: { flow: "facebook/oauth-consent" },
 };
 
@@ -517,7 +511,7 @@ export const meta: SiteApi = {
       makes: ["META_CLIENT_ID", "META_CLIENT_SECRET"],
       how: {
         workflow: "meta-developer-app",
-        input: { redirectUri: META_REDIRECT },
+        input: { redirectUri: WEB_REDIRECT },
       },
       summary:
         "On developers.facebook.com: a Business app with Facebook Login for Business, Marketing API and Instagram products, the redirect URI; keep the app id and secret",

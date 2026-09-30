@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
+import { WEB_REDIRECT } from "./oauth.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 
 export const TIKTOK_ORIGIN = "https://open.tiktokapis.com";
@@ -78,6 +79,7 @@ export const tiktokOAuth: OAuthSpec = {
   clientId: "TIKTOK_CLIENT_KEY",
   clientSecret: "TIKTOK_CLIENT_SECRET",
   refreshToken: "TIKTOK_REFRESH_TOKEN",
+  redirect: WEB_REDIRECT,
   consent: { flow: "tiktok/oauth-consent" },
 };
 
@@ -86,6 +88,8 @@ export const tiktok: SiteApi = {
   origin: TIKTOK_ORIGIN,
   probe: { path: "/v2/user/info/" },
   auth: { oauth: tiktokOAuth },
+  // Wren's account was made with "Continue with Google" (2026-09-29).
+  via: "google",
   routes: [
     route({
       method: "GET",
@@ -196,7 +200,7 @@ export const tiktok: SiteApi = {
       makes: ["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"],
       how: {
         workflow: "tiktok-developer-app",
-        input: { redirectUri: "http://127.0.0.1:9400/oauth/callback" },
+        input: { redirectUri: WEB_REDIRECT },
       },
       summary:
         "On developers.tiktok.com: an app with Login Kit + Content Posting API, the redirect URI, the account as a target user; keep the client key and secret",

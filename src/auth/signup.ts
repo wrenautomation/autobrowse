@@ -203,7 +203,10 @@ export interface NewAccount {
 }
 
 /** Sites whose signup form caps a password below the minted 24 characters. */
-export const PASSWORD_MAX: Readonly<Record<string, number>> = { tiktok: 20 };
+export const PASSWORD_MAX: Readonly<Record<string, number>> = {
+  tiktok: 20,
+  "tiktok-developers": 20,
+};
 
 const passwordLength = (site: string) =>
   Math.min(24, PASSWORD_MAX[site.split("@")[0] ?? site] ?? 24);

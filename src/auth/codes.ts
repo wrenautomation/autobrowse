@@ -44,6 +44,7 @@ export interface MessageReader {
  * The code in a message: a prefixed one first (`FB-12345`, `G-123456`), then
  * 4–8 digits next to the word "code" (Facebook's are 5), then any 6–8 digits.
  * A bare 4–5 digit number far from "code" is a year or a zip, not a code.
+ * A letters-and-digits one comes only after "code:" or "pin:" (TikTok's).
  */
 export function extractCode(text: string): string | null {
   const near =
@@ -51,6 +52,8 @@ export function extractCode(text: string): string | null {
     text.match(/code[^0-9]{0,40}?\b(\d{4,8})\b/i) ??
     text.match(/\b(\d{4,8})\b[^0-9]{0,40}?code/i);
   if (near?.[1]) return near[1];
+  const mixed = text.match(/\b(?:code|pin)\b[^:\n]{0,40}:\s*((?=[A-Za-z]*\d)[A-Za-z0-9]{4,8})\b/i);
+  if (mixed?.[1]) return mixed[1];
   const any = text.match(/\b(\d{6,8})\b/);
   return any?.[1] ?? null;
 }
