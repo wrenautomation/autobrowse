@@ -7,13 +7,6 @@ Live list: `pnpm autobrowse needs`. Rows clear themselves. Dated 2026-09-30.
 - **Yes on the recruiting opener run (~$70).** One grounded first line per
   firm, ~12k firms, Command A. Sample: 29 lines from 42 firms with a site.
 
-- **Data Axle: optional, your spend.** Free sources already reach 10k
-  recruiting leads (Overture places, SBA search), so this only adds owner
-  names and sales figures. The one library I found that gives it outside its
-  city is Burlington (Ontario): US + Canada data, non-resident card $66/yr,
-  paid by phone at 905.639.3611. Edmonton has none; Calgary is Canada-only
-  and residents-only. If you buy the card, say so and I build the export flow.
-
 - **Heads-up, no action.** TikTok is live through a sandbox app: posts stay
   private until TikTok reviews the app, and the review needs a demo video.
   Say when you want public TikTok posts; I make the video and apply.
