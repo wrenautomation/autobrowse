@@ -41,6 +41,7 @@ import { handsFor } from "../browser/human/index.js";
 import { inPage } from "../browser/in-page.js";
 import { type Hints, locate, locateAll, textOf } from "../browser/locate.js";
 import { snapshotPage } from "../browser/repair.js";
+import { lookAt, type PageLook } from "../browser/screens.js";
 import { type BrowserOptions, bodyText, looksLikeWall, NeedsHuman } from "../browser/session.js";
 import type { SecretSink } from "../deps/sink.js";
 import { macDesktop } from "../desktop/mac.js";
@@ -90,6 +91,7 @@ import {
 } from "../recorder/redact.js";
 import { saveRecording } from "../recorder/store.js";
 import type { Action, LocatorHints, Recording } from "../recorder/types.js";
+import { machine, type RunLog, type RunOutcome, runLog } from "../runs/log.js";
 
 const hintsSchema = z.object({
   tag: z.string().nullable().optional(),
@@ -185,6 +187,14 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   /** Read a secret the site just minted straight into the secret sink under `env`; nothing shows it. */
   targetSchema.extend({ cmd: z.literal("keep"), env: z.string().regex(/^[A-Z][A-Z0-9_]*$/) }),
   z.object({ cmd: z.literal("note"), text: z.string() }),
+  /** What this run is for, in words: the history groups runs by it and walks are built from it. */
+  z.object({ cmd: z.literal("goal"), text: z.string().min(1).max(500) }),
+  /** The goal is met, or cannot be: ends this run in the history. The session stays open; the next command starts a new run. */
+  z.object({
+    cmd: z.literal("done"),
+    outcome: z.enum(["achieved", "failed"]),
+    summary: z.string().max(500).optional(),
+  }),
   /** Solve the captcha on the page: the checkbox by hand, a picture by the runner's eyes. Journaled, so the compiled flow solves it too. */
   z.object({ cmd: z.literal("captcha") }),
   /** Write the journal as a recording under `recordingsDir/<name>`. */
@@ -220,7 +230,32 @@ const LOOKS = new Set<Command["cmd"]>([
   "key",
 ]);
 /** Session controls and nesting stay out of a batch. */
-const UNBATCHABLE = new Set<Command["cmd"]>(["batch", "close", "pause", "resume", "save"]);
+const UNBATCHABLE = new Set<Command["cmd"]>([
+  "batch",
+  "close",
+  "pause",
+  "resume",
+  "save",
+  "goal",
+  "done",
+]);
+/** Acts a walk replays: the run keeps the page each was done on (`lookAt`, before the act). */
+const LOOKED_AT = new Set<Command["cmd"]>([
+  "click",
+  "drag",
+  "fill",
+  "place",
+  "select",
+  "upload",
+  "press",
+  "read",
+  "keep",
+  "captcha",
+]);
+/** Answers a caller that reads the whole page each time would get instead: measured for the token report. */
+const WHOLE_PAGE = new Set<Command["cmd"]>([...LOOKS, "aria", "snapshot", "text", "batch"]);
+/** How long the whole-page measure may take before the row goes without it. */
+const FULL_MS = 1_500;
 /** How long after a command its own late DOM events are still the agent's, not a person's. */
 /** Which explore flag gives a `place` secret, for the error when it is missing. */
 export function placeHint(secret: string): string {
@@ -370,6 +405,17 @@ export interface ExploreOptions {
    * (`resumedFrom`). Only `close` removes it.
    */
   journalFile?: string;
+  /**
+   * Where run history goes (`runs/<site>/<run>.jsonl`, src/runs/log.ts): every
+   * command with what its answer cost the caller, every act with the page it
+   * was done on, how it ended. Kept for good; walks are built from it.
+   * Absent: no history.
+   */
+  runs?: string;
+  /** Who drives, for the history: `console` (the default: a CLI or Claude Code over the socket), `agent:<model>`. */
+  driver?: string;
+  /** The first run's goal, when the caller knows it at the start. */
+  goal?: string;
   now?: () => number;
 }
 
@@ -411,6 +457,8 @@ export interface Explorer {
   done: Promise<void>;
   /** What a dead session's journal carried in: its acts and the page it ended on. */
   resumedFrom: { acts: number; url: string | null } | null;
+  /** The run the history is writing now; null without `runs` or between `done` and the next command. */
+  runId(): string | null;
 }
 export type ExploreCommand = Command;
 
@@ -557,6 +605,102 @@ async function serve(
     waiters = [];
   };
 
+  // Run history: the journal is resume state and goes on `close`; the run stays.
+  // A resumed session goes on writing the run its journal's sidecar names.
+  const runSide = opts.journalFile ? `${opts.journalFile}.run` : null;
+  let history: RunLog | null = null;
+  let carriedRun =
+    resumedFrom && runSide && existsSync(runSide) ? readFileSync(runSide, "utf8").trim() : null;
+  let firstGoal = opts.goal ?? null;
+  /** A recording was saved this run: the close that follows ends it `saved`. */
+  let saved = false;
+  /** How the session ended when no `done` said: an idle close, else closed. */
+  let endedBy: RunOutcome | null = null;
+  /** `close` was sent: nothing of this run is left to resume. */
+  let closing = false;
+  /** The page the command in flight acts on, as it was before the act. */
+  let lookBefore: PageLook | null = null;
+  /** The history never fails a command: a full disk loses rows, not acts. */
+  const logged = (f: (h: RunLog) => void) => {
+    const h = history;
+    if (!h || h.ended()) return;
+    try {
+      f(h);
+    } catch {
+      // not written
+    }
+  };
+  const openRun = () => {
+    if (!opts.runs || (history && !history.ended())) return;
+    const was = carriedRun;
+    carriedRun = null;
+    try {
+      history = runLog(opts.runs, opts.site, was ? { id: was } : {});
+    } catch {
+      // A sidecar naming no run (hand-edited, cut): a new one.
+      history = runLog(opts.runs, opts.site);
+    }
+    if (runSide) writeFileSync(runSide, history.id, { mode: 0o600 });
+    const vp = page.viewportSize();
+    logged((h) =>
+      h.start({
+        run: h.id,
+        site: opts.site,
+        driver: opts.driver ?? "console",
+        goal: firstGoal,
+        machine: machine(),
+        resumed: was !== null,
+        viewport: vp ? { width: vp.width, height: vp.height } : null,
+      }),
+    );
+    firstGoal = null;
+    saved = false;
+  };
+  /** `resumable`: an idle close or a lost browser, whose next life goes on writing this run. */
+  const endRun = async (outcome: RunOutcome, summary: string | null, resumable = false) => {
+    const h = history;
+    if (!h || h.ended()) return;
+    const look = page.isClosed() ? null : await lookAt(page).catch(() => null);
+    logged((l) => l.end({ outcome, summary, look }));
+    if (runSide && !resumable) rmSync(runSide, { force: true });
+  };
+  /** What the whole accessibility tree would have cost, in chars; null when it takes too long. */
+  const wholePage = async (): Promise<number | null> => {
+    const p = page;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), FULL_MS);
+    });
+    const tree = await Promise.race([ariaWithFrames(p).catch(() => null), late]);
+    clearTimeout(timer);
+    return tree === null ? null : tree.length;
+  };
+  /**
+   * One command's row: how long, what its answer cost the caller in chars,
+   * and (for acts and looks) what the whole page would have. The whole page
+   * is measured beside the next command, never in its way.
+   */
+  const counted = (c: Command, t0: number, error: string | null, chars: number) => {
+    const h = history;
+    if (!h || h.ended()) return;
+    const ms = now() - t0;
+    const host = URL.canParse(page.url()) ? new URL(page.url()).host : "";
+    const write = (full: number | null) =>
+      logged((l) =>
+        l.cmd({
+          cmd: c.cmd,
+          ok: error === null,
+          error: error === null ? null : redactText(error).slice(0, 200),
+          ms,
+          chars,
+          full,
+          host,
+        }),
+      );
+    if (error !== null || !WHOLE_PAGE.has(c.cmd)) return write(null);
+    void wholePage().then(write);
+  };
+
   const shoot = async (): Promise<string> => {
     const file = join(shotsDir, `${String(shotN++).padStart(4, "0")}.png`);
     // A failed shot is an error, never a path to a file that is not there.
@@ -567,6 +711,10 @@ async function serve(
     const act = { ...a, t: tBase + now() - t0, url: page.url() } as Action;
     actions.push(act);
     if (opts.journalFile) appendFileSync(opts.journalFile, `${JSON.stringify(act)}\n`);
+    // A person's act between commands has no look: the page was already changed when it was seen.
+    const hand = byHand();
+    logged((h) => h.act(act, hand ? null : lookBefore, hand));
+    lookBefore = null;
   };
   // While paused, the page reports what a person does (the recorder's
   // observer), so hand-done steps sit in the same journal as the
@@ -826,11 +974,14 @@ async function serve(
     "url",
     "pages",
     "close",
+    "goal",
   ]);
   let chain: Promise<unknown> = Promise.resolve();
   let lastTouch = now();
   const run = (c: Command, wait = false): Promise<unknown> => {
     lastTouch = now();
+    // After a `done`, the next command that works the page (or names a goal) starts the next run.
+    if (c.cmd === "goal" || !IMMEDIATE.has(c.cmd)) openRun();
     if (IMMEDIATE.has(c.cmd)) return runOne(c, wait);
     const next = chain.then(() => runOne(c, wait));
     chain = next.catch(() => undefined);
@@ -848,6 +999,7 @@ async function serve(
     busy++;
     try {
       const helped = await helpedSince();
+      if (history && LOOKED_AT.has(c.cmd)) lookBefore = await lookAt(page).catch(() => null);
       const out = await looked(c, wait);
       left = { url: page.url(), rows: out.rows ?? left?.rows ?? null };
       return helped && out.answer && typeof out.answer === "object" && !Array.isArray(out.answer)
@@ -856,6 +1008,7 @@ async function serve(
     } finally {
       busy--;
       quietAt = now() + HAND_GRACE_MS;
+      lookBefore = null;
     }
   };
   const looked = async (c: Command, wait: boolean) => {
@@ -1076,6 +1229,14 @@ async function serve(
       case "note":
         journal({ kind: "note", text: c.text });
         return { ok: true };
+      case "goal":
+        logged((h) => h.goal(c.text));
+        return { ok: true, run: history?.id ?? null };
+      case "done": {
+        const id = history && !history.ended() ? history.id : null;
+        await endRun(c.outcome, c.summary ?? null);
+        return { ok: true, run: id };
+      }
       case "os": {
         const a = c.act;
         await gateDesktop(a, wait);
@@ -1094,6 +1255,7 @@ async function serve(
       case "pause":
         paused = true;
         handActs = 0;
+        if (history) lookBefore = await lookAt(page).catch(() => null);
         journal({ kind: "pause" });
         // The page may predate the init script: hook it now.
         await inPage(page, OBSERVER_SCRIPT).catch(() => undefined);
@@ -1119,6 +1281,7 @@ async function serve(
           commands: [],
         };
         const dir = await saveRecording(opts.recordingsDir, rec);
+        saved = true;
         return { dir, actions: actions.length };
       }
       case "batch": {
@@ -1137,6 +1300,8 @@ async function serve(
         };
         for (const [i, one] of cmds.entries()) {
           try {
+            if (history && LOOKED_AT.has(one.cmd))
+              lookBefore = await lookAt(page).catch(() => null);
             done.push(await act(one, wait));
           } catch (err) {
             // A payment gate answers the whole call, as it does a single act.
@@ -1149,6 +1314,7 @@ async function serve(
       }
       case "close":
         // Closed on purpose: nothing left to resume.
+        closing = true;
         if (opts.journalFile) rmSync(opts.journalFile, { force: true });
         queueMicrotask(() => finish());
         return { ok: true };
@@ -1179,18 +1345,22 @@ async function serve(
       // `?wait=1`: a payment gate holds the request until the person answers (one request, not a
       // resend loop); without it the gate answers 202 at once and the same command re-asks.
       const wait = new URL(req.url ?? "/", "http://x").searchParams.get("wait") === "1";
+      const t = now();
       try {
         const answer = await run(parsed, wait);
-        res.end(JSON.stringify(parsed.cmd === "url" ? answer : leanUrls(answer)));
+        const body = JSON.stringify(parsed.cmd === "url" ? answer : leanUrls(answer));
+        counted(parsed, t, null, body.length);
+        res.end(body);
       } catch (err) {
         res.statusCode = err instanceof PaymentGate ? (err.reason === "asked" ? 202 : 403) : 500;
-        res.end(
-          JSON.stringify({
-            error: err instanceof Error ? err.message.split("\n")[0] : String(err),
-            url: shortUrl(page.url()),
-            ...(err instanceof PaymentGate ? { gate: err.gate, reason: err.reason } : {}),
-          }),
-        );
+        const error = err instanceof Error ? err.message.split("\n")[0] : String(err);
+        const body = JSON.stringify({
+          error,
+          url: shortUrl(page.url()),
+          ...(err instanceof PaymentGate ? { gate: err.gate, reason: err.reason } : {}),
+        });
+        counted(parsed, t, error ?? "", body.length);
+        res.end(body);
       }
     });
   });
@@ -1208,26 +1378,44 @@ async function serve(
     idleMs > 0
       ? setInterval(
           () => {
-            if (now() - lastTouch >= (paused ? idleMs * 4 : idleMs)) finish();
+            if (now() - lastTouch >= (paused ? idleMs * 4 : idleMs)) {
+              endedBy = "idle";
+              finish();
+            }
           },
           Math.min(60_000, idleMs),
         )
       : null;
   idleCheck?.unref();
-  void done.then(() => {
+  const ended = done.then(async () => {
     if (idleCheck) clearInterval(idleCheck);
     server.close();
     if (opts.tokenFile) rmSync(opts.tokenFile, { force: true });
+    // A recording saved and then closed is a run that did its job; an idle close or a lost browser resumes.
+    await endRun(endedBy ?? (saved ? "saved" : "closed"), null, !closing).catch(() => undefined);
     finishFlow();
   });
+  openRun();
   return {
     port: opts.port,
     token,
-    exec: (c) => run(c, true),
+    exec: async (c) => {
+      const t = now();
+      try {
+        const answer = await run(c, true);
+        counted(c, t, null, JSON.stringify(answer ?? null).length);
+        return answer;
+      } catch (err) {
+        const error = err instanceof Error ? (err.message.split("\n")[0] ?? "") : String(err);
+        counted(c, t, error, error.length);
+        throw err;
+      }
+    },
     paused: () => paused,
     resumed: () =>
       paused ? new Promise<void>((resolve) => waiters.push(resolve)) : Promise.resolve(),
-    done,
+    done: ended,
     resumedFrom,
+    runId: () => (history && !history.ended() ? history.id : null),
   };
 }

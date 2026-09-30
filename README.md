@@ -137,7 +137,9 @@ a row; it is work.
   whole form is mapped in one look instead of one miss per run. Every act
   that works is journaled as a recording; `save` writes it, `compile`
   takes it from there. Failing flows leave the same aria tree next to the
-  screenshot (`<stamp>.aria.txt`).
+  screenshot (`<stamp>.aria.txt`). Each session is also a run, kept for
+  good: `goal` names it, `done` ends it, and runs that reached the same
+  goal build a walk (`walks build`), a flow with no model in the loop.
 - **Minted secrets.** `{"cmd":"keep","hints":…,"env":"X_API_KEY"}` reads
   a key the site just showed straight into the secret sink (`.env` locally,
   SSM in prod) under that name. The journal keeps the element and the env
@@ -370,6 +372,10 @@ pnpm autobrowse workflows                      # what this worker can run
 pnpm autobrowse workflows bootstrap            # its steps (! = irreversible) and every input: type, default, what it is
 pnpm autobrowse workflows bootstrap --template > plan.json   # fill in, then: run bootstrap cf --plan plan.json
 pnpm autobrowse runs --limit 20                # the registry, newest first (--before <cursor> pages)
+pnpm autobrowse explored google                # explore runs kept for good: driver, goal, outcome, answer tokens (show <run>: its shape, no values)
+pnpm autobrowse walks build google admin-sso --goal-like "sso"   # runs that reached a goal → a walk, run as google/walk-admin-sso
+pnpm autobrowse walks run google/admin-sso --plan domain=x.com   # no model in the loop; --yes when it has a final act
+pnpm autobrowse tokens --days 30               # model calls by purpose, explore answers vs whole-page reads, the verdict
 pnpm autobrowse status domain wren-six.com     # every run is <workflow> <key>
 pnpm autobrowse approve domain wren-six.com purchase
 pnpm autobrowse approve domain wren-six.com human     # after doing what the email asked
@@ -444,6 +450,8 @@ src/channels/   email, phone (iMessage on this Mac), linq, webhook, inbound comm
 src/deps/       SecretSink (env file), Shell: what workflows read and write
 src/devices/    what a person owns and a second step leans on: the paired phone (SMS in, iMessage out)
 src/explore/    explore mode: one open browser, a loopback command API, pause/resume with hand acts journaled
+src/runs/       run history (one chained file per explore session) and the token report
+src/walks/      walks: built from runs that reached a goal, run as `<site>/walk-<name>`
 src/agent/      the exploration agent (digest, one act a step), sessions (play/pause, persisted), repair, evaluator
 src/workflows/  one dir per workflow; domain + bootstrap hand-written, compiled ones are served as they appear (one `Compiled` object)
 src/ui/         Hono API (+ SSE bus, bearer, rate limit) and the static SPA

@@ -79,6 +79,7 @@ import {
   missingEntries,
   paceFor,
   profilesForPlace,
+  runsDirFor,
   sinkFor,
   spendLedgerFor,
   stepLedgerFor,
@@ -252,7 +253,7 @@ export function explorerOpener(
   port: number,
   extra?: Pick<
     ExploreOptions,
-    "tokenFile" | "secrets" | "secretHosts" | "idleMinutes" | "journalFile"
+    "tokenFile" | "secrets" | "secretHosts" | "idleMinutes" | "journalFile" | "driver" | "goal"
   > & {
     /** false: a wall on `open` stays a wall (a signup page must not sign in as a stored account). */
     signIn?: boolean;
@@ -275,6 +276,7 @@ export function explorerOpener(
       charges: chargesFor(settings, gmailFor(settings)),
       pace: paceFor(settings), // an agent browses at a person's pace: sites watch for the other kind
       sink,
+      runs: runsDirFor(settings),
       ...(approver ? { approve: approver } : {}),
       ...extra,
     });
@@ -299,14 +301,13 @@ export function agentFor(
     ...(o.notify ? { notify: o.notify } : {}),
     ...(o.emit ? { emit: o.emit } : {}),
     // One journal per session: a pick-up after a crash saves the acts before it too.
-    open: (site, port, session) =>
-      open(
-        site,
-        port,
-        session
+    open: (site, port, session, run) =>
+      open(site, port, {
+        ...(session
           ? { journalFile: journalFileFor(expandHome(settings.recordingsDir), site, session) }
-          : {},
-      ),
+          : {}),
+        ...run,
+      }),
   });
 }
 

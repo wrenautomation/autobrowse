@@ -8,7 +8,7 @@
  */
 import { z } from "zod";
 
-const hintsSchema = z.object({
+export const hintsSchema = z.object({
   tag: z.string().nullable().optional(),
   role: z.string().nullable().optional(),
   name: z.string().nullable().optional(),
@@ -20,16 +20,18 @@ const hintsSchema = z.object({
   inputType: z.string().nullable().optional(),
   css: z.string().nullable().optional(),
   nth: z.number().int().nonnegative().nullable().optional(),
+  /** The iframe the element is in, by CSS selector. */
+  frame: z.string().nullable().optional(),
 });
 
 /** Where a fill's text comes from at run time. */
-const valueSchema = z.union([
+export const valueSchema = z.union([
   z.object({ from: z.literal("plan"), field: z.string() }),
   z.object({ from: z.literal("secret"), key: z.string() }),
   z.object({ from: z.literal("literal"), text: z.string() }),
 ]);
 
-const opSchema = z.discriminatedUnion("kind", [
+export const opSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("click"),
     goal: z.string(),

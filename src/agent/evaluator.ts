@@ -92,6 +92,7 @@ export async function proposeWorkflows(
   const empty = evidence.failures.length === 0 && evidence.sessions.length === 0;
   if (empty) return { proposals: [], usage: { inputTokens: 0, outputTokens: 0 } };
   const { value, usage } = await completeJson(llm, proposalsSchema, {
+    purpose: "evaluate",
     system: SYSTEM,
     prompt: describeEvidence(evidence),
     maxTokens: 1500,

@@ -94,7 +94,13 @@ export interface SessionsOptions {
    * Opens an explore server for the site on the port; the login hook rides
    * inside. `session` names its journal, so a pick-up keeps the acts before.
    */
-  open(site: string, port: number, session?: string): Promise<Explorer>;
+  open(
+    site: string,
+    port: number,
+    session?: string,
+    /** For the run history: what the agent is after and which model drives. */
+    run?: { goal: string; driver: string },
+  ): Promise<Explorer>;
   /** First loopback port; each live session takes the next free one. */
   basePort?: number;
   maxSteps?: number;
@@ -223,7 +229,10 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
     void emit({ type: "started", run: ref, at: now().toISOString() });
     live.finished = (async () => {
       try {
-        const ex = await o.open(req.site, view.port, view.id);
+        const ex = await o.open(req.site, view.port, view.id, {
+          goal: req.goal,
+          driver: `agent:${o.llm.id}`,
+        });
         live.explorer = ex;
         void ex.done.then(() => {
           if (view.status !== "closed" && view.status !== "done") view.status = "closed";
@@ -288,6 +297,14 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
         };
         view.achieved = result.achieved;
         view.summary = result.summary;
+        // The run ends where the agent did; a stopped one did not get there.
+        await ex
+          .exec({
+            cmd: "done",
+            outcome: result.achieved && !live.stopFlag ? "achieved" : "failed",
+            summary: (live.stopFlag ? `stopped: ${result.summary}` : result.summary).slice(0, 500),
+          })
+          .catch(() => undefined);
         view.status = live.stopFlag ? "stopped" : "done";
         if (!live.stopFlag)
           await o
@@ -298,6 +315,9 @@ export function agentSessions(o: SessionsOptions): AgentSessions {
       } catch (err) {
         view.error = err instanceof Error ? err.message : String(err);
         view.status = "failed";
+        await live.explorer
+          ?.exec({ cmd: "done", outcome: "failed", summary: view.error.slice(0, 500) })
+          .catch(() => undefined);
       }
       persist(view);
       void emit({

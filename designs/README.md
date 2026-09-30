@@ -26,3 +26,4 @@ decided. Each ends with a ranked "where to attack"; ✅ marks what landed.
 | [vault-split](2026-09-22-vault-split.md) | vault moves to credvault; every credential mirrored to SSM; autobrowse owns a route only if part of it needs a browser; client shape |
 | [web-search](2026-09-29-web-search.md) | Google's page by browser (Overview, results, ads), Exa, Perplexity; `signedOut`, `via` |
 | [owner-keys](2026-09-30-owner-keys.md) | one autobrowse, many owners: paths, env, SSM, IAM role, Restate names per owner |
+| [runs-and-walks](2026-09-30-runs-and-walks.md) | every explore session kept as a run; walks built from runs that reached a goal; the token ledger and verdict |

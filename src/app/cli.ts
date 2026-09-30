@@ -28,6 +28,7 @@ import { registerLangfuseCommands } from "./cli-langfuse.js";
 import { registerNeedsCommands } from "./cli-needs.js";
 import { registerReachCommands } from "./cli-reach.js";
 import { registerRecordCommands } from "./cli-record.js";
+import { registerRunsCommands } from "./cli-runs.js";
 import { registerShotsCommands } from "./cli-shots.js";
 import { registerSiteCommands } from "./cli-site.js";
 import { registerUnsubscribe } from "./cli-unsubscribe.js";
@@ -365,6 +366,7 @@ registerLangfuseCommands(program, () => envStoreFor(settings));
 registerReachCommands(program, () => envStoreFor(settings), local);
 registerShotsCommands(program, settings);
 registerWatchedCommands(program, settings);
+registerRunsCommands(program, settings, local);
 registerRepairsCommands(program, settings);
 registerScreensCommands(program, settings);
 program

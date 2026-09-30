@@ -57,6 +57,7 @@ export async function polish(
   llm: Llm,
 ): Promise<{ outline: Outline; usage: LlmUsage }> {
   const { value, usage } = await completeJson(llm, proposalSchema, {
+    purpose: "compile-polish",
     system: SYSTEM,
     prompt: JSON.stringify(outline, null, 2),
     maxTokens: 1500,

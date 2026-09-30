@@ -52,6 +52,8 @@ export interface Screen<C extends ScreenCtx = ScreenCtx> {
   goal?: boolean;
   /** An interrupt checked on a page's first act even when the control shows: it may sit on top (a cookie banner). */
   overlay?: boolean;
+  /** It may come back (a next page): again on a new URL is not stuck, and a new URL is leaving it. */
+  repeats?: boolean;
 }
 
 /** A page by its shape: host and path (ids as `*`), and the headings, buttons and fields it shows. */
@@ -246,13 +248,20 @@ export const landmark = (s: string): string =>
     .trim()
     .slice(0, 60);
 
-/** Visible headings, buttons and fields by their names, headings first. Plain JS: it runs in the page. */
+/**
+ * Visible headings, buttons and fields by their names, headings first. Plain
+ * JS: it runs in the page. A field is named by its label, never its value:
+ * what a person typed (a password) must not become a landmark.
+ */
 const LANDMARK_SCRIPT = `() => {
   const seen = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
-  const name = (e) => (e.getAttribute("aria-label") || e.getAttribute("placeholder") || e.textContent || e.value || "").replace(/\\s+/g, " ").trim();
+  const clean = (s) => (s || "").replace(/\\s+/g, " ").trim();
+  const said = (e) => clean(e.getAttribute("aria-label") || e.getAttribute("placeholder") || e.textContent || (e.type === "submit" || e.type === "button" ? e.value : ""));
+  const label = (e) => clean(e.getAttribute("aria-label") || e.getAttribute("placeholder") || (e.labels && e.labels[0] && e.labels[0].textContent) || e.getAttribute("name") || e.getAttribute("type") || e.tagName.toLowerCase());
   const out = [];
-  for (const sel of ["h1, h2, h3, [role=heading]", "button, [role=button], input[type=submit]", "input:not([type=hidden]), textarea"])
-    for (const e of document.querySelectorAll(sel)) if (seen(e) && name(e)) out.push(sel[0] === "h" ? "heading " + name(e) : sel[0] === "b" ? "button " + name(e) : "field " + name(e));
+  for (const e of document.querySelectorAll("h1, h2, h3, [role=heading]")) if (seen(e) && said(e)) out.push("heading " + said(e));
+  for (const e of document.querySelectorAll("button, [role=button], input[type=submit]")) if (seen(e) && said(e)) out.push("button " + said(e));
+  for (const e of document.querySelectorAll("input:not([type=hidden]):not([type=submit]):not([type=button]), textarea")) if (seen(e)) out.push("field " + label(e));
   return out.slice(0, 60);
 }`;
 
@@ -309,9 +318,9 @@ export async function observe<C extends ScreenCtx>(
 }
 
 /** Until the page is no longer this screen; false when it stays. */
-async function leave<C extends ScreenCtx>(c: C, s: Screen<C>): Promise<boolean> {
+async function leave<C extends ScreenCtx>(c: C, s: Screen<C>, from: string): Promise<boolean> {
   for (let n = 0; n < LEAVE_POLLS; n++) {
-    if (!(await isOn(s, c))) return true;
+    if ((s.repeats && c.fp.url() !== from) || !(await isOn(s, c))) return true;
     await c.fp.wait(POLL_MS);
   }
   return false;
@@ -411,15 +420,23 @@ export async function walk<C extends ScreenCtx>(c: C, w: Walk<C>): Promise<strin
   const main = fp.page;
   const fail = w.fail ?? ((reason: string) => fp.human(reason));
   const path: string[] = [];
+  const urls: string[] = [];
   for (let step = 0; step < (w.maxSteps ?? MAX_STEPS); step++) {
     if (fp.page !== main && fp.page.isClosed?.()) fp.switchTo(main);
     const seen = await observe(c, w.screens);
     const answer: Answer<C> = seen ? { screen: seen } : await unknown(c, w, fail);
     const s = answer.screen;
     if (s.goal) return s.name;
-    if (path.length >= 2 && path.at(-1) === s.name && path.at(-2) === s.name)
-      fail(`stuck on "${s.name}" at ${fp.url()}`);
+    const at = fp.url();
+    if (
+      path.length >= 2 &&
+      path.at(-1) === s.name &&
+      path.at(-2) === s.name &&
+      !(s.repeats && urls.at(-1) !== at)
+    )
+      fail(`stuck on "${s.name}" at ${at}`);
     path.push(s.name);
+    urls.push(at);
     try {
       await s.act?.(c);
     } catch (err) {
@@ -427,7 +444,7 @@ export async function walk<C extends ScreenCtx>(c: C, w: Walk<C>): Promise<strin
       throw err;
     }
     // Kept only once the page moved on: an answer that changed nothing taught nothing.
-    if ((await leave(c, s)) || fp.page.isClosed?.()) answer.worked?.();
+    if ((await leave(c, s, at)) || fp.page.isClosed?.()) answer.worked?.();
   }
   return fail(`no ${w.goal} after ${path.join(" → ")}`);
 }

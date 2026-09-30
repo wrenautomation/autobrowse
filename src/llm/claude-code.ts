@@ -8,6 +8,7 @@
  */
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
+import { type AnthropicUsage, usageOf } from "./anthropic.js";
 import type { Llm, LlmReply, LlmRequest } from "./types.js";
 
 export interface ClaudeCodeOptions {
@@ -30,7 +31,8 @@ interface HeadlessResult {
   subtype?: string;
   is_error?: boolean;
   result?: string;
-  usage?: { input_tokens?: number; output_tokens?: number };
+  /** Input here is only the uncached part: Claude Code's own prompt is nearly all cache. */
+  usage?: AnthropicUsage;
 }
 
 /**
@@ -135,10 +137,7 @@ export function claudeCodeLlm(o: ClaudeCodeOptions): Llm {
       }
       return {
         text: parsed.result,
-        usage: {
-          inputTokens: parsed.usage?.input_tokens ?? 0,
-          outputTokens: parsed.usage?.output_tokens ?? 0,
-        },
+        usage: usageOf(parsed.usage),
         model: o.model,
       };
     },

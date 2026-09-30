@@ -192,7 +192,12 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
     let stepUsage: LlmUsage = { inputTokens: 0, outputTokens: 0 };
     try {
       const reply = await withTrace({ session, step: n }, () =>
-        completeJson(o.llm, stepSchema, { system: SYSTEM, prompt, maxTokens: 600 }),
+        completeJson(o.llm, stepSchema, {
+          purpose: "agent-step",
+          system: SYSTEM,
+          prompt,
+          maxTokens: 600,
+        }),
       );
       usage.inputTokens += reply.usage.inputTokens;
       usage.outputTokens += reply.usage.outputTokens;

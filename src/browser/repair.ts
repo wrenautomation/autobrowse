@@ -107,6 +107,7 @@ export function llmRepairer(llm: Llm): Repairer {
     id: `llm:${llm.id}`,
     async propose(req) {
       const { value } = await completeJson(llm, proposalSchema, {
+        purpose: "repair",
         system: SYSTEM,
         prompt: [
           `Goal: ${req.goal}`,
@@ -142,6 +143,7 @@ export function llmScreenReader(llm: Llm): ScreenReader {
     id: `llm:${llm.id}`,
     async read(req) {
       const { value } = await completeJson(llm, readingSchema, {
+        purpose: "screen-read",
         system: READ_SYSTEM,
         prompt: [
           `Goal: ${req.goal}`,

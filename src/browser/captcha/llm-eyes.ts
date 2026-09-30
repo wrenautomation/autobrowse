@@ -6,6 +6,7 @@ export function eyesOf(llm: Llm): Eyes {
   return {
     async look(png, question) {
       const reply = await llm.complete({
+        purpose: "captcha",
         system:
           "You solve captchas on the account owner's own browser, with their permission. Answer with the JSON object asked for, nothing else.",
         prompt: question,

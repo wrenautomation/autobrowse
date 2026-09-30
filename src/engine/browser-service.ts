@@ -120,6 +120,8 @@ export interface BrowserServiceDeps {
   runner: FlowRunner;
   /** Extra flows callable through `flow({name, input})`, on top of BROWSER_FLOWS. */
   catalog?: FlowCatalog;
+  /** Walks by `<site>/walk-<name>` (src/walks), read from disk per call so a rebuilt walk runs at once. */
+  walks?: (name: string) => BrowserFlow<never, unknown> | null;
 }
 
 /** Terminal for what a retry would not fix; everything else (network, browser) retries under RETRY. */
@@ -146,6 +148,17 @@ export async function runLeg<I, O>(
 }
 
 export function browserService(deps: BrowserServiceDeps, name: string = BROWSER_SERVICE) {
+  /** A walk file a hand edit broke is a bad request, not a retry. */
+  const walkNamed = (name: string): BrowserFlow<never, unknown> | null => {
+    try {
+      return deps.walks?.(name) ?? null;
+    } catch (err) {
+      throw new restate.TerminalError(
+        `walk ${name}: ${err instanceof Error ? err.message : String(err)}`,
+        { errorCode: 400 },
+      );
+    }
+  };
   const leg =
     <I, O>(flow: BrowserFlow<I, O>) =>
     (ctx: restate.Context, input: I): Promise<O> =>
@@ -169,7 +182,7 @@ export function browserService(deps: BrowserServiceDeps, name: string = BROWSER_
       /** Any flow in the catalog by name; the input is the flow's own. */
       flow: async (ctx: restate.Context, raw: unknown) => {
         const { name, input, profile } = named.parse(raw);
-        const flow = deps.catalog?.[name] ?? BROWSER_FLOWS[name];
+        const flow = deps.catalog?.[name] ?? BROWSER_FLOWS[name] ?? walkNamed(name);
         if (!flow)
           throw new restate.TerminalError(`no browser flow named ${name}`, { errorCode: 404 });
         const sited = profile ? { ...flow, site: profile } : flow;

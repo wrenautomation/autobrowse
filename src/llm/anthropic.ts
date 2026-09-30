@@ -1,14 +1,32 @@
 /** Anthropic Messages API over the shared http client; the key lives in a header only. */
 import type { HttpClient } from "../clients/http.js";
-import type { Llm, LlmReply, LlmRequest } from "./types.js";
+import type { Llm, LlmReply, LlmRequest, LlmUsage } from "./types.js";
 
 const URL = "https://api.anthropic.com/v1/messages";
 
 interface MessagesResponse {
   model: string;
   content: Array<{ type: string; text?: string }>;
-  usage: { input_tokens: number; output_tokens: number };
+  usage: AnthropicUsage;
 }
+
+/** Anthropic's usage: input is the uncached part; cache writes and reads are counted beside it. */
+export interface AnthropicUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+}
+
+/** Every input token, cached or not; the cache reads apart. */
+export const usageOf = (u: AnthropicUsage | undefined): LlmUsage => ({
+  inputTokens:
+    (u?.input_tokens ?? 0) +
+    (u?.cache_creation_input_tokens ?? 0) +
+    (u?.cache_read_input_tokens ?? 0),
+  outputTokens: u?.output_tokens ?? 0,
+  cachedTokens: u?.cache_read_input_tokens ?? 0,
+});
 
 export function anthropicLlm(opts: { apiKey: string; model: string; http: HttpClient }): Llm {
   return {
@@ -42,7 +60,7 @@ export function anthropicLlm(opts: { apiKey: string; model: string; http: HttpCl
       if (!r.ok || !r.body) throw new Error(`anthropic: HTTP ${r.status}`);
       return {
         text: r.body.content.map((c) => c.text ?? "").join(""),
-        usage: { inputTokens: r.body.usage.input_tokens, outputTokens: r.body.usage.output_tokens },
+        usage: usageOf(r.body.usage),
         model: r.body.model,
       };
     },

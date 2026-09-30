@@ -60,6 +60,8 @@ Desktop, `{"cmd":"os","act":{…}}`: `{"kind":"apps"}`, `{"kind":"open","app":"F
 Needs Accessibility granted to the terminal; root needs `pnpm autobrowse desktop setup` once.
 
 Session:
+- `{"cmd":"goal","text":"…"}` — what this run is for. Send it first: a walk is built from runs that share a goal.
+- `{"cmd":"done","outcome":"achieved","summary":"…"}` (or `"failed"`) — how the run ended. Send it last, before `save`. A later `goal` starts the next run in the same session.
 - `{"cmd":"pause"}` / `{"cmd":"resume"}` — a person acts by hand in between; those acts land in the journal too.
 - Headed, no pause needed: when William does a step by hand between two of your
   commands, your next answer carries `helped: {acts, url, changed, note}`. Read
@@ -72,13 +74,13 @@ Session:
 
 Every look costs tokens. Look once, then let the acts tell you what changed.
 
-1. `start.sh <site> <url>`. The `open` answer already lists the page's controls (`changed.added`).
+1. `start.sh <site> <url>`, then `goal`. The `open` answer already lists the page's controls (`changed.added`).
 2. `snapshot`. `aria` with `hints` or a `limit` only when the snapshot is not enough.
 3. Every act answers `changed`: `added` (new controls, up to 40), `gone` (a count), `more` (past 40). Read that; don't look again after each act.
 4. Acts you are sure of (fill a form, submit) go in one `batch`. It stops at the first failure: `failed: {at, cmd, error}`, `done` holds what ran. A paying click goes alone.
 5. Prefer `role`+`name`; fall back to `css`+`nth`. A failed act is not journaled. Change the hints; don't repeat.
 6. Never `raw:true` on a page showing a key.
-7. Done: `note` what was achieved, `save` with a kebab name, `stop.sh`.
+7. Done: `done` with the outcome and a one-line summary, `save` with a kebab name if it should compile, `stop.sh`.
 
 The payment gate: a billing field (card, CVC, tax id, billing address) or a
 spending button (Buy, Pay, Subscribe, Add funds, Start trial) texts William and
@@ -86,6 +88,21 @@ spending button (Buy, Pay, Subscribe, Add funds, Start trial) texts William and
 or `type` around it.
 
 ## After: a workflow
+
+Every session is a run, kept for good beside the credentials (`explored`).
+Two or three runs that reached the same goal become a walk: screens known by
+their URL and landmarks, each with the acts that worked on it. A walk runs
+as `<site>/walk-<name>` in the catalog, with no model in the loop.
+
+```sh
+pnpm -s autobrowse explored <site>                         # runs: driver, goal, outcome, answer tokens
+pnpm -s autobrowse walks build <site> <name> --goal-like "<words>"   # or --run id,id
+pnpm -s autobrowse walks show <site>/<name>                # screens and ops, never values
+pnpm -s autobrowse walks run <site>/<name> --plan key=value [--yes]  # --yes when it has a final act
+pnpm -s autobrowse tokens --days 30                        # spend and the verdict
+```
+
+Or compile a saved recording to TypeScript:
 
 ```sh
 pnpm -s autobrowse compile <name>              # → src/workflows/<name>/

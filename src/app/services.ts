@@ -49,11 +49,12 @@ import {
   totpSource,
 } from "../auth/index.js";
 import { CRED_ENV, keychainOf, WALLET_KEYCHAIN } from "../auth/keep.js";
+import { loginSecrets, type SecretValues } from "../auth/signup.js";
 import { fileDoneActs } from "../browser/attempt.js";
 import type { Eyes } from "../browser/captcha/index.js";
 import { eyesOf } from "../browser/captcha/llm-eyes.js";
 import { fileFixes } from "../browser/fixes.js";
-import type { FlowRunner } from "../browser/flow.js";
+import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import { flowRunner } from "../browser/flow.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { HUMAN_PACE, type Pace } from "../browser/human/index.js";
@@ -122,6 +123,7 @@ import {
 } from "../google-auth.js";
 import { type BudgetExceeded, type BudgetedLlm, budgetedLlm, fileLedger } from "../llm/budget.js";
 import { type Llm, makeLlm } from "../llm/index.js";
+import { countedLlm, fileLlmCalls } from "../llm/ledger.js";
 import { otlpSink, type TraceSink, tracedLlm } from "../llm/trace.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
 import { type Charge, type ChargeRow, reportCharge } from "../money/charges.js";
@@ -141,6 +143,8 @@ import {
   sitesService,
 } from "../sites/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
+import { type WalkInput, type WalkOutput, walkFlow } from "../walks/flow.js";
+import { loadWalk, type WalkSpec } from "../walks/spec.js";
 import { type BootstrapDeps, bootstrapWorkflow } from "../workflows/bootstrap/index.js";
 import {
   type CompiledCatalog,
@@ -343,8 +347,10 @@ export function llmFor(
     },
     http,
   );
-  const traces = raw && traceSinkFor(settings, http);
-  const llm = raw && traces ? tracedLlm(raw, traces) : raw;
+  // Every call is counted (the token report); a trace, when there is a collector, sees the same call.
+  const counted = raw && countedLlm(raw, fileLlmCalls(llmCallsDirFor(settings)));
+  const traces = counted && traceSinkFor(settings, http);
+  const llm = counted && traces ? tracedLlm(counted, traces) : counted;
   if (!llm || settings.llmDailyTokens === 0) return llm;
   return budgetedLlm(llm, {
     dailyTokens: settings.llmDailyTokens,
@@ -506,6 +512,67 @@ export function ledgerPath(
   name: "audit" | "spend" | "steps" | "charges" | "cards-on-file",
 ): string {
   return join(dirname(expandHome(settings.credentialsFile)), `${name}.jsonl`);
+}
+
+/** The owner's state folder: where the credentials file lives, and every ledger beside it. */
+const stateDir = (settings: Settings): string => dirname(expandHome(settings.credentialsFile));
+
+/** Run history (src/runs/log.ts): one folder per site, kept for good. */
+export const runsDirFor = (settings: Settings): string => join(stateDir(settings), "runs");
+
+/** Walks built from runs (src/walks): `walks/<site>/<name>.json`. */
+export const walksDirFor = (settings: Settings): string => join(stateDir(settings), "walks");
+
+/** Every model call, one file per month (src/llm/ledger.ts). */
+export const llmCallsDirFor = (settings: Settings): string => join(stateDir(settings), "llm");
+
+/** Placed secrets a walk asks for: its sites' stored logins, codes from their inboxes; a bare `password` is the walk's own site's. */
+function walkSecrets(settings: Settings, spec: WalkSpec): SecretValues {
+  const sites = [
+    ...new Set([
+      spec.site,
+      ...spec.secrets.flatMap((s) =>
+        s.key.includes(".") ? [s.key.slice(0, s.key.lastIndexOf("."))] : [],
+      ),
+    ]),
+  ];
+  const own = loginSecrets(
+    credentialsFor(settings),
+    sites,
+    {},
+    {
+      codes: { source: codesFor(settings, gmailFor(settings)), since: new Date() },
+      phone: ourPhone(settings),
+    },
+  );
+  const bare: Record<string, string> = {
+    email: "username",
+    username: "username",
+    password: "password",
+    code: "code",
+  };
+  return (name) => {
+    const field = bare[name];
+    return own.secrets(name.includes(".") || !field ? name : `${spec.site}.${field}`);
+  };
+}
+
+/** A walk by its catalog name, `<site>/walk-<name>`, with the owner's logins and sink; null when there is none. */
+export function walkFor(
+  settings: Settings,
+  flowName: string,
+  sink: SecretSink = sinkFor(settings),
+): BrowserFlow<WalkInput, WalkOutput> | null {
+  const m = /^([a-z0-9][a-z0-9._-]*)(?:@[\w-]+)?\/walk-([a-z][a-z0-9-]*)$/i.exec(flowName);
+  if (!m) return null;
+  const dir = walksDirFor(settings);
+  const spec = loadWalk(dir, m[1] as string, m[2] as string);
+  if (!spec) return null;
+  return walkFlow(spec, {
+    secrets: walkSecrets(settings, spec),
+    sink,
+    load: (site, name) => loadWalk(dir, site, name),
+  });
 }
 
 export function stepLedgerFor(settings: Settings): StepLedger {
@@ -1180,7 +1247,10 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     services: [
       runsRegistryFor(settings.owner),
       // The browser legs for an orchestrator that owns the API steps (wren); compiled flows by name too.
-      browserService({ runner: browser }, named(BROWSER_SERVICE, settings.owner)),
+      browserService(
+        { runner: browser, walks: (name) => walkFor(settings, name, sink) },
+        named(BROWSER_SERVICE, settings.owner),
+      ),
       // The site APIs for the same orchestrator: official shapes, durable over the tunnel.
       sitesService(sites, named(SITES_SERVICE, settings.owner)),
       // One verb for the same orchestrator; the backend wires the doer in after the model exists.

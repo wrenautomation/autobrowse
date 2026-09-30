@@ -74,6 +74,7 @@ export async function pickAbility(
     .map((p) => `- "${p.goal}" → ${p.ability}`)
     .join("\n");
   const { value, usage } = await completeJson(llm, choice, {
+    purpose: "do-pick",
     system: SYSTEM,
     prompt: `REQUEST: ${req.goal}\n\nNAMED INPUTS:\n${named || "(none)"}\n\nABILITIES:\n${abilities.map(line).join("\n") || "(none)"}\n\nSITES WITH A LOGIN: ${sites.join(", ") || "(none)"}${earlier ? `\n\nEARLIER PICKS:\n${earlier}` : ""}`,
     maxTokens: 600,

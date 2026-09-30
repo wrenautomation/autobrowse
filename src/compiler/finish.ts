@@ -184,7 +184,12 @@ export async function finish(o: FinishOptions): Promise<FinishOutcome> {
   return { status: "gave-up", rounds, usage, summary: last.slice(0, 600) };
 
   async function ask() {
-    const r = await o.llm.complete({ system: SYSTEM, prompt, maxTokens: 20_000 });
+    const r = await o.llm.complete({
+      purpose: "compile-finish",
+      system: SYSTEM,
+      prompt,
+      maxTokens: 20_000,
+    });
     usage.inputTokens += r.usage.inputTokens;
     usage.outputTokens += r.usage.outputTokens;
     return { value: parseReply(r.text) };

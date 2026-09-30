@@ -85,7 +85,7 @@ export function looseName(name: string): string {
   return `/^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/`;
 }
 
-function stripHints(h: LocatorHints): Hints {
+export function stripHints(h: LocatorHints): Hints {
   // Keep only what locates; the compiled flow does not need the element's href.
   const { href: _href, ...rest } = h;
   return rest.name ? { ...rest, name: looseName(rest.name) } : rest;

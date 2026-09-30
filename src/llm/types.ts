@@ -14,6 +14,8 @@ export interface LlmRequest {
   maxTokens?: number;
   /** Pictures the model looks at before the prompt (a captcha). A driver that cannot see throws. */
   images?: LlmImage[];
+  /** What the call is for (`agent-step`, `repair`): the token ledger groups by it. Drivers ignore it. */
+  purpose?: string;
 }
 
 export interface LlmImage {
@@ -23,8 +25,11 @@ export interface LlmImage {
 }
 
 export interface LlmUsage {
+  /** Every input token, cache reads and writes included. */
   inputTokens: number;
   outputTokens: number;
+  /** Of the input, how many were read from the provider's prompt cache (billed far lower). */
+  cachedTokens?: number;
 }
 
 export interface LlmReply {
