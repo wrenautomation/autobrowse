@@ -3,7 +3,7 @@
  * client and scopes. The runner signs the profile in when Google asks
  * (`google` credential, TOTP); this walks what comes after, in whatever
  * order Google shows it: the account chooser, the "hasn't verified this
- * app" warning of an app in testing, the scope checkboxes (sensitive scopes
+ * app" warning (Continue in testing, Advanced → "(unsafe)" in production), the scope checkboxes (sensitive scopes
  * start unticked), and the Continue/Allow buttons, until the page is the
  * redirect (the browser answers it; the code rides back in the URL). Mapped 2026-09-20.
  */
@@ -77,11 +77,19 @@ export const googleOauthConsent = defineFlow<OauthConsentInput, { landed: string
         await fp.act({ kind: "click" }, pick, { goal: "pick the account" });
         continue;
       }
-      // An app in testing: "Google hasn't verified this app" → Continue (sometimes behind "Advanced").
+      // An unverified app: "Google hasn't verified this app". In testing it shows
+      // Continue; in production, "Go to <app> (unsafe)" behind the Advanced link.
       if (/hasn.t verified this app/i.test(text)) {
-        const advanced = { role: "button", name: "/^advanced$/i" } as const;
-        if (await fp.has(advanced)) await fp.act({ kind: "click" }, advanced, { goal: "advanced" });
-        const go = { css: 'a:has-text("(unsafe)"), button:has-text("Continue")' } as const;
+        const proceed = { role: "link", name: "/\\(unsafe\\)$/i" } as const;
+        const cont = { role: "button", name: "/^continue$/i" } as const;
+        if (!(await fp.has(cont))) {
+          const advanced = { role: "link", name: "/^advanced$/i" } as const;
+          if (await fp.has(advanced))
+            await fp.act({ kind: "click" }, advanced, { goal: "advanced" });
+          if (!(await fp.has(proceed, 5_000)))
+            return fp.human("the unverified-app warning shows no way on");
+        }
+        const go = (await fp.has(cont)) ? cont : proceed;
         await fp.act({ kind: "click" }, go, { goal: "past the unverified-app warning" });
         continue;
       }

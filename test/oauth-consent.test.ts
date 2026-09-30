@@ -74,7 +74,9 @@ describe("google oauth consent", () => {
       {
         url: "https://accounts.google.com/signin/oauth/warning",
         text: "Google hasn't verified this app",
-        present: (h) => h.name === "/^advanced$/i" || Boolean(h.css?.includes("unsafe")),
+        // In production: "Go to <app> (unsafe)" behind the Advanced link.
+        present: (h) =>
+          h.role === "link" && ["/^advanced$/i", "/\\(unsafe\\)$/i"].includes(h.name ?? ""),
       },
       {
         url: "https://accounts.google.com/signin/oauth/consent",
@@ -93,6 +95,19 @@ describe("google oauth consent", () => {
       "select all scopes",
       "consent",
     ]);
+  });
+
+  it("in testing, the warning's Continue button goes straight on", async () => {
+    const { fp, acts } = consentPages([
+      {
+        url: "https://accounts.google.com/signin/oauth/warning",
+        text: "Google hasn't verified this app",
+        present: (h) => h.role === "button" && h.name === "/^continue$/i",
+      },
+      { url: "http://127.0.0.1:9400/oauth/callback?code=abc&state=s" },
+    ]);
+    await googleOauthConsent.run(fp, { url: AUTH });
+    expect(acts).toEqual(["past the unverified-app warning"]);
   });
 
   it("hands over when Google refuses or the walk goes nowhere", async () => {

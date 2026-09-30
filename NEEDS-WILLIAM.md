@@ -10,15 +10,6 @@ Live list: `pnpm autobrowse needs`. Rows clear themselves. Dated 2026-09-27.
   william@wrenautomation.com, name "Wren Automation", handle wrenautomation.
   Then tell me. I do the developer app and consent.
 
-- **Publish the Google app.** YouTube's token died today: the app is in
-  Testing, so tokens last 7 days. console.cloud.google.com → project
-  wren-509223 (your personal account) → Google Auth Platform → Audience →
-  Publish app → Confirm. I re-consented, so YouTube works until 10-06.
-- **Full Disk Access for node.** Lets the Mac's desk worker (Reddit) run
-  without a terminal. System Settings → Privacy & Security → Full Disk
-  Access → + → Cmd-Shift-G →
-  `/opt/homebrew/Cellar/node/25.2.1/bin/node` → on. Then tell me.
-
 - **Loom plan.** The 14-day trial ends ~10-13. After it, Starter caps at 25
   videos of 5 minutes. Upgrade only if that's too small (your spend).
 
