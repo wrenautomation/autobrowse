@@ -20,7 +20,7 @@ Spend is the person's decision. The policy defaults to never (`NO_AUTO_SPEND`); 
 - `SpendPolicy { allow, autoYesUnder, dailyCap, hardCap }` — `src/gates/spend.ts:41-58`; `Amount`, `amountIn` — `:12-39`
 - `Decided = auto | person | granted | cap | denied | unanswered`; `SpendRecord`; `SpendLedger` — `:60-90`; `spentToday` — `:104`
 - `Grant`, `Grants` (`spend grant`) — `:117-180`; `policedApprover(ask, o)` — `:197`
-- Wired: `spendPolicyFor`, `spendLedgerFor`, `spendGrantsFor` — `src/app/services.ts:956-971`
+- Wired: `spendPolicyFor`, `spendLedgerFor`, `spendGrantsFor` — `src/app/services.ts:965-980`
 
 ## Connected to
 
@@ -30,7 +30,7 @@ Spend is the person's decision. The policy defaults to never (`NO_AUTO_SPEND`); 
 
 ## If you change this
 
-- **Hits:** `src/gates/payment.ts` callers, `src/app/services.ts:941-971`, `src/app/cli-wallet.ts` (`spend` verbs), `src/auth/ledger.ts` (ledger window includes spend rows).
+- **Hits:** `src/gates/payment.ts` callers, `src/app/services.ts:950-980`, `src/app/cli-wallet.ts` (`spend` verbs), `src/auth/ledger.ts` (ledger window includes spend rows).
 - **Does not hit:** engine gates; the wallet's cards.
 
 ## Surfaces

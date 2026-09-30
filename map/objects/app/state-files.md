@@ -20,12 +20,12 @@ Plain files a person can open, one concern each; secrets sealed; shared truth in
 | Path | Holds | Card |
 |---|---|---|
 | `~/.config/autobrowse/credentials.json` | sealed sign-ins (`src/app/config.ts:221`) | [[credential]] |
-| `~/.config/autobrowse/wallet.sealed` | sealed cards (`:221`) | [[card]] |
-| `~/.config/autobrowse/accounts.json` | identities and purposes (`:241`) | [[account]] |
-| `~/.config/autobrowse/access.json` | hashed agent keys (`:134`) | [[access-key]] |
-| `~/.config/autobrowse/fixes.json` | kept repairs (`:110`) | [[fix]] |
-| `~/.config/autobrowse/screens.json` | learned screens (`:112`) | [[screen]] |
-| `~/.config/autobrowse/caps.json` | today's use of each account's daily caps, keyed site, account, bucket, and `next`: each site|account's next paced slot, kept across the day turning (`:114`; `/data/caps.json` on the box) | [[site-facade]] |
+| `~/.config/autobrowse/wallet.sealed` | sealed cards (`:223`) | [[card]] |
+| `~/.config/autobrowse/accounts.json` | identities and purposes (`:243`) | [[account]] |
+| `~/.config/autobrowse/access.json` | hashed agent keys (`:136`) | [[access-key]] |
+| `~/.config/autobrowse/fixes.json` | kept repairs (`:112`) | [[fix]] |
+| `~/.config/autobrowse/screens.json` | learned screens (`:114`) | [[screen]] |
+| `~/.config/autobrowse/caps.json` | today's use of each account's daily caps, keyed site, account, bucket, and `next`: each site|account's next paced slot, kept across the day turning (`:116`; `/data/caps.json` on the box) | [[site-facade]] |
 | `~/.config/autobrowse/steps.jsonl` | agent step ledger (`src/agent/ledger.ts`) | [[agent-session]] |
 | `~/.config/autobrowse/needs-done.json` | decisions marked done (`src/app/config.ts:40`) | [[need]] |
 | `~/.config/autobrowse/profiles/<site>` | browser profiles (`src/app/config.ts:86`) | [[session]] |
@@ -35,7 +35,7 @@ Plain files a person can open, one concern each; secrets sealed; shared truth in
 | `src/workflows/<name>/` (repo, committed) | compiled modules, outline, proof | [[compiled-workflow]] |
 | SSM `/autobrowse/config` | site tokens, env store (credvault `EnvStore`) | [[token]] |
 | SSM `/autobrowse/owners/<o>/config` | the same, for owner `<o>` (`src/owner.ts:25`) | [[owner]], [[token]] |
-| SSM `/wallet/cards`, `/wallet/profiles` | wallet backup (`src/money/wallet.ts:244`, `src/money/profile.ts:162`) | [[card]] |
+| SSM `/wallet/cards`, `/wallet/profiles` | wallet backup (`src/money/wallet.ts:244`, `src/money/profile.ts:184`) | [[card]] |
 | S3 shots bucket | shipped screenshots (`src/shots/ship.ts:109`); owner `<o>` under `owners/<o>/` (`src/owner.ts:26`) | [[owner]] |
 | Keychain `autobrowse`, `autobrowse-wallet` | seal keys (`src/auth/keep.ts:9-17`) | [[credential]], [[card]] |
 | Keychain `autobrowse-owner-<o>` | owner `<o>`'s seal key (`src/auth/keep.ts:14`) | [[owner]] |

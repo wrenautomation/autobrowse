@@ -20,7 +20,7 @@ Rendered source is the truth from then on (the header in each module says so). O
 - `CompiledWorkflow { workflow, dir, proof }`; `loadCompiledWorkflows(root)`; `HAND_WRITTEN` — `src/workflows/compiled.ts:28-71`; `COMPILED_OBJECT`, `splitCompiledKey`, `CompiledCatalog`, `compiledCatalog` — `:72-104`
 - Dir: `COMPILED_DIR = "src/workflows"`, modules import the library as `COMPILED_LIB = "../../index.js"` — `src/app/services.ts:367-368`
 - Deps a rendered module gets: `CompiledDeps { browser, secrets, shell, desktop, sink }`, browser bound to the flow's site — `src/workflows/compiled-deps.ts:18-40`
-- Render → check → finish: `render` `src/compiler/render.ts:256`; `checkCompiled` (tsc + vitest) `src/compiler/check.ts:14`; `finish` (a model fills plan inputs, send gate, proof reads, `dropped()` guard) `src/compiler/finish.ts:131-205`; `compileRecording`, `finishCompiled` `src/app/backend.ts:162-212`
+- Render → check → finish: `render` `src/compiler/render.ts:256`; `checkCompiled` (tsc + vitest) `src/compiler/check.ts:14`; `finish` (a model fills plan inputs, send gate, proof reads, `dropped()` guard) `src/compiler/finish.ts:131-205`; `compileRecording`, `finishCompiled` `src/app/backend.ts:163-213`
 - Files per dir: `index.ts`, `index.test.ts`, `outline.json`, `proof.json`
 
 ## Connected to

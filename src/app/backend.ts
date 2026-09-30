@@ -78,6 +78,7 @@ import {
   loginFor,
   missingEntries,
   paceFor,
+  profilesForPlace,
   sinkFor,
   spendLedgerFor,
   stepLedgerFor,
@@ -259,6 +260,7 @@ export function explorerOpener(
 ) => Promise<Explorer> {
   const approver: Approver | null = approverFor(settings, gmailFor(settings));
   const cards = cardsFor(settings);
+  const profiles = profilesForPlace(settings);
   return async (site, port, { signIn = true, ...extra } = {}) =>
     startExplore({
       site,
@@ -269,6 +271,7 @@ export function explorerOpener(
       captcha: captchaFor(settings),
       audit: auditFor(settings),
       ...(cards ? { cards, cardsOnFile: cardsOnFileFor(settings) } : {}),
+      ...(profiles ? { profiles } : {}),
       charges: chargesFor(settings, gmailFor(settings)),
       pace: paceFor(settings), // an agent browses at a person's pace: sites watch for the other kind
       sink,

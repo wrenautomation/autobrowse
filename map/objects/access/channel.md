@@ -19,7 +19,7 @@ One shape for delivery and one parser for replies, so a `yes` by SMS, email or w
 
 - `Channel { name, deliver(event), note?(text) }` — `src/channels/types.ts:7-16`
 - `Command`, `RunSpec`, `parseCommand(text)` (`yes`, `no`, `pause`, `play`, `status`, `reset`, optional `<workflow> <key>`) — `src/channels/commands.ts:6-31`
-- Rendering: `src/channels/render.ts`; inbound: `/hooks/inbound`, `/hooks/linq` — `src/ui/api.ts:725-739`; wired by `channelsFor` — `src/app/services.ts:1010`
+- Rendering: `src/channels/render.ts`; inbound: `/hooks/inbound`, `/hooks/linq` — `src/ui/api.ts:725-739`; wired by `channelsFor` — `src/app/services.ts:1019`
 - The phone as a device (read SMS, send iMessage): `phoneReader`, `phoneNotifier`, `phoneStatus` — `src/devices/phone.ts:78-137`
 
 ## Connected to
@@ -29,7 +29,7 @@ One shape for delivery and one parser for replies, so a `yes` by SMS, email or w
 
 ## If you change this
 
-- **Hits:** `src/channels/*.ts`, `src/gates/ask.ts`, `src/app/services.ts:1010`, `src/ui/api.ts:725`, `src/devices/phone.ts`.
+- **Hits:** `src/channels/*.ts`, `src/gates/ask.ts`, `src/app/services.ts:1019`, `src/ui/api.ts:725`, `src/devices/phone.ts`.
 - **Does not hit:** the run object's logic (it only emits).
 
 ## Surfaces

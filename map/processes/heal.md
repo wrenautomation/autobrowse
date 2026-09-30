@@ -20,7 +20,7 @@ A broken flow must get fixed in the flow (fallback paths, a remapped locator), n
 
 ## Steps
 
-1. The runner writes `*.failure.json`; `App.onFailure` hands it to `healer` — `src/browser/session.ts:51`, `src/app/services.ts:400`, `src/app/backend.ts:215`
+1. The runner writes `*.failure.json`; `App.onFailure` hands it to `healer` — `src/browser/session.ts:51`, `src/app/services.ts:400`, `src/app/backend.ts:216`
 2. `locateFailure(record, root)`: which compiled dir, which outline step, which op (`brokenOp`) — `src/agent/heal.ts:72`, `src/compiler/patch.ts:29`
 3. `healRequest` → the agent runs from that page toward the step's goal — `src/agent/heal.ts:103`, `src/agent/explorer.ts:140`
 4. `swapHints` / `replaceOp` patches the outline; `render` writes the module — `src/compiler/patch.ts:63-90`, `src/compiler/render.ts:256`
@@ -29,7 +29,7 @@ A broken flow must get fixed in the flow (fallback paths, a remapped locator), n
 
 ## If you change this
 
-- **Hits:** `src/app/backend.ts:214-238`, `src/ui/jobs.ts` (heal runs as a job), `autobrowse repair`, `src/browser/fixes.ts`, `src/compiler/patch.ts`.
+- **Hits:** `src/app/backend.ts:215-239`, `src/ui/jobs.ts` (heal runs as a job), `autobrowse repair`, `src/browser/fixes.ts`, `src/compiler/patch.ts`.
 - **Does not hit:** hand-written flows (`src/browser/flows/`: fixed by hand), sign-in walks (their unknown pages are learned screens, not heals).
 
 ## Surfaces

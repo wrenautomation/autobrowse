@@ -155,6 +155,10 @@ a row; it is work.
   `--inbox will@…` reads the codes there when the address is an alias.
   The journal keeps every placed field redacted, so the compiled flow reads
   it as a secret by key.
+  `place{secret:"profile.taxId"}` fills a field from the Mac's wallet
+  profile (`name`, `email`, `phone`, an address field; `profile@<id>.…`
+  picks one). It is the person's own, not a site's login, so any host may
+  have it.
 - **Env store.** Secrets travel through SSM Parameter Store, one
   SecureString per name under `/autobrowse/config` (KMS at rest, IAM at
   the door, every read in CloudTrail; no extra vendor). `autobrowse env

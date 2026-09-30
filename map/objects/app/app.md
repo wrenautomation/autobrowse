@@ -17,8 +17,8 @@ Deps are made in one file so the CLI, the worker and tests share the same wiring
 
 ## Shape
 
-- `App { services, channel, workflows(), proofs(), catalog, browser, bus, memory, sink, sites, idle, screen, credentials, onFailure, doer }` — `src/app/services.ts:370-403`; `buildApp(settings, log)` — `:1034`
-- Factories: `browserOptions` `:247`, `llmFor` `:330`, `credentialsFor` `:418`, `codesFor` `:551`, `loginFor` `:598`, `envStoreFor` `:844`, `approverFor` `:941`, `channelsFor` `:1010`, wallet and profiles `:694-722`
+- `App { services, channel, workflows(), proofs(), catalog, browser, bus, memory, sink, sites, idle, screen, credentials, onFailure, doer }` — `src/app/services.ts:370-403`; `buildApp(settings, log)` — `:1043`
+- Factories: `browserOptions` `:247`, `llmFor` `:330`, `credentialsFor` `:418`, `codesFor` `:551`, `loginFor` `:598`, `envStoreFor` `:853`, `approverFor` `:950`, `channelsFor` `:1019`, wallet and profiles `:694-722`
 - `src/app/main.ts`: `buildApp` → Restate endpoint (`planEndpoint`, `registerDeployment` `src/app/register.ts:11`) → `startUiServer` (`src/ui/server.ts:34`) → `scheduleIdleStop` (`src/app/idle.ts:70`) and `selfStopper` (the box stops its own instance, `src/app/box.ts:67`)
 - Restate services registered: run objects (hand-written), `Compiled`, `Runs`, `browser`, `sites`, `do`
 - `src/app/desk.ts`: the Mac's lean worker, only `sitesService(app.sites, "desk")` (`src/sites/service.ts:58`) on its own tunnel name in the box's Restate environment; no UI, idle stop or evaluator. launchd keeps it up (`deploy/desk/install.sh`); the agent needs node to have Full Disk Access (the repo is under ~/Documents)
@@ -32,7 +32,7 @@ Deps are made in one file so the CLI, the worker and tests share the same wiring
 
 ## If you change this
 
-- **Hits:** `src/app/main.ts`, `src/app/backend.ts:329-469` (`localParts`, `backendFor`, `localBackend`), every `src/app/cli-*.ts`, `src/app/status.ts`, `test/` fixtures that build parts.
+- **Hits:** `src/app/main.ts`, `src/app/backend.ts:332-472` (`localParts`, `backendFor`, `localBackend`), every `src/app/cli-*.ts`, `src/app/status.ts`, `test/` fixtures that build parts.
 - **Does not hit:** the engine's types; flows.
 
 ## Surfaces

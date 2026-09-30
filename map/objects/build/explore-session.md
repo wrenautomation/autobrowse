@@ -3,7 +3,7 @@ type: object
 cluster: build
 universe: live
 status: verified
-verified: 2026-09-28 @ 70aefc3
+verified: 2026-09-30 @ baab3e6+
 entity: src/explore/server.ts
 ---
 
@@ -17,12 +17,12 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 
 ## Shape
 
-- `Command` (open, click, fill, place, keep, aria, read, note, save, os …) — `src/explore/server.ts:198`; `ExploreOptions` — `:295-360`; `Explorer` — `:387`
-- Journal: `journalFileFor(recordingsDir, site, id)` under `recordings/.explore-<site>/` — `:363`; `readJournal` — `:367`; `DEFAULT_IDLE_MINUTES` 30 — `:381`
-- Money and secrets on this path: `secrets`/`secretHosts` (place by name), `cards`, `cardsOnFile`, `charges`, `approve`, `audit` — `:310-344`; `placeHint` names the flag a missing secret needs — `:218-234`
-- Help by hand, no pause: acts a person does between two commands count (`byHand`, `HAND_GRACE_MS` — `:236`, `:533-540`); the next answer carries `helped {acts, url, changed, note}` — `helpedSince` `:834`
-- A target with no `frame` the page lacks is looked for in each visible iframe (`withFrame`, `src/browser/frames.ts`), so `place` on a card provider's hosted field (Braintree) works with plain role/name hints — `:852-856`
-- Opened by `explorerOpener` — `src/app/backend.ts:245`; the CLI `record`/`explore` verbs in `src/app/cli-record.ts`
+- `Command` (open, click, fill, place, keep, aria, read, note, save, os …) — `src/explore/server.ts:205`; `ExploreOptions` — `:302-373`; `Explorer` — `:400`
+- Journal: `journalFileFor(recordingsDir, site, id)` under `recordings/.explore-<site>/` — `:376`; `readJournal` — `:380`; `DEFAULT_IDLE_MINUTES` 30 — `:394`
+- Money and secrets on this path: `secrets`/`secretHosts` (place by name), `profiles` (a profile field, any host), `cards`, `cardsOnFile`, `charges`, `approve`, `audit` — `:317-357`; `placeHint` names the flag a missing secret needs — `:225-241`
+- Help by hand, no pause: acts a person does between two commands count (`byHand`, `HAND_GRACE_MS` — `:243`, `:546-553`); the next answer carries `helped {acts, url, changed, note}` — `helpedSince` `:873`
+- A target with no `frame` the page lacks is looked for in each visible iframe (`withFrame`, `src/browser/frames.ts`), so `place` on a card provider's hosted field (Braintree) works with plain role/name hints — `:891-895`
+- Opened by `explorerOpener` — `src/app/backend.ts:246`; the CLI `record`/`explore` verbs in `src/app/cli-record.ts`
 
 ## Connected to
 
@@ -33,7 +33,7 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 
 ## If you change this
 
-- **Hits:** `src/agent/explorer.ts`, `src/agent/sessions.ts`, `src/app/cli-record.ts`, `src/app/backend.ts:245`, `.claude/skills/autobrowse/explore.md` and the skill's scripts (the command list is documented there), `src/mcp/server.ts`.
+- **Hits:** `src/agent/explorer.ts`, `src/agent/sessions.ts`, `src/app/cli-record.ts`, `src/app/backend.ts:246`, `.claude/skills/autobrowse/explore.md` and the skill's scripts (the command list is documented there), `src/mcp/server.ts`.
 - **Does not hit:** compiled workflows already rendered; the run object.
 
 ## Surfaces

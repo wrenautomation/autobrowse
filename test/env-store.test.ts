@@ -16,7 +16,7 @@ describe("autobrowse env", () => {
     let pasted = "";
     const copied: string[] = [];
     const program = new Command().exitOverride();
-    registerEnvCommands(program, { envFile: join(dir, ".env") } as Settings, {
+    registerEnvCommands(program, { envFile: join(dir, ".env"), owner: "wren" } as Settings, {
       store: () => store,
       say: (l) => said.push(l),
       out: (t) => {

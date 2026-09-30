@@ -15,7 +15,9 @@ import {
   fileProfiles,
   ownerOf,
   type Profile,
+  profileField,
   profileSchema,
+  profileSecret,
 } from "../src/money/profile.js";
 import {
   backedUpWallet,
@@ -240,6 +242,20 @@ describe("profiles", () => {
     expect(cardField({ ...c, postal: undefined }, "postal", home)).toBe("T6R 0K9");
     expect(cardField({ ...c, postal: "M5V2T6" }, "postal", home)).toBe("M5V2T6");
     expect(cardField(c, "city")).toBeNull();
+  });
+  it("place fills a profile field by name: the tax id a billing page asks for, an address field", () => {
+    expect(profileSecret("profile.taxId")).toEqual({ id: null, field: "taxId" });
+    expect(profileSecret("profile@wren.postal")).toEqual({ id: "wren", field: "postal" });
+    expect(profileSecret("cloudflare.password")).toBeNull();
+    const p = profileSchema.parse({
+      id: "w",
+      name: "W",
+      taxId: "123456789 rt 0001",
+      address: home,
+    });
+    expect(profileField(p, "taxId")).toBe("123456789RT0001");
+    expect(profileField(p, "city")).toBe("Edmonton");
+    expect(profileField({ id: "w", name: "W" }, "taxId")).toBeNull();
   });
   it("a card bills to its owner, else the only profile", () => {
     const a = { id: "william", name: "W" };

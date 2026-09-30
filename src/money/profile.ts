@@ -126,6 +126,28 @@ export function addressField(a: Address | undefined, field: string): string | nu
   }
 }
 
+/** A profile field by name after `profile.`: `taxId`, `name`, `email`, `phone`, or an address field; null when it has none. */
+export function profileField(p: Profile, field: string): string | null {
+  switch (field) {
+    case "taxId":
+      return p.taxId ?? null;
+    case "name":
+      return p.name;
+    case "email":
+      return p.email ?? null;
+    case "phone":
+      return p.phone ?? null;
+    default:
+      return addressField(p.address, field);
+  }
+}
+
+/** `profile.taxId` → the only profile, `taxId`; `profile@william.postal` → profile `william`. Null: not a profile field. */
+export function profileSecret(name: string): { id: string | null; field: string } | null {
+  const m = /^profile(?:@([a-z0-9-]+))?\.([A-Za-z][A-Za-z0-9]*)$/.exec(name);
+  return m ? { id: m[1] ?? null, field: m[2] as string } : null;
+}
+
 export const ADDRESS_FIELDS = [
   "address1",
   "address2",

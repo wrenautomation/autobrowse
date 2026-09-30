@@ -62,7 +62,14 @@ import {
 } from "../gates/payment.js";
 import type { Amount } from "../gates/spend.js";
 import { type Charge, type Receipt, receiptOutcome, stillAsking } from "../money/charges.js";
-import { ADDRESS_FIELDS, type Address, type Contacts } from "../money/profile.js";
+import {
+  ADDRESS_FIELDS,
+  type Address,
+  type Contacts,
+  type Profile,
+  profileField,
+  profileSecret,
+} from "../money/profile.js";
 import {
   type Card,
   cardEnding,
@@ -321,6 +328,12 @@ export interface ExploreOptions {
     label: string | null;
     subscription: boolean;
   }) => Promise<Card & { billing?: Address; tell?: Contacts }>;
+  /**
+   * The owner's profiles, where they live (the Mac): `place{secret:"profile.<field>"}`
+   * (or `profile@<id>.<field>`) fills one of its fields, such as `taxId` on a
+   * billing page. Id null: the only profile. Absent: refused.
+   */
+  profiles?: (id: string | null) => Promise<Profile | null>;
   /**
    * Which card each host was given: written when a card is placed, read when a
    * site charges the card it keeps, so every charge names its card's ending.
@@ -650,6 +663,32 @@ async function serve(
     await decide(`${act} ${JSON.stringify(t.hints)}`, what, page.url(), wait, amount);
     return { what, amount, charges: chargesNow(hints) };
   };
+  /** A secret this session holds by name (a code, a minted password, a stored login). */
+  const sessionSecret = async (name: string): Promise<string> => {
+    if (!opts.secrets) throw new Error(`place: no secrets in this session; ${placeHint(name)}`);
+    const value = await opts.secrets(name);
+    if (!value)
+      throw new Error(
+        `place: ${name} is not available now (a code: the site's message has not arrived in the inbox this run reads yet, wait and retry); ${placeHint(name)}`,
+      );
+    return value;
+  };
+  /** A field of the owner's profile. */
+  const profileValue = async (
+    name: string,
+    want: { id: string | null; field: string },
+  ): Promise<string> => {
+    if (!opts.profiles)
+      throw new Error("place: no profiles here (they live on the Mac: autobrowse profile set)");
+    const p = await opts.profiles(want.id);
+    if (!p) throw new Error(`place: ${name}: no profile ${want.id ?? "(name one: profile@<id>.)"}`);
+    const value = profileField(p, want.field);
+    if (!value)
+      throw new Error(
+        `place: ${name}: profile ${p.id} has no ${want.field} (fields: taxId, name, email, phone, ${ADDRESS_FIELDS.join(", ")})`,
+      );
+    return value;
+  };
   /** Card-and-host pairs a person said yes to this session; the card last placed, for the receipt. */
   const cardsYes = new Set<string>();
   let placedCard: { line: string; recurring: boolean; tell?: Contacts } | null = null;
@@ -900,15 +939,11 @@ async function serve(
       case "place": {
         const card = cardSecret(c.secret);
         if (card) return placeCard(c, card, wait);
-        if (!opts.secrets)
-          throw new Error(`place: no secrets in this session; ${placeHint(c.secret)}`);
-        const value = await opts.secrets(c.secret);
-        if (!value)
-          throw new Error(
-            `place: ${c.secret} is not available now (a code: the site's message has not arrived in the inbox this run reads yet, wait and retry); ${placeHint(c.secret)}`,
-          );
+        const own = profileSecret(c.secret);
+        const value = own ? await profileValue(c.secret, own) : await sessionSecret(c.secret);
         const host = new URL(page.url()).host;
-        const allowed = opts.secretHosts ? opts.secretHosts(host, c.secret) : true;
+        // A profile field is the person's own, not a site's login: any host may have it.
+        const allowed = !own && opts.secretHosts ? opts.secretHosts(host, c.secret) : true;
         await opts.audit?.record({
           at: new Date().toISOString(),
           credential: opts.site,

@@ -13,7 +13,7 @@ An API key another agent presents, carrying a scope: which sites and accounts, w
 
 ## Why this shape
 
-The operator's UI token does everything; a key does only what its scope lists. Keys are stored hashed in `access.json`; the value is shown once. `do` seen through a key is the catalog cut to the scope, each leg checked (`Backend.doAs`, `src/app/backend.ts:133`).
+The operator's UI token does everything; a key does only what its scope lists. Keys are stored hashed in `access.json`; the value is shown once. `do` seen through a key is the catalog cut to the scope, each leg checked (`Backend.doAs`, `src/app/backend.ts:134`).
 
 ## Shape
 
@@ -29,7 +29,7 @@ The operator's UI token does everything; a key does only what its scope lists. K
 
 ## If you change this
 
-- **Hits:** `src/ui/api.ts:143-169`, `src/ui/auth.ts`, `src/app/backend.ts:133` (`doAs`), `src/app/cli-access.ts`.
+- **Hits:** `src/ui/api.ts:143-169`, `src/ui/auth.ts`, `src/app/backend.ts:134` (`doAs`), `src/app/cli-access.ts`.
 - **Does not hit:** Restate handlers (the ingress has its own auth), sign-ins.
 
 ## Surfaces

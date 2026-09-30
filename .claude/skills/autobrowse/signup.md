@@ -35,6 +35,7 @@ gives it (flags go after the port in `start.sh`):
 | `password` | `--new-password <address>` |
 | `<site>.username`, `.password`, `.code`, `.phone`, `.phoneLocal` | `--login <site>[,<site>…]` |
 | `card.number`, `.exp`, `.expMonth`, `.expYear`, `.cvc`, `.name`, `.postal` (`card@<label>.…`) | none: payment-gated |
+| `profile.taxId`, `.name`, `.email`, `.phone`, `.address1` … `.countryName` (`profile@<id>.…` picks one) | none: the Mac's wallet profiles; any host |
 
 A missing secret's error names the flag.
 

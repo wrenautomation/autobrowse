@@ -743,6 +743,15 @@ export function cardsFor(settings: Settings): ExploreOptions["cards"] {
   };
 }
 
+/** The owner's profiles for `place{secret:"profile.<field>"}`: on the Mac only, like the wallet. */
+export function profilesForPlace(settings: Settings): ExploreOptions["profiles"] {
+  if (process.platform !== "darwin" || !isDefaultOwner(settings.owner)) return undefined;
+  return async (id) => {
+    const { ownerOf } = await import("../money/profile.js");
+    return ownerOf(await (await profilesFor(settings)).list(), id ?? undefined);
+  };
+}
+
 /** Which card each host was given (brand, kind, last 4 only): a chained ledger, read from its tail. */
 export function cardsOnFileFor(settings: Settings): NonNullable<ExploreOptions["cardsOnFile"]> {
   type Row = { at: string; site: string; host: string; card: string };
