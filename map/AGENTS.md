@@ -27,7 +27,7 @@ Nouns, verbs, and what a change hits, for an agent editing this repo. The code i
 
 | Word | Means | Not |
 |---|---|---|
-| site | a browser profile name: `x`, `x@wren` (`Site = string`, `src/browser/flow.ts:61`) | `SiteApi`, the official-API facade (`src/sites/types.ts:148`); `SiteLogin`, the sign-in spec (`src/auth/login.ts:54`) |
+| site | a browser profile name: `x`, `x@wren` (`Site = string`, `src/browser/flow.ts:61`) | `SiteApi`, the official-API facade (`src/sites/types.ts:155`); `SiteLogin`, the sign-in spec (`src/auth/login.ts:55`) |
 | workflow / flow / walk | engine `Workflow` = steps + gates on Restate; `BrowserFlow` = one browser leg; walk = a screens loop inside a sign-in | a compiled workflow wraps flows; none of the three is another |
 | step | engine `StepDef`; an outline step (compiler); a watched `Step` (`browser/watch`); an agent `StepRecord` | |
 | screen | `browser/screens` = a page a walk knows; `src/app/screen.ts` = headed or headless | |

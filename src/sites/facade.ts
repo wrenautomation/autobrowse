@@ -347,7 +347,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     return row;
   };
   const status = async (s: SiteApi): Promise<SiteRow> => {
-    const as = (await deps.accountFor?.(s)) ?? null;
+    const as = s.signedOut ? null : ((await deps.accountFor?.(s)) ?? null);
     return {
       site: s.site,
       origin: s.origin,
@@ -395,7 +395,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       // token at a provider's site, and at a site whose key a browser flow mints (npm, Cal.com: one
       // key, kept under its plain name). A site with its own OAuth logins keeps that token for whoever
       // its own credential is (a person's own LinkedIn), never for the policy's account.
-      const chosen = account ?? (await deps.accountFor?.(s)) ?? null;
+      const chosen = account ?? (s.signedOut ? null : await deps.accountFor?.(s)) ?? null;
       const oneKey = !s.setup.some((st) => "oauth" in st.how);
       const fallback = !account && chosen && (deps.providerOf?.(s) || oneKey);
       // A route that prefers the browser never reaches the API, so never pays for a read.

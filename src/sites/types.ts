@@ -9,6 +9,7 @@
  * OAuth client) and OAuth consents autobrowse drives itself.
  */
 import type { z } from "zod";
+import type { IdentityProvider } from "../auth/identities.js";
 import type { HttpClient } from "../clients/http.js";
 import type { Amount } from "../gates/spend.js";
 import type { Pace } from "./caps.js";
@@ -169,6 +170,19 @@ export interface SiteApi {
    * `default` otherwise. A step can say its own.
    */
   purpose?: string;
+  /**
+   * No account behind it: a browser leg runs signed out in the site's own
+   * profile (a Google search), never as the policy's account. A caller can
+   * still name one.
+   */
+  signedOut?: true;
+  /**
+   * The account was made through this provider's button and lives in its
+   * profile (where explore and `login` sign it in): the policy's account at
+   * that provider, and the browser leg runs in that account's profile.
+   * Perplexity's session dies with a profile of its own.
+   */
+  via?: IdentityProvider;
   /** A cheap who-am-I read on the API leg (a concrete GET path): `site check` calls it to prove the token works. */
   probe?: { path: string; input?: Record<string, unknown> };
   /** Most a route's `meter` may use per account per day, by bucket (`{ profile: 80, search: 25 }`). */

@@ -6,6 +6,7 @@
  * live on 2026-09-21 (headless explore): github, microsoft (first page), linkedin.
  */
 
+import type { FlowPage } from "../browser/flow.js";
 import { backFrom, clickOpening, type Walk, walk } from "../browser/screens.js";
 import { FACEBOOK_LOGIN_URL, signInToFacebook } from "./facebook.js";
 import { signInToGithub } from "./github.js";
@@ -795,6 +796,31 @@ const reddit: SiteLogin = {
   }),
 };
 
+/**
+ * Perplexity: made with "Continue with Google" as william@ (2026-09-29), no
+ * password. Its session dies with the browser, so the runner signs in each
+ * time: "Sign In" opens the modal that holds the Google button. The page
+ * alone does not say who is signed in; its session endpoint does.
+ */
+const PERPLEXITY_HOME = "https://www.perplexity.ai/";
+export const perplexitySignedIn = (fp: FlowPage): Promise<boolean> =>
+  fp.page.evaluate<boolean>(
+    `fetch("/api/auth/session").then((r) => r.json()).then((j) => Boolean(j && j.user)).catch(() => false)`,
+  );
+const perplexity: SiteLogin = {
+  site: "perplexity",
+  home: PERPLEXITY_HOME,
+  ask: "Your Perplexity account (perplexity.ai), for answers with their sources",
+  via: ["google"],
+  loggedIn: async (fp) => /perplexity\.ai/.test(fp.url()) && (await perplexitySignedIn(fp)),
+  signIn: oauthLogin("perplexity", {
+    start: PERPLEXITY_HOME,
+    before: [{ role: "button", name: "Sign In" }],
+    button: { role: "button", name: "/continue with google/i" },
+    success: perplexitySignedIn,
+  }),
+};
+
 export const SITE_LOGINS: readonly SiteLogin[] = [
   cloudflare,
   google,
@@ -815,4 +841,5 @@ export const SITE_LOGINS: readonly SiteLogin[] = [
   npm,
   github,
   reddit,
+  perplexity,
 ];

@@ -9,7 +9,7 @@ entity: src/auth/login.ts
 
 # Site login
 
-How one site is signed into and where its password may be typed: `SiteLogin` in `src/auth/login.ts`; the list is `SITE_LOGINS` in `src/auth/sites.ts:798`.
+How one site is signed into and where its password may be typed: `SiteLogin` in `src/auth/login.ts`; the list is `SITE_LOGINS` in `src/auth/sites.ts:824`.
 
 ## Why this shape
 
@@ -17,16 +17,16 @@ The runner meets a wall and calls one hook (`RunnerOptions.login`); the spec say
 
 ## Shape
 
-- `SiteLogin { site, home, credential?, ask?, via?, loggedIn, signIn, signInHere?, totpSetup?, passwordChange?, passkeySetup?, recoveryCodes?, origins? }` — `src/auth/login.ts:55-96`
-- Builders: `formLogin` `:193`, `oauthLogin` `:272`, `viaLogin` `:313`; `LoginFailed` (this method failed, try the next) `:174`
-- `loginProvider(sites, opts)` = the runner's hook: resolves the site, picks methods, signs in, returns `signed-in | no-credential | unknown-site` — `:533-616`
+- `SiteLogin { site, home, credential?, ask?, via?, loggedIn, signIn, signInHere?, totpSetup?, passwordChange?, passkeySetup?, recoveryCodes?, origins? }` — `src/auth/login.ts:55-94`
+- Builders: `formLogin` `:194`, `oauthLogin` `:275` (`before` clicks open the sign-in; a site made through a provider signs in as its own account there, never the provider's default credential), `viaLogin` `:322`; `LoginFailed` (this method failed, try the next) `:175`
+- `loginProvider(sites, opts)` = the runner's hook: resolves the site, picks methods, signs in, returns `signed-in | no-credential | unknown-site` — `:545-602`
 - Wired: `loginFor` — `src/app/services.ts:584`
 
 ## Connected to
 
 - **owns:** its walk or form
 - **owned-by:** `SITE_LOGINS`
-- **joins:** [[credential]], [[identity-provider]] (`via`), [[sign-in-context]], [[screen]] (walks), [[guard]] (`passwordDomains`, `src/auth/login.ts:384`), [[need]]
+- **joins:** [[credential]], [[identity-provider]] (`via`), [[sign-in-context]], [[screen]] (walks), [[guard]] (`passwordDomains`, `src/auth/login.ts:392`), [[need]]
 - **looks-like-but-is-not:** [[site-api]] (the official API), `SITES` in `src/browser/flow.ts:63`
 
 ## If you change this

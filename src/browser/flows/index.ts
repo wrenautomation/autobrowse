@@ -5,6 +5,14 @@ export { facebookOauthConsent } from "./facebook-oauth-consent.js";
 export { type Fingerprint, fingerprint, tellsOf } from "./fingerprint.js";
 export { googleDkimGenerate, googleDkimStart } from "./google-dkim.js";
 export { googleProfilePhoto } from "./google-profile-photo.js";
+export {
+  type Ad as GoogleAd,
+  googleSearch,
+  type Overview as GoogleOverview,
+  type Result as GoogleResult,
+  type SearchInput as GoogleSearchInput,
+  type Serp,
+} from "./google-search.js";
 export { googleWorkspaceLogo } from "./google-workspace-logo.js";
 export { type CreatePostInput, instagramCreatePost } from "./instagram-create-post.js";
 export { instagramOauthConsent } from "./instagram-oauth-consent.js";
@@ -42,6 +50,11 @@ export {
 } from "./npm-granular-token.js";
 export { googleOauthConsent, type OauthConsentInput, redirectOf } from "./oauth-consent.js";
 export { outlookOauthConsent } from "./outlook-oauth-consent.js";
+export {
+  type Asked as PerplexityAnswer,
+  type AskSource as PerplexitySource,
+  perplexityAsk,
+} from "./perplexity-ask.js";
 export {
   type CommentInput as RedditCommentInput,
   OLD as REDDIT_OLD,

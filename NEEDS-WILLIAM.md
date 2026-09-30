@@ -11,9 +11,10 @@ Live list: `pnpm autobrowse needs`. Rows clear themselves. Dated 2026-09-27.
 - **Loom plan.** The 14-day trial ends ~10-13. After it, Starter caps at 25
   videos of 5 minutes. Upgrade only if that's too small (your spend).
 
-- **A web search key.** The box can't search: DuckDuckGo bot-checks its IP and
-  no key is set. Exa's free signup credits do: copy the key,
-  `autobrowse env set EXA_API_KEY --clipboard`.
+- **Heads-up, no action.** 09-29 a Perplexity sign-in fell back to your
+  personal Google credential and typed its stored password once. Google
+  rejected it. Fixed: a site made through Google now always signs in as its
+  own account. If Google mails you about a failed sign-in, that was it.
 
 Optional: `autobrowse creds paste google@will` and a Gmail consent for
 will@williamjin.dev, if autobrowse should read that inbox.

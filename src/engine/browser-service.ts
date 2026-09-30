@@ -16,6 +16,7 @@ import { facebookOauthConsent } from "../browser/flows/facebook-oauth-consent.js
 import { fingerprint } from "../browser/flows/fingerprint.js";
 import { googleDkimGenerate, googleDkimStart } from "../browser/flows/google-dkim.js";
 import { googleProfilePhoto } from "../browser/flows/google-profile-photo.js";
+import { googleSearch } from "../browser/flows/google-search.js";
 import { googleWorkspaceLogo } from "../browser/flows/google-workspace-logo.js";
 import { instagramCreatePost } from "../browser/flows/instagram-create-post.js";
 import { instagramOauthConsent } from "../browser/flows/instagram-oauth-consent.js";
@@ -35,6 +36,7 @@ import { npmGranularToken } from "../browser/flows/npm-granular-token.js";
 import { npmTrustedPublisher } from "../browser/flows/npm-trusted-publisher.js";
 import { googleOauthConsent } from "../browser/flows/oauth-consent.js";
 import { outlookOauthConsent } from "../browser/flows/outlook-oauth-consent.js";
+import { perplexityAsk } from "../browser/flows/perplexity-ask.js";
 import { redditComment, redditRead, redditSubmit } from "../browser/flows/reddit.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { tiktokOauthConsent } from "../browser/flows/tiktok-oauth-consent.js";
@@ -76,6 +78,8 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     googleWorkspaceLogo,
     googleProfilePhoto,
     googleOauthConsent,
+    googleSearch,
+    perplexityAsk,
     linkedinOauthConsent,
     instagramOauthConsent,
     instagramCreatePost,

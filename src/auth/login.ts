@@ -45,7 +45,7 @@ export interface SignInContext {
   /**
    * Another site's credential (the identity provider behind an OAuth button),
    * or throws. With `account`, the one for that username: the site's own when
-   * it matches, else a `<site>@<label>` credential whose username is it.
+   * it matches, else a `<site>@<label>` (or `<site>-<label>`) credential whose username is it.
    */
   credFor(site: string, account?: string): Promise<Credential>;
   /** This context signing in as another credential: its codes come from that one. */
@@ -247,6 +247,8 @@ export function serially<T>(ctx: SignInContext, kind: CodeKind, fn: () => Promis
 
 export interface OauthLoginSpec {
   start: string;
+  /** Clicks on `start` that bring the provider's button up (a "Sign In" that opens a modal). */
+  before?: Hints[];
   /** The provider's button on the site's login page; the provider's own readings when absent. */
   button?: Hints;
   /** Which identity provider (and stored credential) signs in; `google` by default. */
@@ -282,6 +284,8 @@ export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signI
     // unclickable. A card that is already there is the sign-in (LinkedIn, 2026-09-22).
     let page = opened();
     if (!page) {
+      for (const h of spec.before ?? [])
+        await fp.act({ kind: "click" }, h, { goal: `open ${site}'s sign-in` });
       const button = await providerButton(fp, provider, spec.button);
       const popup = fp.nextPage(8_000);
       const failed = await fp
@@ -298,7 +302,11 @@ export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signI
       }
     }
     if (page) fp.switchTo(page);
-    const cred = await ctx.credFor(provider.site, spec.account);
+    // A site made through the provider's button signs in as its own username
+    // there, never as the provider's stored default: that was a person's own
+    // account once, its password typed for a Wren site (2026-09-29).
+    const account = spec.account ?? (ctx.cred.via ? ctx.cred.username : undefined);
+    const cred = await ctx.credFor(provider.site, account);
     await provider.signIn(ctx.as(cred));
     fp.switchTo(main);
     await landAfterOauth(site, spec, ctx);
@@ -511,9 +519,9 @@ export function signInContext(p: SignInParts): SignInContext {
       if (!c) throw new LoginFailed(site, `no credential stored for ${other}`);
       names.set(c, other);
       if (!account || sameUser(c.username, account)) return c;
-      // A second account at the provider lives as `<provider>@<label>`.
+      // A second account at the provider lives as `<provider>@<label>` (or `<provider>-<label>`: google-admin).
       for (const name of await p.credentials.list()) {
-        if (!name.startsWith(`${other}@`)) continue;
+        if (!name.startsWith(`${other}@`) && !name.startsWith(`${other}-`)) continue;
         const alt = await p.credentials.get(name);
         if (alt && sameUser(alt.username, account)) {
           names.set(alt, name);

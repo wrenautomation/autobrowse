@@ -66,6 +66,7 @@ const RELOAD_EVERY_MS = 60_000;
 
 /** Which identity provider a site's consent signs in with: the consent flow's own site (`google/oauth-consent`). */
 export function consentProviderOf(s: SiteApi): IdentityProvider | null {
+  if (s.via) return s.via;
   const consent = s.setup.find((st) => "oauth" in st.how);
   const spec = consent && "oauth" in consent.how ? consent.how.oauth : null;
   const at = spec && "flow" in spec.consent ? spec.consent.flow.split("/")[0] : null;

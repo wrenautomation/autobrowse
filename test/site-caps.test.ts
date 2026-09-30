@@ -126,6 +126,7 @@ describe("web and x reads", () => {
     expect(row.routes.map((r) => [r.path, r.via])).toEqual([
       ["/search", "api"],
       ["/read", "api"],
+      ["/google", "none"], // a browser leg; this fake runner has no flows
     ]);
     await expect(sites.call("web", "GET", "/search", {})).rejects.toMatchObject({ status: 400 });
   });

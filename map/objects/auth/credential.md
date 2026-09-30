@@ -19,7 +19,7 @@ The vault is its own repo and npm package (public). Changing a name in `src/auth
 
 - Names: Keychain service `autobrowse` (seal key), env prefix `AUTOBROWSE_CRED_`, secret prefix `AUTOBROWSE_`, SSM path `/autobrowse/config` — `src/auth/keep.ts:7-13`
 - Store: env layer first, then the sealed file `~/.config/autobrowse/credentials.json` (`src/app/config.ts:205`); armed with a canary whose read is refused and reported — `src/app/services.ts:415-465`
-- A credential is keyed `<site>` or `<site>@<label>`; `via` names an identity provider instead of a password (`methodsOf`, `src/auth/login.ts:622`)
+- A credential is keyed `<site>` or `<site>@<label>`; `via` names an identity provider instead of a password (`methodsOf`, `src/auth/login.ts:630`)
 - Minted on signup: `accountKey`, `mintCredential`, `mintPassword` — `src/auth/signup.ts:222-310`
 - Every typed secret is audited (`SecretAudit`, `auditFor` `src/app/services.ts:505`; window read by `ledgerSince` `src/auth/ledger.ts:18`)
 

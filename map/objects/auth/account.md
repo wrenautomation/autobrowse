@@ -13,7 +13,7 @@ One of the person's addresses and what it is for: `Identity` in `src/auth/identi
 
 ## Why this shape
 
-Purposes decide which account a site call or consent runs as when nobody names one: `default`, `pays`, `signup` are held by one account each; any other word is a group (`sends`). A site names a purpose, a setup step can override it (`src/auth/identities.ts:21-36`, `src/sites/types.ts:165-170`).
+Purposes decide which account a site call or consent runs as when nobody names one: `default`, `pays`, `signup` are held by one account each; any other word is a group (`sends`). A site names a purpose, a setup step can override it (`src/auth/identities.ts:21-36`, `src/sites/types.ts:166-171`).
 
 ## Shape
 
@@ -26,7 +26,7 @@ Purposes decide which account a site call or consent runs as when nobody names o
 
 - **owns:** purposes
 - **owned-by:** [[app]] (`identitiesFor`, `src/app/services.ts:409`)
-- **joins:** [[credential]] (the row is its view), [[site-facade]] (`accountFor`, `policyAccount` `src/sites/wire.ts:82-103`), [[need]] (`accountNeeds`), `Policy` (`src/app/owed.ts:42`)
+- **joins:** [[credential]] (the row is its view), [[site-facade]] (`accountFor`, `policyAccount` `src/sites/wire.ts:83-104`), [[need]] (`accountNeeds`), `Policy` (`src/app/owed.ts:42`)
 - **looks-like-but-is-not:** `Identity` in `src/browser/identity.ts:16` (the browser's UA); an access key
 
 ## If you change this
