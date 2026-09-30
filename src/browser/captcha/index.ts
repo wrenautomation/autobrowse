@@ -9,6 +9,8 @@
  *             and press Verify; new squares fading in are looked at again
  *   text      a picture of letters beside a box: the eyes read, the hands type
  *   slider    a puzzle piece to drag into its gap: the eyes say how far
+ *   hold      "press and hold" (HUMAN, on Microsoft's signup): the button is
+ *             held down until the challenge lets go
  *
  * The eyes are any model that can see (`Eyes`): the picture is the captcha
  * box alone, cut from the page in memory, never written to disk. Without
@@ -20,8 +22,8 @@
 import type { FrameLocator, Locator, Page } from "playwright";
 import type { Hands } from "../human/index.js";
 
-export type CaptchaKind = "checkbox" | "grid" | "text" | "slider";
-export type CaptchaVendor = "recaptcha" | "hcaptcha" | "turnstile" | "generic";
+export type CaptchaKind = "checkbox" | "grid" | "text" | "slider" | "hold";
+export type CaptchaVendor = "recaptcha" | "hcaptcha" | "turnstile" | "human" | "generic";
 
 export interface Captcha {
   kind: CaptchaKind;
@@ -86,6 +88,12 @@ const GENERIC = {
     '[class*="captcha" i][class*="container" i], [class*="captcha" i][class*="verify" i], [id*="captcha" i]',
 };
 
+/** HUMAN's press-and-hold button, by its label or its words (its frames nest two deep). */
+const HOLD =
+  '[aria-label*="press & hold" i], [aria-label*="press and hold" i], [role="button"]:has-text("Press & Hold"), button:has-text("Press & Hold")';
+
+const holdButton = (page: Page): Promise<Locator | null> => shown(page, HOLD);
+
 /**
  * Cloudflare's own challenge page puts Turnstile in a closed shadow root:
  * no selector reaches it, but the frame list does. Its box on the page,
@@ -142,6 +150,7 @@ export async function findCaptcha(page: Page): Promise<Captcha | null> {
   if (await on(RECAPTCHA.anchor)) return { kind: "checkbox", vendor: "recaptcha" };
   if (await on(HCAPTCHA.anchor)) return { kind: "checkbox", vendor: "hcaptcha" };
   if (await turnstileShown(page)) return { kind: "checkbox", vendor: "turnstile" };
+  if (await holdButton(page)) return { kind: "hold", vendor: "human" };
   if (await on(GENERIC.slider)) return { kind: "slider", vendor: "generic" };
   if ((await on(GENERIC.picture)) && (await on(GENERIC.input)))
     return { kind: "text", vendor: "generic" };
@@ -161,7 +170,7 @@ export async function solveCaptcha(page: Page, o: SolveOptions): Promise<Captcha
       return { solved: true, ...last, rounds: round - 1 };
     }
     last = now;
-    if (now.kind !== "checkbox" && !o.eyes)
+    if (now.kind !== "checkbox" && now.kind !== "hold" && !o.eyes)
       return {
         solved: false,
         ...now,
@@ -172,11 +181,13 @@ export async function solveCaptcha(page: Page, o: SolveOptions): Promise<Captcha
       done =
         now.kind === "checkbox"
           ? await tick(page, now.vendor, o.hands, settle)
-          : now.kind === "grid"
-            ? await pickSquares(page, now.vendor, o.hands, o.eyes as Eyes, settle)
-            : now.kind === "text"
-              ? await readLetters(page, o.hands, o.eyes as Eyes)
-              : await slide(page, o.hands, o.eyes as Eyes, settle);
+          : now.kind === "hold"
+            ? await hold(page, o.hands, settle)
+            : now.kind === "grid"
+              ? await pickSquares(page, now.vendor, o.hands, o.eyes as Eyes, settle)
+              : now.kind === "text"
+                ? await readLetters(page, o.hands, o.eyes as Eyes)
+                : await slide(page, o.hands, o.eyes as Eyes, settle);
     } catch (err) {
       // A model that cannot see, a part that moved: the person's, with the reason.
       const why = err instanceof Error ? (err.message.split("\n")[0] ?? "") : String(err);
@@ -359,4 +370,38 @@ async function slide(page: Page, hands: Hands, eyes: Eyes, settleMs: number): Pr
     await page.waitForTimeout(500);
   }
   return "again";
+}
+
+/**
+ * Press and hold: the pointer goes to the button, the button stays down until it
+ * is gone or stops asking (the challenge's own "done"), then lets go. Too short a
+ * hold and HUMAN asks again: the next round holds again.
+ */
+async function hold(page: Page, hands: Hands, settleMs: number): Promise<Step> {
+  const button = await holdButton(page);
+  if (!button) return "ticked";
+  await hands.think(page);
+  const box = await button.boundingBox(T);
+  if (!box) return "gave-up";
+  await page.mouse.move(
+    box.x + box.width * (0.4 + Math.random() * 0.2),
+    box.y + box.height * (0.4 + Math.random() * 0.2),
+    { steps: 12 },
+  );
+  await page.mouse.down();
+  const until = Date.now() + settleMs * 2;
+  let released = false;
+  while (Date.now() < until) {
+    await page.waitForTimeout(500);
+    if (!(await holdButton(page))) {
+      released = true;
+      break;
+    }
+  }
+  // Released a beat after the challenge answers, as a thumb would.
+  await page.waitForTimeout(300 + Math.random() * 400);
+  await page.mouse.up();
+  if (released) return "ticked";
+  await page.waitForTimeout(2_000);
+  return (await holdButton(page)) ? "again" : "ticked";
 }

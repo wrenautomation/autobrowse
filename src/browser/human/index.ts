@@ -335,6 +335,14 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
     async paste(target, text, o) {
       await click(target, o);
       await rest(target.page(), pace.mouse.hover, pace, random).catch(() => undefined);
+      // A code split one box per character (Microsoft's six digit boxes): a fill lands
+      // it all in the first box. Keys, as a person types them, move the widget along.
+      if ([...text].length > 1 && (await boxWidth(target)) === 1) {
+        await target.fill("", o);
+        for (const ch of text)
+          await target.page().keyboard.type(ch, { delay: drawMs(pace.typing.hold, random) });
+        return;
+      }
       await target.fill(text, o);
     },
     press: (target, key, o) => {
@@ -353,6 +361,21 @@ const hasFocus = (target: Locator): Promise<boolean> =>
       (el) => el === el.ownerDocument.activeElement || el.contains(el.ownerDocument.activeElement),
     )
     .catch(() => true);
+
+/**
+ * How many characters the field holds: its maxlength, else 1 for a box in a row of
+ * code boxes (`codeEntry-0`, `otp-1`, "digit 1"); null when it is an ordinary field.
+ */
+const boxWidth = (target: Locator): Promise<number | null> =>
+  target
+    .evaluate((el) => {
+      const input = el as typeof el & { maxLength?: number; name?: string };
+      if (input.maxLength && input.maxLength > 0) return input.maxLength;
+      const label = `${input.id} ${input.name ?? ""} ${input.getAttribute("aria-label") ?? ""}`;
+      const siblings = input.parentElement?.parentElement?.querySelectorAll("input").length ?? 0;
+      return siblings >= 4 && /code|otp|digit|pin/i.test(label) ? 1 : null;
+    })
+    .catch(() => null);
 
 /** A field's value; null for anything that is not a field (a rich editor keeps its own). */
 const fieldValue = (target: Locator): Promise<string | null> =>
