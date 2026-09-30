@@ -4,6 +4,9 @@ Live list: `pnpm autobrowse needs`. Rows clear themselves. Dated 2026-09-30.
 
 ## To do
 
+- **Yes on the recruiting opener run (~$70).** One grounded first line per
+  firm, ~12k firms, Command A. Sample: 29 lines from 42 firms with a site.
+
 - **Data Axle: optional, your spend.** Free sources already reach 10k
   recruiting leads (Overture places, SBA search), so this only adds owner
   names and sales figures. The one library I found that gives it outside its

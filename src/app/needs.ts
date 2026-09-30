@@ -303,6 +303,26 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
       after: "keys-meta",
     },
     {
+      id: "recruiting-opener-run",
+      kind: "money",
+      what: "Yes on the recruiting opener pass: one grounded line per firm, ~$70 of LLM for ~12k firms",
+      unlocks: "a personal first line in every recruiting email",
+      how: [
+        "say yes; the run is Restate `Enrichment/recruiting/opener`",
+        "autobrowse needs done recruiting-opener-run",
+      ],
+    },
+    {
+      id: "data-axle-card",
+      kind: "money",
+      what: "Optional: Burlington (Ontario) library card, $66/yr non-resident, by phone 905.639.3611",
+      unlocks: "Data Axle owner names and sales figures for recruiting firms",
+      how: [
+        "buy the card and say so; I build the Data Axle pull",
+        "autobrowse needs done data-axle-card",
+      ],
+    },
+    {
       id: "npm-account",
       kind: "credential",
       what: "The npm account itself: npmjs.com/signup on william@wrenautomation.com, then `creds username npm <the username you picked>`",
