@@ -33,7 +33,7 @@ Plain files a person can open, one concern each; secrets sealed; shared truth in
 | `recordings/` (repo, gitignored) | recordings, explore journals | [[recording]], [[explore-session]] |
 | `src/workflows/<name>/` (repo, committed) | compiled modules, outline, proof | [[compiled-workflow]] |
 | SSM `/autobrowse/config` | site tokens, env store (credvault `EnvStore`) | [[token]] |
-| SSM `/wallet/cards`, `/wallet/profiles` | wallet backup (`src/money/wallet.ts:244`, `src/money/profile.ts:155`) | [[card]] |
+| SSM `/wallet/cards`, `/wallet/profiles` | wallet backup (`src/money/wallet.ts:244`, `src/money/profile.ts:162`) | [[card]] |
 | S3 shots bucket | shipped screenshots (`src/shots/ship.ts:109`) | — |
 | Keychain `autobrowse`, `autobrowse-wallet` | seal keys (`src/auth/keep.ts:7-9`) | [[credential]], [[card]] |
 

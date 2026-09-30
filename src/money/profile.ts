@@ -53,6 +53,12 @@ export const profileSchema = z.object({
     .trim()
     .regex(/^\+\d{8,15}$/, "phone: +<country><number>, digits only")
     .optional(),
+  /** The sales-tax registration a billing form asks for: a Canadian GST/HST number (`123456789RT0001`). */
+  taxId: z
+    .string()
+    .trim()
+    .transform((t) => t.toUpperCase().replace(/\s+/g, ""))
+    .optional(),
 });
 export type Profile = z.infer<typeof profileSchema>;
 
@@ -86,6 +92,7 @@ export function describeProfile(p: Profile): string {
     p.gender ?? null,
     p.email ? `receipts ${p.email}` : null,
     p.phone ? `texts ${phoneEnding(p.phone)}` : null,
+    p.taxId ? `tax id ${p.taxId}` : null,
     a
       ? `${[a.line1, a.line2].filter(Boolean).join(", ")}, ${a.city} ${a.regionCode} ${a.postal}, ${a.country}`
       : "no address",

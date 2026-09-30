@@ -56,6 +56,7 @@ export function registerWalletCommands(program: Command, settings: Settings): vo
     .option("--country <cc>", "two letters: CA")
     .option("--email <address>", "where its cards' receipts and invoices go")
     .option("--phone <+number>", "where its cards' charges are texted")
+    .option("--tax-id <id>", "GST/HST number a billing form asks for: 123456789RT0001")
     .action(async (id: string, o: Record<string, string | undefined>) => {
       const { describeProfile, profileSchema, addressSchema } = await import("../money/profile.js");
       const store = await profilesFor(settings);
@@ -80,6 +81,7 @@ export function registerWalletCommands(program: Command, settings: Settings): vo
           gender: o.gender,
           email: o.email,
           phone: o.phone,
+          taxId: o.taxId,
         }),
         ...(Object.keys(addr).length || was?.address
           ? { address: addressSchema.parse({ ...was?.address, ...addr }) }
