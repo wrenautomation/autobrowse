@@ -1,0 +1,97 @@
+# Explore: drive a browser or the desktop
+
+One browser stays open on a site, signed in through the site's stored login.
+You send one JSON command at a time over loopback. Every act that works is
+journaled; `save` writes a recording; `compile` makes it a workflow.
+
+## First: does something already do it?
+
+```sh
+pnpm -s autobrowse do "<goal>" --dry-run       # routes to a flow, a site route or a workflow
+pnpm -s autobrowse workflows [name]            # what exists; a name prints its inputs (--template for a plan file)
+pnpm -s autobrowse site status <site>          # the site's API and browser routes
+```
+
+## Session
+
+`scripts/` sits beside this file (the skill's folder). Run them from anywhere.
+
+```bash
+scripts/start.sh <site> [url] [port] [flags]   # default port 9090; prints "port N" when ready
+scripts/cmd.sh <port> '<json>'                 # one command, JSON back
+scripts/stop.sh <port>                         # close browser + socket
+scripts/state.sh                               # open sessions, resumable journals, profiles
+```
+
+`<site>` is a profile name (`google`, `cloudflare`, `aws`, `scratch` = no login;
+`<site>@<label>` for a second account). One session per site; `start.sh` on an
+open port just reports it. A session that died left its journal:
+`start.sh <site> "" <same port>` resumes on its last page, so `save` still has
+every act. `stop.sh` ends it for good. Flags for secrets: signup.md.
+
+## Commands
+
+Targets are `hints`: `{role, name, text, placeholder, id, testId, href, inputType, css, nth}`.
+Any subset; `name` is the accessible name from `aria`.
+
+Look:
+- `{"cmd":"snapshot"}` — interactive elements, one line each. Start here.
+- `{"cmd":"aria"}` — accessibility tree, masked. `hints` scopes it, `limit` caps characters (default 12000).
+- `{"cmd":"text"}`, `{"cmd":"url"}`, `{"cmd":"screenshot"}` (path back), `{"cmd":"count","hints":…}`.
+- `{"cmd":"pages"}` / `{"cmd":"page","index":1}` or `"main"` — OAuth popups; the session returns to main when the popup closes.
+
+Act (journaled):
+- `{"cmd":"open","url":"https://…"}`
+- `{"cmd":"click","hints":{"role":"button","name":"Create"},"goal":"…"}`
+- `{"cmd":"fill","hints":{…},"value":"…"}`, `select`, `press` (`"key":"Enter"`), `upload`.
+- `{"cmd":"type","text":"…"}`, `{"cmd":"key","key":"Escape"}` — into whatever is focused.
+- `{"cmd":"place","hints":{…},"secret":"code"}` — types a secret the session holds (signup.md); the value never reaches you.
+- `{"cmd":"read","hints":{…},"as":"fieldName"}` — text off the page into the flow's output.
+- `{"cmd":"keep","hints":{…},"env":"X_API_KEY"}` — a secret the site just showed goes straight to the store (`.env` locally, SSM in prod). The journal keeps the element and the name, never the value. This is how keys get set up.
+- `{"cmd":"captcha"}` — solves the page's captcha (a checkbox by a human click, a picture by a model, cropped in memory). Returns `{solved, kind, vendor, reason?}`. Never screenshot a captcha yourself.
+- `{"cmd":"note","text":"…"}` — a comment in the journal.
+- `{"cmd":"eval","js":"…"}` — last resort; not journaled as a click, so the recording misses it.
+- `{"cmd":"batch","cmds":[{…},{…}]}` — up to 30 commands in order, one answer, one `changed`. No `close`, `pause`, `resume`, `save` or nested batch.
+
+Desktop, `{"cmd":"os","act":{…}}`: `{"kind":"apps"}`, `{"kind":"open","app":"Finder"}`,
+`{"kind":"tree"}`, `{"kind":"click","role":"AXButton","name":"OK"}`,
+`{"kind":"type","text":"…","secret":true}`, `{"kind":"key","combo":"cmd+shift+4"}`,
+`{"kind":"shot"}`, `{"kind":"shell","command":"…","root":true}`, `{"kind":"wait","ms":500}`.
+Needs Accessibility granted to the terminal; root needs `pnpm autobrowse desktop setup` once.
+
+Session:
+- `{"cmd":"pause"}` / `{"cmd":"resume"}` — a person acts by hand in between; those acts land in the journal too.
+- Headed, no pause needed: when William does a step by hand between two of your
+  commands, your next answer carries `helped: {acts, url, changed, note}`. Read
+  the page he left; never redo his step.
+- `{"cmd":"journal","last":5}` — what is recorded (`total` and the newest `last`).
+- `{"cmd":"save","name":"site-what-it-does"}` — writes `recordings/<name>/`.
+- `{"cmd":"close"}`.
+
+## How to work
+
+Every look costs tokens. Look once, then let the acts tell you what changed.
+
+1. `start.sh <site> <url>`. The `open` answer already lists the page's controls (`changed.added`).
+2. `snapshot`. `aria` with `hints` or a `limit` only when the snapshot is not enough.
+3. Every act answers `changed`: `added` (new controls, up to 40), `gone` (a count), `more` (past 40). Read that; don't look again after each act.
+4. Acts you are sure of (fill a form, submit) go in one `batch`. It stops at the first failure: `failed: {at, cmd, error}`, `done` holds what ran. A paying click goes alone.
+5. Prefer `role`+`name`; fall back to `css`+`nth`. A failed act is not journaled. Change the hints; don't repeat.
+6. Never `raw:true` on a page showing a key.
+7. Done: `note` what was achieved, `save` with a kebab name, `stop.sh`.
+
+The payment gate: a billing field (card, CVC, tax id, billing address) or a
+spending button (Buy, Pay, Subscribe, Add funds, Start trial) texts William and
+`cmd.sh` holds until he answers (up to ~45 min); the act runs on a yes. No `eval`
+or `type` around it.
+
+## After: a workflow
+
+```sh
+pnpm -s autobrowse compile <name>              # → src/workflows/<name>/
+pnpm -s autobrowse try <name>                  # run it here, no Restate: proof it is deterministic
+pnpm -s autobrowse repair <failure.json>       # an agent picks up where a flow stopped
+```
+
+A flow that breaks gets fixed in the flow (a fallback path, a remap), not
+handed to William. Failure files: `~/.config/autobrowse/artifacts/`.

@@ -103,3 +103,26 @@ Where to attack: `start.sh` finds the process by `pgrep -f "explore <site>
 have anyway; the skill is loaded from this repo's `.claude/`, so a session
 started in the parent directory sees it under a path prefix; Claude Code
 must be told the site profile names (listed in the skill, not derived).
+
+## One skill, a router and job files (2026-09-30)
+
+The skill grew past explore: research, leads, site APIs, signup, accounts.
+Split by job, kept as one skill.
+
+- `SKILL.md` is a router: a job table, the rules that hold for every job
+  (secrets, money, public acts, passwords, sign-in tries), and live state.
+  After a context summary Claude Code re-attaches it whole; the rules must
+  survive that, so they live here and nowhere else.
+- One file per job, read on demand: `research.md`, `leads.md`,
+  `site-apis.md`, `explore.md`, `signup.md`, `accounts.md`. A research
+  agent reads the router and one file (~1.1k tokens), not the whole set.
+- Not several skills. The jobs cross (a signup is explore + secrets +
+  accounts; a site setup is a consent in an explore browser), and split
+  skills would each need the rules, which then drift.
+- Live state is one `!` line: `scripts/state.sh` by its full path, allowed in
+  `allowed-tools`. A failed injection aborts the whole skill, so the script
+  is local only (no SSM, no network), under a second, always exit 0. It adds
+  the facade's sites and the compiled workflows, read from `src/`, so the
+  lists never go stale. The old fallback loop over relative paths rendered
+  empty from another cwd.
+- Injection runs only in `SKILL.md`; job files are plain.

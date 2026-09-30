@@ -33,7 +33,7 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 
 ## If you change this
 
-- **Hits:** `src/agent/explorer.ts`, `src/agent/sessions.ts`, `src/app/cli-record.ts`, `src/app/backend.ts:243`, `.claude/skills/autobrowse/SKILL.md` and its scripts (the command list is documented there), `src/mcp/server.ts`.
+- **Hits:** `src/agent/explorer.ts`, `src/agent/sessions.ts`, `src/app/cli-record.ts`, `src/app/backend.ts:243`, `.claude/skills/autobrowse/explore.md` and the skill's scripts (the command list is documented there), `src/mcp/server.ts`.
 - **Does not hit:** compiled workflows already rendered; the run object.
 
 ## Surfaces
@@ -46,4 +46,4 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 ## See
 
 - Source: `src/explore/server.ts`
-- Skill: `.claude/skills/autobrowse/SKILL.md`
+- Skill: `.claude/skills/autobrowse/SKILL.md` (router), `explore.md` (the commands)

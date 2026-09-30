@@ -161,8 +161,10 @@ a row; it is work.
   Clipboard carries it to a phone), `env pull` merges all of them into a
   0600 `.env`, `eval "$(autobrowse env pull --export)"` loads a shell.
   `env ls` prints names only; nothing prints a value unless `--print`.
-- **Claude Code.** The skill in `.claude/skills/autobrowse/` teaches
-  Claude Code the explore session: `scripts/start.sh <site> [url]`, then
+- **Claude Code.** The skill in `.claude/skills/autobrowse/` is a router
+  (`SKILL.md`: the job table, the standing rules, live state) and one file
+  per job: research, leads, site APIs, explore, signup, accounts. The
+  explore session is `scripts/start.sh <site> [url]`, then
   `scripts/cmd.sh <port> '{"cmd":…}'`, `save`, `stop.sh`. It costs context
   only when invoked; an MCP server's tool schemas would sit in every
   session. `autobrowse mcp` still exists for clients that want tools

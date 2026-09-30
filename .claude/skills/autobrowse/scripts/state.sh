@@ -1,5 +1,6 @@
 #!/bin/bash
-# state.sh → what is live right now: open sessions, journals a dead session left, profiles.
+# state.sh → what is live right now: open sessions, journals a dead session left, profiles,
+# the facade's sites and the compiled workflows.
 # Read into the skill at load; never fails, never prints a token, stays under ~2 s.
 ROOT=$(cd "$(dirname "$0")/../../../.." && pwd)
 DIR=${TMPDIR:-/tmp}/autobrowse
@@ -19,4 +20,8 @@ prof=$(ls "$P" 2>/dev/null | grep -v @ | tr '\n' ' ')
 per=$(ls "$P" 2>/dev/null | grep -c @)
 [ "${per:-0}" -gt 0 ] && prof+="(+$per per-account: <site>@<label>)"
 echo "- profiles: ${prof:-none}"
+sites=$(grep -ho '^  site: "[a-z-]*"' "$ROOT"/src/sites/*.ts 2>/dev/null | sed -E 's/.*"(.*)"/\1/' | sort | tr '\n' ' ')
+echo "- site APIs: ${sites:-none}"
+wf=$(ls -d "$ROOT"/src/workflows/*/ 2>/dev/null | sed -E 's#.*/workflows/##; s#/$##' | grep -v '^example-' | tr '\n' ' ')
+echo "- compiled workflows: ${wf:-none}"
 exit 0
