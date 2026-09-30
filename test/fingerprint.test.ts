@@ -449,8 +449,14 @@ describe("web miss edges", () => {
   it("through the site: 400, 501 and 502 all become SiteErrors with that status", async () => {
     const leg = (vars: Record<string, string>) =>
       ({ token: "", http: {} as ApiLeg["http"], env: (k: string) => vars[k] }) as ApiLeg;
-    const searchApi = web.routes[0]?.api as (i: unknown, l: ApiLeg) => Promise<unknown>;
-    const readApi = web.routes[1]?.api as (i: unknown, l: ApiLeg) => Promise<unknown>;
+    const searchApi = web.routes.find((r) => r.path === "/search")?.api as (
+      i: unknown,
+      l: ApiLeg,
+    ) => Promise<unknown>;
+    const readApi = web.routes.find((r) => r.path === "/read")?.api as (
+      i: unknown,
+      l: ApiLeg,
+    ) => Promise<unknown>;
     const status = async (p: Promise<unknown>) => {
       const e = await p.catch((x: unknown) => x);
       expect(e).toBeInstanceOf(SiteError);
@@ -467,7 +473,9 @@ describe("web miss edges", () => {
   });
 
   it("the site's via parser: `,` alone means the default order", () => {
-    const req = web.routes[0]?.request as unknown as { parse(v: unknown): { via?: string[] } };
+    const req = web.routes.find((r) => r.path === "/search")?.request as unknown as {
+      parse(v: unknown): { via?: string[] };
+    };
     expect(req.parse({ q: "q", via: " brave , exa " }).via).toEqual(["brave", "exa"]);
     expect(req.parse({ q: "q" }).via).toBeUndefined();
     expect(req.parse({ q: "q", via: "," }).via).toBeUndefined();

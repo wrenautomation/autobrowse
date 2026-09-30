@@ -264,3 +264,131 @@ export async function search(
   const { value, via, tried } = await firstOf(o.order ?? SEARCH_ORDER, run);
   return { query, hits: value, via, tried };
 }
+
+/* ---------------- people ---------------- */
+
+export interface Role {
+  title: string;
+  company: string;
+  /** The company's LinkedIn page, when the profile links it. */
+  companyUrl: string | null;
+  current: boolean;
+  /** "Jan 2025 - Present (1 year and 8 months)", as the profile says it. */
+  dates: string | null;
+}
+
+export interface Person {
+  name: string;
+  url: string;
+  headline: string | null;
+  location: string | null;
+  /** Newest first, as the profile lists them. */
+  roles: Role[];
+}
+
+export interface People {
+  query: string;
+  people: Person[];
+  via: string;
+}
+
+const LINK = /^\[([^\]]+)\]\(([^)]+)\)$/;
+const CURRENT = /\s*\(Current\)\s*$/;
+const DATES = /^(?:[A-Z][a-z]{2} )?\d{4} - /;
+
+/** "[Acme](url)" or "Acme": the name and its link. */
+function companyOf(raw: string): { company: string; companyUrl: string | null } {
+  const s = raw.trim();
+  const m = LINK.exec(s);
+  return m
+    ? { company: (m[1] ?? "").trim(), companyUrl: m[2] ?? null }
+    : { company: s, companyUrl: null };
+}
+
+/**
+ * One profile as Exa's people search writes it: `# Name`, the headline and
+ * location lines, then `## Experience` with each role as `### Title - Company`
+ * or a `### Company` group of `#### Title` roles; `(Current)` marks a role held
+ * now, and the line after is its dates.
+ */
+export function exaProfile(text: string): Omit<Person, "url"> | null {
+  const lines = text.split("\n").map((l) => l.trim());
+  const name = lines
+    .find((l) => l.startsWith("# "))
+    ?.slice(2)
+    .trim();
+  if (!name) return null;
+  const head = lines.slice(lines.indexOf(`# ${name}`) + 1).filter(Boolean);
+  const body = (i: number) => {
+    const l = head[i];
+    return l && !l.startsWith("#") && !/connections|followers/.test(l) ? l : null;
+  };
+  const roles: Role[] = [];
+  const start = lines.indexOf("## Experience");
+  let group: { company: string; companyUrl: string | null } | null = null;
+  if (start >= 0) {
+    for (let i = start + 1; i < lines.length; i++) {
+      const l = lines[i] ?? "";
+      if (l.startsWith("## ")) break;
+      const next = lines.slice(i + 1).find(Boolean) ?? "";
+      const dates = DATES.test(next) ? next : null;
+      if (l.startsWith("#### ") && group) {
+        const title = l.slice(5);
+        roles.push({
+          title: title.replace(CURRENT, ""),
+          ...group,
+          current: CURRENT.test(title),
+          dates,
+        });
+      } else if (l.startsWith("### ")) {
+        const entry = l.slice(4);
+        const current = CURRENT.test(entry);
+        const plain = entry.replace(CURRENT, "");
+        const at = plain.lastIndexOf(" - ");
+        if (at > 0) {
+          group = null;
+          roles.push({
+            title: plain.slice(0, at).trim(),
+            ...companyOf(plain.slice(at + 3)),
+            current,
+            dates,
+          });
+        } else group = companyOf(plain);
+      }
+    }
+  }
+  return { name, headline: body(0), location: body(1), roles };
+}
+
+/**
+ * People whose public profiles match `query` ("recruiters who work or worked
+ * at Acme"): Exa's people index, each with every role it lists. Exa only; no
+ * other backend reads profiles.
+ */
+export async function people(query: string, deps: Deps, o: { n?: number } = {}): Promise<People> {
+  const key = await deps.env("EXA_API_KEY");
+  if (!key) throw new WebMiss("nothing answered: exa (skipped: no EXA_API_KEY)", 501);
+  let res: Response;
+  try {
+    res = await get(deps.fetch ?? fetch, "https://api.exa.ai/search", {
+      method: "POST",
+      headers: { "x-api-key": key, "content-type": "application/json" },
+      body: JSON.stringify({
+        query,
+        category: "people",
+        numResults: o.n ?? 10,
+        type: "auto",
+        contents: { text: { maxCharacters: 8000 } },
+      }),
+    });
+  } catch (e) {
+    throw new WebMiss(`nothing answered: exa (${String(e)})`, 502);
+  }
+  const body = (await res.json()) as { results?: Array<{ url: string; text?: string }> };
+  const out: Person[] = [];
+  for (const r of body.results ?? []) {
+    const p = r.text ? exaProfile(r.text) : null;
+    if (p) out.push({ ...p, url: r.url });
+  }
+  return { query, people: out, via: "exa" };
+}

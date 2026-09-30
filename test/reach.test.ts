@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { duckduckgoHits, htmlText, readPage, search, WebMiss } from "../src/reach/web.js";
+import {
+  duckduckgoHits,
+  exaProfile,
+  htmlText,
+  people,
+  readPage,
+  search,
+  WebMiss,
+} from "../src/reach/web.js";
 import { type ApiLeg, SiteError } from "../src/sites/types.js";
 import { web } from "../src/sites/web.js";
 
@@ -95,5 +103,127 @@ describe("search", () => {
     expect(duckduckgoHits(html)).toEqual([
       { title: "Lake Hills", url: "https://lakehills.test/", snippet: "Fee-only & fiduciary" },
     ]);
+  });
+});
+
+describe("people", () => {
+  const PROFILE = [
+    "# Dana Ruiz",
+    "",
+    "Head of Talent at Northwind",
+    "",
+    "Denver, Colorado, United States (US)",
+    "",
+    "500 connections • 1,200 followers",
+    "",
+    "## About",
+    "",
+    "Head of Talent at Northwind",
+    "",
+    "## Experience",
+    "",
+    "### [Northwind](https://www.linkedin.com/company/northwind)",
+    "",
+    "#### Head of Talent (Current)",
+    "",
+    "Jan 2025 - Present (1 year and 8 months) in Denver",
+    "",
+    "- Leads a team of 12 recruiters",
+    "",
+    "#### Recruiting Manager",
+    "",
+    "Mar 2021 - Jan 2025 (3 years and 10 months)",
+    "",
+    "### Senior Recruiter - Contoso Staffing",
+    "",
+    "2018 - 2021 (3 years)",
+    "",
+    "## Education",
+    "",
+    "### University of Colorado",
+  ].join("\n");
+
+  it("reads a profile: headline, location, every role with its company and dates", () => {
+    expect(exaProfile(PROFILE)).toEqual({
+      name: "Dana Ruiz",
+      headline: "Head of Talent at Northwind",
+      location: "Denver, Colorado, United States (US)",
+      roles: [
+        {
+          title: "Head of Talent",
+          company: "Northwind",
+          companyUrl: "https://www.linkedin.com/company/northwind",
+          current: true,
+          dates: "Jan 2025 - Present (1 year and 8 months) in Denver",
+        },
+        {
+          title: "Recruiting Manager",
+          company: "Northwind",
+          companyUrl: "https://www.linkedin.com/company/northwind",
+          current: false,
+          dates: "Mar 2021 - Jan 2025 (3 years and 10 months)",
+        },
+        {
+          title: "Senior Recruiter",
+          company: "Contoso Staffing",
+          companyUrl: null,
+          current: false,
+          dates: "2018 - 2021 (3 years)",
+        },
+      ],
+    });
+  });
+
+  it("a single role with a linked company, a hyphen in the title, and no dates line", () => {
+    const text = [
+      "# Lee Park",
+      "Talent Partner",
+      "## Experience",
+      "### Talent Partner - Tech - [Northwind](https://x.example/c) (Current)",
+      "- Hires engineers",
+    ].join("\n");
+    expect(exaProfile(text)?.roles).toEqual([
+      {
+        title: "Talent Partner - Tech",
+        company: "Northwind",
+        companyUrl: "https://x.example/c",
+        current: true,
+        dates: null,
+      },
+    ]);
+  });
+
+  it("text with no name is no profile", () => {
+    expect(exaProfile("just some page")).toBeNull();
+  });
+
+  it("asks Exa's people index with the key in a header; no key is final (501)", async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const f = (async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return new Response(
+        JSON.stringify({
+          results: [
+            { url: "https://www.linkedin.com/in/dana", text: PROFILE },
+            { url: "https://x.example", text: "no heading" },
+          ],
+        }),
+      );
+    }) as unknown as typeof fetch;
+    const env = async (k: string) => (k === "EXA_API_KEY" ? "k1" : undefined);
+    const out = await people("recruiters at Northwind", { env, fetch: f }, { n: 5 });
+    expect(out.people.map((p) => [p.name, p.url])).toEqual([
+      ["Dana Ruiz", "https://www.linkedin.com/in/dana"],
+    ]);
+    const sent = JSON.parse(String(calls[0]?.init.body));
+    expect(sent).toMatchObject({
+      query: "recruiters at Northwind",
+      category: "people",
+      numResults: 5,
+    });
+    expect(calls[0]?.init.headers).toMatchObject({ "x-api-key": "k1" });
+    await expect(people("q", { env: async () => undefined, fetch: f })).rejects.toMatchObject({
+      status: 501,
+    });
   });
 });

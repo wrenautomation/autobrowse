@@ -1,7 +1,7 @@
 /**
  * The open web as a site, so a caller that only reaches autobrowse through
  * the facade (wren's worker, over Restate) can search and read: `GET
- * /search?q=` and `GET /read?url=`. No official API behind it; each route
+ * /search?q=`, `GET /people?q=` and `GET /read?url=`. No official API behind it; each route
  * tries its backends in order (`src/reach/web.ts`), and each backend reads
  * its own key by name (EXA_API_KEY, BRAVE_API_KEY, JINA_API_KEY), skipped
  * when unset. `via` reorders them for one call. `GET /google` is Google's own
@@ -10,7 +10,7 @@
  * to the Mac's desk (`desk/call`), paced like a person searching.
  */
 import { z } from "zod";
-import { readPage, search, WebMiss } from "../reach/web.js";
+import { people, readPage, search, WebMiss } from "../reach/web.js";
 import { route, type SiteApi, SiteError } from "./types.js";
 
 /** No backend answering is the caller's to read, not a retry: Restate would replay it forever. */
@@ -52,6 +52,17 @@ export const web: SiteApi = {
         search(q, { env: async (k) => leg.env(k) }, { n, ...(via ? { order: via } : {}) }).catch(
           final,
         ),
+    }),
+    route({
+      method: "GET",
+      path: "/people",
+      summary:
+        "People search (`q`, `n` people, default 10): public profiles with name, headline, location and every role (title, company, current, dates); exa",
+      request: z.object({
+        q: z.string().min(1),
+        n: z.coerce.number().int().min(1).max(25).default(10),
+      }),
+      api: ({ q, n }, leg) => people(q, { env: async (k) => leg.env(k) }, { n }).catch(final),
     }),
     route({
       method: "GET",

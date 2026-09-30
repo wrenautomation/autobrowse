@@ -113,7 +113,7 @@ describe("a named account", () => {
 });
 
 describe("web and x reads", () => {
-  it("web needs no key: authed, both routes on the api leg, input checked", async () => {
+  it("web needs no key: authed, its api routes on the api leg, input checked", async () => {
     const sites = siteFacade([web], {
       http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
       env: () => undefined,
@@ -125,6 +125,7 @@ describe("web and x reads", () => {
     expect(row.authed).toBe(true);
     expect(row.routes.map((r) => [r.path, r.via])).toEqual([
       ["/search", "api"],
+      ["/people", "api"],
       ["/read", "api"],
       ["/google", "none"], // a browser leg; this fake runner has no flows
     ]);
