@@ -4,14 +4,12 @@ Live list: `pnpm autobrowse needs`. Rows clear themselves. Dated 2026-09-30.
 
 ## To do
 
-- **Gmail on your personal account: optional.** This is the permission to
-  read that inbox (an OAuth token), not the browser login. It was made while
-  the Google app was in Testing, and Testing tokens die after 7 days. The app
-  is published now, so a new token lasts. I won't redo it: Google asks
-  "verify it's you" before Gmail access, and the flow would type the stored
-  personal password, the one Google rejects. If you want that inbox read:
-  copy your current password, then run `autobrowse creds paste google` and
-  `autobrowse site setup gmail consent --account <your gmail>`.
+- **Data Axle: optional, your spend.** Free sources already reach 10k
+  recruiting leads (Overture places, SBA search), so this only adds owner
+  names and sales figures. The one library I found that gives it outside its
+  city is Burlington (Ontario): US + Canada data, non-resident card $66/yr,
+  paid by phone at 905.639.3611. Edmonton has none; Calgary is Canada-only
+  and residents-only. If you buy the card, say so and I build the export flow.
 
 - **Heads-up, no action.** TikTok is live through a sandbox app: posts stay
   private until TikTok reviews the app, and the review needs a demo video.
