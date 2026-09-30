@@ -329,6 +329,7 @@ pnpm autobrowse enroll-totp cloudflare --url https://dash.cloudflare.com/profile
 pnpm autobrowse enroll-totp will@a.com william@a.com  # several Google accounts, one after another
 pnpm autobrowse creds to-passwords will@a.com         # login + authenticator into Apple Passwords, sorted (all your devices)
 pnpm autobrowse inbox-name will@a.com will jin        # fix a Workspace inbox's display name (admin API)
+pnpm autobrowse inbox-photo will@a.com pfp.png        # a Workspace inbox's picture, no sign-in (admin API; still, 96 px)
 pnpm autobrowse run bootstrap cloudflare --plan '{"provider":"cloudflare"}'   # mints CLOUDFLARE_ACCOUNT_ID + API token into .env (--plan: JSON, a file, or -)
 # map a page by hand or by model: one open browser, one command at a time (token printed at start)
 pnpm autobrowse explore cloudflare --url https://dash.cloudflare.com/profile/api-tokens

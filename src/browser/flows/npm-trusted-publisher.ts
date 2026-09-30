@@ -22,7 +22,7 @@ export interface TrustedPublisherInput {
   /** File name under .github/workflows/, e.g. release.yml. */
   workflow: string;
   environment?: string;
-  /** Let the workflow `npm publish` directly, not only stage. */
+  /** Let the workflow `npm publish` directly (true) or only stage (false); absent = npm's default. */
   allowPublish?: boolean;
 }
 
@@ -45,7 +45,8 @@ export const npmTrustedPublisher = defineFlow<TrustedPublisherInput, TrustedPubl
   name: "trusted-publisher",
   async run(fp, input) {
     const trusted = `${input.owner}/${input.repo}:${input.workflow}`;
-    const url = `https://www.npmjs.com/package/${encodeURIComponent(input.package)}/access`;
+    // A scoped name keeps its `@` and `/`: npm's site does not route them encoded.
+    const url = `https://www.npmjs.com/package/${encodeURI(input.package)}/access`;
     await fp.open(url);
     await unlockWithPasskey(fp, USE_KEY);
     const add = { role: "button", name: "Add Trusted Publisher connection for GitHub Actions" };
@@ -66,11 +67,13 @@ export const npmTrustedPublisher = defineFlow<TrustedPublisherInput, TrustedPubl
       await fp.act({ kind: "fill", value: input.environment }, box("Environment name"), {
         goal: "the GitHub environment",
       });
-    if (input.allowPublish)
+    // Set the box to what was asked, whatever its default: a click only toggles.
+    const allow = fp.page.getByRole("checkbox", { name: "Allow npm publish" });
+    if (input.allowPublish !== undefined && (await allow.isChecked()) !== input.allowPublish)
       await fp.act(
         { kind: "click" },
         { role: "checkbox", name: "Allow npm publish" },
-        { goal: "let it publish, not only stage" },
+        { goal: input.allowPublish ? "let it publish, not only stage" : "stage only" },
       );
     await fp.act(
       { kind: "click" },

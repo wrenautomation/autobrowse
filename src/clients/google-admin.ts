@@ -33,6 +33,12 @@ export interface GoogleAdminClient {
   setPassword(email: string, password: string): Promise<void>;
   /** The name mail shows beside the address; a Workspace user cannot change it themselves. */
   setName(email: string, givenName: string, familyName: string): Promise<void>;
+  /**
+   * The account's picture, set as the admin: no sign-in, so it works on an
+   * inbox Google will not let us into. Still only (an animated GIF lands as
+   * its first frame); the `google/profile-photo` flow keeps the animation.
+   */
+  setPhoto(email: string, image: Uint8Array, mimeType: "image/png" | "image/jpeg"): Promise<void>;
 }
 
 export class GoogleAdminError extends Error {
@@ -131,6 +137,14 @@ export function googleAdmin(opts: { token: TokenSupplier; http: HttpClient }): G
         { method: "PUT", body: { name: { givenName, familyName } } },
       );
       if (!u) throw new GoogleAdminError("set name", 404, null);
+    },
+    async setPhoto(email, image, mimeType) {
+      const u = await call<{ primaryEmail: string }>(
+        "set photo",
+        `${DIRECTORY}/users/${encodeURIComponent(email)}/photos/thumbnail`,
+        { method: "PUT", body: { photoData: Buffer.from(image).toString("base64url"), mimeType } },
+      );
+      if (!u) throw new GoogleAdminError("set photo", 404, null);
     },
   };
 }

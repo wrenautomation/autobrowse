@@ -26,7 +26,7 @@ The box bills only while running. A deploy starts it and lets the worker's own i
 4. SSM `send-command`: write `compose.yml` and `autobrowse-deploy`, run it with the sha — `.github/workflows/deploy.yml:39-62`; the script pulls, gives `/data` to the image's pwuser uid (1001 now, 1000 once), and restarts; the running image stays if the pull fails — `deploy/scripts/on-box-deploy.sh:33-47`
 5. The worker: `buildApp` → `planEndpoint` (tunnel to Restate Cloud, or listen) → `registerDeployment` → `startUiServer` → `scheduleIdleStop` + `selfStopper` — `src/app/main.ts`, `src/app/endpoint.ts:39`, `src/app/register.ts:11`, `src/ui/server.ts:34`, `src/app/idle.ts:70`, `src/app/box.ts:67`
 6. Infra is `deploy/terraform/` (`box.tf`, `ci.tf`, `shots.tf`); state is local and never committed
-7. npm is separate: a `v*` tag runs `.github/workflows/release.yml`, which publishes `@wrenautomation/autobrowse` by trusted publishing and skips a version already on npm; `prepublishOnly` rebuilds `dist/` clean, and `files` in `package.json` keeps compiled tests out
+7. npm is separate: a `v*` tag runs `.github/workflows/release.yml`, which publishes `@wrenautomation/autobrowse` by trusted publishing and skips a version already on npm; `prepublishOnly` rebuilds `dist/` clean, and `files` in `package.json` keeps compiled tests out. The trust was set once with `site call npm POST /packages/@wrenautomation%2Fautobrowse/trust --account william_jin` (the npm login is a username, not the Wren address)
 
 ## If you change this
 
