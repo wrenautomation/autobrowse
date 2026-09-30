@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 /**
  * `autobrowse`: start a run, answer its gates, pause and play, list runs,
  * log into a site once, record a chore. Every workflow the worker serves

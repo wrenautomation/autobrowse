@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { API_SIGNUPS } from "../src/auth/signup.js";
+import { npmCreateOrg } from "../src/browser/flows/npm-create-org.js";
 import { tokenName } from "../src/browser/flows/npm-granular-token.js";
 import { npmTrustedPublisher } from "../src/browser/flows/npm-trusted-publisher.js";
 import type { HttpClient, JsonRequest } from "../src/clients/http.js";
@@ -103,5 +104,14 @@ describe("npm", () => {
         workflow: ".github/workflows/x.yml",
       }).success,
     ).toBe(false);
+  });
+
+  it("makes a free org through the page, gated as irreversible", () => {
+    const orgs = npm.routes.find((r) => r.path === "/orgs");
+    expect(orgs?.irreversible).toBe(true);
+    expect(orgs?.browser).toEqual({ flow: "npm/create-org" });
+    expect(BROWSER_FLOWS["npm/create-org"]).toBe(npmCreateOrg);
+    expect(orgs?.request.safeParse({ name: "@wren" }).success).toBe(false);
+    expect(orgs?.request.safeParse({ name: "wrenautomation" }).success).toBe(true);
   });
 });

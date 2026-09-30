@@ -7,6 +7,11 @@ Separate from `wren` (the campaign system) on purpose: different
 credentials, different runtime (browser sessions, waits for a human),
 different release pace.
 
+On npm as `@wrenautomation/autobrowse`: `npx @wrenautomation/autobrowse --help`
+for the CLI, `import … from "@wrenautomation/autobrowse/sites"` (also `/auth`,
+`/do`, `/agent`, `/flows`, `/llm`) for the library. A `v*` tag publishes
+(`.github/workflows/release.yml`, trusted publishing).
+
 New here: `walkthrough/` is the guided path (setup → secrets → sites →
 Meta → Google → explore → agent → accounts → chores → the box) with demos
 that run now.

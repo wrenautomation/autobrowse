@@ -22,8 +22,8 @@ const timeZone = z.string().refine(
 );
 
 const schema = z.object({
-  /** Restate Cloud ingress: autobrowse's own objects and wren's loops share the env. */
-  restateIngressUrl: z.string().url(),
+  /** Restate ingress: Restate Cloud in prod (wren's loops share the env), a local restate-server otherwise. */
+  restateIngressUrl: z.string().url().default("http://localhost:8080"),
   restateAuthToken: z.string().min(1).optional(),
   /** Cloudflare: registrar of record and DNS for every fleet domain. */
   cloudflareApiToken: z.string().min(1).optional(),

@@ -1,6 +1,20 @@
 {
-  "name": "autobrowse",
-  "private": true,
+  "name": "@wrenautomation/autobrowse",
+  "version": "0.1.0",
+  "description": "Browser and account automation: recorded flows where no API exists, official API shapes where one does, a person in the loop for money, accounts and consent.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wrenautomation/autobrowse.git"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "README.md",
+    "LICENSE.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -33,7 +47,7 @@
     }
   },
   "bin": {
-    "autobrowse": "./dist/app/cli.js"
+    "autobrowse": "dist/app/cli.js"
   },
   "packageManager": "pnpm@9.15.0",
   "engines": {
@@ -54,7 +68,8 @@
     "gates": "pnpm lint && pnpm typecheck && pnpm test",
     "ui:dev": "vite --config ui/vite.config.ts ui",
     "ui:build": "vite build --config ui/vite.config.ts ui",
-    "test:live": "LIVE=1 vitest run test/live.test.ts"
+    "test:live": "LIVE=1 vitest run test/live.test.ts",
+    "prepublishOnly": "rm -rf dist && pnpm build:check"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",

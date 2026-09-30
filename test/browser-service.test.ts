@@ -69,6 +69,7 @@ describe("browser service", () => {
       "loom/delete",
       "loom/rename",
       "loom/upload",
+      "npm/create-org",
       "npm/granular-token",
       "npm/trusted-publisher",
       "outlook/oauth-consent",

@@ -28,8 +28,12 @@ Three layers, each usable alone (README "Use as a library"):
 
 Packaging: `package.json` `exports` map — `.`, `./sites`, `./auth`, `./do`,
 `./agent`, `./flows`, `./llm` — over `dist/` from `pnpm build` (`tsc`).
-Still `private: true`: wren takes it as a workspace/git dependency, nothing
-goes to npm.
+Public on npm since 2026-09-30 as `@wrenautomation/autobrowse` (the bare
+name was taken): the tarball is `dist/` minus compiled tests, plus README and
+LICENSE. The first publish was by token; a `v*` tag publishes after that
+through `.github/workflows/release.yml` (trusted publishing). The CLI's bin
+runs on plain node, and it starts with no env (Restate defaults to a local
+ingress).
 
 Setup is a first-class concept, not a README: a `SetupStep` says what env
 names it makes and needs and how (a recorded console flow, an OAuth

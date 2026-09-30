@@ -32,6 +32,7 @@ import {
   linkedinSearchPeople,
 } from "../browser/flows/linkedin-reach.js";
 import { loomDelete, loomRename, loomUpload } from "../browser/flows/loom.js";
+import { npmCreateOrg } from "../browser/flows/npm-create-org.js";
 import { npmGranularToken } from "../browser/flows/npm-granular-token.js";
 import { npmTrustedPublisher } from "../browser/flows/npm-trusted-publisher.js";
 import { googleOauthConsent } from "../browser/flows/oauth-consent.js";
@@ -92,6 +93,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinConnect,
     linkedinMessage,
     resetMailProbe,
+    npmCreateOrg,
     npmGranularToken,
     npmTrustedPublisher,
     calcomApiKey,

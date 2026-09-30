@@ -82,6 +82,15 @@ export const npm: SiteApi = {
     }),
     route({
       method: "POST",
+      path: "/orgs",
+      summary:
+        "Make a free org (unlimited public packages) so packages publish under its scope; the name is fixed once made",
+      request: z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/) }),
+      irreversible: true,
+      browser: { flow: "npm/create-org" },
+    }),
+    route({
+      method: "POST",
       path: "/packages/{package}/trust",
       summary:
         "Trust a GitHub Actions workflow to publish the package over OIDC (no token in CI); owner, repo and workflow are fixed once made",

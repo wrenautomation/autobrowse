@@ -43,6 +43,7 @@ export {
   type UploadInput as LoomUploadInput,
   type Video as LoomVideo,
 } from "./loom.js";
+export { type CreateOrgInput, type CreateOrgResult, npmCreateOrg } from "./npm-create-org.js";
 export {
   type GranularTokenInput,
   type GranularTokenResult,
