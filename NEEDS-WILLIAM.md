@@ -4,8 +4,13 @@ Live list: `pnpm autobrowse needs`. Rows clear themselves. Dated 2026-09-30.
 
 ## To do
 
-- **Gmail token on your personal account lapsed** (Google revoked it). Wren
-  mail still reads fine. Only if autobrowse should read that inbox again:
+- **Gmail on your personal account: optional.** This is the permission to
+  read that inbox (an OAuth token), not the browser login. It was made while
+  the Google app was in Testing, and Testing tokens die after 7 days. The app
+  is published now, so a new token lasts. I won't redo it: Google asks
+  "verify it's you" before Gmail access, and the flow would type the stored
+  personal password, the one Google rejects. If you want that inbox read:
+  copy your current password, then run `autobrowse creds paste google` and
   `autobrowse site setup gmail consent --account <your gmail>`.
 
 - **Heads-up, no action.** TikTok is live through a sandbox app: posts stay
