@@ -406,6 +406,25 @@ runbook; a push to main deploys once the box exists. The box sleeps between
 jobs: `IDLE_STOP_MINUTES` makes the worker stop its own instance once nothing
 has needed it, and a caller (wren, `box.sh start`) wakes it.
 
+### Owners
+
+One autobrowse serves many businesses, one per process. `--owner <name>` or
+`AUTOBROWSE_OWNER` picks whose accounts, files, SSM path and Restate names
+load; the default `wren` keeps every existing name. An owner's files live in
+`~/.config/autobrowse/owners/<name>/` (its `.env` holds its accounts), its
+secrets under SSM `/autobrowse/owners/<name>/`, its services as
+`sites_<name>`, `Runs_<name>`, …. Every AWS call it makes assumes the owners
+role (`AUTOBROWSE_OWNER_ROLE_ARN`, terraform output `owner_role_arn`) tagged
+with its name, so it reaches its own paths only. The operator's tools (LLM,
+search, browsers) are shared; its accounts, cards and phone are not.
+
+```sh
+pnpm autobrowse --owner acme needs                                 # what acme still owes
+AUTOBROWSE_OWNER=acme RESTATE_PORT=9181 UI_PORT=9180 pnpm worker   # acme's worker beside wren's
+```
+
+Why and the full split: `designs/2026-09-30-owner-keys.md`.
+
 ## Layout
 
 ```

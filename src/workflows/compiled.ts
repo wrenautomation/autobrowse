@@ -18,6 +18,7 @@ import type { SecretSink } from "../deps/sink.js";
 import { type HostDeps, makeRunObjectFrom, type RunObjectDefinition } from "../engine/object.js";
 import type { AdvanceOptions } from "../engine/run.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
+import { named } from "../owner.js";
 import { type CompiledDeps, compiledDeps } from "./compiled-deps.js";
 import { type Proof, readProof } from "./proof.js";
 
@@ -113,7 +114,7 @@ export function makeCompiledRunObject(o: {
   audit?: SecretAudit;
 }): RunObjectDefinition<AnyWorkflow> {
   return makeRunObjectFrom(
-    COMPILED_OBJECT.name,
+    named(COMPILED_OBJECT.name, o.host.owner),
     async (objectKey) => {
       const ref = splitCompiledKey(objectKey);
       const found = await o.catalog.get(ref.workflow);

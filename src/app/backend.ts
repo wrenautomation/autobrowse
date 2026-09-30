@@ -55,6 +55,7 @@ import type { Proof } from "../workflows/proof.js";
 import { proofLine, proveWorkflow, writeProof } from "../workflows/proof.js";
 import type { Ingress } from "./client.js";
 import type { Settings } from "./config.js";
+import { fileDone } from "./needs.js";
 import { needsContextFor, type Owed, owedOf, type Policy, policyOf } from "./owed.js";
 import { type Screen, screenOf } from "./screen.js";
 import {
@@ -435,7 +436,7 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
     ...(o.llm ? { llm: o.llm, budget: () => budgetOf(o.llm) } : {}),
     ...(o.status ? { status: o.status } : {}),
     ledger: (since) => ledgerSince(auditFor(settings), spendLedgerFor(settings), since),
-    owed: owedOf(needsContextFor(settings)),
+    owed: owedOf(needsContextFor(settings), fileDone(settings.needsDoneFile)),
     policy: policyOf(settings),
   };
 }

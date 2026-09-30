@@ -13,12 +13,12 @@ A payment card in the wallet, placed into a checkout by field name after one yes
 
 ## Why this shape
 
-Cards never pass through a model or a log: `place{secret:"card.number"}` reads the wallet inside the explore server; the model sees only brand, kind and last four (`describeCard`, `cardEnding`). The wallet has its own Keychain item so opening credentials never opens cards (`WALLET_KEYCHAIN`, `src/auth/keep.ts:9`).
+Cards never pass through a model or a log: `place{secret:"card.number"}` reads the wallet inside the explore server; the model sees only brand, kind and last four (`describeCard`, `cardEnding`). The wallet has its own Keychain item so opening credentials never opens cards (`WALLET_KEYCHAIN`, `src/auth/keep.ts:17`).
 
 ## Shape
 
 - `Card { label, kind, holder, number, expMonth, expYear, cvc, postal?, owner?, email?, phone?, addedAt }` — `src/money/wallet.ts:29-50`; `luhn`, `cardBrand`, `admitCard`, `parseCardLine`, `cardFromFields` — `:53-198`
-- `Wallet`, `fileWallet` (`~/.config/autobrowse/wallet.sealed`, `src/app/config.ts:205`), `ssmWallet` (`/wallet/cards`), `backedUpWallet`, `pickCard` — `:200-450`; `cardSecret(name)` — `:415`
+- `Wallet`, `fileWallet` (`~/.config/autobrowse/wallet.sealed`, `src/app/config.ts:223`), `ssmWallet` (`/wallet/cards`), `backedUpWallet`, `pickCard` — `src/money/wallet.ts:200-458`; `cardSecret(name)` — `:415`
 - `Profile`, `Address`, `contactsOf`, `ProfileStore` (`/wallet/profiles`) — `src/money/profile.ts:36-217`
 - `Charge`, `Receipt`, `Invoice`, `reportCharge` (texted, emailed, written down) — `src/money/charges.ts:18-160`; `cardsOnFile` (which card each host holds) — `src/explore/server.ts:328-332`
 
@@ -30,7 +30,7 @@ Cards never pass through a model or a log: `place{secret:"card.number"}` reads t
 
 ## If you change this
 
-- **Hits:** `src/explore/server.ts:319-340`, `src/money/profile.ts`, `src/money/charges.ts`, `src/app/services.ts:674-795` (`walletFor`, `profilesFor`, `cardsFor`, `chargesFor`), `src/app/cli-wallet.ts`, `src/auth/ingest.ts`.
+- **Hits:** `src/explore/server.ts:319-340`, `src/money/profile.ts`, `src/money/charges.ts`, `src/app/services.ts:694-813` (`walletFor`, `profilesFor`, `cardsFor`, `chargesFor`), `src/app/cli-wallet.ts`, `src/auth/ingest.ts`.
 - **Does not hit:** the credential vault; site API tokens.
 
 ## Surfaces

@@ -1,8 +1,9 @@
 /**
  * DomainProvision under a real Restate: a run stops at the purchase gate,
  * `status` shows it, `approve` moves it on, the flow finishes; pause holds
- * the next step and play releases it; reset forgets a waiting run. Needs
- * Docker.
+ * the next step and play releases it; reset forgets a waiting run; a
+ * second owner beside the default one keeps its own objects and registry.
+ * Needs Docker.
  */
 import * as clients from "@restatedev/restate-sdk-clients";
 import { RestateTestEnvironment } from "@restatedev/restate-sdk-testcontainers";
@@ -10,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { NeedsHuman } from "../src/browser/session.js";
 import { Unrecoverable } from "../src/engine/effects.js";
 import { makeRunObject, type RunObject } from "../src/engine/object.js";
-import { runsRegistry } from "../src/engine/registry.js";
+import { runsRegistry, runsRegistryFor } from "../src/engine/registry.js";
 import {
   type CompiledCatalog,
   type CompiledWorkflow,
@@ -23,6 +24,9 @@ import { fakeBrowser, fakeDeps, fakeHost } from "./fakes.js";
 
 const deps = fakeDeps();
 const host = fakeHost();
+/** A second owner on the same Restate (designs/2026-09-30-owner-keys.md): no wren of its own. */
+const acmeDeps = fakeDeps({ wren: null });
+const acmeHost = { ...fakeHost(), owner: "acme" };
 /** A catalog a test can add to while Restate is up: what a compile does on disk. */
 const shelf = new Map<string, CompiledWorkflow>();
 const catalog: CompiledCatalog = {
@@ -40,6 +44,8 @@ beforeAll(async () => {
         runsRegistry,
         makeRunObject(domainWorkflow, deps, host),
         makeCompiledRunObject({ catalog, browser, host }),
+        runsRegistryFor("acme"),
+        makeRunObject(domainWorkflow, acmeDeps, acmeHost),
       ],
       alwaysReplay: true,
     });
@@ -247,5 +253,42 @@ describe("Compiled object", () => {
     await expect(compiled("example-title", "k2").run({ dryRun: false })).rejects.toThrow(
       /no compiled workflow/,
     );
+  });
+});
+
+describe("two owners on one Restate", () => {
+  it("run the same key apart: each its own object, deps, events and registry", async () => {
+    const domain = "shared.test";
+    const acme = clients
+      .connect({ url: env.baseUrl() })
+      .objectClient<RunObject<DomainWorkflow>>({ name: "domain_acme" }, domain);
+    const acmeRegistry = () =>
+      clients
+        .connect({ url: env.baseUrl() })
+        .objectClient<typeof runsRegistry>({ name: "Runs_acme" }, "all");
+    await acme.run({ domain, inboxes: inbox });
+    await until(
+      () => acme.status(),
+      (s) => s.gate !== null,
+    );
+    // The default owner has no run under that key.
+    expect(await object(domain).status()).toMatchObject({ plan: null, gate: null, outcome: null });
+    await acme.approve({ name: "purchase" });
+    const done = await until(
+      () => acme.status(),
+      (s) => s.outcome?.status === "done",
+    );
+    expect(done.outcome?.results.roster?.detail).toMatch(/no wren for this owner/);
+    expect(done.outcome?.results.loops?.status).toBe("skipped");
+    expect(acmeDeps.calls).toContain(`buy ${domain}`);
+    expect(deps.calls).not.toContain(`buy ${domain}`);
+    expect(acmeHost.subjects()).toContain(`${domain}: done`);
+    expect(host.subjects().some((s) => s.startsWith(domain))).toBe(false);
+    const rows = await until(
+      () => acmeRegistry().list({}),
+      (r) => r.some((x) => x.key === domain && x.status === "done"),
+    );
+    expect(rows.map((r) => r.key)).toEqual([domain]);
+    expect((await registry().list({})).some((r) => r.key === domain)).toBe(false);
   });
 });

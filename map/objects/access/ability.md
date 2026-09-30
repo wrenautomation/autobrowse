@@ -30,7 +30,7 @@ One thing `do` can pick: a site route, a compiled workflow, a hand-written flow 
 
 ## If you change this
 
-- **Hits:** `src/do/doer.ts`, `src/do/pick.ts`, `src/do/service.ts`, `src/do/tools.ts`, `src/app/backend.ts:120-132`, `src/app/cli-do.ts`, UI `/api/abilities`, `/api/do` (`src/ui/api.ts:313-334`), `src/access/fence.ts`, wren callers of Restate `do`.
+- **Hits:** `src/do/doer.ts`, `src/do/pick.ts`, `src/do/service.ts`, `src/do/tools.ts`, `src/app/backend.ts:121-133`, `src/app/cli-do.ts`, UI `/api/abilities`, `/api/do` (`src/ui/api.ts:313-334`), `src/access/fence.ts`, wren callers of Restate `do`.
 - **Does not hit:** the run object; sign-ins.
 
 ## Surfaces

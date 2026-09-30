@@ -160,13 +160,13 @@ export function api(deps: ApiDeps): Hono<Env> {
   const scopeOf = (c: Context<Env>) => c.get("scope");
   /** A run row or event an agent may see: its workflow, or its session's site. */
   const visibleRun = (scope: Scope, workflow: string, key: string) => {
-    if (scope.owner) return true;
+    if (scope.operator) return true;
     const session = workflow === AGENT ? deps.agent?.get(key) : null;
     return session ? allowsSite(scope, session.site) : allowsWorkflow(scope, workflow);
   };
-  /** `do` and its catalog as the scope sees them; an agent never falls back to the owner's. */
+  /** `do` and its catalog as the scope sees them; an agent never falls back to the operator's. */
   const verbOf = (scope: Scope): Pick<Backend, "abilities"> & { do: Backend["do"]["do"] } =>
-    scope.owner
+    scope.operator
       ? { do: (r) => deps.do.do(r), abilities: () => deps.abilities() }
       : (deps.doAs?.(scope) ?? {
           do: async () => {
@@ -421,14 +421,14 @@ export function api(deps: ApiDeps): Hono<Env> {
   });
   app.get("/api/jobs", (c) => {
     const scope = scopeOf(c);
-    return c.json(scope.owner ? jobs.list() : jobs.list().filter((j) => j.by === scope.name));
+    return c.json(scope.operator ? jobs.list() : jobs.list().filter((j) => j.by === scope.name));
   });
   /** `?wait=<ms>` (30s at most) holds the answer until the job settles: one request, not a poll loop. */
   app.get("/api/jobs/:id", async (c) => {
     const wait = Math.min(Number(c.req.query("wait") ?? 0) || 0, 30_000);
     const scope = scopeOf(c);
     const job = await jobs.wait(c.req.param("id"), wait);
-    return job && (scope.owner || job.by === scope.name)
+    return job && (scope.operator || job.by === scope.name)
       ? c.json(job)
       : c.json({ error: "no such job" }, 404);
   });
@@ -443,7 +443,7 @@ export function api(deps: ApiDeps): Hono<Env> {
       ...(before ? { before } : {}),
     });
     // A cut page can come back short: page on with the last row's cursor, not by length.
-    return c.json(scope.owner ? rows : rows.filter((r) => visibleRun(scope, r.workflow, r.key)));
+    return c.json(scope.operator ? rows : rows.filter((r) => visibleRun(scope, r.workflow, r.key)));
   });
 
   app.get("/api/runs/:workflow/:key", async (c) => {

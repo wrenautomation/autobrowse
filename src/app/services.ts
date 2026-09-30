@@ -48,7 +48,7 @@ import {
   SITE_LOGINS,
   totpSource,
 } from "../auth/index.js";
-import { CRED_ENV, ENV_STORE_PREFIX, KEYCHAIN, WALLET_KEYCHAIN } from "../auth/keep.js";
+import { CRED_ENV, keychainOf, WALLET_KEYCHAIN } from "../auth/keep.js";
 import { fileDoneActs } from "../browser/attempt.js";
 import type { Eyes } from "../browser/captcha/index.js";
 import { eyesOf } from "../browser/captcha/llm-eyes.js";
@@ -94,12 +94,12 @@ import {
   phoneStatus,
 } from "../devices/phone.js";
 import type { Doer } from "../do/doer.js";
-import { doService } from "../do/service.js";
-import { type BrowserService, browserService } from "../engine/browser-service.js";
+import { DO_SERVICE, doService } from "../do/service.js";
+import { BROWSER_SERVICE, type BrowserService, browserService } from "../engine/browser-service.js";
 import { Unrecoverable } from "../engine/effects.js";
 import { parseGuards } from "../engine/guards.js";
 import { makeRunObject } from "../engine/object.js";
-import { runsRegistry } from "../engine/registry.js";
+import { type RunsRegistry, runsRegistryFor } from "../engine/registry.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import type { ExploreOptions } from "../explore/server.js";
 import { askOverChannel } from "../gates/ask.js";
@@ -125,6 +125,7 @@ import { type Llm, makeLlm } from "../llm/index.js";
 import { otlpSink, type TraceSink, tracedLlm } from "../llm/trace.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
 import { type Charge, type ChargeRow, reportCharge } from "../money/charges.js";
+import { isDefaultOwner, named, ownerKeys } from "../owner.js";
 import { s3BlobStore } from "../shots/s3.js";
 import { keepArtifact, keepRecording, type ShipReport, shipShots } from "../shots/ship.js";
 import { fileCaps } from "../sites/caps.js";
@@ -133,6 +134,7 @@ import {
   accountEnv,
   gmailOAuth,
   profileOf,
+  SITES_SERVICE,
   type SiteFacade,
   type SitesService,
   sitesFor,
@@ -149,6 +151,7 @@ import { type DomainDeps, domainWorkflow } from "../workflows/domain/index.js";
 import type { Proof } from "../workflows/proof.js";
 import type { Settings } from "./config.js";
 import { holding, type Idle, idleTracker } from "./idle.js";
+import { awsFor } from "./owner.js";
 import { headed, type Screen, screenOf } from "./screen.js";
 import type { DeviceLink } from "./setup.js";
 
@@ -367,7 +370,7 @@ export const COMPILED_LIB = "../../index.js";
 export interface App {
   services: Array<
     | ReturnType<typeof makeRunObject>
-    | typeof runsRegistry
+    | RunsRegistry
     | BrowserService
     | SitesService
     | ReturnType<typeof doService>
@@ -423,13 +426,15 @@ export function credentialsFor(
   } = {},
 ): CredentialStore {
   const cipher =
-    settings.credentialsCipher === "keychain" ? aesGcmCipher(keychainKey(KEYCHAIN)) : plainCipher;
+    settings.credentialsCipher === "keychain"
+      ? aesGcmCipher(keychainKey(keychainOf(settings.owner)))
+      : plainCipher;
   const file = fileCredentials(settings.credentialsFile, cipher);
   const env = envCredentials(process.env, CRED_ENV);
   // SSM is the truth: reads ask it first and refresh the file, writes land in both.
   // Env baked in at deploy is only the fallback, so a changed password is never stale on the box.
   // One synced store per file for the whole process: its cache is what keeps KMS reads down.
-  const key = `${settings.credentialsFile}|${settings.credentialsCipher}|${settings.awsRegion}`;
+  const key = `${settings.owner}|${settings.credentialsFile}|${settings.credentialsCipher}|${settings.awsRegion}`;
   const syncedNow = () => {
     const made = syncedStores.get(key);
     if (made) return made;
@@ -470,10 +475,15 @@ export function shipperFor(
 ): (() => Promise<ShipReport>) | null {
   const bucket = settings.shotsBucket;
   if (!bucket) return null;
+  // An owner's shots are fenced by its IAM session; an S3-compatible store has no such fence.
+  if (settings.shotsEndpoint && !isDefaultOwner(settings.owner))
+    throw new Error(
+      `owner ${settings.owner}: shots ship to S3 only (SHOTS_ENDPOINT has no per-owner scope)`,
+    );
   const artifacts = expandHome(settings.artifactsDir);
   const store = s3BlobStore({
     bucket,
-    region: settings.awsRegion,
+    aws: awsFor(settings),
     ...(settings.shotsEndpoint ? { endpoint: settings.shotsEndpoint } : {}),
   });
   return () =>
@@ -484,7 +494,7 @@ export function shipperFor(
       ],
       store,
       ledgerFile: join(artifacts, ".shots-shipped.tsv"),
-      machine: settings.shotsMachine ?? hostname().replace(/\.local$/, ""),
+      machine: `${ownerKeys(settings.owner).shots}${settings.shotsMachine ?? hostname().replace(/\.local$/, "")}`,
       ...o,
     });
 }
@@ -554,10 +564,12 @@ export function codesFor(
   const phone = phoneFor(settings);
   if (phone)
     sources.push(messageSource({ kind: "sms", inbox: phone.number, reader: phoneReader(phone) }));
-  const linq = linqFor(settings, http);
+  // The operator's lines (Linq, Twilio) carry only the operator's codes.
+  const operators = isDefaultOwner(settings.owner);
+  const linq = operators ? linqFor(settings, http) : null;
   if (linq)
     sources.push(messageSource({ kind: "sms", inbox: linq.to, reader: linq.client.reader() }));
-  if (settings.twilioAccountSid && settings.twilioAuthToken && settings.twilioNumber)
+  if (operators && settings.twilioAccountSid && settings.twilioAuthToken && settings.twilioNumber)
     sources.push(
       messageSource({
         kind: "sms",
@@ -572,9 +584,11 @@ export function codesFor(
   return codeSources(...sources);
 }
 
-/** The number a site may text us on: the paired phone, else Linq, else Twilio. */
+/** The number a site may text us on: the paired phone, else Linq, else Twilio; an owner's own phone only. */
 export function ourPhone(settings: Settings, http = httpClient()): string | null {
-  return phoneFor(settings)?.number ?? linqFor(settings, http)?.to ?? settings.twilioNumber ?? null;
+  const own = phoneFor(settings)?.number ?? null;
+  if (!isDefaultOwner(settings.owner)) return own;
+  return own ?? linqFor(settings, http)?.to ?? settings.twilioNumber ?? null;
 }
 
 /**
@@ -600,12 +614,12 @@ export function loginFor(
   });
 }
 
-/** Linq when the key and our number are set; the operator's number falls back to the paired phone's. */
+/** Linq when the key and our number are set; the operator's number falls back to the paired phone's (never an owner's). */
 export function linqFor(
   settings: Settings,
   http = httpClient(),
 ): { client: LinqClient; to: string } | null {
-  const to = settings.linqTo ?? settings.phoneNumber;
+  const to = settings.linqTo ?? (isDefaultOwner(settings.owner) ? settings.phoneNumber : undefined);
   if (!settings.linqApiKey || !settings.linqNumber || !to) return null;
   return {
     client: linqClient({ apiKey: settings.linqApiKey, from: settings.linqNumber, http }),
@@ -656,14 +670,20 @@ export function sinkFor(settings: Settings, ssm: SSMClient = ssmFor(settings)): 
 
 /**
  * Every state each credential has had: a version per change, one SSM
- * parameter per site under /autobrowse/config/history (one level down, so
+ * parameter per site under <owner's path>/history (one level down, so
  * env listings and the box's deploy never see it). `creds history`, `creds restore`.
  */
 export function credentialHistoryFor(
   settings: Settings,
   ssm: SSMClient = ssmFor(settings),
 ): CredentialHistory {
-  return ssmCredentialHistory(ssm, `${ENV_STORE_PREFIX}/history`);
+  return ssmCredentialHistory(ssm, `${ownerKeys(settings.owner).ssm}/history`);
+}
+
+/** Cards and the person's details are the operator's: an owner has neither (designs/2026-09-30-owner-keys.md). */
+function operatorOnly(settings: Settings, what: string): void {
+  if (!isDefaultOwner(settings.owner))
+    throw new Error(`owner ${settings.owner}: ${what} are the operator's; an owner has none`);
 }
 
 /**
@@ -673,8 +693,9 @@ export function credentialHistoryFor(
  */
 export async function walletFor(
   settings: Settings,
-  ssm: SSMClient = lazy(() => new SSMClient({ region: settings.awsRegion })),
+  ssm: SSMClient = lazy(() => new SSMClient(awsFor(settings))),
 ) {
+  operatorOnly(settings, "cards");
   if (process.platform !== "darwin") throw new Error("the wallet lives on the Mac only");
   const { backedUpWallet, fileWallet, ssmWallet } = await import("../money/wallet.js");
   return backedUpWallet(
@@ -686,8 +707,9 @@ export async function walletFor(
 /** The person's own details, sealed beside the wallet (same keychain item), backed up to SSM /wallet/profiles. */
 export async function profilesFor(
   settings: Settings,
-  ssm: SSMClient = lazy(() => new SSMClient({ region: settings.awsRegion })),
+  ssm: SSMClient = lazy(() => new SSMClient(awsFor(settings))),
 ) {
+  operatorOnly(settings, "profiles");
   if (process.platform !== "darwin") throw new Error("profiles live on the Mac only");
   const { backedUpProfiles, fileProfiles, ssmProfiles } = await import("../money/profile.js");
   return backedUpProfiles(
@@ -701,7 +723,7 @@ export async function profilesFor(
 
 /** Explore's card picker: the Mac's wallet under WALLET_DEBIT_HOSTS; elsewhere none (card places are refused). */
 export function cardsFor(settings: Settings): ExploreOptions["cards"] {
-  if (process.platform !== "darwin") return undefined;
+  if (process.platform !== "darwin" || !isDefaultOwner(settings.owner)) return undefined;
   return async ({ host, label, subscription }) => {
     const { pickCard } = await import("../money/wallet.js");
     const { contactsOf, ownerOf } = await import("../money/profile.js");
@@ -800,28 +822,36 @@ export async function missingEntries(
   return Object.entries(await store.getMany(names)).map(([name, value]) => ({ name, value }));
 }
 
-/** One SSM client per region for the process, made on first use. */
+/** One SSM client per owner and region for the process, made on first use. */
 const ssmClients = new Map<string, SSMClient>();
 function ssmFor(settings: Settings): SSMClient {
-  let c = ssmClients.get(settings.awsRegion);
+  const key = `${settings.owner}|${settings.awsRegion}`;
+  let c = ssmClients.get(key);
   if (!c) {
-    c = lazy(() => new SSMClient({ region: settings.awsRegion }));
-    ssmClients.set(settings.awsRegion, c);
+    c = lazy(() => new SSMClient(awsFor(settings)));
+    ssmClients.set(key, c);
   }
   return c;
 }
 
 /**
- * The store `autobrowse env` and prod's sink share: SSM under /autobrowse/config.
- * One per client for the process: it remembers each value by version, and every
- * value read from SSM is a KMS decrypt (billed past 20k a month).
+ * The store `autobrowse env` and prod's sink share: SSM under the owner's
+ * path (/autobrowse/config for the default owner). One per client and path
+ * for the process: it remembers each value by version, and every value read
+ * from SSM is a KMS decrypt (billed past 20k a month).
  */
-const envStores = new WeakMap<SSMClient, EnvStore>();
+const envStores = new WeakMap<SSMClient, Map<string, EnvStore>>();
 export function envStoreFor(settings: Settings, ssm: SSMClient = ssmFor(settings)): EnvStore {
-  let store = envStores.get(ssm);
+  const path = ownerKeys(settings.owner).ssm;
+  let byPath = envStores.get(ssm);
+  if (!byPath) {
+    byPath = new Map();
+    envStores.set(ssm, byPath);
+  }
+  let store = byPath.get(path);
   if (!store) {
-    store = ssmEnvStore(ssm, ENV_STORE_PREFIX);
-    envStores.set(ssm, store);
+    store = ssmEnvStore(ssm, path);
+    byPath.set(path, store);
   }
   return store;
 }
@@ -1057,16 +1087,17 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     ),
     google: lazy(() => googleAdminFor(settings, http)),
     gmail,
-    roster: lazy(() =>
-      ssmRosterStore({ param: settings.rosterSsmParam, region: settings.awsRegion }),
-    ),
-    wren: wrenClient({
-      ingressUrl: settings.restateIngressUrl,
-      authToken: settings.restateAuthToken ?? null,
-      githubToken: settings.githubToken ?? null,
-      repo: settings.wrenRepo,
-      http,
-    }),
+    roster: lazy(() => ssmRosterStore({ param: settings.rosterSsmParam, aws: awsFor(settings) })),
+    // The handoff to wren is Wren's own; another owner's roster is written and left there.
+    wren: isDefaultOwner(settings.owner)
+      ? wrenClient({
+          ingressUrl: settings.restateIngressUrl,
+          authToken: settings.restateAuthToken ?? null,
+          githubToken: settings.githubToken ?? null,
+          repo: settings.wrenRepo,
+          http,
+        })
+      : null,
     browser,
     credentials: credentialsFor(settings),
     download: async (url) => {
@@ -1091,7 +1122,10 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   const sink = sinkFor(settings, ssm);
   const bootstrapDeps = bootstrapDepsFor(settings, browser, sink, http);
 
-  const host = { emit: (e: Parameters<Channel["deliver"]>[0]) => channel.deliver(e) };
+  const host = {
+    emit: (e: Parameters<Channel["deliver"]>[0]) => channel.deliver(e),
+    owner: settings.owner,
+  };
   /** The catalog is read on every listing; a broken flow is said once per distinct error, not per request. */
   const warned = new Set<string>();
   const catalog = compiledCatalog(COMPILED_DIR, (dir, err) => {
@@ -1133,14 +1167,18 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   );
   const late: { doer: Doer | null } = { doer: null };
   return {
+    // Every name carries the owner (`sites_<owner>`), so owners share one Restate and never each other's calls.
     services: [
-      runsRegistry,
+      runsRegistryFor(settings.owner),
       // The browser legs for an orchestrator that owns the API steps (wren); compiled flows by name too.
-      browserService({ runner: browser }),
+      browserService({ runner: browser }, named(BROWSER_SERVICE, settings.owner)),
       // The site APIs for the same orchestrator: official shapes, durable over the tunnel.
-      sitesService(sites),
+      sitesService(sites, named(SITES_SERVICE, settings.owner)),
       // One verb for the same orchestrator; the backend wires the doer in after the model exists.
-      doService(() => (late.doer ? holding(idle, late.doer) : null)),
+      doService(
+        () => (late.doer ? holding(idle, late.doer) : null),
+        named(DO_SERVICE, settings.owner),
+      ),
       makeRunObject(domainWorkflow, domainDeps, host, { guards }),
       makeRunObject(bootstrapWorkflow, bootstrapDeps, host, { guards }),
       // Every compiled flow, present and future, runs under this one object.

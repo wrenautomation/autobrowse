@@ -37,6 +37,7 @@ Nouns, verbs, and what a change hits, for an agent editing this repo. The code i
 | IdentityProvider | `auth/providers` = a sign-in (google, github, microsoft); `auth/identities` = where an account lives (google, microsoft) | |
 | account | an `Identity` (address + purposes); a `<site>@<label>` credential name; an `AccountRow` (what is stored per site) | |
 | session | browser `Session` (a context + page); agent `SessionView`; explore session (a port + journal) | |
+| owner | a tenant: `AUTOBROWSE_OWNER`, its files, SSM path, Restate names (`src/owner.ts:11`) | a card's `owner` (`src/money/profile.ts`); the access scope `operator`, the UI token (`src/access/keys.ts:41`) |
 | need / owed | `Need` = one thing only the person can give, with a check; `Owed` = the list with done-marks | `NEEDS-WILLIAM.md` is kept by hand |
 
 ## Universes

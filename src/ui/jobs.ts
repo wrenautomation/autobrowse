@@ -13,7 +13,7 @@ export interface JobView {
   kind: string;
   key: string;
   status: "running" | "done" | "failed";
-  /** Who started it: `owner` or an agent key's name; each sees only its own. */
+  /** Who started it: `operator` or an agent key's name; each sees only its own. */
   by: string;
   startedAt: string;
   finishedAt: string | null;
@@ -40,7 +40,7 @@ export class Jobs {
   }
 
   /** Start work under `kind/key`, or return the job already running it for the same caller. */
-  start(kind: string, key: string, work: () => Promise<unknown>, by = "owner"): JobView {
+  start(kind: string, key: string, work: () => Promise<unknown>, by = "operator"): JobView {
     const slot = `${by}:${kind}/${key}`;
     const runningId = this.running.get(slot);
     const running = runningId ? this.jobs.get(runningId) : undefined;

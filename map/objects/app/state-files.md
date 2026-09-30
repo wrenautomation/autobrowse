@@ -9,7 +9,7 @@ entity: src/app/config.ts
 
 # State on disk
 
-What autobrowse keeps outside git, where, and which card owns it. Defaults from `src/app/config.ts`; the box uses the same names under its data volume.
+What autobrowse keeps outside git, where, and which card owns it. Defaults from `src/app/config.ts`; the box uses the same names under its data volume. The rows are the default [[owner]]'s; any other owner's sit under `owners/<o>/`.
 
 ## Why this shape
 
@@ -19,23 +19,26 @@ Plain files a person can open, one concern each; secrets sealed; shared truth in
 
 | Path | Holds | Card |
 |---|---|---|
-| `~/.config/autobrowse/credentials.json` | sealed sign-ins (`src/app/config.ts:205`) | [[credential]] |
-| `~/.config/autobrowse/wallet.sealed` | sealed cards (`:182`) | [[card]] |
-| `~/.config/autobrowse/accounts.json` | identities and purposes (`:202`) | [[account]] |
-| `~/.config/autobrowse/access.json` | hashed agent keys (`:95`) | [[access-key]] |
-| `~/.config/autobrowse/fixes.json` | kept repairs (`:73`) | [[fix]] |
-| `~/.config/autobrowse/screens.json` | learned screens (`:75`) | [[screen]] |
-| `~/.config/autobrowse/caps.json` | today's use of each account's daily caps, keyed site, account, bucket, and `next`: each site|account's next paced slot, kept across the day turning (`:77`; `/data/caps.json` on the box) | [[site-facade]] |
+| `~/.config/autobrowse/credentials.json` | sealed sign-ins (`src/app/config.ts:221`) | [[credential]] |
+| `~/.config/autobrowse/wallet.sealed` | sealed cards (`:221`) | [[card]] |
+| `~/.config/autobrowse/accounts.json` | identities and purposes (`:241`) | [[account]] |
+| `~/.config/autobrowse/access.json` | hashed agent keys (`:134`) | [[access-key]] |
+| `~/.config/autobrowse/fixes.json` | kept repairs (`:110`) | [[fix]] |
+| `~/.config/autobrowse/screens.json` | learned screens (`:112`) | [[screen]] |
+| `~/.config/autobrowse/caps.json` | today's use of each account's daily caps, keyed site, account, bucket, and `next`: each site|account's next paced slot, kept across the day turning (`:114`; `/data/caps.json` on the box) | [[site-facade]] |
 | `~/.config/autobrowse/steps.jsonl` | agent step ledger (`src/agent/ledger.ts`) | [[agent-session]] |
-| `~/.config/autobrowse/needs-done.json` | decisions marked done (`src/app/owed.ts:79`) | [[need]] |
-| `~/.config/autobrowse/profiles/<site>` | browser profiles | [[session]] |
-| `~/.config/autobrowse/artifacts/` | shots, aria, traces, `*.failure.json`, watched steps (`src/app/services.ts:482`) | [[failure-record]], [[watch-step]] |
+| `~/.config/autobrowse/needs-done.json` | decisions marked done (`src/app/config.ts:40`) | [[need]] |
+| `~/.config/autobrowse/profiles/<site>` | browser profiles (`src/app/config.ts:86`) | [[session]] |
+| `~/.config/autobrowse/artifacts/` | shots, aria, traces, `*.failure.json`, watched steps (`src/app/services.ts:492`) | [[failure-record]], [[watch-step]] |
+| `~/.config/autobrowse/owners/<o>/` | a non-default owner's `.env` and the files above, fixed names (`OWNER_PATHS`, `src/app/config.ts:428`) | [[owner]] |
 | `recordings/` (repo, gitignored) | recordings, explore journals | [[recording]], [[explore-session]] |
 | `src/workflows/<name>/` (repo, committed) | compiled modules, outline, proof | [[compiled-workflow]] |
 | SSM `/autobrowse/config` | site tokens, env store (credvault `EnvStore`) | [[token]] |
+| SSM `/autobrowse/owners/<o>/config` | the same, for owner `<o>` (`src/owner.ts:25`) | [[owner]], [[token]] |
 | SSM `/wallet/cards`, `/wallet/profiles` | wallet backup (`src/money/wallet.ts:244`, `src/money/profile.ts:162`) | [[card]] |
-| S3 shots bucket | shipped screenshots (`src/shots/ship.ts:109`) | — |
-| Keychain `autobrowse`, `autobrowse-wallet` | seal keys (`src/auth/keep.ts:7-9`) | [[credential]], [[card]] |
+| S3 shots bucket | shipped screenshots (`src/shots/ship.ts:109`); owner `<o>` under `owners/<o>/` (`src/owner.ts:26`) | [[owner]] |
+| Keychain `autobrowse`, `autobrowse-wallet` | seal keys (`src/auth/keep.ts:9-17`) | [[credential]], [[card]] |
+| Keychain `autobrowse-owner-<o>` | owner `<o>`'s seal key (`src/auth/keep.ts:14`) | [[owner]] |
 
 Temp dirs `run-files-*`, `upload-*`, `passwords-*` are reaped (`src/browser/reap.ts:72`).
 

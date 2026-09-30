@@ -2,9 +2,12 @@
  * Settings from the environment. Every value that is a credential stays in
  * this object and in request headers; nothing here is ever logged whole.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
+import { DEFAULT_DB } from "../devices/phone.js";
+import { checkOwner, DEFAULT_OWNER, isDefaultOwner, OWNER_NAME } from "../owner.js";
 
 /** An IANA zone Chrome knows (`America/New_York`, or an alias like `Asia/Kolkata`); a typo would leave the browser on UTC unsaid. */
 const timeZone = z.string().refine(
@@ -21,7 +24,20 @@ const timeZone = z.string().refine(
   { message: "not an IANA time zone (America/New_York)" },
 );
 
+export const DEFAULT_OWNERS_DIR = "~/.config/autobrowse/owners";
+
 const schema = z.object({
+  /** Whose accounts, files and SSM path this process serves (designs/2026-09-30-owner-keys.md). */
+  owner: z
+    .string()
+    .regex(OWNER_NAME, "lowercase letters, digits and _, starting with a letter")
+    .default(DEFAULT_OWNER),
+  /** Each non-default owner's files: `<ownersDir>/<owner>/`. */
+  ownersDir: z.string().min(1).default(DEFAULT_OWNERS_DIR),
+  /** The shared owners role (terraform output owner_role_arn): a non-default owner's AWS calls assume it. */
+  ownerRoleArn: z.string().min(1).optional(),
+  /** Needs marked done by hand (`autobrowse needs done`). */
+  needsDoneFile: z.string().min(1).default("~/.config/autobrowse/needs-done.json"),
   /** Restate ingress: Restate Cloud in prod (wren's loops share the env), a local restate-server otherwise. */
   restateIngressUrl: z.string().url().default("http://localhost:8080"),
   restateAuthToken: z.string().min(1).optional(),
@@ -282,6 +298,10 @@ const schema = z.object({
 export type Settings = z.infer<typeof schema>;
 
 export const ENV_KEYS = {
+  owner: "AUTOBROWSE_OWNER",
+  ownersDir: "OWNERS_DIR",
+  ownerRoleArn: "AUTOBROWSE_OWNER_ROLE_ARN",
+  needsDoneFile: "NEEDS_DONE_FILE",
   restateIngressUrl: "RESTATE_INGRESS_URL",
   restateAuthToken: "RESTATE_AUTH_TOKEN",
   cloudflareApiToken: "CLOUDFLARE_API_TOKEN",
@@ -401,26 +421,122 @@ export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {
     );
     throw new Error(`invalid settings:\n${lines.join("\n")}`);
   }
-  return parsed.data;
+  return ownerLayout(parsed.data, env);
 }
 
-/** Load `.env` from the repo root (the nearest ancestor holding package.json). Values already in the env win. */
-export function loadEnvFile(from = process.cwd()): string {
+/** An owner's files, fixed under `<ownersDir>/<owner>/`: nobody sets them, so no owner can point at another's. */
+export const OWNER_PATHS = {
+  credentialsFile: "credentials.json",
+  accountsFile: "accounts.json",
+  capsFile: "caps.json",
+  accessFile: "access.json",
+  needsDoneFile: "needs-done.json",
+  walletFile: "wallet.sealed",
+  profilesDir: "profiles",
+  artifactsDir: "artifacts",
+  recordingsDir: "recordings",
+  envFile: ".env",
+} as const satisfies Partial<Record<keyof Settings, string>>;
+
+/** One file by two names: `~`, `.` and symlinks resolved. */
+function sameFile(a: string, b: string): boolean {
+  const real = (p: string) => {
+    const abs = resolve(p.replace(/^~(?=$|\/)/, homedir()));
+    try {
+      return realpathSync(abs);
+    } catch {
+      return abs;
+    }
+  };
+  return real(a) === real(b);
+}
+
+/** The directory an owner's files live in. */
+export const ownerDir = (ownersDir: string, owner: string): string =>
+  join(ownersDir, checkOwner(owner));
+
+/** The owner `process.env` was entered for (`enterOwner` in app/owner.ts); null until then. */
+let enteredOwner: string | null = null;
+export const markEntered = (owner: string): void => {
+  enteredOwner = owner;
+};
+export const entered = (): string | null => enteredOwner;
+
+/**
+ * A non-default owner's settings: its files fixed under its directory, its
+ * roster under its own SSM path unless it names one. An env that sets a
+ * fixed path is refused. The default owner's are left as they are.
+ */
+function ownerLayout(settings: Settings, env: NodeJS.ProcessEnv): Settings {
+  // A process entered for one owner never loads another's settings, the default owner's included.
+  if (env === process.env && enteredOwner !== null && enteredOwner !== settings.owner)
+    throw new Error(
+      `owner ${settings.owner}: the env was not entered for this owner but for ${enteredOwner} (boot() in src/app/owner.ts)`,
+    );
+  if (isDefaultOwner(settings.owner)) return settings;
+  // Fail closed: an owner's process that skipped `boot()` would still hold the operator's accounts.
+  if (env === process.env && enteredOwner !== settings.owner)
+    throw new Error(
+      `owner ${settings.owner}: the env was not entered for this owner (boot() in src/app/owner.ts)`,
+    );
+  const dir = ownerDir(settings.ownersDir, settings.owner);
+  const fixed = Object.keys(OWNER_PATHS) as (keyof typeof OWNER_PATHS)[];
+  const set = fixed.filter((k) => env[ENV_KEYS[k]]);
+  if (set.length)
+    throw new Error(
+      `owner ${settings.owner}: ${set.map((k) => ENV_KEYS[k]).join(", ")}: fixed under ${dir}`,
+    );
+  // The Mac's own Messages are the operator's: an owner's phone reads only the database its env names.
+  if (settings.phoneNumber && !settings.phoneMessagesDb)
+    throw new Error(
+      `owner ${settings.owner}: ${ENV_KEYS.phoneNumber} needs ${ENV_KEYS.phoneMessagesDb} (the Mac's own Messages are the operator's)`,
+    );
+  if (settings.phoneMessagesDb && sameFile(settings.phoneMessagesDb, DEFAULT_DB))
+    throw new Error(
+      `owner ${settings.owner}: ${ENV_KEYS.phoneMessagesDb} names the Mac's own Messages; those are the operator's`,
+    );
+  const paths = Object.fromEntries(fixed.map((k) => [k, join(dir, OWNER_PATHS[k])]));
+  return {
+    ...settings,
+    ...paths,
+    rosterSsmParam: env[ENV_KEYS.rosterSsmParam] || `/autobrowse/owners/${settings.owner}/roster`,
+    // Memory is kept per owner; the operator's assistant is its own.
+    backboardAssistant:
+      env[ENV_KEYS.backboardAssistant] || `${settings.backboardAssistant}-${settings.owner}`,
+  };
+}
+
+/**
+ * Load `.env` from the repo root (the nearest ancestor holding package.json).
+ * Values already in the env win. `names`: every name the file holds, set
+ * here or not (an owner's process drops them: `enterOwner`).
+ */
+export function loadEnvFile(from = process.cwd()): { root: string; names: string[] } {
   let dir = resolve(from);
   for (;;) {
     if (existsSync(join(dir, "package.json"))) break;
     const parent = dirname(dir);
-    if (parent === dir) return from;
+    if (parent === dir) return { root: from, names: [] };
     dir = parent;
   }
   const file = join(dir, ".env");
-  if (!existsSync(file)) return dir;
+  const names: string[] = [];
+  for (const [key, value] of readDotenv(file)) {
+    names.push(key);
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+  return { root: dir, names };
+}
+
+/** `KEY=value` lines of a dotenv file (none when it is missing); quotes stripped, comments skipped. */
+export function readDotenv(file: string): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!existsSync(file)) return out;
   for (const line of readFileSync(file, "utf8").split("\n")) {
     const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/.exec(line);
     if (!m || line.trimStart().startsWith("#")) continue;
-    const [, key, rawValue] = m as unknown as [string, string, string];
-    if (process.env[key] !== undefined) continue;
-    process.env[key] = rawValue.replace(/^(['"])(.*)\1$/, "$2");
+    const [, key, raw] = m as unknown as [string, string, string];
+    out.set(key, raw.replace(/^(['"])(.*)\1$/, "$2"));
   }
-  return dir;
+  return out;
 }

@@ -13,7 +13,8 @@ export interface DomainDeps {
   google: GoogleAdminClient;
   gmail: GmailUserClient;
   roster: RosterStore;
-  wren: WrenClient;
+  /** Wren's own orchestrator; null for any other owner, whose roster is written and left there. */
+  wren: WrenClient | null;
   browser: FlowRunner;
   /**
    * Where each inbox's sign-in lives, as `google@<email>`: the password,

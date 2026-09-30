@@ -20,7 +20,7 @@ Deterministic first, model last: the model chooses among named abilities and nev
 
 ## Steps
 
-1. `doer(deps).do(req)`: `abilities()` (cut to scope through `doAs`) — `src/do/doer.ts:107,231`, `src/app/backend.ts:130`
+1. `doer(deps).do(req)`: `abilities()` (cut to scope through `doAs`) — `src/do/doer.ts:107,231`, `src/app/backend.ts:131`
 2. `pickAbility(llm, goal, abilities, memory)`; a remembered pick skips the model — `src/do/pick.ts:52`
 3. `dryRun` → the pick and why, nothing runs — `src/do/doer.ts:249-262`
 4. By kind: `callSite` → [[site-call]]; `runWorkflow` → `runCompiled` with gates approved; `runFlow`; `runTool` — `src/do/doer.ts:59-84`
@@ -29,7 +29,7 @@ Deterministic first, model last: the model chooses among named abilities and nev
 
 ## If you change this
 
-- **Hits:** `src/do/catalog.ts`, `src/do/pick.ts`, `src/do/tools.ts`, `src/access/fence.ts`, `src/app/backend.ts:120-132`, wren callers of Restate `do`.
+- **Hits:** `src/do/catalog.ts`, `src/do/pick.ts`, `src/do/tools.ts`, `src/access/fence.ts`, `src/app/backend.ts:121-133`, wren callers of Restate `do`.
 - **Does not hit:** the run object; sign-ins.
 
 ## Surfaces

@@ -107,6 +107,21 @@ data "aws_iam_policy_document" "box" {
       "arn:aws:ssm:${var.region}:${data.aws_caller_identity.me.account_id}:parameter/wallet/*",
     ]
   }
+  # Every owner's env store (owners.tf): the box's own role never reads or writes one;
+  # an owner's worker there assumes the owners role, tagged with its name.
+  statement {
+    sid    = "NeverAnOwner"
+    effect = "Deny"
+    actions = [
+      "ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath",
+      "ssm:GetParameterHistory", "ssm:PutParameter", "ssm:DeleteParameter",
+      "ssm:DeleteParameters", "ssm:LabelParameterVersion",
+    ]
+    resources = [
+      "arn:aws:ssm:${var.region}:${data.aws_caller_identity.me.account_id}:parameter/autobrowse/owners",
+      "arn:aws:ssm:${var.region}:${data.aws_caller_identity.me.account_id}:parameter/autobrowse/owners/*",
+    ]
+  }
   statement {
     sid       = "ReadEnvStore"
     actions   = ["ssm:GetParametersByPath", "ssm:GetParameter"]

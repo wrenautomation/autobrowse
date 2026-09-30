@@ -17,7 +17,7 @@ Purposes decide which account a site call or consent runs as when nobody names o
 
 ## Shape
 
-- `Identity { address, at: google|microsoft, for: string[], note? }` — `src/auth/identities.ts:40-48`; store `fileIdentities` / `envIdentities` (`AUTOBROWSE_ACCOUNTS` on the box) / `layeredIdentities` — `:151-178`; file `~/.config/autobrowse/accounts.json` (`src/app/config.ts:227`)
+- `Identity { address, at: google|microsoft, for: string[], note? }` — `src/auth/identities.ts:40-48`; store `fileIdentities` / `envIdentities` (`AUTOBROWSE_ACCOUNTS` on the box) / `layeredIdentities` — `:151-178`; file `~/.config/autobrowse/accounts.json` (`src/app/config.ts:243`)
 - `accountSite(nameOrAddress)`: a bare address is `google@<address>` — `:61`
 - `AccountRow { site, known, ask, username, via, url, has{…} }`, `Accounts { list, save, check }` — `src/auth/accounts.ts:15-52`
 - New accounts: `NewAccount`, `accountKey` (which credential name), `signupGoal` — `src/auth/signup.ts:193-339`; `lookForAccount` asks the site first — `src/auth/exists.ts:78`
@@ -25,13 +25,13 @@ Purposes decide which account a site call or consent runs as when nobody names o
 ## Connected to
 
 - **owns:** purposes
-- **owned-by:** [[app]] (`identitiesFor`, `src/app/services.ts:409`)
-- **joins:** [[credential]] (the row is its view), [[site-facade]] (`accountFor`, `policyAccount` `src/sites/wire.ts:83-104`), [[need]] (`accountNeeds`), `Policy` (`src/app/owed.ts:42`)
+- **owned-by:** [[app]] (`identitiesFor`, `src/app/services.ts:412`)
+- **joins:** [[credential]] (the row is its view), [[site-facade]] (`accountFor`, `policyAccount` `src/sites/wire.ts:83-104`), [[need]] (`accountNeeds`), `Policy` (`src/app/owed.ts:41`)
 - **looks-like-but-is-not:** `Identity` in `src/browser/identity.ts:16` (the browser's UA); an access key
 
 ## If you change this
 
-- **Hits:** `src/sites/wire.ts`, `src/sites/renew.ts`, `src/app/needs.ts:172`, `src/app/owed.ts`, `src/app/cli-accounts.ts`, `src/app/cli-auth.ts`, UI `/api/accounts`, `/api/policy` (`src/ui/api.ts:245-309`).
+- **Hits:** `src/sites/wire.ts`, `src/sites/renew.ts`, `src/app/needs.ts:183`, `src/app/owed.ts`, `src/app/cli-accounts.ts`, `src/app/cli-auth.ts`, UI `/api/accounts`, `/api/policy` (`src/ui/api.ts:245-309`).
 - **Does not hit:** the runner; the vault format.
 
 ## Surfaces

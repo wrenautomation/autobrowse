@@ -8,14 +8,14 @@
  */
 import pino from "pino";
 import { httpClient } from "../clients/http.js";
+import { named } from "../owner.js";
 import { DESK_SERVICE, sitesService } from "../sites/index.js";
-import { loadEnvFile, loadSettings } from "./config.js";
 import { cloudAdminUrl, planEndpoint } from "./endpoint.js";
+import { boot } from "./owner.js";
 import { registerDeployment } from "./register.js";
 import { buildApp } from "./services.js";
 
-loadEnvFile();
-const settings = loadSettings();
+const { settings } = boot();
 const log = pino({ level: settings.logLevel });
 const app = await buildApp(settings, log);
 // The .env is the box's twin: the tunnel name is overridden, never shared.
@@ -24,7 +24,7 @@ if (plan.mode !== "tunnel")
   throw new Error("the desk needs the Restate Cloud tunnel settings (RESTATE_ENVIRONMENT_ID …)");
 const { connectTunnel } = await import("@restatedev/restate-sdk-tunnel");
 const tunnel = connectTunnel({
-  services: [sitesService(app.sites, DESK_SERVICE)],
+  services: [sitesService(app.sites, named(DESK_SERVICE, settings.owner))],
   tunnelName: plan.tunnelName,
   environmentId: plan.environmentId,
   region: plan.region,

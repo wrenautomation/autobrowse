@@ -20,8 +20,8 @@ Play-pause: a human or the model drives, every act is journaled the same way, so
 - `SessionStatus` (starting … needs-human … closed); `SessionView`; `StartRequest`; `AgentSessions { start, list, get, pause, resume, stop, save, exec, close, flush }` — `src/agent/sessions.ts:18-90`; `AGENT = "agent"` — `:130`
 - `AgentOptions { explorer, llm, goal, inputs, secrets, maxSteps, ledger, session, prior, stopped, onHuman, maxRefs }` — `src/agent/explorer.ts:69-95`; `StepRecord` — `:57-67`
 - What the model sees: `digest(aria)` with refs, `pageForModel` — `src/agent/digest.ts:213,421`
-- Ledger: `StepLedger` rows in `~/.config/autobrowse/steps.jsonl` — `src/agent/ledger.ts:10-46`; `stepLedgerFor` `src/app/services.ts:501`; OTLP trace sink `traceSinkFor` `:276`
-- Made by `agentFor` — `src/app/backend.ts:279`
+- Ledger: `StepLedger` rows in `~/.config/autobrowse/steps.jsonl` — `src/agent/ledger.ts:10-46`; `stepLedgerFor` `src/app/services.ts:511`; OTLP trace sink `traceSinkFor` `:284`
+- Made by `agentFor` — `src/app/backend.ts:281`
 
 ## Connected to
 
@@ -32,7 +32,7 @@ Play-pause: a human or the model drives, every act is journaled the same way, so
 
 ## If you change this
 
-- **Hits:** `src/agent/explorer.ts`, `src/agent/heal.ts`, `src/agent/builder.ts`, `src/do/doer.ts`, `src/app/backend.ts:279`, UI `/api/agent/*` (`src/ui/api.ts:557-669`), `src/app/cli-do.ts`.
+- **Hits:** `src/agent/explorer.ts`, `src/agent/heal.ts`, `src/agent/builder.ts`, `src/do/doer.ts`, `src/app/backend.ts:281`, UI `/api/agent/*` (`src/ui/api.ts:557-669`), `src/app/cli-do.ts`.
 - **Does not hit:** the runner's repair path; compiled workflows already rendered.
 
 ## Surfaces

@@ -12,10 +12,11 @@ import { withCall } from "../browser/attempt.js";
 import { FlowFailed } from "../browser/flow.js";
 import { type Artifacts, NeedsHuman } from "../browser/session.js";
 import { HttpError } from "../clients/http.js";
+import { named } from "../owner.js";
 import type { DistributiveOmit } from "../types.js";
 import { type Effects, type GateAnswer, type GateName, Unrecoverable } from "./effects.js";
 import type { RunEvent, RunRef } from "./events.js";
-import { REGISTRY, REGISTRY_KEY, type RunsRegistry } from "./registry.js";
+import { REGISTRY_KEY, type RunsRegistry, registryOf } from "./registry.js";
 import type { AdvanceOptions } from "./run.js";
 import {
   advance,
@@ -50,6 +51,8 @@ export interface HostDeps {
   emit(event: RunEvent): Promise<void>;
   /** Off in tests that run one object without the registry. */
   registry?: boolean;
+  /** Whose runs these are: object and registry names carry it (designs/2026-09-30-owner-keys.md). */
+  owner?: string;
 }
 
 /** Restate retries a failed `ctx.run` forever by default; this is what a step gets instead. */
@@ -178,10 +181,11 @@ export function makeRunObject<W extends AnyWorkflow>(
   opts: AdvanceOptions = {},
 ): RunObjectDefinition<W> {
   return makeRunObjectFrom(
-    workflow.name,
+    named(workflow.name, host.owner),
     async (key) => ({ workflow, deps, ref: { workflow: workflow.name, key } }),
     host,
     opts,
+    (key) => ({ workflow: workflow.name, key }),
   );
 }
 
@@ -199,6 +203,7 @@ export function makeRunObjectFrom<W extends AnyWorkflow>(
   refOf: (key: string) => RunRef = (key) => ({ workflow: name, key }),
 ): RunObjectDefinition<W> {
   const service = { name } as const;
+  const registry = registryOf(host.owner) as RunsRegistry;
   type Self = RunObject<W>;
 
   const emit = async (ctx: restate.ObjectContext, ref: RunRef, e: EventBody) => {
@@ -208,7 +213,7 @@ export function makeRunObjectFrom<W extends AnyWorkflow>(
       at: new Date(await ctx.date.now()).toISOString(),
     } as RunEvent;
     if (host.registry !== false)
-      ctx.objectSendClient<RunsRegistry>(REGISTRY, REGISTRY_KEY).record(event);
+      ctx.objectSendClient<RunsRegistry>(registry, REGISTRY_KEY).record(event);
     await ctx.run(`emit ${event.type}`, () => host.emit(event).catch(() => undefined));
   };
 

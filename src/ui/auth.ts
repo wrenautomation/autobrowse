@@ -5,7 +5,7 @@
  */
 import { timingSafeEqual } from "node:crypto";
 import type { MiddlewareHandler } from "hono";
-import { type KeyStore, OWNER, type Scope } from "../access/keys.js";
+import { type KeyStore, OPERATOR, type Scope } from "../access/keys.js";
 
 export function tokenMatches(given: string | undefined, expected: string): boolean {
   if (!given) return false;
@@ -25,9 +25,9 @@ export function bearerAuth(token: string | undefined): MiddlewareHandler {
 }
 
 /**
- * Who is asking: the owner (the token, or local use with no token and no
+ * Who is asking: the operator (the token, or local use with no token and no
  * bearer) or an agent by its key (`access/keys`). A bearer that is neither
- * is refused, local or not: a wrong key never falls through to the owner.
+ * is refused, local or not: a wrong key never falls through to the operator.
  */
 export function accessAuth(
   token: string | undefined,
@@ -39,10 +39,10 @@ export function accessAuth(
     const scope =
       given === undefined
         ? token === undefined
-          ? OWNER
+          ? OPERATOR
           : null
         : token !== undefined && tokenMatches(given, token)
-          ? OWNER
+          ? OPERATOR
           : (keys?.resolve(given) ?? null);
     if (!scope) return c.json({ error: "unauthorized" }, 401);
     c.set("scope", scope);

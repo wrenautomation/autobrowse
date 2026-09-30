@@ -11,6 +11,7 @@
  * Both end with the worker registering itself (`registerDeployment`) so nobody
  * runs `restate deployments register` by hand.
  */
+import { named } from "../owner.js";
 import type { Settings } from "./config.js";
 
 export type EndpointPlan =
@@ -25,6 +26,7 @@ export type EndpointPlan =
 
 type Keys = Pick<
   Settings,
+  | "owner"
   | "restatePort"
   | "restateEndpointUrl"
   | "restateAdminUrl"
@@ -54,7 +56,8 @@ export function planEndpoint(s: Keys): EndpointPlan {
   }
   return {
     mode: "tunnel",
-    tunnelName: s.restateTunnelName as string,
+    // One tunnel per owner: two workers on one name would take each other's calls.
+    tunnelName: named(s.restateTunnelName as string, s.owner),
     environmentId: s.restateEnvironmentId as string,
     region: s.restateCloudRegion as string,
     signingPublicKey: s.restateIdentityKey,

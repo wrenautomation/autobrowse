@@ -29,11 +29,11 @@ async function rows(d: NeedsCliDeps): Promise<NeedRow[]> {
   return resolveNeeds(allNeeds(await d.context()), d.done.read());
 }
 
-/** `autobrowse site setup <site> <step> [--account <a>]` → its parts, or null for any other command. */
+/** `autobrowse [--owner <o>] site setup <site> <step> [--account <a>]` → its parts, or null for any other command. */
 export function setupArgs(
   how: string,
 ): { site: string; step: string; account: string | null } | null {
-  const m = /^autobrowse site setup (\S+) (\S+)(?: --account (\S+))?$/.exec(how);
+  const m = /^autobrowse (?:--owner \S+ )?site setup (\S+) (\S+)(?: --account (\S+))?$/.exec(how);
   return m ? { site: m[1] as string, step: m[2] as string, account: m[3] ?? null } : null;
 }
 
@@ -64,7 +64,7 @@ export function registerNeedsCommands(program: Command, deps: () => NeedsCliDeps
         return;
       }
       const first = row.how[0] ?? "";
-      const paste = /^autobrowse creds paste (\S+)$/.exec(first);
+      const paste = /^autobrowse (?:--owner \S+ )?creds paste (\S+)$/.exec(first);
       const setup = setupArgs(first);
       if (paste) {
         const site = paste[1] as string;

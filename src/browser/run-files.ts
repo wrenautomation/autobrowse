@@ -2,8 +2,9 @@
  * Files a run needs, on whichever machine runs it. `autobrowse run` hands a
  * plan to Restate, and the prod box runs it: a path on this Mac means
  * nothing there. So the CLI ships each local file the plan names to the
- * `inputs/` prefix of the shots bucket and puts an `s3://` ref in its place.
- * The box may read only that prefix, and objects there expire after a week
+ * `inputs/` prefix of the shots bucket (`inputs/owners/<owner>/` for an
+ * owner, src/owner.ts) and puts an `s3://` ref in its place. The box may
+ * read only its prefix, and objects there expire after a week
  * (deploy/terraform/shots.tf): it sees the files a plan named, nothing else.
  * The upload act turns a ref (or a signed https URL) back into a temp file.
  */
@@ -14,8 +15,9 @@ import { homedir, tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { type AwsConfig, awsConfigFromEnv, DEFAULT_OWNER, ownerKeys } from "../owner.js";
 
-export const INPUTS_PREFIX = "inputs/";
+export const INPUTS_PREFIX = ownerKeys(DEFAULT_OWNER).inputs;
 
 const TYPES: Record<string, string> = {
   ".png": "image/png",
@@ -44,6 +46,7 @@ export interface InputStore {
 export async function shipPlanFiles(
   plan: unknown,
   store: InputStore,
+  prefix: string = INPUTS_PREFIX,
 ): Promise<{ plan: unknown; shipped: string[] }> {
   const shipped: string[] = [];
   const walk = async (v: unknown): Promise<unknown> => {
@@ -55,7 +58,7 @@ export async function shipPlanFiles(
       const hash = createHash("sha256");
       for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
       const ext = extname(path).toLowerCase();
-      const key = `${INPUTS_PREFIX}${hash.digest("hex").slice(0, 24)}${ext}`;
+      const key = `${prefix}${hash.digest("hex").slice(0, 24)}${ext}`;
       shipped.push(v);
       return store.put(key, path, st.size, TYPES[ext] ?? "application/octet-stream");
     }
@@ -78,10 +81,8 @@ export interface RemoteReaders {
 
 const s3Read = async (bucket: string, key: string) => {
   const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
-  const s3 = new S3Client({
-    region: process.env.AWS_REGION ?? "us-east-1",
-    followRegionRedirects: true,
-  });
+  // The worker's owner reads with its own session: the box role may not read another owner's inputs.
+  const s3 = new S3Client({ ...awsConfigFromEnv(), followRegionRedirects: true });
   const got = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   if (!got.Body) throw new Error(`s3://${bucket}/${key}: empty`);
   return got.Body.transformToWebStream() as ReadableStream<Uint8Array>;
@@ -131,9 +132,9 @@ export async function localCopies(
 }
 
 /** The shots bucket as the input store: refs are `s3://<bucket>/inputs/…`. */
-export function s3InputStore(bucket: string, region: string): InputStore {
+export function s3InputStore(bucket: string, aws: AwsConfig): InputStore {
   const client = import("@aws-sdk/client-s3").then(({ S3Client, PutObjectCommand }) => ({
-    s3: new S3Client({ region }),
+    s3: new S3Client(aws),
     PutObjectCommand,
   }));
   return {

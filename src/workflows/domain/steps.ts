@@ -463,10 +463,12 @@ export const roster: Step<"roster"> = {
     });
     memo.rosterAdded = added;
     if (added.length === 0) return done("all inboxes already on the roster");
+    const wren = deps.wren;
+    if (!wren) return done(`added ${added.join(", ")}; no wren for this owner`);
     const since = await fx.now();
-    await fx.run("wren redeploy", () => deps.wren.redeploy());
+    await fx.run("wren redeploy", () => wren.redeploy());
     const deployed = await pollUntil(fx, "wren deploy", 15 * 60_000, async () => {
-      const state = await deps.wren.deployState(since);
+      const state = await wren.deployState(since);
       if (state === "failed") throw new Error("wren deploy failed; see its Actions tab");
       return state === "success";
     });
@@ -480,10 +482,12 @@ export const loops: Step<"loops"> = {
   irreversible: true,
   async run({ fx, deps, plan }) {
     if (!plan.handoff) return skipped("handoff=false");
+    const wren = deps.wren;
+    if (!wren) return skipped("no wren for this owner");
     const outcomes: string[] = [];
     for (const inbox of plan.inboxes) {
       const email = inboxAddress(plan, inbox);
-      const o = await fx.run(`loops ${email}`, () => deps.wren.startLoops(email));
+      const o = await fx.run(`loops ${email}`, () => wren.startLoops(email));
       outcomes.push(`${email} send=${o.send} inbox=${o.inbox}`);
     }
     return done(outcomes.join(", "));

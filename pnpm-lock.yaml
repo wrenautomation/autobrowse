@@ -39,8 +39,8 @@ importers:
         specifier: 15.0.0
         version: 15.0.0
       credvault:
-        specifier: 0.9.0
-        version: 0.9.0
+        specifier: 0.10.0
+        version: 0.10.0
       hono:
         specifier: 4.13.8
         version: 4.13.8
@@ -113,6 +113,10 @@ packages:
 
   '@aws-sdk/client-ssm@3.1136.0':
     resolution: {integrity: sha512-tMZyh47eKTo6HbHf5Gg8lHaYwowOp77YTMqfmys9ilpd7bQTq8PYH1Oqy4SxAIptcBe71uy1I7q3YziWVZZC6w==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-sts@3.1136.0':
+    resolution: {integrity: sha512-6NfisbmH1dBbYy6UgLsaWpeVIfWqQc3j0GYLgV5ciDsthsYMcwlgZjfaoOVoctUhXzBU4Rw50GAqzDGTrgnS9A==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/core@3.978.0':
@@ -1061,8 +1065,8 @@ packages:
     resolution: {integrity: sha512-piICUB6ei4IlTv1+653yq5+KoqfBYmj9bw6LqXoOneTMDXk5nM1qt12mFW1caG3LlJXEKW1Bp0WggEmIfQB34g==}
     engines: {node: '>= 14'}
 
-  credvault@0.9.0:
-    resolution: {integrity: sha512-sKRIDKxtprR8K3SM4bufvRX0PCryYH93t83T8aNJNaPT8wk22tVdDqpkY5oGoswHeCRjd3PlChRLnMLERqn/Zw==}
+  credvault@0.10.0:
+    resolution: {integrity: sha512-Vi3VpD09+iFS7x/T+oIz7l8oZ9c213T2vnSJSvlHme+nCPbvn1Sxr8FvtwkcV6laguvZ4XOWgBgSLIhlkjnfMQ==}
     engines: {node: '>=22'}
 
   cross-spawn@7.0.6:
@@ -2098,6 +2102,18 @@ snapshots:
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
+  '@aws-sdk/client-sts@3.1136.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.1
+      '@aws-sdk/credential-provider-node': 3.972.83
+      '@aws-sdk/signature-v4-multi-region': 3.996.47
+      '@aws-sdk/types': 3.974.6
+      '@smithy/core': 3.35.0
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.19.0
+      tslib: 2.8.1
+
   '@aws-sdk/core@3.978.0':
     dependencies:
       '@aws-sdk/types': 3.974.5
@@ -3030,9 +3046,10 @@ snapshots:
       crc-32: 1.2.2
       readable-stream: 4.7.0
 
-  credvault@0.9.0:
+  credvault@0.10.0:
     dependencies:
       '@aws-sdk/client-ssm': 3.1136.0
+      '@aws-sdk/client-sts': 3.1136.0
       zod: 4.6.5
 
   cross-spawn@7.0.6:

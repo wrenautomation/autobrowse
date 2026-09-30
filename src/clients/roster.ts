@@ -5,6 +5,7 @@
  */
 import { GetParameterCommand, PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { parse } from "smol-toml";
+import type { AwsConfig } from "../owner.js";
 
 export interface RosterEntry {
   address: string;
@@ -17,8 +18,8 @@ export interface RosterStore {
   write(text: string): Promise<void>;
 }
 
-export function ssmRosterStore(opts: { param: string; region: string }): RosterStore {
-  const ssm = new SSMClient({ region: opts.region });
+export function ssmRosterStore(opts: { param: string; aws: AwsConfig }): RosterStore {
+  const ssm = new SSMClient(opts.aws);
   return {
     async read() {
       const r = await ssm.send(new GetParameterCommand({ Name: opts.param, WithDecryption: true }));

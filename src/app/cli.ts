@@ -12,6 +12,7 @@ import { httpClient } from "../clients/http.js";
 import type { GateName } from "../engine/effects.js";
 import { cursorOf } from "../engine/rows.js";
 import { summarize } from "../engine/run.js";
+import { ownerKeys } from "../owner.js";
 import { DEFAULT_TLDS, domainIdeas } from "../workflows/domain/ideas.js";
 import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
 import { localBackend, proofsOf, workflowsOf } from "./backend.js";
@@ -37,16 +38,23 @@ import {
   registerWatchedCommands,
 } from "./cli-watched.js";
 import { ingress } from "./client.js";
-import { loadEnvFile, loadSettings } from "./config.js";
 import { fileDone } from "./needs.js";
-import { DONE_FILE, needsContextFor } from "./owed.js";
+import { needsContextFor } from "./owed.js";
+import { awsFor, boot, ownerFromArgv } from "./owner.js";
 import { credentialsFor, envStoreFor, identitiesFor, WORKFLOWS } from "./services.js";
 
-loadEnvFile();
-const settings = loadSettings();
+// `--owner` picks whose env, files and names load, so it is read before anything else.
+const argvOwner = ownerFromArgv(process.argv);
+if (argvOwner === "") {
+  console.error("--owner needs a name");
+  process.exit(2);
+}
+if (argvOwner) process.env.AUTOBROWSE_OWNER = argvOwner;
+const { settings } = boot();
 const api = ingress({
   url: settings.restateIngressUrl,
   authToken: settings.restateAuthToken ?? null,
+  owner: settings.owner,
 });
 
 const local = localBackend(settings, api);
@@ -71,7 +79,20 @@ async function patient<T>(call: PromiseLike<T>, afterMs = 10_000): Promise<T> {
   }
 }
 
-const program = new Command("autobrowse").showHelpAfterError();
+const program = new Command("autobrowse")
+  .showHelpAfterError()
+  .option(
+    "--owner <name>",
+    "whose accounts, files and workers (designs/2026-09-30-owner-keys.md); default AUTOBROWSE_OWNER, else wren",
+  )
+  .hook("preAction", () => {
+    // The early read and commander's must agree: a value that only looked like the flag must not switch owners.
+    const { owner } = program.opts<{ owner?: string }>();
+    if (owner !== argvOwner)
+      throw new Error(
+        `--owner: read as ${argvOwner ?? "unset"} early, ${owner ?? "unset"} by the parser; pass it once, as its own flag`,
+      );
+  });
 
 program
   .command("workflows [name]")
@@ -118,7 +139,11 @@ program
     // The run may happen on the box: files the plan names on this machine go with it.
     if (plan && settings.shotsBucket) {
       const { shipPlanFiles, s3InputStore } = await import("../browser/run-files.js");
-      const r = await shipPlanFiles(plan, s3InputStore(settings.shotsBucket, settings.awsRegion));
+      const r = await shipPlanFiles(
+        plan,
+        s3InputStore(settings.shotsBucket, awsFor(settings)),
+        ownerKeys(settings.owner).inputs,
+      );
       plan = r.plan as Record<string, unknown>;
       for (const f of r.shipped) console.log(`shipped ${f} (the run reads it for a week)`);
     }
@@ -401,7 +426,7 @@ registerDoCommands(program, local);
 registerAuthCommands(program, settings);
 registerNeedsCommands(program, () => ({
   context: needsContextFor(settings),
-  done: fileDone(DONE_FILE),
+  done: fileDone(settings.needsDoneFile),
   credentials: () => credentialsFor(settings),
   sites: () => local().backend.sites ?? null,
 }));

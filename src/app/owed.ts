@@ -17,7 +17,6 @@ import type { Settings } from "./config.js";
 import {
   allNeeds,
   type DoneStore,
-  fileDone,
   KIND_TITLES,
   type NeedKind,
   type NeedsContext,
@@ -68,6 +67,8 @@ export function needsContextFor(
       return phone ? once(() => phoneStatus(phone.dbPath)) : null;
     })(),
     desktop: process.platform === "darwin" ? once(() => macDesktop().permissions()) : null,
+    owner: settings.owner,
+    envFile: settings.envFile,
   });
 }
 
@@ -76,12 +77,7 @@ function once<T>(f: () => Promise<T>): () => Promise<T> {
   return () => (p ??= f());
 }
 
-export const DONE_FILE = "~/.config/autobrowse/needs-done.json";
-
-export function owedOf(
-  context: () => Promise<NeedsContext>,
-  done: DoneStore = fileDone(DONE_FILE),
-): Owed {
+export function owedOf(context: () => Promise<NeedsContext>, done: DoneStore): Owed {
   return {
     rows: async () => ({
       titles: KIND_TITLES,

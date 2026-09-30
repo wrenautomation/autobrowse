@@ -43,6 +43,16 @@ data "aws_iam_policy_document" "box_shots" {
     actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.shots.arn}/inputs/*"]
   }
+  # Owners' shots and inputs (owners.tf) are theirs: the box's own role touches neither.
+  statement {
+    sid     = "NeverAnOwners"
+    effect  = "Deny"
+    actions = ["s3:PutObject", "s3:GetObject"]
+    resources = [
+      "${aws_s3_bucket.shots.arn}/owners/*",
+      "${aws_s3_bucket.shots.arn}/inputs/owners/*",
+    ]
+  }
 }
 
 # A plan's files are needed for the run, not kept: gone after a week.

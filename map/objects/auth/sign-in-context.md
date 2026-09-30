@@ -19,7 +19,7 @@ Codes come from sources the site never sees (TOTP from the vault, an inbox, a ph
 
 - `SignInContext { fp, cred, code(kind, hint?, after?), serial?, offers(kind), inbox(kind), notify?, credFor(site, account?), as(cred) }` — `src/auth/login.ts:21-54`; built by `signInContext` — `:461`
 - `CodeKind = totp | email | sms`; `CodeSource { get, offers, inbox }`; `totpSource`, `messageSource`, `codeSources`; `MessageReader` — `src/auth/codes.ts:10-142`; `inboxLock` — `:177`
-- Readers: Gmail (`src/clients/gmail.ts`), the paired phone (`phoneReader`, `src/devices/phone.ts:78`), Twilio (`src/clients/twilio.ts`); wired by `codesFor` — `src/app/services.ts:541`
+- Readers: Gmail (`src/clients/gmail.ts`), the paired phone (`phoneReader`, `src/devices/phone.ts:78`), Twilio (`src/clients/twilio.ts`); wired by `codesFor` — `src/app/services.ts:551`
 
 ## Connected to
 
@@ -29,7 +29,7 @@ Codes come from sources the site never sees (TOTP from the vault, an inbox, a ph
 
 ## If you change this
 
-- **Hits:** every `signIn` in `src/auth/sites.ts`, `src/auth/google.ts`, `src/auth/github.ts`, `src/auth/microsoft.ts`, `src/auth/enroll.ts`, `src/app/services.ts:541-602`, `test/google.test.ts` (`ctxOf`).
+- **Hits:** every `signIn` in `src/auth/sites.ts`, `src/auth/google.ts`, `src/auth/github.ts`, `src/auth/microsoft.ts`, `src/auth/enroll.ts`, `src/app/services.ts:551-615`, `test/google.test.ts` (`ctxOf`).
 - **Does not hit:** the runner, site APIs.
 
 ## Surfaces

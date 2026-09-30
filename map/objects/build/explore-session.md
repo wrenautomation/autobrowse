@@ -22,7 +22,7 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 - Money and secrets on this path: `secrets`/`secretHosts` (place by name), `cards`, `cardsOnFile`, `charges`, `approve`, `audit` — `:310-344`; `placeHint` names the flag a missing secret needs — `:218-234`
 - Help by hand, no pause: acts a person does between two commands count (`byHand`, `HAND_GRACE_MS` — `:236`, `:533-540`); the next answer carries `helped {acts, url, changed, note}` — `helpedSince` `:834`
 - A target with no `frame` the page lacks is looked for in each visible iframe (`withFrame`, `src/browser/frames.ts`), so `place` on a card provider's hosted field (Braintree) works with plain role/name hints — `:852-856`
-- Opened by `explorerOpener` — `src/app/backend.ts:243`; the CLI `record`/`explore` verbs in `src/app/cli-record.ts`
+- Opened by `explorerOpener` — `src/app/backend.ts:245`; the CLI `record`/`explore` verbs in `src/app/cli-record.ts`
 
 ## Connected to
 
@@ -33,7 +33,7 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 
 ## If you change this
 
-- **Hits:** `src/agent/explorer.ts`, `src/agent/sessions.ts`, `src/app/cli-record.ts`, `src/app/backend.ts:243`, `.claude/skills/autobrowse/explore.md` and the skill's scripts (the command list is documented there), `src/mcp/server.ts`.
+- **Hits:** `src/agent/explorer.ts`, `src/agent/sessions.ts`, `src/app/cli-record.ts`, `src/app/backend.ts:245`, `.claude/skills/autobrowse/explore.md` and the skill's scripts (the command list is documented there), `src/mcp/server.ts`.
 - **Does not hit:** compiled workflows already rendered; the run object.
 
 ## Surfaces

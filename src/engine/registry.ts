@@ -4,6 +4,7 @@
  * projection, not a source of truth: a run's own state is the truth.
  */
 import * as restate from "@restatedev/restate-sdk";
+import { DEFAULT_OWNER, named } from "../owner.js";
 import type { RunEvent } from "./events.js";
 import { runId } from "./events.js";
 import {
@@ -37,28 +38,35 @@ export {
   trimRows,
 } from "./rows.js";
 
-export const runsRegistry = restate.object({
-  name: REGISTRY.name,
-  handlers: {
-    record: async (ctx: restate.ObjectContext, event: RunEvent): Promise<void> => {
-      // Kept newest first: an event places its row (one pass), a page is a slice.
-      const rows = orderedRows(await ctx.get<Stored>(ROWS));
-      const id = runId(event.run);
-      const have = rows.find((r) => runId(r) === id) ?? null;
-      ctx.set(ROWS, trimRows(placeRow(rows, applyRunEvent(have, event))));
-    },
-    list: restate.handlers.object.shared(
-      async (ctx: restate.ObjectSharedContext, q: ListQuery): Promise<RunRow[]> =>
-        pageOfOrdered(orderedRows(await ctx.get<Stored>(ROWS)), q),
-    ),
-    forget: async (ctx: restate.ObjectContext, id: string): Promise<void> => {
-      const rows = orderedRows(await ctx.get<Stored>(ROWS));
-      ctx.set(
-        ROWS,
-        rows.filter((r) => runId(r) !== id),
-      );
-    },
-  },
+/** The owner's registry: `Runs` for the default owner, `Runs_<owner>` for any other. */
+export const registryOf = (owner: string = DEFAULT_OWNER) => ({
+  name: named(REGISTRY.name, owner),
 });
 
-export type RunsRegistry = typeof runsRegistry;
+export const runsRegistryFor = (owner: string = DEFAULT_OWNER) =>
+  restate.object({
+    name: registryOf(owner).name,
+    handlers: {
+      record: async (ctx: restate.ObjectContext, event: RunEvent): Promise<void> => {
+        // Kept newest first: an event places its row (one pass), a page is a slice.
+        const rows = orderedRows(await ctx.get<Stored>(ROWS));
+        const id = runId(event.run);
+        const have = rows.find((r) => runId(r) === id) ?? null;
+        ctx.set(ROWS, trimRows(placeRow(rows, applyRunEvent(have, event))));
+      },
+      list: restate.handlers.object.shared(
+        async (ctx: restate.ObjectSharedContext, q: ListQuery): Promise<RunRow[]> =>
+          pageOfOrdered(orderedRows(await ctx.get<Stored>(ROWS)), q),
+      ),
+      forget: async (ctx: restate.ObjectContext, id: string): Promise<void> => {
+        const rows = orderedRows(await ctx.get<Stored>(ROWS));
+        ctx.set(
+          ROWS,
+          rows.filter((r) => runId(r) !== id),
+        );
+      },
+    },
+  });
+
+export const runsRegistry = runsRegistryFor();
+export type RunsRegistry = ReturnType<typeof runsRegistryFor>;

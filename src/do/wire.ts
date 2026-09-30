@@ -3,7 +3,14 @@
  * the agent. Every catalog it reads (sites, flows, logins) is an option with
  * the built-in as default, so a library caller can hand a narrower world.
  */
-import { allowsSite, allowsTool, allowsWorkflow, can, OWNER, type Scope } from "../access/keys.js";
+import {
+  allowsSite,
+  allowsTool,
+  allowsWorkflow,
+  can,
+  OPERATOR,
+  type Scope,
+} from "../access/keys.js";
 import type { AgentSessions } from "../agent/sessions.js";
 import type { SiteLogin } from "../auth/login.js";
 import { SITE_LOGINS } from "../auth/sites.js";
@@ -49,14 +56,14 @@ export interface DoerParts {
   /**
    * An agent key's scope: the catalog shows only what it may use, and each
    * leg checks again before it runs. No agent sessions (nothing new built)
-   * unless the scope may `agent`. The owner's when absent.
+   * unless the scope may `agent`. The operator's when absent.
    */
   scope?: Scope;
 }
 
 /** Whether a scope may run this ability: its site (default account), workflow or tool. */
 export function mayUse(scope: Scope, a: Ability): boolean {
-  if (scope.owner) return true;
+  if (scope.operator) return true;
   if (a.kind === "workflow") return allowsWorkflow(scope, a.name);
   if (a.kind === "tool") return allowsTool(scope, a.name);
   return a.site !== null && allowsSite(scope, a.site);
@@ -68,7 +75,7 @@ export interface Verb extends Doer {
 }
 
 export function doerFor(p: DoerParts): Verb {
-  const scope = p.scope ?? OWNER;
+  const scope = p.scope ?? OPERATOR;
   const refuse = (what: string) => new DoError(403, `this key may not use ${what}`);
   const flows = p.flows ?? BROWSER_FLOWS;
   const tools = p.tools ?? TOOLS;
@@ -88,8 +95,8 @@ export function doerFor(p: DoerParts): Verb {
     ];
   };
   const abilities = async (): Promise<Ability[]> =>
-    scope.owner ? all() : (await all()).filter((a) => mayUse(scope, a));
-  const agentOk = scope.owner || can(scope, "agent");
+    scope.operator ? all() : (await all()).filter((a) => mayUse(scope, a));
+  const agentOk = scope.operator || can(scope, "agent");
   const verb = doer({
     llm: p.llm,
     abilities,

@@ -19,6 +19,7 @@ import {
   upsertDotenv,
 } from "credvault";
 import { expandHome } from "../google-auth.js";
+import { isDefaultOwner } from "../owner.js";
 import type { Settings } from "./config.js";
 
 export interface EnvCliDeps {
@@ -64,10 +65,15 @@ export function registerEnvCommands(program: Command, settings: Settings, deps: 
   const say = deps.say ?? ((l: string) => console.log(l));
   const out = deps.out ?? ((t: string) => process.stdout.write(t));
   const clipboard = deps.clipboard ?? macClipboard;
+  // Only the default owner's store feeds the box; an owner's worker reads its own at boot.
+  const boxHint = () => {
+    if (isDefaultOwner(settings.owner))
+      say("the box reads the store on its next deploy (push to main)");
+  };
   const env = program
     .command("env")
     .description(
-      "Secrets in and out of the store (SSM /autobrowse/config): the same values on every machine and the prod box",
+      "Secrets in and out of the store (SSM /autobrowse/config; an owner's /autobrowse/owners/<owner>/config): the same values on every machine and the prod box",
     );
 
   env
@@ -179,7 +185,7 @@ export function registerEnvCommands(program: Command, settings: Settings, deps: 
       }
       for (const e of chosen) await store.put(e.name, e.value);
       if (chosen.length) say(`pushed ${chosen.length}: ${chosen.map((e) => e.name).join(", ")}`);
-      say("the box reads the store on its next deploy (push to main)");
+      boxHint();
     });
 
   env
@@ -205,7 +211,7 @@ export function registerEnvCommands(program: Command, settings: Settings, deps: 
         await writeSecretFile(file, upsertDotenv(current, [{ name, value }]));
         say(`and in ${file}`);
       }
-      say("the box reads the store on its next deploy (push to main)");
+      boxHint();
     });
 
   env

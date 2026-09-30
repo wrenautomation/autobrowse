@@ -15,12 +15,14 @@ import { type Identity, identityFor } from "../auth/identities.js";
 import type { SiteLogin } from "../auth/login.js";
 import { signupInbox } from "../auth/signup.js";
 import { expandHome } from "../google-auth.js";
+import { isDefaultOwner } from "../owner.js";
 import { gmailOAuth } from "../sites/gmail.js";
 import { accountEnv } from "../sites/oauth.js";
 import { RENEW_WITHIN_MS } from "../sites/renew.js";
 import type { OAuthSpec, SetupStep, SiteApi } from "../sites/types.js";
 import { consentProviderOf, policyAccount, profileOf } from "../sites/wire.js";
 import { youtubeOAuth } from "../sites/youtube.js";
+import { isOperatorTool } from "./owner.js";
 
 export type NeedKind = "credential" | "keys" | "consent" | "phone" | "mac" | "money" | "decision";
 
@@ -53,6 +55,10 @@ export interface NeedsContext {
   phone?: (() => Promise<{ read: boolean; send: boolean }>) | null;
   /** The desktop leg's permissions on this Mac. */
   desktop?: (() => Promise<{ accessibility: boolean; root: boolean }>) | null;
+  /** Whose rows these are (designs/2026-09-30-owner-keys.md); absent = the default owner. */
+  owner?: string;
+  /** The env file `env push` reads, named in a row for an owner (the default owner's is `.env`). */
+  envFile?: string;
 }
 
 /** The login a site's consent signs in with (`facebook/oauth-consent` → `facebook`), or null for a token site. */
@@ -74,6 +80,11 @@ async function lapsing(ctx: NeedsContext, name: string): Promise<string | null> 
   const kept = (await ctx.kept?.()) ?? [];
   return expiring(kept, RENEW_WITHIN_MS).find((e) => e.name === name)?.expiresAt ?? null;
 }
+
+/** A non-default owner's rows: its sites and accounts only. */
+const isOwners = (ctx: NeedsContext): ctx is NeedsContext & { owner: string } =>
+  Boolean(ctx.owner) && !isDefaultOwner(ctx.owner as string);
+const dotenvOf = (ctx: NeedsContext) => (isOwners(ctx) && ctx.envFile ? ctx.envFile : ".env");
 
 /** Wren's own Google account: its channel, its Pages, its signups. */
 const WREN_ADDRESS = "william@wrenautomation.com";
@@ -115,10 +126,10 @@ export function siteNeeds(ctx: NeedsContext): Need[] {
         how: appStep
           ? [
               `autobrowse site setup ${s.site} ${appStep.name}`,
-              `or make the app by hand, put ${keyNames.join(" and ")} in .env, then autobrowse env push ${keyNames.join(" ")}`,
+              `or make the app by hand, put ${keyNames.join(" and ")} in ${dotenvOf(ctx)}, then autobrowse env push ${keyNames.join(" ")}`,
             ]
           : [
-              `put ${keyNames.join(" and ")} in .env, then autobrowse env push ${keyNames.join(" ")}`,
+              `put ${keyNames.join(" and ")} in ${dotenvOf(ctx)}, then autobrowse env push ${keyNames.join(" ")}`,
             ],
         ...(login && login !== "google"
           ? { after: `login-${ctx.logins.find((x) => x.site === login)?.credential ?? login}` }
@@ -147,7 +158,7 @@ export function siteNeeds(ctx: NeedsContext): Need[] {
             )
           ).some(Boolean),
       });
-    } else if ("token" in s.auth) {
+    } else if ("token" in s.auth && !(isOwners(ctx) && isOperatorTool(s.auth.token))) {
       const token = s.auth.token;
       // A step that mints it is the first line: a person copying a token by hand is the fallback.
       const tokenStep = s.setup.find((st) => st.makes.includes(token));
@@ -158,7 +169,7 @@ export function siteNeeds(ctx: NeedsContext): Need[] {
         unlocks: `the ${s.site} API`,
         how: [
           ...(tokenStep ? [`autobrowse site setup ${s.site} ${tokenStep.name}`] : []),
-          `or put ${token} in .env, then autobrowse env push ${token}`,
+          `or put ${token} in ${dotenvOf(ctx)}, then autobrowse env push ${token}`,
         ],
         // Present and not about to lapse: a token inside the renew window reopens the row.
         check: async () => (await holds(ctx, token)) && !(await lapsing(ctx, token)),
@@ -464,8 +475,24 @@ export function signupNeeds(ctx: NeedsContext): Need[] {
   return out;
 }
 
+/** Fixed rows that are an owner's too; the phone, this Mac, money, Wren's accounts and decisions are the operator's. */
+const OWNERS_FIXED = new Set(["instantly-key", "signup-inbox"]);
+
+/** `autobrowse …` as this owner runs it: `autobrowse --owner <o> …`. */
+export function commandFor(how: string, owner: string | undefined): string {
+  if (!owner || isDefaultOwner(owner)) return how;
+  return how.replace(/\bautobrowse (?!--owner )/g, `autobrowse --owner ${owner} `);
+}
+
 export function allNeeds(ctx: NeedsContext): Need[] {
-  return [...siteNeeds(ctx), ...accountNeeds(ctx), ...signupNeeds(ctx), ...fixedNeeds(ctx)];
+  if (!isOwners(ctx))
+    return [...siteNeeds(ctx), ...accountNeeds(ctx), ...signupNeeds(ctx), ...fixedNeeds(ctx)];
+  const own = [
+    ...siteNeeds(ctx),
+    ...accountNeeds(ctx),
+    ...fixedNeeds(ctx).filter((n) => OWNERS_FIXED.has(n.id)),
+  ];
+  return own.map((n) => ({ ...n, how: n.how.map((h) => commandFor(h, ctx.owner)) }));
 }
 
 /** Decisions and manual steps the person marked done, with a note each. */

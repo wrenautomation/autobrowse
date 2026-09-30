@@ -6,11 +6,12 @@ import { fileKeys } from "../access/keys.js";
 import type { FailureRecord } from "../browser/session.js";
 import { httpClient } from "../clients/http.js";
 import { expandHome } from "../google-auth.js";
+import { isDefaultOwner } from "../owner.js";
 import { startUiServer } from "../ui/server.js";
 import { backendFor } from "./backend.js";
 import { ingress } from "./client.js";
-import { loadEnvFile, loadSettings } from "./config.js";
 import { cloudAdminUrl, planEndpoint } from "./endpoint.js";
+import { awsFor, boot } from "./owner.js";
 import { registerDeployment } from "./register.js";
 import { initSentry } from "./sentry.js";
 import {
@@ -24,8 +25,7 @@ import {
 } from "./services.js";
 import { statusOf } from "./status.js";
 
-const root = loadEnvFile();
-const settings = loadSettings();
+const { root, settings } = boot();
 const log = pino({ level: settings.logLevel });
 const bootedAt = new Date();
 const sentry = settings.sentryDsn
@@ -102,6 +102,7 @@ const backend = backendFor(settings, app, {
   ingress: ingress({
     url: settings.restateIngressUrl,
     authToken: settings.restateAuthToken ?? null,
+    owner: settings.owner,
   }),
   ...(app.channel.note ? { notify: app.channel.note.bind(app.channel) } : {}),
 });
@@ -176,7 +177,10 @@ const shipShots = (why: string): Promise<void> => {
 };
 if (ship && settings.shotsEveryMinutes > 0)
   setInterval(() => void shipShots("timer"), settings.shotsEveryMinutes * 60_000).unref();
-if (settings.idleStopMinutes > 0) {
+// The box is the operator's: only the default owner's worker may stop it.
+if (settings.idleStopMinutes > 0 && !isDefaultOwner(settings.owner))
+  log.info({ owner: settings.owner }, "idle stop is the operator's worker's; off here");
+else if (settings.idleStopMinutes > 0) {
   const { EC2Client } = await import("@aws-sdk/client-ec2");
   const { ec2Port, instanceIdFromMetadata, selfStopper } = await import("./box.js");
   const { scheduleIdleStop } = await import("./idle.js");
@@ -212,7 +216,7 @@ if (settings.idleStopMinutes > 0) {
       }
     },
     stop: selfStopper({
-      ec2: ec2Port(new EC2Client({ region: settings.awsRegion })),
+      ec2: ec2Port(new EC2Client(awsFor(settings))),
       instanceId: async () => settings.instanceId ?? (await instanceIdFromMetadata()),
     }),
     // What this session did with secrets and money, to the person, before the lights go out.

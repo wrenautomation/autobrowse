@@ -61,7 +61,7 @@ export { GateOpen, Unrecoverable } from "./engine/effects.js";
 export type { RunEvent, RunRef } from "./engine/events.js";
 export { memoryEffects } from "./engine/memory.js";
 export { type HostDeps, makeRunObject, type RunObject } from "./engine/object.js";
-export { runsRegistry } from "./engine/registry.js";
+export { registryOf, runsRegistry, runsRegistryFor } from "./engine/registry.js";
 export { advance, applyAnswer, nextStep, type Outcome, runFlow, summarize } from "./engine/run.js";
 export {
   defineWorkflow,
@@ -73,5 +73,15 @@ export {
   type Workflow,
 } from "./engine/workflow.js";
 export * from "./llm/index.js";
+/** Owners: one autobrowse, many tenants (designs/2026-09-30-owner-keys.md). */
+export {
+  type AwsConfig,
+  awsConfig,
+  checkOwner,
+  DEFAULT_OWNER,
+  isDefaultOwner,
+  named,
+  ownerKeys,
+} from "./owner.js";
 export * from "./recorder/index.js";
 export { domainWorkflow } from "./workflows/domain/index.js";

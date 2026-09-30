@@ -13,14 +13,14 @@ One Restate virtual object per run, keyed by the run's key: `makeRunObject` / `m
 
 ## Why this shape
 
-Each handler is one host invocation and state is saved before it returns (`src/engine/run.ts:97`). Transient failures retry with backoff for about a day; `Unrecoverable`, `NeedsHuman`, `FlowFailed` and 4xx stop at once (`src/engine/object.ts:57-74`).
+Each handler is one host invocation and state is saved before it returns (`src/engine/run.ts:97`). Transient failures retry with backoff for about a day; `Unrecoverable`, `NeedsHuman`, `FlowFailed` and 4xx stop at once (`src/engine/object.ts:60-77`).
 
 ## Shape
 
-- Handlers: `run`, `step`, `pause`, `play`, `approve`, `reject`, `reset`, `status` — `src/engine/object.ts:148-157`
+- Handlers: `run`, `step`, `pause`, `play`, `approve`, `reject`, `reset`, `status` — `src/engine/object.ts:151-160`
 - State keys: results, memo, answers, the open gate — `src/engine/run.ts:14-19`
-- `HostDeps.emit(event)` journals every [[run-event]]; `registry: false` in tests — `src/engine/object.ts:48-53`
-- `makeRunObjectFrom(name, resolve)`: one object serves many workflows found per key (the compiled ones) — `src/engine/object.ts:193`, `src/workflows/compiled.ts:105`
+- `HostDeps.emit(event)` journals every [[run-event]]; `registry: false` in tests — `src/engine/object.ts:49-56`
+- `makeRunObjectFrom(name, resolve)`: one object serves many workflows found per key (the compiled ones) — `src/engine/object.ts:197`, `src/workflows/compiled.ts:106`
 - `Effects` seam a step gets: `run`, `get`, `set`, `clear`, `sleep`, `now` — `src/engine/effects.ts:12-21`
 
 ## Connected to
@@ -32,7 +32,7 @@ Each handler is one host invocation and state is saved before it returns (`src/e
 
 ## If you change this
 
-- **Hits:** `src/engine/run.ts`, `src/engine/memory.ts` (the test host), `src/workflows/compiled.ts`, `src/app/services.ts:1004` (`buildApp` registers them), CLI `run`/`status`, UI `/api/runs`, `src/app/client.ts`.
+- **Hits:** `src/engine/run.ts`, `src/engine/memory.ts` (the test host), `src/workflows/compiled.ts`, `src/app/services.ts:1034` (`buildApp` registers them), CLI `run`/`status`, UI `/api/runs`, `src/app/client.ts`.
 - **Does not hit:** flows, the site facade, agent sessions (in-process, not Restate).
 
 ## Surfaces

@@ -13,15 +13,15 @@ A stored sign-in for a site: `Credential` and `CredentialStore` come from the `c
 
 ## Why this shape
 
-The vault is its own repo and npm package (public). Changing a name in `src/auth/keep.ts` strands what is already stored under the old one (`src/auth/keep.ts:1-13`).
+The vault is its own repo and npm package (public). Changing a name in `src/auth/keep.ts` strands what is already stored under the old one (`src/auth/keep.ts:1-6`).
 
 ## Shape
 
-- Names: Keychain service `autobrowse` (seal key), env prefix `AUTOBROWSE_CRED_`, secret prefix `AUTOBROWSE_`, SSM path `/autobrowse/config` — `src/auth/keep.ts:7-13`
-- Store: env layer first, then the sealed file `~/.config/autobrowse/credentials.json` (`src/app/config.ts:205`); armed with a canary whose read is refused and reported — `src/app/services.ts:415-465`
+- Names: Keychain service `autobrowse` (seal key; an owner's `autobrowse-owner-<owner>`), env prefix `AUTOBROWSE_CRED_`, secret prefix `AUTOBROWSE_` — `src/auth/keep.ts:9-20`; SSM path `/autobrowse/config` (an owner's `/autobrowse/owners/<owner>/config`) — `src/owner.ts:20-29`
+- Store: env layer first, then the sealed file `~/.config/autobrowse/credentials.json` (`src/app/config.ts:221`); armed with a canary whose read is refused and reported — `src/app/services.ts:418-470`
 - A credential is keyed `<site>` or `<site>@<label>`; `via` names an identity provider instead of a password (`methodsOf`, `src/auth/login.ts:630`)
 - Minted on signup: `accountKey`, `mintCredential`, `mintPassword` — `src/auth/signup.ts:225-313`
-- Every typed secret is audited (`SecretAudit`, `auditFor` `src/app/services.ts:505`; window read by `ledgerSince` `src/auth/ledger.ts:18`)
+- Every typed secret is audited (`SecretAudit`, `auditFor` `src/app/services.ts:515`; window read by `ledgerSince` `src/auth/ledger.ts:18`)
 
 ## Connected to
 
@@ -31,7 +31,7 @@ The vault is its own repo and npm package (public). Changing a name in `src/auth
 
 ## If you change this
 
-- **Hits:** `src/app/services.ts:415`, `src/auth/login.ts`, `src/auth/accounts.ts`, `src/auth/signup.ts`, `src/app/needs.ts`, `src/app/cli-auth.ts` (`creds`), the wren repo (reads the same SSM path through credvault).
+- **Hits:** `src/app/services.ts:418`, `src/auth/login.ts`, `src/auth/accounts.ts`, `src/auth/signup.ts`, `src/app/needs.ts`, `src/app/cli-auth.ts` (`creds`), the wren repo (reads the same SSM path through credvault).
 - **Does not hit:** the wallet; site API tokens.
 
 ## Surfaces

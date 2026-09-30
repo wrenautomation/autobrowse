@@ -145,7 +145,7 @@ export async function runLeg<I, O>(
   }
 }
 
-export function browserService(deps: BrowserServiceDeps) {
+export function browserService(deps: BrowserServiceDeps, name: string = BROWSER_SERVICE) {
   const leg =
     <I, O>(flow: BrowserFlow<I, O>) =>
     (ctx: restate.Context, input: I): Promise<O> =>
@@ -158,7 +158,7 @@ export function browserService(deps: BrowserServiceDeps) {
         RETRY,
       );
   return restate.service({
-    name: BROWSER_SERVICE,
+    name,
     handlers: {
       dkimGenerate: (ctx: restate.Context, raw: unknown) =>
         leg(googleDkimGenerate)(ctx, domain.parse(raw)),

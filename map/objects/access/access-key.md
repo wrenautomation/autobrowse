@@ -13,12 +13,12 @@ An API key another agent presents, carrying a scope: which sites and accounts, w
 
 ## Why this shape
 
-The owner's UI token does everything; a key does only what its scope lists. Keys are stored hashed in `access.json`; the value is shown once. `do` seen through a key is the catalog cut to the scope, each leg checked (`Backend.doAs`, `src/app/backend.ts:130`).
+The operator's UI token does everything; a key does only what its scope lists. Keys are stored hashed in `access.json`; the value is shown once. `do` seen through a key is the catalog cut to the scope, each leg checked (`Backend.doAs`, `src/app/backend.ts:133`).
 
 ## Shape
 
-- `VERBS = do | run | sites | agent`; `scopeSchema { sites (site, site@label, site@*), workflows (prefix*), tools, can }`; `Scope` (owner or rules) — `src/access/keys.ts:22-37`; `allowsSite` — `:51`
-- `StoredKey { name, hash, createdAt … }`; `KeyStore { list, add, revoke, resolve }`; `KEY_NAME` — `:73-92`; file `~/.config/autobrowse/access.json` (`src/app/config.ts:120`)
+- `VERBS = do | run | sites | agent`; `scopeSchema { sites (site, site@label, site@*), workflows (prefix*), tools, can }`; `Scope` (the operator or rules), `OPERATOR` — `src/access/keys.ts:22-41`; `allowsSite` — `:53`
+- `StoredKey { name, hash, createdAt … }`; `KeyStore { list, add, revoke, resolve }`; `KEY_NAME` — `:76-92`; file `~/.config/autobrowse/access.json` (`src/app/config.ts:136`)
 - `refusal(scope, method, path, query, lookups)` — `src/access/fence.ts:28`; applied per request in the API — `src/ui/api.ts:154-160`
 
 ## Connected to
@@ -29,7 +29,7 @@ The owner's UI token does everything; a key does only what its scope lists. Keys
 
 ## If you change this
 
-- **Hits:** `src/ui/api.ts:143-169`, `src/ui/auth.ts`, `src/app/backend.ts:130` (`doAs`), `src/app/cli-access.ts`.
+- **Hits:** `src/ui/api.ts:143-169`, `src/ui/auth.ts`, `src/app/backend.ts:133` (`doAs`), `src/app/cli-access.ts`.
 - **Does not hit:** Restate handlers (the ingress has its own auth), sign-ins.
 
 ## Surfaces

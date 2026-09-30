@@ -4,11 +4,11 @@
  * (wren, a person, an agent runner) only chooses which key each agent gets.
  * A key names the sites, workflows and tools it may use and the verbs it
  * may call; anything not named is refused, and every list an agent reads
- * shows only what it may use. The owner (UI_TOKEN, or local use with no
+ * shows only what it may use. The operator (UI_TOKEN, or local use with no
  * token) sees everything.
  *
  * The fence holds for agents that reach autobrowse over its API with a
- * key. An agent with a shell on the worker's machine is the owner.
+ * key. An agent with a shell on the worker's machine is the operator.
  *
  * Stored as a sha256 of each key, never the key: it is shown once, at
  * `access grant`. A key is 32 random bytes, so a plain hash is enough.
@@ -34,9 +34,11 @@ export const scopeSchema = z.object({
 });
 export type ScopeRules = z.infer<typeof scopeSchema>;
 
-export type Scope = { owner: true; name: "owner" } | ({ owner: false; name: string } & ScopeRules);
+export type Scope =
+  | { operator: true; name: "operator" }
+  | ({ operator: false; name: string } & ScopeRules);
 
-export const OWNER: Scope = { owner: true, name: "owner" };
+export const OPERATOR: Scope = { operator: true, name: "operator" };
 
 /** `github@wren` → [github, wren]; `github` → [github, ""] (the default account). */
 const split = (site: string): [string, string] => {
@@ -49,7 +51,7 @@ const glob = (pattern: string, name: string) =>
 
 /** Whether the scope may act as this site's account (`github`, `github@wren`). */
 export function allowsSite(scope: Scope, site: string): boolean {
-  if (scope.owner) return true;
+  if (scope.operator) return true;
   const [name, account] = split(site);
   return scope.sites.some((p) => {
     const [pName, pAccount] = split(p);
@@ -59,15 +61,16 @@ export function allowsSite(scope: Scope, site: string): boolean {
 
 /** Whether any account of this site is in scope: the site shows up in lists. */
 export const seesSite = (scope: Scope, site: string): boolean =>
-  scope.owner || scope.sites.some((p) => base(p) === base(site));
+  scope.operator || scope.sites.some((p) => base(p) === base(site));
 
 export const allowsWorkflow = (scope: Scope, name: string): boolean =>
-  scope.owner || scope.workflows.some((p) => glob(p, name));
+  scope.operator || scope.workflows.some((p) => glob(p, name));
 
 export const allowsTool = (scope: Scope, name: string): boolean =>
-  scope.owner || scope.tools.includes(name);
+  scope.operator || scope.tools.includes(name);
 
-export const can = (scope: Scope, verb: Verb): boolean => scope.owner || scope.can.includes(verb);
+export const can = (scope: Scope, verb: Verb): boolean =>
+  scope.operator || scope.can.includes(verb);
 
 /** One stored key: its name, rules and the hash it is known by. */
 export interface StoredKey extends ScopeRules {
@@ -115,7 +118,7 @@ export function fileKeys(file: string, now: () => Date = () => new Date()): KeyS
     add(name, rules) {
       if (!KEY_NAME.test(name))
         throw new Error("a key name is lowercase letters, digits and dashes");
-      if (name === "owner") throw new Error("owner is the UI token, not an agent key");
+      if (name === "operator") throw new Error("operator is the UI token, not an agent key");
       const parsed = scopeSchema.parse(rules);
       const key = `abk_${name}_${randomBytes(32).toString("base64url")}`;
       const stored: StoredKey = {
@@ -138,7 +141,7 @@ export function fileKeys(file: string, now: () => Date = () => new Date()): KeyS
       const hit = read().find((k) => k.hash === hash);
       if (!hit) return null;
       const { hash: _h, createdAt: _c, ...rest } = hit;
-      return { owner: false, ...rest };
+      return { operator: false, ...rest };
     },
   };
 }

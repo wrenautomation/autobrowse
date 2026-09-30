@@ -17,9 +17,10 @@ Restate has no cross-object query. A registry fed by events answers "what runs e
 
 ## Shape
 
-- Handlers: `record(event)`, `list(query)` (shared), `forget(id)` — `src/engine/registry.ts:40-62`
+- Handlers: `record(event)`, `list(query)` (shared), `forget(id)` — `src/engine/registry.ts:49-68`
+- One per [[owner]]: `Runs` for the default, `Runs_<owner>` for any other (`registryOf`, `:42`)
 - Kept: `KEEP_ROWS` 2000, pages of `LIST_LIMIT` 100 with a cursor — `src/engine/rows.ts:66-95`
-- A pre-2026-09-22 map is read once and written back as a list — `src/engine/registry.ts:23-25`
+- A pre-2026-09-22 map is read once and written back as a list — `src/engine/registry.ts:24-26`
 
 ## Connected to
 
@@ -29,7 +30,7 @@ Restate has no cross-object query. A registry fed by events answers "what runs e
 
 ## If you change this
 
-- **Hits:** `src/engine/rows.ts`, CLI `runs` (`src/app/cli.ts:317`), UI `/api/runs` (`src/ui/api.ts:437`), `src/app/client.ts`.
+- **Hits:** `src/engine/rows.ts`, CLI `runs` (`src/app/cli.ts:342`), UI `/api/runs` (`src/ui/api.ts:437`), `src/app/client.ts`.
 - **Does not hit:** run state; channels.
 
 ## Surfaces

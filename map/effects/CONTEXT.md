@@ -25,6 +25,7 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | an env variable | [[settings]] | `compose.yml`, `deploy/prod.env.example`, `README.md`, the box's env |
 | the backend port | [[backend]] | `src/ui/api.ts`, the SPA client `ui/src/api.ts`, CLI client |
 | `do` routing, the catalog | [[ability]] | [[access-key]] (scope cuts), [[do]] process, wren callers |
+| an owner's names, paths, or setting classes | [[owner]] | [[state-files]], [[settings]], [[runs-registry]], `deploy/terraform/owners.tf` (the `owner` tag) |
 | the box, compose, CI | [[deploy]] process | [[settings]], wren's wake by instance id |
 
 ## Pointing in (outside this tree; breaks silently)

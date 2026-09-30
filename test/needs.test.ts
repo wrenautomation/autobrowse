@@ -7,6 +7,7 @@ import { setupArgs } from "../src/app/cli-needs.js";
 import {
   accountNeeds,
   allNeeds,
+  commandFor,
   consentLoginOf,
   fileDone,
   formatNeeds,
@@ -16,7 +17,7 @@ import {
   siteNeeds,
 } from "../src/app/needs.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";
-import { gmail, meta, npm, youtube } from "../src/sites/index.js";
+import { gmail, meta, npm, perplexity, youtube } from "../src/sites/index.js";
 
 const ctx = (env: Record<string, string>, extra: Partial<NeedsContext> = {}): NeedsContext => ({
   sites: [meta, youtube, gmail],
@@ -152,6 +153,71 @@ describe("needs", () => {
       account: null,
     });
     expect(setupArgs("autobrowse creds paste x")).toBeNull();
+    expect(setupArgs("autobrowse --owner acme site setup meta developer-app")).toEqual({
+      site: "meta",
+      step: "developer-app",
+      account: null,
+    });
+  });
+});
+
+describe("an owner's needs", () => {
+  const acme = { owner: "acme", envFile: "~/.config/autobrowse/owners/acme/.env" };
+
+  it("keeps the owner's sites and accounts; the phone, this Mac, money and Wren's accounts stay the operator's", () => {
+    const ids = (c: NeedsContext) => allNeeds(c).map((n) => n.id);
+    const operator = ids(ctx({}, { sites: [meta, youtube, gmail, perplexity] }));
+    const owner = ids(ctx({}, { sites: [meta, youtube, gmail, perplexity], ...acme }));
+    for (const id of [
+      "phone-forwarding",
+      "mac-root",
+      "anthropic-credits",
+      "signup-x",
+      "npm-account",
+    ])
+      expect(operator).toContain(id);
+    expect(operator).toContain("token-perplexity");
+    for (const id of [
+      "keys-meta",
+      "consent-youtube",
+      "login-google-jin",
+      "inbox-w",
+      "signup-inbox",
+    ])
+      expect(owner).toContain(id);
+    expect(owner).toContain("instantly-key");
+    for (const id of [
+      "phone-forwarding",
+      "phone-send",
+      "mac-root",
+      "anthropic-credits",
+      "virtual-cards-vendor",
+      "youtube-consent-wren",
+      "signup-x",
+      "instagram-page-link",
+      "npm-account",
+      // The operator's tool: every owner uses the operator's key.
+      "token-perplexity",
+    ])
+      expect(owner).not.toContain(id);
+    expect(ids(ctx({}, { owner: "wren" }))).toEqual(ids(ctx({})));
+  });
+
+  it("every command runs as the owner and names the owner's env file", () => {
+    const rows = allNeeds(ctx({}, acme));
+    const lines = rows.flatMap((r) => r.how).filter((h) => h.includes("autobrowse "));
+    expect(lines.length).toBeGreaterThan(5);
+    for (const h of lines) expect(h).not.toMatch(/\bautobrowse (?!--owner acme )/);
+    const keys = rows.find((r) => r.id === "keys-meta")?.how.join("\n") ?? "";
+    expect(keys).toContain(`in ${acme.envFile}, then autobrowse --owner acme env push`);
+    expect(setupArgs(rows.find((r) => r.id === "consent-gmail")?.how[0] ?? "")).toMatchObject({
+      site: "gmail",
+      step: "consent",
+    });
+    expect(commandFor("autobrowse creds paste x", "wren")).toBe("autobrowse creds paste x");
+    expect(commandFor("autobrowse --owner acme creds paste x", "acme")).toBe(
+      "autobrowse --owner acme creds paste x",
+    );
   });
 });
 

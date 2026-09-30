@@ -19,9 +19,9 @@ const request = z.object({
   dryRun: z.boolean().default(false),
 });
 
-export function doService(verb: () => Doer | null) {
+export function doService(verb: () => Doer | null, name: string = DO_SERVICE) {
   return restate.service({
-    name: DO_SERVICE,
+    name,
     handlers: {
       run: async (ctx: restate.Context, raw: unknown) => {
         const r = request.safeParse(raw);

@@ -5,15 +5,15 @@
  */
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { loadEnvFile, loadSettings } from "../src/app/config.js";
+import type { loadSettings } from "../src/app/config.js";
+import { boot } from "../src/app/owner.js";
 import { llmFor, memoryFor } from "../src/app/services.js";
 import { completeJson } from "../src/llm/types.js";
 
 const live = process.env.LIVE === "1";
 // Settings are strict (a real .env); only load them when the live run is on, so CI's import is clean.
 function liveSettings() {
-  loadEnvFile();
-  return loadSettings();
+  return boot().settings;
 }
 const settings = live ? liveSettings() : ({} as ReturnType<typeof loadSettings>);
 

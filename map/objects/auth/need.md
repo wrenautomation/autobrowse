@@ -17,9 +17,9 @@ The owed list clears itself: a credential present, a token kept, a consent done,
 
 ## Shape
 
-- `NeedKind = credential | keys | consent | phone | mac | money | decision`; `Need { id, kind, what, unlocks, how[], after?, check? }` — `src/app/needs.ts:25-40`
-- Sources: `siteNeeds`, `accountNeeds`, `fixedNeeds`, `signupNeeds` → `allNeeds` — `:82-430`; `NeedsContext` — `:42-57`
-- Done store: `DONE_FILE` `~/.config/autobrowse/needs-done.json` — `src/app/owed.ts:79`; `Owed`, `Policy` — `:30-46`
+- `NeedKind = credential | keys | consent | phone | mac | money | decision`; `Need { id, kind, what, unlocks, how[], after?, check? }` — `src/app/needs.ts:27-42`
+- Sources: `siteNeeds`, `accountNeeds`, `fixedNeeds`, `signupNeeds` → `allNeeds` — `:93-496`; `NeedsContext` — `:44-63`
+- Done store: `needsDoneFile` `~/.config/autobrowse/needs-done.json` — `src/app/config.ts:40`, opened by `fileDone` — `src/app/needs.ts:507`; `Owed`, `Policy` — `src/app/owed.ts:29-45`
 
 ## Connected to
 

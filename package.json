@@ -1,6 +1,6 @@
 {
   "name": "@wrenautomation/autobrowse",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Browser and account automation: recorded flows where no API exists, official API shapes where one does, a person in the loop for money, accounts and consent.",
   "repository": {
     "type": "git",
@@ -93,7 +93,7 @@
     "@restatedev/restate-sdk-tunnel": "1.17.1",
     "@sentry/node": "10.75.0",
     "commander": "15.0.0",
-    "credvault": "0.9.0",
+    "credvault": "0.10.0",
     "hono": "4.13.8",
     "patchright": "1.63.0",
     "pino": "10.3.1",
