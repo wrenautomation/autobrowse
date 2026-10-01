@@ -28,8 +28,10 @@ export {
   linkedinCompanyJobs,
   linkedinCompanyPeople,
   linkedinConnect,
+  linkedinInbox,
   linkedinMessage,
   linkedinProfile,
+  linkedinRelationship,
   linkedinSearchPeople,
   type Person,
   type Profile as LinkedInProfile,
@@ -58,9 +60,11 @@ export {
 } from "./perplexity-ask.js";
 export {
   type CommentInput as RedditCommentInput,
+  type MessageInput as RedditMessageInput,
   OLD as REDDIT_OLD,
   type ReadInput as RedditReadInput,
   redditComment,
+  redditMessage,
   redditRead,
   redditSubmit,
   type SubmitInput as RedditSubmitInput,

@@ -88,6 +88,10 @@ const peopleSearch = z.object({
     .optional(),
 });
 const flag = z.preprocess((v) => v === true || v === "true", z.boolean()).default(false);
+const inbox = z.object({
+  max: z.coerce.number().int().min(1).max(100).default(20),
+  unread: flag,
+});
 const profile = z.object({
   vanity,
   experience: flag,
@@ -132,10 +136,15 @@ export const linkedin: SiteApi = {
   probe: { path: "/v2/userinfo" },
   auth: { oauth: linkedinOAuth },
   // Reads a person could do in a day without LinkedIn restricting the account, per account.
-  caps: { profile: 80, search: 25, company: 40 },
-  // William's own profile reads nothing until he lifts it (his call, 2026-10-01); a call is a 429.
+  // Invites and messages at a person's pace: LinkedIn's own weekly invite limit is ~100, and an
+  // account that sends more than a few dozen a day is the one it restricts. Outreach ramps
+  // under these (wren's reach loop), never at them.
+  caps: { profile: 80, search: 25, company: 40, connect: 20, message: 25, inbox: 48 },
+  // William's own profile reads and sends nothing until he lifts it (his call, 2026-10-01); a call is a 429.
   // Before: 40 profiles and 15 searches a day for client lookups (wren, 2026-09-29).
-  accountCaps: { linkedin: { profile: 0, search: 0, company: 0 } },
+  accountCaps: {
+    linkedin: { profile: 0, search: 0, company: 0, connect: 0, message: 0, inbox: 0 },
+  },
   pace: { gapMs: 10_000, jitterMs: 20_000 },
   routes: [
     route({
@@ -328,7 +337,26 @@ export const linkedin: SiteApi = {
       summary: "Invite to connect, with an optional note (200 characters; five notes a month free)",
       request: connect,
       irreversible: true,
+      meter: () => ({ connect: 1 }),
       browser: { flow: "linkedin/connect" },
+    }),
+    route({
+      method: "GET",
+      path: "/in/{vanity}/relationship",
+      summary:
+        "Where this account stands with a member: connected (1st), pending (our invite is out), none",
+      request: z.object({ vanity }),
+      meter: () => ({ profile: 1 }),
+      browser: { flow: "linkedin/relationship" },
+    }),
+    route({
+      method: "GET",
+      path: "/messaging",
+      summary:
+        "The inbox's conversations newest first (`max`, `unread=true`): name, handle, preview, unread",
+      request: inbox,
+      meter: () => ({ inbox: 1 }),
+      browser: { flow: "linkedin/inbox" },
     }),
     route({
       method: "POST",
@@ -336,6 +364,7 @@ export const linkedin: SiteApi = {
       summary: "Message a 1st-degree connection (anyone else is InMail, which needs Premium)",
       request: message,
       irreversible: true,
+      meter: () => ({ message: 1 }),
       browser: { flow: "linkedin/message" },
     }),
   ],

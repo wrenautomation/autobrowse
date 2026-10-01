@@ -83,6 +83,38 @@ const ME_FIELDS = [
 ] as const;
 /** A subreddit rule as `/r/{sr}/about/rules` lists it. */
 const RULE_FIELDS = ["short_name", "description", "kind", "violation_reason", "priority"] as const;
+/** Another account as `/user/{name}/about` shows it: age and karma (the warmup reads these), whether it takes messages. */
+const USER_FIELDS = [
+  "id",
+  "name",
+  "created_utc",
+  "link_karma",
+  "comment_karma",
+  "total_karma",
+  "is_suspended",
+  "verified",
+  "accept_pms",
+  "accept_chats",
+  "accept_followers",
+  "icon_img",
+] as const;
+/** A private message (t4) or a comment reply in the inbox (t1), as the inbox listings show them. */
+const MESSAGE_FIELDS = [
+  "id",
+  "name",
+  "author",
+  "dest",
+  "subject",
+  "body",
+  "created_utc",
+  "new",
+  "first_message_name",
+  "parent_id",
+  "was_comment",
+  "subreddit",
+  "context",
+  "distinguished",
+] as const;
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -108,17 +140,46 @@ export function slimListing(l: unknown): Obj {
   };
 }
 
+/** An inbox listing: messages with their reply threads, one level down. */
+export function slimMessages(l: unknown): Obj {
+  const data = isObj(l) && isObj(l.data) ? l.data : {};
+  const children = Array.isArray(data.children) ? data.children : [];
+  return {
+    kind: "Listing",
+    data: {
+      after: data.after ?? null,
+      before: data.before ?? null,
+      children: children.filter(isObj).map((c) => {
+        const m = pick(c.data, MESSAGE_FIELDS);
+        const replies = isObj(c.data) ? c.data.replies : null;
+        if (isObj(replies)) m.replies = slimMessages(replies);
+        return { kind: c.kind, data: m };
+      }),
+    },
+  };
+}
+
+const USER = "[A-Za-z0-9_-]{3,20}";
+const SR = "[A-Za-z0-9_]{2,21}";
+
 /** The reads the routes send here, and how each answer is slimmed. */
 const READS: Array<{ path: RegExp; slim: (body: unknown) => unknown }> = [
   { path: /^\/api\/me$/, slim: (b) => pick(isObj(b) ? b.data : null, ME_FIELDS) },
   { path: /^\/api\/info$/, slim: slimListing },
-  { path: /^\/user\/[A-Za-z0-9_-]{3,20}\/(submitted|comments)$/, slim: slimListing },
+  { path: new RegExp(`^/user/${USER}/(submitted|comments)$`), slim: slimListing },
+  {
+    path: new RegExp(`^/user/${USER}/about$`),
+    slim: (b) => pick(isObj(b) ? b.data : null, USER_FIELDS),
+  },
+  { path: new RegExp(`^/r/${SR}/(new|hot|top|search)$`), slim: slimListing },
+  { path: /^\/search$/, slim: slimListing },
+  { path: /^\/message\/(inbox|unread|sent)$/, slim: slimMessages },
   {
     path: /^\/comments\/[a-z0-9]{1,12}$/,
     slim: (b) => (Array.isArray(b) ? b.slice(0, 2).map(slimListing) : slimListing(b)),
   },
   {
-    path: /^\/r\/[A-Za-z0-9_]{2,21}\/about\/rules$/,
+    path: new RegExp(`^/r/${SR}/about/rules$`),
     slim: (b) => ({
       rules: (isObj(b) && Array.isArray(b.rules) ? b.rules : []).map((r) => pick(r, RULE_FIELDS)),
     }),
@@ -363,3 +424,75 @@ function mine(fp: FlowPage): Promise<string[]> {
       .map((c) => c.getAttribute("data-fullname") ?? c.id.replace(/^thing_/, ""));
   });
 }
+
+export interface MessageInput {
+  /** The recipient's username, without u/. */
+  to: string;
+  subject: string;
+  text: string;
+}
+
+/**
+ * A private message through old Reddit's compose form
+ * (`/message/compose/?to=<name>`: `input[name=to]`, `input[name=subject]`,
+ * `textarea[name=text]`, a reCAPTCHA for a new account, `button#send`). A
+ * delivered message leaves "your message has been delivered" in the form's
+ * `.status`; a refused one a `span.error.<CODE>.field-<field>`
+ * (USER_DOESNT_EXIST, NOT_WHITELISTED_BY_USER_MESSAGE when the person takes
+ * no messages, RATELIMIT). The route caps these per account per day: a new
+ * account that messages strangers fast is the one Reddit shadowbans.
+ */
+export const redditMessage = defineFlow<MessageInput, JsonAnswer<{ delivered: true }>>({
+  site: "reddit",
+  name: "message",
+  async run(fp, { to, subject, text }) {
+    const name = to.replace(/^\/?u\//i, "");
+    if (!/^[A-Za-z0-9_-]{3,20}$/.test(name))
+      return refused("BAD_USER", `${to} is not a Reddit username`, "to");
+    await fp.open(`${OLD}/message/compose/?to=${encodeURIComponent(name)}`);
+    const form = "#compose-message";
+    const toBox: Hints = { css: `${form} input[name=to]` };
+    if (!(await fp.has(toBox, RENDER_MS))) return fp.human(`reddit: no compose form (${fp.url()})`);
+    const me = await signedIn(fp);
+    if (me && me.toLowerCase() === name.toLowerCase())
+      return refused("BAD_USER", "the account cannot message itself", "to");
+    await fp.act({ kind: "fill", value: name }, toBox, { goal: "name the recipient" });
+    await fp.act(
+      { kind: "fill", value: subject },
+      { css: `${form} input[name=subject]` },
+      {
+        goal: "type the subject",
+      },
+    );
+    await fp.act(
+      { kind: "fill", value: text },
+      { css: `${form} textarea[name=text]` },
+      {
+        goal: "type the message",
+      },
+    );
+    await passCaptcha(fp);
+    await fp.act(
+      { kind: "click" },
+      { css: `${form} button#send, ${form} button[type=submit]` },
+      {
+        goal: `send the message to ${name}`,
+        irreversible: true,
+      },
+    );
+    for (let waited = 0; waited < LAND_MS; waited += 1_000) {
+      const status = await fp.page.evaluate(
+        (sel) =>
+          [...document.querySelectorAll(`${sel} .status`)]
+            .map((e) => (e.textContent ?? "").trim())
+            .find(Boolean) ?? "",
+        form,
+      );
+      if (/delivered/i.test(status)) return { json: { errors: [], data: { delivered: true } } };
+      const errors = await formErrors(fp, form);
+      if (errors.length) return { json: { errors } };
+      await fp.wait(1_000);
+    }
+    return fp.human(`reddit: the message neither said delivered nor why not (${fp.url()})`);
+  },
+});

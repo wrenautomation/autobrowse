@@ -26,6 +26,9 @@ import type { Hints } from "../locate.js";
 interface El {
   innerText: string;
   href: string;
+  className: string;
+  textContent: string | null;
+  getAttribute(name: string): string | null;
   nextElementSibling: El | null;
   querySelector(sel: string): El | null;
   querySelectorAll(sel: string): Iterable<El>;
@@ -760,5 +763,141 @@ export const linkedinMessage = defineFlow<MessageInput, { sent: true }>({
     if (/couldn.t send|failed to send|try again/i.test(await fp.text()))
       return fp.human("LinkedIn did not send the message");
     return { sent: true };
+  },
+});
+
+export interface RelationshipInput {
+  vanity: string;
+}
+
+export type Relationship = "connected" | "pending" | "none" | "unknown";
+
+const PENDING = /^pending$/i;
+const CONNECT = /^connect$/i;
+const MESSAGE = /^message$/i;
+
+/**
+ * Where this account stands with a member, from the buttons on the profile's
+ * top card: "Message" with no "Connect" = 1st degree, "Pending" = our invite
+ * is out, "Connect" = nothing yet. One profile read; the outreach loop asks
+ * it before every follow-up message so a pending invite is never messaged
+ * (that would be InMail) and an accepted one is caught without the inbox.
+ */
+export const linkedinRelationship = defineFlow<
+  RelationshipInput,
+  { vanity: string; relationship: Relationship; degree?: string }
+>({
+  site: "linkedin",
+  name: "relationship",
+  async run(fp, input) {
+    await go(fp, `${WEB}/in/${encodeURIComponent(input.vanity)}/`);
+    if (!(await fp.has({ css: "main section" }, RENDER_MS)))
+      return fp.human(`no profile at ${fp.url()}`);
+    await fp.wait(SETTLE_MS);
+    const { buttons, degree } = await fp.page.evaluate(() => {
+      const card = document.querySelector("main section");
+      const labels = [...(card?.querySelectorAll("button, a[href]") ?? [])]
+        .map((b) => (b.getAttribute("aria-label") || b.textContent || "").trim())
+        .filter(Boolean);
+      const text = card?.textContent ?? "";
+      const d = /\b(1st|2nd|3rd\+?)\b/.exec(text)?.[1] ?? null;
+      return { buttons: labels, degree: d };
+    });
+    const has = (re: RegExp) => buttons.some((b) => re.test(b) || re.test(b.split(/\s+/)[0] ?? ""));
+    const relationship: Relationship = has(PENDING)
+      ? "pending"
+      : has(CONNECT)
+        ? "none"
+        : has(MESSAGE) || degree === "1st"
+          ? "connected"
+          : "unknown";
+    return { vanity: input.vanity, relationship, ...(degree ? { degree } : {}) };
+  },
+});
+
+export interface InboxInput {
+  /** How many conversations from the top (default 20). */
+  max?: number;
+  /** Only conversations with unread messages. */
+  unread?: boolean;
+}
+
+export interface Conversation {
+  /** The conversation's own URL. */
+  url: string;
+  /** The other person's shown name. */
+  name: string;
+  /** Their profile handle when the row links it. */
+  vanity?: string;
+  /** The last message's text as the list previews it. */
+  preview: string;
+  /** The list's own time label ("2h", "Sep 29"). */
+  when: string;
+  unread: boolean;
+}
+
+/**
+ * The messaging inbox's left list, newest first: who, the preview, whether
+ * unread. Replies to outreach are caught here, then the conversation is read
+ * on its `url` by the person (or a later flow). Mapped from the 2026 UI's
+ * list items (`li` under `main` whose link is `/messaging/thread/…`); a
+ * changed list comes back empty, and the loop treats empty as "nothing new",
+ * so `unread` counts are checked against the nav badge too.
+ */
+export const linkedinInbox = defineFlow<
+  InboxInput,
+  { conversations: Conversation[]; badge: number }
+>({
+  site: "linkedin",
+  name: "inbox",
+  async run(fp, input) {
+    const max = input.max ?? 20;
+    await go(fp, `${WEB}/messaging/${input.unread ? "?filter=unread" : ""}`);
+    if (!(await fp.has({ css: "main" }, RENDER_MS))) return fp.human(`no inbox at ${fp.url()}`);
+    await fp.wait(SETTLE_MS * 2);
+    const got = await fp.page.evaluate(() => {
+      const rows = [...document.querySelectorAll("main li")]
+        .filter((li) => li.querySelector("a[href*='/messaging/thread/']"))
+        .filter((li) => !li.querySelector("li"));
+      const badge = Number(
+        /\d+/.exec(
+          document.querySelector("a[href*='/messaging/'] .notification-badge__count")
+            ?.textContent ?? "",
+        )?.[0] ?? "0",
+      );
+      return {
+        badge,
+        rows: rows.map((li) => {
+          const a = li.querySelector("a[href*='/messaging/thread/']") as { href: string } | null;
+          const profile = li.querySelector("a[href*='/in/']") as { href: string } | null;
+          const lines =
+            (li as { innerText?: string }).innerText
+              ?.split("\n")
+              .map((l) => l.trim())
+              .filter(Boolean) ?? [];
+          return {
+            url: a?.href ?? "",
+            profile: profile?.href ?? "",
+            lines,
+            unread:
+              /\bunread\b/i.test(li.className) ||
+              Boolean(li.querySelector("[class*='unread'], .notification-badge")),
+          };
+        }),
+      };
+    });
+    const conversations: Conversation[] = got.rows.slice(0, max).map((r) => {
+      const [name = "", ...rest] = r.lines;
+      const when =
+        rest.find((l) => /^(\d+[smhdw]|[A-Z][a-z]{2} \d{1,2}|\d{1,2}:\d{2}\s?(AM|PM)?)$/.test(l)) ??
+        "";
+      const preview = rest
+        .filter((l) => l !== when)
+        .join(" ")
+        .slice(0, 300);
+      const v = r.profile ? vanityOf(r.profile) : null;
+      return { url: r.url, name, ...(v ? { vanity: v } : {}), preview, when, unread: r.unread };
+    });
+    return { conversations, badge: got.badge };
   },
 });

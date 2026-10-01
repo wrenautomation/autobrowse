@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { FlowPage } from "../src/browser/flow.js";
-import { redditComment, redditRead, redditSubmit } from "../src/browser/flows/reddit.js";
+import {
+  redditComment,
+  redditMessage,
+  redditRead,
+  redditSubmit,
+} from "../src/browser/flows/reddit.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
@@ -39,11 +44,18 @@ describe("reddit site", () => {
     expect(reddit.routes.map((r) => `${r.method} ${r.path}`)).toEqual([
       "GET /api/v1/me",
       "GET /user/{username}/submitted",
+      "GET /user/{username}/comments",
+      "GET /user/{username}/about",
+      "GET /r/{subreddit}/new",
+      "GET /r/{subreddit}/search",
+      "GET /search",
+      "GET /message/{where}",
       "GET /api/info",
       "GET /comments/{article}",
       "GET /r/{subreddit}/about/rules",
       "POST /api/submit",
       "POST /api/comment",
+      "POST /api/compose",
     ]);
     for (const r of reddit.routes) {
       expect(r.api).toBeUndefined();
@@ -52,12 +64,15 @@ describe("reddit site", () => {
           ? "reddit/read"
           : r.path === "/api/submit"
             ? "reddit/submit"
-            : "reddit/comment",
+            : r.path === "/api/compose"
+              ? "reddit/message"
+              : "reddit/comment",
       );
     }
     expect(BROWSER_FLOWS["reddit/read"]).toBe(redditRead);
     expect(BROWSER_FLOWS["reddit/submit"]).toBe(redditSubmit);
     expect(BROWSER_FLOWS["reddit/comment"]).toBe(redditComment);
+    expect(BROWSER_FLOWS["reddit/message"]).toBe(redditMessage);
   });
 
   it("writes are irreversible and metered per bucket; reads are one read each", () => {
@@ -69,12 +84,17 @@ describe("reddit site", () => {
     expect(
       routeOf(...COMMENT).meter?.(parsed(...COMMENT, { thing_id: "t3_a", text: "hi" }) as never),
     ).toEqual({ comments: 1 });
+    expect(
+      routeOf("POST", "/api/compose").meter?.(
+        parsed("POST", "/api/compose", { to: "someone", subject: "hi", text: "hello" }) as never,
+      ),
+    ).toEqual({ messages: 1 });
     for (const r of reddit.routes.filter((x) => x.method === "GET"))
       expect(r.meter?.({} as never)).toEqual({ reads: 1 });
   });
 
   it("is capped and paced like a person", () => {
-    expect(reddit.caps).toEqual({ reads: 300, posts: 3, comments: 20 });
+    expect(reddit.caps).toEqual({ reads: 300, posts: 3, comments: 20, messages: 5 });
     expect(reddit.pace).toEqual({ gapMs: 20_000, jitterMs: 40_000 });
   });
 });
@@ -200,6 +220,12 @@ describe("reddit browser leg inputs", () => {
     const samples: Record<string, Record<string, unknown>> = {
       "/api/v1/me": {},
       "/user/{username}/submitted": { username: "WrenAutomation" },
+      "/user/{username}/comments": { username: "WrenAutomation" },
+      "/user/{username}/about": { username: "WrenAutomation" },
+      "/r/{subreddit}/new": { subreddit: "startups" },
+      "/r/{subreddit}/search": { subreddit: "startups", q: "hiring" },
+      "/search": { q: "recruiting agency" },
+      "/message/{where}": { where: "unread" },
       "/api/info": { id: "t3_a" },
       "/comments/{article}": { article: "abc" },
       "/r/{subreddit}/about/rules": { subreddit: "startups" },
@@ -233,6 +259,12 @@ describe("reddit browser leg inputs", () => {
       sr: "u_WrenAutomation",
     });
     expect(routeOf(...COMMENT).browser?.input).toBeUndefined();
+  });
+
+  it("compose strips u/ off the recipient", () => {
+    expect(
+      legInput("POST", "/api/compose", { to: "u/Someone", subject: "hi", text: "hello" }),
+    ).toEqual({ to: "Someone", subject: "hi", text: "hello" });
   });
 });
 
@@ -278,6 +310,7 @@ describe("reddit through the facade", () => {
     expect(row.routes.filter((r) => r.irreversible).map((r) => r.path)).toEqual([
       "/api/submit",
       "/api/comment",
+      "/api/compose",
     ]);
   });
 

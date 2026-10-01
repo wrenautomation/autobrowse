@@ -117,7 +117,14 @@ describe("a named account", () => {
   });
 
   it("linkedin's own profile reads nothing until William lifts it", () => {
-    expect(linkedin.accountCaps?.linkedin).toEqual({ profile: 0, search: 0, company: 0 });
+    expect(linkedin.accountCaps?.linkedin).toEqual({
+      profile: 0,
+      search: 0,
+      company: 0,
+      connect: 0,
+      message: 0,
+      inbox: 0,
+    });
     expect(linkedin.caps).toMatchObject({ company: 40 });
   });
 });

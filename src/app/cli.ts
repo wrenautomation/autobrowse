@@ -137,6 +137,68 @@ program
   });
 
 program
+  .command("flows")
+  .description(
+    "Every deterministic browser leg on this worker: hand-written flows with the routes that call them, compiled workflows with their proof, walks (`!` = irreversible)",
+  )
+  .option("--site <site>", "one site's legs")
+  .action(async (o: { site?: string }) => {
+    const { BROWSER_FLOWS } = await import("../engine/browser-service.js");
+    const { SITES } = await import("../sites/index.js");
+    const { listWalks } = await import("../walks/spec.js");
+    const { walksDirFor } = await import("./services.js");
+    const { proofLine } = await import("../workflows/proof.js");
+    const { backend } = local();
+    const [workflows, proofs] = await Promise.all([workflowsOf(backend), proofsOf(backend)]);
+    const site = o.site?.trim().toLowerCase();
+    // Each leg's callers: the official-API routes whose browser leg it is.
+    const callers = new Map<string, { route: string; irreversible: boolean }[]>();
+    for (const s of SITES)
+      for (const r of s.routes) {
+        if (!r.browser) continue;
+        const leg = "flow" in r.browser ? r.browser.flow : r.browser.workflow;
+        const list = callers.get(leg) ?? [];
+        list.push({
+          route: `${r.method} ${s.site}${r.path}`,
+          irreversible: Boolean(r.irreversible),
+        });
+        callers.set(leg, list);
+      }
+    const mark = (leg: string) => (callers.get(leg)?.some((c) => c.irreversible) ? "!" : " ");
+    const via = (leg: string) => {
+      const c = callers.get(leg) ?? [];
+      return c.length ? c.map((x) => x.route).join(", ") : "no route (flow({name}) only)";
+    };
+    const flows = Object.keys(BROWSER_FLOWS)
+      .filter((n) => !site || n.startsWith(`${site}/`))
+      .sort();
+    console.log(`hand-written flows (src/browser/flows): ${flows.length}`);
+    for (const n of flows) console.log(`  ${mark(n)} ${n.padEnd(34)} ${via(n)}`);
+    const compiled = workflows.filter(
+      (w) => !site || w.name.startsWith(`${site}-`) || w.name.includes(`-${site}`),
+    );
+    console.log(`\ncompiled workflows (src/workflows): ${compiled.length}`);
+    for (const w of compiled) {
+      const proof = proofs[w.name];
+      const note = proof
+        ? proofLine(proof)
+        : w.name in proofs
+          ? "draft, never run"
+          : "hand-written";
+      const bang = w.steps.some((s) => s.irreversible) ? "!" : " ";
+      console.log(
+        `  ${bang} ${w.name.padEnd(34)} ${note}; steps ${w.steps.map((s) => `${s.name}${s.irreversible ? "!" : ""}`).join(" → ")}; ${via(w.name)}`,
+      );
+    }
+    const walks = listWalks(walksDirFor(settings)).filter((w) => !site || w.site === site);
+    console.log(`\nwalks (built from runs, ${walksDirFor(settings)}): ${walks.length}`);
+    for (const w of walks)
+      console.log(
+        `  ${w.irreversible ? "!" : " "} ${`${w.site}/walk-${w.name}`.padEnd(34)} ${w.screens} screens from ${w.runs} runs; ${w.goal.replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "<email>").slice(0, 60)}`,
+      );
+  });
+
+program
   .command("run <workflow> <key>")
   .description("Start a run from a plan (JSON); omit --plan to resume the stored one")
   .option("--plan <json|file>", "inline JSON, a file path, or - for stdin")

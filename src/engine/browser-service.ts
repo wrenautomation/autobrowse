@@ -27,8 +27,10 @@ import {
   linkedinCompanyJobs,
   linkedinCompanyPeople,
   linkedinConnect,
+  linkedinInbox,
   linkedinMessage,
   linkedinProfile,
+  linkedinRelationship,
   linkedinSearchPeople,
 } from "../browser/flows/linkedin-reach.js";
 import { loomDelete, loomRename, loomUpload } from "../browser/flows/loom.js";
@@ -38,7 +40,7 @@ import { npmTrustedPublisher } from "../browser/flows/npm-trusted-publisher.js";
 import { googleOauthConsent } from "../browser/flows/oauth-consent.js";
 import { outlookOauthConsent } from "../browser/flows/outlook-oauth-consent.js";
 import { perplexityAsk } from "../browser/flows/perplexity-ask.js";
-import { redditComment, redditRead, redditSubmit } from "../browser/flows/reddit.js";
+import { redditComment, redditMessage, redditRead, redditSubmit } from "../browser/flows/reddit.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { tiktokOauthConsent } from "../browser/flows/tiktok-oauth-consent.js";
 import { xOauthConsent } from "../browser/flows/x-oauth-consent.js";
@@ -92,6 +94,8 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinCompanyPeople,
     linkedinConnect,
     linkedinMessage,
+    linkedinInbox,
+    linkedinRelationship,
     resetMailProbe,
     npmCreateOrg,
     npmGranularToken,
@@ -107,6 +111,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     redditRead,
     redditSubmit,
     redditComment,
+    redditMessage,
     loomUpload,
     loomRename,
     loomDelete,

@@ -56,6 +56,40 @@ const comment = z.object({
   text: z.string().min(1).max(10_000),
 });
 
+const about = z.object({
+  username: z.string().regex(/^[A-Za-z0-9_-]{3,20}$/, "a Reddit username"),
+});
+const listing = z.object({
+  subreddit: z.string().regex(/^[A-Za-z0-9_]{2,21}$/),
+  limit,
+  after: z.string().optional(),
+});
+const srSearch = z.object({
+  subreddit: z.string().regex(/^[A-Za-z0-9_]{2,21}$/),
+  q: z.string().min(1).max(512),
+  sort: z.enum(["relevance", "hot", "top", "new", "comments"]).default("new"),
+  t: z.enum(["hour", "day", "week", "month", "year", "all"]).default("month"),
+  limit,
+  after: z.string().optional(),
+  restrict_sr: z.literal("on").default("on"),
+});
+const search = srSearch.omit({ subreddit: true, restrict_sr: true }).extend({
+  type: z.enum(["link", "sr", "user"]).default("link"),
+});
+const inbox = z.object({
+  where: z.enum(["inbox", "unread", "sent"]).default("inbox"),
+  limit,
+  after: z.string().optional(),
+  /** `true` marks what the listing shows as read, as the inbox page does. */
+  mark: flag.default(false),
+});
+const compose = z.object({
+  api_type: z.literal("json").default("json"),
+  to: z.string().regex(/^(\/?u\/)?[A-Za-z0-9_-]{3,20}$/, "a Reddit username"),
+  subject: z.string().min(1).max(100),
+  text: z.string().min(1).max(10_000),
+});
+
 const read = "reddit/read";
 
 export const reddit: SiteApi = {
@@ -63,7 +97,8 @@ export const reddit: SiteApi = {
   origin: REDDIT_ORIGIN,
   // No client: every route is a browser leg, signed in as the account's own profile.
   auth: { open: true },
-  caps: { reads: 300, posts: 3, comments: 20 },
+  // Messages the lowest: the first thing Reddit shadowbans is an account messaging strangers fast.
+  caps: { reads: 300, posts: 3, comments: 20, messages: 5 },
   pace: { gapMs: 20_000, jitterMs: 40_000 },
   routes: [
     route({
@@ -84,6 +119,68 @@ export const reddit: SiteApi = {
         input: ({ username, ...q }) => ({ path: `/user/${username}/submitted`, query: query(q) }),
       },
       summary: "A user's posts, newest first by default (a Listing of t3)",
+    }),
+    route({
+      method: "GET",
+      path: "/user/{username}/comments",
+      request: submitted,
+      meter: () => ({ reads: 1 }),
+      browser: {
+        flow: read,
+        input: ({ username, ...q }) => ({ path: `/user/${username}/comments`, query: query(q) }),
+      },
+      summary: "An account's comments (`limit`, `sort`, `after`)",
+    }),
+    route({
+      method: "GET",
+      path: "/user/{username}/about",
+      request: about,
+      meter: () => ({ reads: 1 }),
+      browser: { flow: read, input: ({ username }) => ({ path: `/user/${username}/about` }) },
+      summary:
+        "An account's public card: created_utc, link/comment/total karma, is_suspended, accept_pms",
+    }),
+    route({
+      method: "GET",
+      path: "/r/{subreddit}/new",
+      request: listing,
+      meter: () => ({ reads: 1 }),
+      browser: {
+        flow: read,
+        input: ({ subreddit, ...q }) => ({ path: `/r/${subreddit}/new`, query: query(q) }),
+      },
+      summary: "A subreddit's newest posts (`limit`, `after`)",
+    }),
+    route({
+      method: "GET",
+      path: "/r/{subreddit}/search",
+      request: srSearch,
+      meter: () => ({ reads: 1 }),
+      browser: {
+        flow: read,
+        input: ({ subreddit, ...q }) => ({ path: `/r/${subreddit}/search`, query: query(q) }),
+      },
+      summary: "Posts in one subreddit matching `q` (`sort`, `t`, `limit`, `after`)",
+    }),
+    route({
+      method: "GET",
+      path: "/search",
+      request: search,
+      meter: () => ({ reads: 1 }),
+      browser: { flow: read, input: (q) => ({ path: "/search", query: query(q) }) },
+      summary: "Posts (or `type=sr` subreddits, `type=user` accounts) matching `q` site-wide",
+    }),
+    route({
+      method: "GET",
+      path: "/message/{where}",
+      request: inbox,
+      meter: () => ({ reads: 1 }),
+      browser: {
+        flow: read,
+        input: ({ where, ...q }) => ({ path: `/message/${where}`, query: query(q) }),
+      },
+      summary:
+        "The account's messages: `where` = inbox (everything in), unread, sent; `mark=true` marks them read",
     }),
     route({
       method: "GET",
@@ -136,6 +233,19 @@ export const reddit: SiteApi = {
       meter: () => ({ comments: 1 }),
       browser: { flow: "reddit/comment" },
       summary: "! A comment on a post (t3_) or a reply to a comment (t1_)",
+    }),
+    route({
+      method: "POST",
+      path: "/api/compose",
+      request: compose,
+      irreversible: true,
+      meter: () => ({ messages: 1 }),
+      browser: {
+        flow: "reddit/message",
+        input: (m) => ({ to: m.to.replace(/^\/?u\//, ""), subject: m.subject, text: m.text }),
+      },
+      summary:
+        "! A private message to an account (not chat); answers {json:{errors,data:{delivered}}}; 5 a day",
     }),
   ],
   setup: [],
