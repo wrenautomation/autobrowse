@@ -25,7 +25,7 @@ describe("claudeCodeLlm", () => {
     const reply = await llm.complete({ system: "be terse", prompt: "hi", json: true });
     expect(reply).toEqual({
       text: '{"ok":true}',
-      usage: { inputTokens: 120, outputTokens: 8 },
+      usage: { inputTokens: 120, outputTokens: 8, cachedTokens: 0 },
       model: "sonnet",
     });
     const [c] = calls;

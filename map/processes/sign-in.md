@@ -24,13 +24,13 @@ If flows signed in themselves, every flow would carry every site's quirks and ev
 2. `loginProvider` resolves the spec (`resolveLogin`), lists methods (`methodsOf`: password first, then each `via`) — `src/auth/login.ts:545-628,416,630`
 3. `signInContext` binds the credential, the code sources and the phone notifier — `src/auth/login.ts:473`; codes: `src/auth/codes.ts:68-142`, inbox lock `:177`
 4. The page is bound to the spec's origins (`boundPage`, `passwordDomains`) so a fill of the password on any other host is refused and recorded — `src/auth/guard.ts:88`, `src/auth/login.ts:392`
-5. `spec.signIn(ctx)`: `formLogin` for a form (`src/auth/login.ts:194`), `oauthLogin` presses the provider button and hands to `providerOf(via).signIn` (`:272`, `src/auth/providers.ts:31`), a walk for a branching site (`googleWalk`, `src/auth/google.ts`; `walk()`, `src/browser/screens.ts:409`)
+5. `spec.signIn(ctx)`: `formLogin` for a form (`src/auth/login.ts:194`), `oauthLogin` presses the provider button and hands to `providerOf(via).signIn` (`:272`, `src/auth/providers.ts:31`), a walk for a branching site (`googleWalk`, `src/auth/google.ts`; `walk()`, `src/browser/screens.ts:418`)
 6. A method that throws `LoginFailed` yields to the next; none left → `no-credential` — `src/auth/login.ts:175,572-612`
 7. The runner retries the open; a wall still there is a person's (`NeedsHuman`) — `src/browser/flow.ts:512-533`
 
 ## If you change this
 
-- **Hits:** every spec in `src/auth/sites.ts`, `src/auth/google.ts`, `src/app/services.ts:598` (`loginFor`), compiled workflows and site browser legs (they meet walls through the same hook), `autobrowse login`, `accounts check`, `test/google.test.ts`, `test/site-fakes.ts`.
+- **Hits:** every spec in `src/auth/sites.ts`, `src/auth/google.ts`, `src/app/services.ts:665` (`loginFor`), compiled workflows and site browser legs (they meet walls through the same hook), `autobrowse login`, `accounts check`, `test/google.test.ts`, `test/site-fakes.ts`.
 - **Does not hit:** API legs (tokens, never a wall), the engine.
 
 ## Surfaces

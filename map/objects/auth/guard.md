@@ -24,7 +24,7 @@ A fill whose value is a secret is checked against the page's host before anythin
 
 ## Connected to
 
-- **owned-by:** `loginProvider`; `compiledDeps` (`src/workflows/compiled-deps.ts:31-37`); the explore server (`secretHosts`, `src/explore/server.ts:319`)
+- **owned-by:** `loginProvider`; `compiledDeps` (`src/workflows/compiled-deps.ts:31-37`); the explore server (`secretHosts`, `src/explore/server.ts:355`)
 - **joins:** [[credential]] (audit), [[flow]], [[site-login]]
 
 ## If you change this

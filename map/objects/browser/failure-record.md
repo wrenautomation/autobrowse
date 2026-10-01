@@ -18,7 +18,7 @@ Heal, repair and the evaluator all start from the same file: site, flow, url, th
 ## Shape
 
 - `FailureRecord` — `src/browser/session.ts:51-68`
-- Written by the runner into `ARTIFACTS_DIR` (default `~/.config/autobrowse/artifacts`, `src/app/services.ts:492`); `App.onFailure` hands each one to the healer — `src/app/services.ts:400`, `src/app/backend.ts:216`
+- Written by the runner into `ARTIFACTS_DIR` (default `~/.config/autobrowse/artifacts`, `src/app/services.ts:498`); `App.onFailure` hands each one to the healer — `src/app/services.ts:406`, `src/app/backend.ts:217`
 - Read: `readFailures` — `src/agent/evaluator.ts:42`; `locateFailure` — `src/agent/heal.ts:72`
 
 ## Connected to
@@ -29,7 +29,7 @@ Heal, repair and the evaluator all start from the same file: site, flow, url, th
 
 ## If you change this
 
-- **Hits:** `src/agent/heal.ts`, `src/agent/evaluator.ts`, `src/app/backend.ts:216`, UI `/api/artifacts` (`src/ui/api.ts:551`), `autobrowse repair`.
+- **Hits:** `src/agent/heal.ts`, `src/agent/evaluator.ts`, `src/app/backend.ts:217`, UI `/api/artifacts` (`src/ui/api.ts:551`), `autobrowse repair`.
 - **Does not hit:** the run object or registry.
 
 ## Surfaces

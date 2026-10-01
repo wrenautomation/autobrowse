@@ -20,8 +20,8 @@ Cards never pass through a model or a log: `place{secret:"card.number"}` reads t
 - `Card { label, kind, holder, number, expMonth, expYear, cvc, postal?, owner?, email?, phone?, addedAt }` — `src/money/wallet.ts:29-50`; `luhn`, `cardBrand`, `admitCard`, `parseCardLine`, `cardFromFields` — `:53-198`
 - `Wallet`, `fileWallet` (`~/.config/autobrowse/wallet.sealed`, `src/app/config.ts:223`), `ssmWallet` (`/wallet/cards`), `backedUpWallet`, `pickCard` — `src/money/wallet.ts:200-458`; `cardSecret(name)` — `:415`
 - `Profile`, `Address`, `contactsOf`, `ProfileStore` (`/wallet/profiles`) — `src/money/profile.ts:36-239`
-- `profileSecret` (`profile.<field>`, `profile@<id>.<field>`), `profileField` — `src/money/profile.ts:130-149`; explore reads them through `profiles` (`profilesForPlace`, `src/app/services.ts:747`)
-- `Charge`, `Receipt`, `Invoice`, `reportCharge` (texted, emailed, written down) — `src/money/charges.ts:18-160`; `cardsOnFile` (which card each host holds) — `src/explore/server.ts:341-345`
+- `profileSecret` (`profile.<field>`, `profile@<id>.<field>`), `profileField` — `src/money/profile.ts:130-149`; explore reads them through `profiles` (`profilesForPlace`, `src/app/services.ts:814`)
+- `Charge`, `Receipt`, `Invoice`, `reportCharge` (texted, emailed, written down) — `src/money/charges.ts:18-160`; `cardsOnFile` (which card each host holds) — `src/explore/server.ts:377-381`
 
 ## Connected to
 
@@ -31,7 +31,7 @@ Cards never pass through a model or a log: `place{secret:"card.number"}` reads t
 
 ## If you change this
 
-- **Hits:** `src/explore/server.ts:326-353`, `src/money/profile.ts`, `src/money/charges.ts`, `src/app/services.ts:694-822` (`walletFor`, `profilesFor`, `profilesForPlace`, `cardsFor`, `chargesFor`), `src/app/cli-wallet.ts`, `src/auth/ingest.ts`.
+- **Hits:** `src/explore/server.ts:362-389`, `src/money/profile.ts`, `src/money/charges.ts`, `src/app/services.ts:761-889` (`walletFor`, `profilesFor`, `profilesForPlace`, `cardsFor`, `chargesFor`), `src/app/cli-wallet.ts`, `src/auth/ingest.ts`.
 - **Does not hit:** the credential vault; site API tokens.
 
 ## Surfaces

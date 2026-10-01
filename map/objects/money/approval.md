@@ -20,7 +20,7 @@ One question per act, asked once and remembered until answered and consumed. A c
 - `Approval { what, url, site, amount? }`; `Approver = (ask) => true | false | null` — `src/gates/payment.ts:105-119`
 - `GateReason = no-approver | denied | no-answer | asked`; `PaymentGate` with the wording — `:122-145`; `PendingApprovals.decide(key, ask, wait)` — `:147`
 - What counts as spending: `chargesNow(hints)`, `paymentGate(act, hints)`, `paymentAmount`, `totalIn`, `amountNear` — `:25-103`
-- Asked over a channel: `askOverChannel` — `src/gates/ask.ts:27`; policed by [[spend-policy]]; wired by `approverFor` — `src/app/services.ts:950`
+- Asked over a channel: `askOverChannel` — `src/gates/ask.ts:27`; policed by [[spend-policy]]; wired by `approverFor` — `src/app/services.ts:1017`
 
 ## Connected to
 
@@ -30,7 +30,7 @@ One question per act, asked once and remembered until answered and consumed. A c
 
 ## If you change this
 
-- **Hits:** `src/gates/spend.ts:197` (`policedApprover`), `src/gates/ask.ts`, `src/explore/server.ts`, `src/browser/flow.ts` (act path), `src/sites/facade.ts`, `src/app/services.ts:950`, `src/money/charges.ts`.
+- **Hits:** `src/gates/spend.ts:197` (`policedApprover`), `src/gates/ask.ts`, `src/explore/server.ts`, `src/browser/flow.ts` (act path), `src/sites/facade.ts`, `src/app/services.ts:1017`, `src/money/charges.ts`.
 - **Does not hit:** `src/engine/effects.ts`; the vault.
 
 ## Surfaces

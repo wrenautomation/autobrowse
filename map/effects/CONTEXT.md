@@ -20,6 +20,9 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | accounts and purposes | [[account]] | [[site-facade]] (which account runs), [[need]], `Policy` |
 | the compiler's output | [[compiled-workflow]] | [[outline]], [[proof]], [[heal]] process, `src/index.ts` exports |
 | the explore command set | [[explore-session]] | `.claude/skills/autobrowse/`, [[agent-session]], `src/mcp/server.ts` |
+| a run row, the `goal`/`done` commands | [[explore-run]] | [[walk-spec]] (build reads acts and looks), [[llm-call]] (`tokens` reads `cmd` rows), `.claude/skills/autobrowse/explore.md` |
+| a walk's spec or how one is built or run | [[walk-spec]] | [[screen]] (`walk()`), [[outline]] (op schemas), walk files on disk (`WALK_VERSION`) |
+| what is counted per model call | [[llm-call]] | every `purpose` caller, `src/runs/tokens.ts` |
 | what spends and who says yes | [[approval]] | [[spend-policy]], [[card]], [[site-api]] `spends` |
 | a state file's path or format | [[state-files]] | the owning card, `deploy/compose.prod.yml` volumes |
 | an env variable | [[settings]] | `compose.yml`, `deploy/prod.env.example`, `README.md`, the box's env |

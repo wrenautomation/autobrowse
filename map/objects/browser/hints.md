@@ -29,7 +29,7 @@ One vocabulary is captured by the recorder, kept in outlines, typed in flows, pr
 
 ## If you change this
 
-- **Hits:** `src/browser/locate.ts`, `src/recorder/observer.ts`, `src/compiler/outline.ts:11-24` (its own hints schema), `src/compiler/render.ts:47`, `src/browser/repair.ts`, `src/browser/fixes.ts`, `src/browser/screens.ts`, `src/gates/payment.ts:25-100`, `src/agent/digest.ts`.
+- **Hits:** `src/browser/locate.ts`, `src/recorder/observer.ts`, `src/compiler/outline.ts:11-26` (its own hints schema), `src/compiler/render.ts:47`, `src/browser/repair.ts`, `src/browser/fixes.ts`, `src/browser/screens.ts`, `src/gates/payment.ts:25-100`, `src/agent/digest.ts`.
 - **Does not hit:** desktop ops; site API routes.
 
 ## Surfaces
