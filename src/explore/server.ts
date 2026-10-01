@@ -85,6 +85,7 @@ import {
   looksLikeSecretValue,
   REDACTED,
   redactAria,
+  redactRow,
   redactText,
 } from "../recorder/redact.js";
 import { saveRecording } from "../recorder/store.js";
@@ -840,7 +841,7 @@ async function serve(
     (await snapshotPage(page, 150))
       .split("\n")
       .filter(Boolean)
-      .map((r) => redactText(r));
+      .map((r) => redactRow(r));
   const runOne = async (c: Command, wait: boolean): Promise<unknown> => {
     page = fp.page;
     if (IMMEDIATE.has(c.cmd)) return act(c, wait);
@@ -1006,7 +1007,12 @@ async function serve(
         return { aria: out(redactAria(tree.slice(0, c.limit ?? 12_000)), c.raw) };
       }
       case "snapshot":
-        return { rows: await snapshotPage(page, c.limit ?? 120) };
+        return {
+          rows: (await snapshotPage(page, c.limit ?? 120))
+            .split("\n")
+            .map((r) => redactRow(r))
+            .join("\n"),
+        };
       case "text":
         return { text: out(await bodyText(page, c.limit ?? 4_000), c.raw) };
       case "url":

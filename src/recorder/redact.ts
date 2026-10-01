@@ -3,7 +3,7 @@
  * names that say secret) and the value (token shapes). Either one masks.
  */
 const SECRET_FIELD =
-  /pass(word|wd|phrase)?|secret|token|api[-_ ]?key|private|credential|otp|code|pin|ssn|cvv|cvc|card|\bdsn\b|\bexp(iry|iration)?\b|mm\s*\/\s*yy|valid thru|name on/i;
+  /pass(word|wd|phrase)?|secret|token|api[-_ ]?key|private|credential|otp|code|pin|ssn|cvv|cvc|card|\bdsn\b|\bexp\b|(\b|_)exp(iry|iration)|mm\s*\/\s*yy|valid thru|name on/i;
 
 const SECRET_VALUES: RegExp[] = [
   /\bAKIA[0-9A-Z]{16}\b/, // AWS access key id
@@ -56,6 +56,17 @@ export function redactText(text: string): string {
   for (const re of SECRET_VALUES)
     out = out.replace(new RegExp(re.source, `${re.flags}g`), REDACTED);
   return out.replace(CARD_RUN, (run) => (luhnValid(run.replace(/\D/g, "")) ? REDACTED : run));
+}
+
+/**
+ * A snapshot row of a dropdown named as a secret field shows its choice
+ * (`button role=combobox id=pidlInput_expiryMonth text=01`): masked.
+ */
+export function redactRow(row: string): string {
+  const [head, text] = row.split(/ text=(.*)$/, 2);
+  const secret =
+    text !== undefined && /role=combobox|^select /.test(row) && SECRET_FIELD.test(head ?? "");
+  return redactText(secret ? `${head} text=${REDACTED}` : row);
 }
 
 const FIELD_LINE = /^(\s*)-\s*(?:'|")?(?:textbox|searchbox|combobox)\s+"([^"]*)"[^:\n]*:/;

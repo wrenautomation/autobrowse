@@ -9,6 +9,7 @@ import {
   looksLikeSecretField,
   looksLikeSecretValue,
   redactAria,
+  redactRow,
   redactText,
 } from "../src/recorder/redact.js";
 import { listRecordingSummaries, listRecordings, saveRecording } from "../src/recorder/store.js";
@@ -25,6 +26,15 @@ describe("redact", () => {
     expect(looksLikeSecretValue("wren-six.com")).toBe(false);
     expect(redactText("export TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123 && echo ok")).toBe(
       "export TOKEN=<redacted> && echo ok",
+    );
+  });
+
+  it("masks a secret dropdown's choice in a snapshot row", () => {
+    expect(redactRow("button role=combobox type=button id=pidlInput_expiryMonth text=01")).toBe(
+      "button role=combobox type=button id=pidlInput_expiryMonth text=<redacted>",
+    );
+    expect(redactRow("button role=combobox type=button id=pidlInput_region text=Alberta")).toBe(
+      "button role=combobox type=button id=pidlInput_region text=Alberta",
     );
   });
 });

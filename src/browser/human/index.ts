@@ -118,7 +118,7 @@ export interface Hands {
   /** A control: replace what it holds with `text`. A page: type at the caret. */
   type(target: KeyTarget, text: string, o: ActTimeout): Promise<void>;
   press(target: KeyTarget, key: string, o: ActTimeout): Promise<void>;
-  /** A control: replace what it holds with `text` in one go, as autofill does. */
+  /** A control: replace what it holds with `text` in one go, as autofill does. A dropdown: choose the option. */
   paste(target: Locator, text: string, o: ActTimeout): Promise<void>;
   /** Press at `from`, carry to `to`, let go: points inside the control from its top-left (a slider, a captcha piece). */
   drag(target: Locator, from: Point, to: Point, o: ActTimeout): Promise<void>;
@@ -140,7 +140,9 @@ export const instantHands: Hands = {
   click: (target, { at, ...o }) => target.click({ ...o, ...(at ? { position: at } : {}) }),
   type: (target, text, o) => (isPage(target) ? target.keyboard.type(text) : target.fill(text, o)),
   press: (target, key, o) => (isPage(target) ? target.keyboard.press(key) : target.press(key, o)),
-  paste: (target, text, o) => target.fill(text, o),
+  paste: async (target, text, o) => {
+    if (!(await chosen(target, text, o, (l) => l.click(o)))) await target.fill(text, o);
+  },
   async drag(target, from, to, o) {
     const { mouse } = target.page();
     const box = await boxOf(target, o);
@@ -333,6 +335,7 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
       if (!isPage(target) && text && (await fieldValue(target)) === "") await target.fill(text, o);
     },
     async paste(target, text, o) {
+      if (await chosen(target, text, o, (l) => click(l, o))) return;
       await click(target, o);
       await rest(target.page(), pace.mouse.hover, pace, random).catch(() => undefined);
       // A code split one box per character (Microsoft's six digit boxes): a fill lands
@@ -366,6 +369,34 @@ const hasFocus = (target: Locator): Promise<boolean> =>
  * How many characters the field holds: its maxlength, else 1 for a box in a row of
  * code boxes (`codeEntry-0`, `otp-1`, "digit 1"); null when it is an ordinary field.
  */
+/**
+ * A dropdown takes a value by its option, not by keys: a native select, or a
+ * button that opens a list (Azure's card expiry month). True when it was one.
+ */
+async function chosen(
+  target: Locator,
+  text: string,
+  o: ActTimeout,
+  tap: (l: Locator) => Promise<void>,
+): Promise<boolean> {
+  const kind = await target
+    .evaluate((el) =>
+      el.tagName === "SELECT"
+        ? "select"
+        : el.tagName !== "INPUT" && el.getAttribute("role") === "combobox"
+          ? "list"
+          : null,
+    )
+    .catch(() => null);
+  if (kind === "select") await target.selectOption(text, o);
+  else if (kind === "list") {
+    await tap(target);
+    const option = target.page().getByRole("option", { name: text, exact: true });
+    await tap(option.locator("visible=true").first());
+  }
+  return kind !== null;
+}
+
 const boxWidth = (target: Locator): Promise<number | null> =>
   target
     .evaluate((el) => {
