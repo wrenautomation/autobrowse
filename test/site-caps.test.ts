@@ -301,6 +301,19 @@ describe("who spent a cap", () => {
     expect(report.calls).toHaveLength(2);
     expect(facade(caps, []).caps("2026-09-28").calls).toEqual([]);
   });
+
+  it("a failed metered read is a terminal 502: a durable retry would spend a read per try", async () => {
+    const caps = memoryCaps(() => noon);
+    const err = await facade(caps, [], true)
+      .call("linkedin", "GET", "/company/acme/jobs", {}, "linkedin@research")
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SiteError);
+    expect(err).toMatchObject({ status: 502 });
+    expect((err as Error).message).toMatch(
+      /GET \/company\/\{company\}\/jobs failed after spending a read/,
+    );
+    expect(caps.today()).toEqual({ "linkedin|r@x.com|company": 1 });
+  });
 });
 
 describe("the caps ledger on disk", () => {

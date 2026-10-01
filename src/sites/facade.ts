@@ -478,7 +478,14 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         return out;
       } catch (e) {
         note("failed");
-        throw e;
+        if (!use || !s.caps || e instanceof SiteError) throw e;
+        // The slot is spent whatever broke: a durable retry would spend one per try, so
+        // a failed metered read ends here and the caller chooses (six reads ate 40, 2026-10-01).
+        const why = e instanceof Error ? e.message.slice(0, 200) : String(e);
+        throw new SiteError(
+          502,
+          `${s.site} ${method} ${r.path} failed after spending a read: ${why}`,
+        );
       }
       async function answer(): Promise<unknown> {
         const amount = r.spends ? r.spends(parsed.data as never) : false;
