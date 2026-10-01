@@ -52,6 +52,14 @@ describe("read", () => {
         .text,
     ).toBe("## Team\n\n- Ann 'A'\n- Bo");
   });
+
+  it("html to text: a table row reads across", () => {
+    expect(
+      htmlText(
+        "<table><thead><tr><th>Plan</th> <th>Price</th></tr></thead><tr><td>Pro</td><td>$40</td></tr></table>",
+      ).text,
+    ).toBe("Plan | Price\nPro | $40");
+  });
 });
 
 describe("search", () => {

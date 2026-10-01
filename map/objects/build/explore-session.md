@@ -17,12 +17,13 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 
 ## Shape
 
-- `Command` (open, click, fill, place, keep, aria, read, note, save, os …) — `src/explore/server.ts:216`; `ExploreOptions` — `:338-420`; `Explorer` — `:447`
+- `Command` (open, click, fill, place, keep, aria, read, note, save, os …) — `src/explore/server.ts:220`; `ExploreOptions` — `:338-420`; `Explorer` — `:447`
 - Journal: `journalFileFor(recordingsDir, site, id)` under `recordings/.explore-<site>/` — `:423`; `readJournal` — `:427`; `DEFAULT_IDLE_MINUTES` 30 — `:441`
 - Money and secrets on this path: `secrets`/`secretHosts` (place by name), `profiles` (a profile field, any host), `cards`, `cardsOnFile`, `charges`, `approve`, `audit` — `:353-393`; `placeHint` names the flag a missing secret needs — `:261-277`
 - Help by hand, no pause: acts a person does between two commands count (`byHand`, `HAND_GRACE_MS` — `:279`, `:595-602`); the next answer carries `helped {acts, url, changed, note}` — `helpedSince` `:1027`
 - A target with no `frame` the page lacks is looked for in each visible iframe (`withFrame`, `src/browser/frames.ts`), so `place` on a card provider's hosted field (Braintree) works with plain role/name hints — `:1045-1049`
 - History: every command, act and ending also goes to the session's [[explore-run]] (`goal`, `done`; `openRun` `:633`, `endRun` `:660`), which outlives the journal
+- `text` reads the page as laid out (`layoutText`, `src/browser/layout.ts`): rendered text blocks cut apart by whitespace (XY-cut) into rows, tables and columns; `layout: false` is `innerText`
 - Opened by `explorerOpener` — `src/app/backend.ts:247`; the CLI `record`/`explore` verbs in `src/app/cli-record.ts`
 
 ## Connected to
@@ -34,7 +35,7 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 
 ## If you change this
 
-- **Hits:** `src/agent/explorer.ts`, `src/agent/sessions.ts`, `src/app/cli-record.ts`, `src/app/backend.ts:247`, `.claude/skills/autobrowse/explore.md` and the skill's scripts (the command list is documented there), `src/mcp/server.ts`.
+- **Hits:** `src/agent/explorer.ts`, `test/layout.test.ts` (the `text` layout), `src/agent/sessions.ts`, `src/app/cli-record.ts`, `src/app/backend.ts:247`, `.claude/skills/autobrowse/explore.md` and the skill's scripts (the command list is documented there), `src/mcp/server.ts`.
 - **Does not hit:** compiled workflows already rendered; the run object.
 
 ## Surfaces

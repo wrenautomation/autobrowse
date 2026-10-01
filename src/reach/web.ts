@@ -121,7 +121,7 @@ const decode = (s: string) =>
     .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
     .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => String.fromCodePoint(Number.parseInt(n, 16)));
 
-/** HTML to plain text a person would read: no scripts, headings marked, blocks on their own lines. */
+/** HTML to plain text a person would read: no scripts, headings marked, blocks on their own lines, table rows across. */
 export function htmlText(html: string): { title: string | null; text: string } {
   const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
   const body = html
@@ -129,6 +129,8 @@ export function htmlText(html: string): { title: string | null; text: string } {
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/<h([1-6])[^>]*>/gi, (_, n: string) => `\n\n${"#".repeat(Number(n))} `)
     .replace(/<li[^>]*>/gi, "\n- ")
+    // A table row reads across, its cells apart: `Plan | Price`.
+    .replace(/<\/t[dh]>\s*(?=<t[dh][\s>])/gi, " | ")
     .replace(/<(br|\/p|\/div|\/h[1-6]|\/tr|\/section|\/article|\/header|\/footer)[^>]*>/gi, "\n")
     .replace(/<[^>]+>/g, " ");
   const text = decode(body)

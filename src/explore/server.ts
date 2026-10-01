@@ -39,6 +39,7 @@ import {
 import { ariaWithFrames, withFrame } from "../browser/frames.js";
 import { handsFor } from "../browser/human/index.js";
 import { inPage } from "../browser/in-page.js";
+import { layoutText } from "../browser/layout.js";
 import { type Hints, locate, locateAll, textOf } from "../browser/locate.js";
 import { snapshotPage } from "../browser/repair.js";
 import { lookAt, type PageLook } from "../browser/screens.js";
@@ -161,10 +162,13 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   }),
   /** Interactive elements as one line each, what the repairer sees. */
   z.object({ cmd: z.literal("snapshot"), limit: z.number().int().positive().optional() }),
+  /** The page's words as laid out (rows, tables, columns); `layout: false` = DOM order, `coords` = `@x,y` per line. */
   z.object({
     cmd: z.literal("text"),
     limit: z.number().int().positive().optional(),
     raw: z.boolean().optional(),
+    layout: z.boolean().optional(),
+    coords: z.boolean().optional(),
   }),
   z.object({ cmd: z.literal("url") }),
   /** Every open page (an OAuth popup beside the main one); `page` switches to one by index, "main" returns. */
@@ -1167,7 +1171,14 @@ async function serve(
             .join("\n"),
         };
       case "text":
-        return { text: out(await bodyText(page, c.limit ?? 4_000), c.raw) };
+        return {
+          text: out(
+            c.layout === false
+              ? await bodyText(page, c.limit ?? 4_000)
+              : await layoutText(page, c.limit ?? 4_000, { coords: c.coords === true }),
+            c.raw,
+          ),
+        };
       case "url":
         return { url: page.url() };
       case "pages":
