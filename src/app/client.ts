@@ -5,6 +5,7 @@ import type { RunObject } from "../engine/object.js";
 import { REGISTRY_KEY, type RunsRegistry, registryOf } from "../engine/registry.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import { DEFAULT_OWNER, named } from "../owner.js";
+import { SITES_SERVICE, type SitesService } from "../sites/service.js";
 import { COMPILED_OBJECT, compiledKey, HAND_WRITTEN } from "../workflows/compiled.js";
 
 export interface IngressOptions {
@@ -34,6 +35,9 @@ export function ingress(opts: IngressOptions) {
       conn.serviceClient<BrowserService>({
         name: named(BROWSER_SERVICE, owner),
       } as BrowserService),
+    /** The worker's site facade (`sites/*`): the box's tokens, caps and ledger. */
+    sites: () =>
+      conn.serviceClient<SitesService>({ name: named(SITES_SERVICE, owner) } as SitesService),
   };
 }
 

@@ -8,9 +8,20 @@
  * books each call a slot at least `gapMs` (plus up to `jitterMs`, random)
  * after the last one for that account; the caller sleeps until it. A slot
  * further out than `maxWaitMs` is refused like a cap, with its seconds.
+ *
+ * Who spent it: every metered call is noted (caller, route, outcome), a file
+ * per UTC day beside the caps file, kept two weeks.
  */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import {
+  appendFileSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 
 export interface Taken {
   ok: boolean;
@@ -49,7 +60,30 @@ export interface DailyCaps {
   slot(site: string, account: string, pace: Pace): Slot;
   /** What each bucket has used today, by `site|account|bucket`. */
   today(): Record<string, number>;
+  /** Note one metered call: who asked, which route, how it went. */
+  note(call: MeteredCall): void;
+  /** The day's noted calls (UTC `YYYY-MM-DD`, today when absent), oldest first. */
+  calls(day?: string): MeteredCall[];
 }
+
+/** One metered call. `route` is the template (`GET /in/{vanity}`), never the path a person's name is in. */
+export interface MeteredCall {
+  at: string;
+  site: string;
+  account: string;
+  route: string;
+  use: Record<string, number>;
+  /** Whoever the caller said it is (`x-caller`, or the request's `caller`); null when it said nothing. */
+  caller: string | null;
+  /** The Restate invocation, so the caller's own target can be looked up there. */
+  invocation?: string;
+  /** `capped` and `paced` spent nothing; `failed` spent the cap and got no answer. */
+  outcome: "ok" | "failed" | "capped" | "paced";
+  /** The full bucket, when capped. */
+  bucket?: string;
+}
+
+const KEEP_DAYS = 14;
 
 interface Day {
   day: string;
@@ -66,9 +100,15 @@ const untilTomorrow = (t: number) => {
   return Math.ceil((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1) - t) / 1000);
 };
 
+interface CallLog {
+  add(day: string, call: MeteredCall): void;
+  read(day: string): MeteredCall[];
+}
+
 function capsOn(
   load: () => Day | null,
   save: (d: Day) => void,
+  log: CallLog,
   now: () => number,
   random: () => number,
 ): DailyCaps {
@@ -107,6 +147,52 @@ function capsOn(
       return { ok: true, waitMs };
     },
     today: () => current().used,
+    note: (call) => log.add(call.at.slice(0, 10), call),
+    calls: (day) => log.read(day ?? dayOf(now())),
+  };
+}
+
+/** A file per day under `dir`; a new day's first note drops files older than two weeks. */
+function fileLog(dir: string, now: () => number): CallLog {
+  let made = "";
+  return {
+    add(day, call) {
+      if (made !== day) {
+        mkdirSync(dir, { recursive: true, mode: 0o700 });
+        const oldest = dayOf(now() - KEEP_DAYS * 86_400_000);
+        for (const f of readdirSync(dir))
+          if (f.endsWith(".jsonl") && f.slice(0, 10) < oldest)
+            rmSync(join(dir, f), { force: true });
+        made = day;
+      }
+      appendFileSync(join(dir, `${day}.jsonl`), `${JSON.stringify(call)}\n`, { mode: 0o600 });
+    },
+    read(day) {
+      let text = "";
+      try {
+        text = readFileSync(join(dir, `${day}.jsonl`), "utf8");
+      } catch {
+        return [];
+      }
+      const rows: MeteredCall[] = [];
+      for (const line of text.split("\n")) {
+        if (!line) continue;
+        try {
+          rows.push(JSON.parse(line) as MeteredCall);
+        } catch {
+          // A torn last line from a crash: the rest still reads.
+        }
+      }
+      return rows;
+    },
+  };
+}
+
+function memoryLog(): CallLog {
+  const days = new Map<string, MeteredCall[]>();
+  return {
+    add: (day, call) => days.set(day, [...(days.get(day) ?? []), call]),
+    read: (day) => days.get(day) ?? [],
   };
 }
 
@@ -130,6 +216,7 @@ export function fileCaps(
       writeFileSync(tmp, `${JSON.stringify(d)}\n`, { mode: 0o600 });
       renameSync(tmp, path);
     },
+    fileLog(join(dirname(path), "caps-calls"), now),
     now,
     random,
   );
@@ -145,6 +232,7 @@ export function memoryCaps(
     (d) => {
       kept = d;
     },
+    memoryLog(),
     now,
     random,
   );

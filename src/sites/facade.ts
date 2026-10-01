@@ -12,7 +12,7 @@ import { type JsonSchema, jsonSchemaOf } from "../engine/inputs.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import type { Approver } from "../gates/payment.js";
 import type { Proof, RunAs } from "../workflows/proof.js";
-import type { DailyCaps } from "./caps.js";
+import type { DailyCaps, MeteredCall } from "./caps.js";
 import { accessTokens, accountEnv, pointTo, runConsent } from "./oauth.js";
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -117,6 +117,19 @@ export interface SiteRow {
   probe?: SiteApi["probe"];
 }
 
+/** Who is calling, for the caps ledger: `caller` as the caller names itself, `invocation` its Restate id. */
+export interface CallFrom {
+  caller?: string | null;
+  invocation?: string;
+}
+
+export interface CapsReport {
+  day: string;
+  /** By `site|account|bucket`; today's only (a past day keeps its calls, not its counts). */
+  used: Record<string, number>;
+  calls: MeteredCall[];
+}
+
 export interface SiteFacade {
   list(): Promise<SiteRow[]>;
   status(site: string): Promise<SiteRow>;
@@ -127,7 +140,10 @@ export interface SiteFacade {
     path: string,
     input: Record<string, unknown>,
     account?: string | null,
+    from?: CallFrom,
   ): Promise<unknown>;
+  /** A day's capped reads (today when absent): what each bucket used and every metered call, who asked. */
+  caps(day?: string, site?: string): CapsReport;
   /** Run one setup step; what it makes lands in the sink (under the account's name, with one). */
   setup(
     site: string,
@@ -370,7 +386,19 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
   return {
     list: () => Promise.all(sites.map(status)),
     status: (name) => status(site(name)),
-    async call(name, method, path, input, named) {
+    caps(day, only) {
+      const today = new Date((deps.now ?? Date.now)()).toISOString().slice(0, 10);
+      const at = day ?? today;
+      const used = at === today && deps.caps ? deps.caps.today() : {};
+      return {
+        day: at,
+        used: Object.fromEntries(
+          Object.entries(used).filter(([k]) => !only || k.startsWith(`${only}|`)),
+        ),
+        calls: (deps.caps?.calls(at) ?? []).filter((c) => !only || c.site === only),
+      };
+    },
+    async call(name, method, path, input, named, from) {
       const s = site(name);
       // A credential name (`linkedin@research`) is the account whose username it holds.
       const account = named
@@ -404,72 +432,102 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           ? ((await tokenFor(s, chosen)) ?? (fallback ? await tokenFor(s, null) : null))
           : null;
       const byBrowser = !(r.api && token !== null) && Boolean(r.browser);
+      const use = r.meter?.(parsed.data as never);
+      const note = (outcome: MeteredCall["outcome"], bucket?: string) => {
+        if (!use || !s.caps || !deps.caps) return;
+        deps.caps.note({
+          at: new Date((deps.now ?? Date.now)()).toISOString(),
+          site: s.site,
+          account: chosen ?? s.site,
+          route: `${method} ${r.path}`,
+          use,
+          caller: from?.caller ?? null,
+          ...(from?.invocation ? { invocation: from.invocation } : {}),
+          outcome,
+          ...(bucket ? { bucket } : {}),
+        });
+      };
       // Paced before counted: a refusal here spends none of the day's cap.
       const slot =
         byBrowser && s.pace && deps.caps ? deps.caps.slot(s.site, chosen ?? s.site, s.pace) : null;
+      if (slot && !slot.ok) note("paced");
       if (slot && !slot.ok)
         throw new SiteError(
           429,
           `${s.site} pace for ${chosen ?? "the default account"}: too many calls queued; retry after ${slot.retryAfter}s`,
           slot.retryAfter,
         );
-      const use = r.meter?.(parsed.data as never);
       if (use && s.caps && deps.caps) {
         const limits = { ...s.caps, ...(await capsOfAccount(s, chosen)) };
         const t = deps.caps.take(s.site, chosen ?? s.site, use, limits);
-        if (!t.ok)
+        if (!t.ok) {
+          note("capped", t.bucket);
+          const who = chosen ?? "the default account";
           throw new SiteError(
             429,
-            `${s.site} ${t.bucket} cap for ${chosen ?? "the default account"} is used (${t.used}/${t.cap} today); retry after ${t.retryAfter}s`,
+            t.cap === 0
+              ? `${s.site} ${t.bucket} reads are off for ${who} (cap 0)`
+              : `${s.site} ${t.bucket} cap for ${who} is used (${t.used}/${t.cap} today); retry after ${t.retryAfter}s`,
             t.retryAfter,
           );
+        }
       }
-      const amount = r.spends ? r.spends(parsed.data as never) : false;
-      if (amount !== false) {
-        const what = `${method} ${path} on ${name}, which spends`;
-        if (!deps.approve)
-          throw new SiteError(
-            403,
-            `${what}: no channel to ask on (set PHONE_NUMBER, LINQ_* or NOTIFY_TO)`,
-          );
-        const ok = await deps.approve({
-          what,
-          url: `${s.origin}${path}`,
-          site: name,
-          ...(amount ? { amount } : {}),
-        });
-        if (!ok) throw new SiteError(403, `${what}: refused`);
+      try {
+        const out = await answer();
+        note("ok");
+        return out;
+      } catch (e) {
+        note("failed");
+        throw e;
       }
-      if (r.api && token !== null)
-        return r.api(parsed.data as never, { token, http: deps.http, env: deps.env });
-      if (r.browser) {
-        // The same account the API leg would have used: its profile, so a browser
-        // leg posts as the site's own identity and never as whoever the default
-        // profile happens to be signed in as.
-        // A site with its own logins (LinkedIn) keeps the account in its own `site@label` profile.
-        const at = deps.providerOf?.(s) ?? s.site;
-        const profile = chosen ? await deps.profileFor?.(at, chosen) : null;
-        if (chosen && at === s.site && deps.profileFor && !profile)
-          throw new SiteError(
-            409,
-            `${method} ${r.path}: no ${s.site} profile signs in as the chosen account (autobrowse accounts); creds paste ${s.site}@<label> with its username`,
-          );
-        const run = await legOf(r.browser, profile, at);
-        if (!run)
-          throw new SiteError(
-            501,
-            `${method} ${r.path}: ${legName(r.browser)} not recorded yet; explore it`,
-          );
-        if (slot?.waitMs) await (deps.sleep ?? sleep)(slot.waitMs);
-        const input = r.browser.input
-          ? r.browser.input(parsed.data as never, deps.env)
-          : parsed.data;
-        const out = r.browser.uploads
-          ? await withLocalFile(input as Record<string, unknown>, r.browser.uploads, run)
-          : await run(input);
-        return r.browser.output ? r.browser.output(out) : out;
+      async function answer(): Promise<unknown> {
+        const amount = r.spends ? r.spends(parsed.data as never) : false;
+        if (amount !== false) {
+          const what = `${method} ${path} on ${name}, which spends`;
+          if (!deps.approve)
+            throw new SiteError(
+              403,
+              `${what}: no channel to ask on (set PHONE_NUMBER, LINQ_* or NOTIFY_TO)`,
+            );
+          const ok = await deps.approve({
+            what,
+            url: `${s.origin}${path}`,
+            site: name,
+            ...(amount ? { amount } : {}),
+          });
+          if (!ok) throw new SiteError(403, `${what}: refused`);
+        }
+        if (r.api && token !== null)
+          return r.api(parsed.data as never, { token, http: deps.http, env: deps.env });
+        if (r.browser) {
+          // The same account the API leg would have used: its profile, so a browser
+          // leg posts as the site's own identity and never as whoever the default
+          // profile happens to be signed in as.
+          // A site with its own logins (LinkedIn) keeps the account in its own `site@label` profile.
+          const at = deps.providerOf?.(s) ?? s.site;
+          const profile = chosen ? await deps.profileFor?.(at, chosen) : null;
+          if (chosen && at === s.site && deps.profileFor && !profile)
+            throw new SiteError(
+              409,
+              `${method} ${r.path}: no ${s.site} profile signs in as the chosen account (autobrowse accounts); creds paste ${s.site}@<label> with its username`,
+            );
+          const run = await legOf(r.browser, profile, at);
+          if (!run)
+            throw new SiteError(
+              501,
+              `${method} ${r.path}: ${legName(r.browser)} not recorded yet; explore it`,
+            );
+          if (slot?.waitMs) await (deps.sleep ?? sleep)(slot.waitMs);
+          const input = r.browser.input
+            ? r.browser.input(parsed.data as never, deps.env)
+            : parsed.data;
+          const out = r.browser.uploads
+            ? await withLocalFile(input as Record<string, unknown>, r.browser.uploads, run)
+            : await run(input);
+          return r.browser.output ? r.browser.output(out) : out;
+        }
+        throw new SiteError(501, `${method} ${r.path}: no token for ${name} and no browser leg`);
       }
-      throw new SiteError(501, `${method} ${r.path}: no token for ${name} and no browser leg`);
     },
     async setup(name, stepName, account, asProfile, over) {
       const s = site(name);

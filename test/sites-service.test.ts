@@ -3,9 +3,10 @@ import type { SiteFacade } from "../src/sites/facade.js";
 import { DESK_SERVICE, SITES_SERVICE, SiteError, sitesService } from "../src/sites/index.js";
 
 /** A stand-in Context: `run` calls through and keeps each step's name and retry policy. */
-function ctxOf() {
+function ctxOf(headers: Record<string, string> = {}) {
   const steps: { name: string; attempts: number | undefined }[] = [];
   const ctx = {
+    request: () => ({ id: "inv_1", headers: new Map(Object.entries(headers)) }),
     run: async <T>(
       name: string,
       fn: () => Promise<T>,
@@ -25,13 +26,18 @@ const facade: SiteFacade = {
     if (site !== "linkedin") throw new SiteError(404, `no site api named ${site}`);
     return { site, origin: "o", authed: true, routes: [], setup: [] };
   },
-  call: async (site, method, path, input) => {
-    calls.push({ site, method, path, input });
+  call: async (site, method, path, input, _account, from) => {
+    calls.push({ site, method, path, input, from });
     if (path === "/rest/boom") throw new SiteError(502, "workflow failed");
     if (path === "/rest/flaky") throw new Error("socket hang up");
     return { id: "urn:li:share:1" };
   },
   setup: async () => ({ made: ["LINKEDIN_ACCESS_TOKEN"] }),
+  caps: (day, site) => ({
+    day: day ?? "2026-10-01",
+    used: { [`${site}|a|company`]: 1 },
+    calls: [],
+  }),
 };
 const h = (
   sitesService(facade) as unknown as { service: Record<string, (...args: never) => unknown> }
@@ -52,6 +58,32 @@ describe("sites service", () => {
     expect(calls.at(-1)).toMatchObject({ method: "POST", input: { commentary: "hi" } });
     expect(steps.map((s) => s.attempts)).toEqual([300, 1]);
     expect(steps[1]?.name).toBe("sites linkedin POST /rest/posts");
+  });
+
+  it("says who is calling: the request's caller, else the x-caller header, and the invocation", async () => {
+    await h.call?.(ctxOf({ "x-caller": "wren:demo" }).ctx, {
+      site: "linkedin",
+      method: "GET",
+      path: "/rest/posts",
+    });
+    expect(calls.at(-1)).toMatchObject({ from: { caller: "wren:demo", invocation: "inv_1" } });
+    await h.call?.(ctxOf({ "x-caller": "wren:demo" }).ctx, {
+      site: "linkedin",
+      method: "GET",
+      path: "/rest/posts",
+      caller: "wren:research",
+    });
+    expect(calls.at(-1)).toMatchObject({ from: { caller: "wren:research" } });
+    await h.call?.(ctxOf().ctx, { site: "linkedin", method: "GET", path: "/rest/posts" });
+    expect(calls.at(-1)).toMatchObject({ from: { caller: null } });
+  });
+
+  it("caps reads a day's ledger, the day checked", async () => {
+    const { ctx } = ctxOf();
+    expect(await h.caps?.(ctx, { site: "linkedin" })).toMatchObject({
+      used: { "linkedin|a|company": 1 },
+    });
+    await expect(h.caps?.(ctx, { day: "yesterday" })).rejects.toMatchObject({ code: 400 });
   });
 
   it("a SiteError is terminal under its status; anything else is left to retry", async () => {

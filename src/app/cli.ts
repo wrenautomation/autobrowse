@@ -359,7 +359,7 @@ program
   });
 
 registerRecordCommands(program, settings, local);
-registerSiteCommands(program, local);
+registerSiteCommands(program, local, api);
 registerUnsubscribe(program, local);
 registerAwsCommands(program, local, settings);
 registerLangfuseCommands(program, () => envStoreFor(settings));

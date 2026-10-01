@@ -2,14 +2,44 @@
  * `autobrowse site`: the site APIs from the terminal, on the same Backend
  * the HTTP face serves. `site` lists them, `site <name>` says what answers
  * and what setup is left, `site <name> call` is one official call, `site
- * <name> setup <step>` makes a key or token, `site check` proves each token live.
+ * <name> setup <step>` makes a key or token, `site check` proves each token live,
+ * `site caps` says who spent a day's capped reads.
  */
 import type { Command } from "commander";
+import type { CapsReport } from "../sites/facade.js";
 import { checkSite, type Method } from "../sites/index.js";
 import type { LocalBackend } from "./backend.js";
 import { readJson } from "./cli-json.js";
+import type { Ingress } from "./client.js";
 
-export function registerSiteCommands(program: Command, local: LocalBackend): void {
+/** `will@wren.com` → `w…@wren.com`: an account named without spelling it out. */
+const maskAddress = (a: string) => a.replace(/^([^@])[^@]*@/, "$1…@");
+
+/** Each bucket's use, then each caller's calls by route and outcome; `--rows` lists them. */
+export function printCaps(r: CapsReport, rows: boolean): void {
+  console.log(`caps ${r.day} (UTC)`);
+  const used = Object.entries(r.used).sort();
+  if (!used.length) console.log("  nothing used");
+  for (const [k, n] of used) {
+    const [site, account, bucket] = k.split("|");
+    console.log(`  ${site} ${maskAddress(account ?? "")} ${bucket}: ${n}`);
+  }
+  const groups = new Map<string, number>();
+  for (const c of r.calls) {
+    const k = `${c.caller ?? "(unnamed)"}  ${c.site} ${maskAddress(c.account)}  ${c.route}  ${c.outcome}${c.bucket ? ` ${c.bucket}` : ""}`;
+    groups.set(k, (groups.get(k) ?? 0) + 1);
+  }
+  console.log(`calls: ${r.calls.length}`);
+  for (const [k, n] of [...groups].sort((a, b) => b[1] - a[1]))
+    console.log(`  ${String(n).padStart(4)}  ${k}`);
+  if (rows)
+    for (const c of r.calls)
+      console.log(
+        `  ${c.at.slice(11, 19)} ${c.caller ?? "(unnamed)"} ${c.route} ${c.outcome}${c.invocation ? ` ${c.invocation}` : ""}`,
+      );
+}
+
+export function registerSiteCommands(program: Command, local: LocalBackend, box?: Ingress): void {
   const site = program
     .command("site")
     .description("Services under their official API's shape: API with a token, browser without")
@@ -134,6 +164,33 @@ export function registerSiteCommands(program: Command, local: LocalBackend): voi
         const input = o.input ? ((await readJson(o.input)) as Record<string, unknown>) : undefined;
         const { made } = await sites.setup(name, step, o.account ?? null, o.profile ?? null, input);
         console.log(`kept ${made.join(", ")}`);
+      },
+    );
+  site
+    .command("caps [site]")
+    .description("A day's capped reads: each bucket's use and who made each call (route, outcome)")
+    .option("--day <yyyy-mm-dd>", "a past day (UTC); today by default")
+    .option("--box", "the box's ledger, through Restate, instead of this machine's")
+    .option("--rows", "every call, with its time and Restate invocation")
+    .option("--json", "the report as JSON")
+    .action(
+      async (
+        name: string | undefined,
+        o: { day?: string; box?: boolean; rows?: boolean; json?: boolean },
+      ) => {
+        let r: CapsReport;
+        if (o.box) {
+          if (!box) throw new Error("no Restate ingress here");
+          r = await box
+            .sites()
+            .caps({ ...(o.day ? { day: o.day } : {}), ...(name ? { site: name } : {}) });
+        } else {
+          const sites = local().backend.sites;
+          if (!sites) throw new Error("no site apis here");
+          r = sites.caps(o.day, name);
+        }
+        if (o.json) console.log(JSON.stringify(r, null, 2));
+        else printCaps(r, Boolean(o.rows));
       },
     );
   site

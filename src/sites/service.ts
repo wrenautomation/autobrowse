@@ -1,7 +1,8 @@
 /**
  * The site facade as the Restate service `sites`, for an orchestrator on the
  * same Restate (wren): `sites/call` is one official-API call, `sites/status`
- * the routes and setup rows, `sites/setup` one setup step, `sites/renew` every token about to lapse. The worker dials
+ * the routes and setup rows, `sites/setup` one setup step, `sites/renew` every token about to lapse,
+ * `sites/caps` a day's capped reads and who made them. The worker dials
  * Restate, so a call queues while the box is down and answers when it is up:
  * no inbound port, no reachability from the caller's side. A `SiteError` is
  * terminal under its own status; a write runs once (an irreversible post is
@@ -33,6 +34,8 @@ const call = site.extend({
   method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
   path: z.string().startsWith("/"),
   input: z.record(z.string(), z.unknown()).default({}),
+  /** Who is asking (`wren:demo`), for the caps ledger; the `x-caller` header says it too. */
+  caller: z.string().min(1).max(120).optional(),
 });
 const setup = site.extend({ step: z.string().min(1) });
 
@@ -70,14 +73,32 @@ export function sitesService(facade: SiteFacade, name: string = SITES_SERVICE) {
       call: async (ctx: restate.Context, raw: unknown) => {
         const req = parse(call, raw);
         const retry = req.method === "GET" ? READ_RETRY : WRITE_RETRY;
+        const from = {
+          caller: req.caller ?? ctx.request().headers.get("x-caller") ?? null,
+          invocation: ctx.request().id,
+        };
         return ctx.run(
           `sites ${req.site} ${req.method} ${req.path}`,
           () =>
             terminalOnSiteError(() =>
-              facade.call(req.site, req.method, req.path, req.input, req.account),
+              facade.call(req.site, req.method, req.path, req.input, req.account, from),
             ),
           retry,
         );
+      },
+      /** A day's capped reads: each bucket's use and every metered call, who asked, how it went. */
+      caps: async (ctx: restate.Context, raw: unknown) => {
+        const q = parse(
+          z.object({
+            day: z
+              .string()
+              .regex(/^\d{4}-\d{2}-\d{2}$/)
+              .optional(),
+            site: z.string().min(1).optional(),
+          }),
+          raw ?? {},
+        );
+        return ctx.run(`sites caps ${q.day ?? "today"}`, () => facade.caps(q.day, q.site));
       },
       /** Make again what lapses within the window (a scheduler's daily call); lines say what happened. */
       renew: async (ctx: restate.Context, raw: unknown) => {

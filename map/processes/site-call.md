@@ -20,14 +20,14 @@ One shape for everyone (CLI, HTTP, Restate `sites`, wren): the caller never know
 
 ## Steps
 
-1. `call(site, method, path, input, account?)` → `matchPath(route.path, path)` — `src/sites/facade.ts:120-147,187`
-2. Account: `accountFor(site, purpose, account)` → `accountForSite`, `policyAccount` — `src/sites/wire.ts:83-104`; `signedOut` sites take none; a `via` site takes the account at that provider (`consentProviderOf`, `src/sites/wire.ts:68`) and its browser leg runs in that account's provider profile — `src/sites/facade.ts:450`
-3. Leg: the API when a token is in hand, unless the route has `prefer: "browser"` (X reads: the API bills them). A browser-leg call books its `pace` slot (429 past 2 minutes out), then takes its `meter` from the day's `caps`, the account's `accountCaps` over them (429 over) — `src/sites/facade.ts:401-428`, `src/sites/caps.ts:96-112`; it sleeps until the slot just before the browser runs
+1. `call(site, method, path, input, account?)` → `matchPath(route.path, path)` — `src/sites/facade.ts:133-163,203`
+2. Account: `accountFor(site, purpose, account)` → `accountForSite`, `policyAccount` — `src/sites/wire.ts:83-104`; `signedOut` sites take none; a `via` site takes the account at that provider (`consentProviderOf`, `src/sites/wire.ts:68`) and its browser leg runs in that account's provider profile — `src/sites/facade.ts:490`
+3. Leg: the API when a token is in hand, unless the route has `prefer: "browser"` (X reads: the API bills them). A browser-leg call books its `pace` slot (429 past 2 minutes out), then takes its `meter` from the day's `caps`, the account's `accountCaps` over them (429 over) — `src/sites/facade.ts:429-476`, `src/sites/caps.ts:136-198`; it sleeps until the slot just before the browser runs
 4. `route.spends` → `approve` (the payment gate policed by the spend policy) before anything runs — `src/sites/facade.ts:33-82`, `src/gates/spend.ts:197`
 5. API leg: `accessTokens` mints from the refresh token or reads the key by `accountEnv`, a miss reloads the env store once — `src/sites/oauth.ts:80-135`, `src/sites/wire.ts:53-66`; then `http(...)` with `safeUrl` (never a key in a URL) — `src/clients/http.ts:59-72`; `safeUrls` does the same to every URL in a `LoginFailed` or `NeedsHuman` message
 6. Browser leg: `{ flow }` → `flow(name, input)` on the worker's runner, `{ workflow }` → `compiled.run(name, plan)` (gates approved by the caller) — `src/sites/types.ts:32-44`, `src/workflows/proof.ts:49`
-7. `setup(site, step, …)` mints a token the same way and keeps it through the sink under the account's name — `src/sites/facade.ts:132`, `src/sites/oauth.ts:203`; an OAuth consent opens in the account's provider profile for a `via` site (TikTok), like its browser legs — `src/sites/facade.ts:509-513`
-8. Restate face: `sites/call`, `sites/status`, `sites/setup`, `sites/renew` — `src/sites/service.ts:58-100`; the same handlers as `desk/*` from the Mac (`src/app/desk.ts`) for legs a site refuses from the box's IP (Reddit)
+7. `setup(site, step, …)` mints a token the same way and keeps it through the sink under the account's name — `src/sites/facade.ts:148`, `src/sites/oauth.ts:203`; an OAuth consent opens in the account's provider profile for a `via` site (TikTok), like its browser legs — `src/sites/facade.ts:567-571`
+8. Restate face: `sites/call`, `sites/status`, `sites/setup`, `sites/renew` — `src/sites/service.ts:61-121`; the same handlers as `desk/*` from the Mac (`src/app/desk.ts`) for legs a site refuses from the box's IP (Reddit)
 
 ## If you change this
 

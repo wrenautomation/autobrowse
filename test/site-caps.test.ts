@@ -1,10 +1,20 @@
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Credential, CredentialStore } from "credvault";
 import { describe, expect, it } from "vitest";
 import { linkedinCompanyJobs } from "../src/browser/flows/linkedin-reach.js";
 import { xProfile, xSearch } from "../src/browser/flows/x-read.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
-import { memoryCaps } from "../src/sites/caps.js";
+import { fileCaps, memoryCaps } from "../src/sites/caps.js";
 import { linkedin, SiteError, siteFacade, web, x } from "../src/sites/index.js";
 import { usernameOf } from "../src/sites/wire.js";
 import { fakeBrowser, fakeFetch } from "./fakes.js";
@@ -106,8 +116,8 @@ describe("a named account", () => {
     expect(caps.today()["linkedin|r@x.com|company"]).toBe(3);
   });
 
-  it("linkedin's own profile: 40 profiles and 15 search pages a day", () => {
-    expect(linkedin.accountCaps?.linkedin).toEqual({ profile: 40, search: 15 });
+  it("linkedin's own profile reads nothing until William lifts it", () => {
+    expect(linkedin.accountCaps?.linkedin).toEqual({ profile: 0, search: 0, company: 0 });
     expect(linkedin.caps).toMatchObject({ company: 40 });
   });
 });
@@ -215,5 +225,108 @@ describe("pace", () => {
     expect(err).toMatchObject({ status: 429, retryAfter: 120 });
     expect(order).toHaveLength(3);
     expect(String((err as Error).message)).toMatch(/retry after \d+s/);
+  });
+});
+
+describe("who spent a cap", () => {
+  const facade = (caps: ReturnType<typeof memoryCaps>, calls: string[], fail = false) => {
+    const browser = fakeBrowser(calls);
+    browser.on(linkedinCompanyJobs, async (i) => {
+      calls.push(`jobs ${i.company}`);
+      if (fail) throw new Error("page changed");
+      return { companyId: "1", jobs: [] };
+    });
+    return siteFacade([{ ...linkedin, pace: { gapMs: 0 } }], {
+      http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+      env: () => undefined,
+      sink: memorySink(),
+      runner: browser,
+      flow: (n) => (n === "linkedin/company-jobs" ? (linkedinCompanyJobs as never) : null),
+      caps,
+      now: () => noon,
+      accountOf: async (_site, name) =>
+        name === "linkedin@research" ? "r@x.com" : name === "linkedin" ? "w@x.com" : null,
+    });
+  };
+
+  it("William's own LinkedIn reads nothing: a 429 that spends nothing and runs nothing", async () => {
+    const calls: string[] = [];
+    const caps = memoryCaps(() => noon);
+    const sites = facade(caps, calls);
+    const err = await sites
+      .call("linkedin", "GET", "/company/stripe/jobs", {}, "linkedin", { caller: "wren:demo" })
+      .catch((e: unknown) => e);
+    expect(err).toMatchObject({ status: 429 });
+    expect((err as Error).message).toMatch(/company reads are off for w@x\.com \(cap 0\)/);
+    expect(calls).toEqual([]);
+    expect(caps.today()).toEqual({});
+    expect(caps.calls()).toMatchObject([
+      { account: "w@x.com", caller: "wren:demo", outcome: "capped", bucket: "company" },
+    ]);
+  });
+
+  it("notes each metered call with its caller, route template and outcome", async () => {
+    const caps = memoryCaps(() => noon);
+    await facade(caps, []).call(
+      "linkedin",
+      "GET",
+      "/company/stripe/jobs",
+      {},
+      "linkedin@research",
+      {
+        caller: "wren:research",
+        invocation: "inv_1",
+      },
+    );
+    await facade(caps, [], true)
+      .call("linkedin", "GET", "/company/acme/jobs", {}, "linkedin@research")
+      .catch(() => null);
+    const rows = caps.calls("2026-09-29");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toEqual({
+      at: new Date(noon).toISOString(),
+      site: "linkedin",
+      account: "r@x.com",
+      route: "GET /company/{company}/jobs",
+      use: { company: 1 },
+      caller: "wren:research",
+      invocation: "inv_1",
+      outcome: "ok",
+    });
+    // The path a company or person is named in never lands in the ledger.
+    expect(JSON.stringify(rows)).not.toMatch(/stripe|acme/);
+    expect(rows[1]).toMatchObject({ caller: null, outcome: "failed" });
+    const report = facade(caps, []).caps(undefined, "linkedin");
+    expect(report).toMatchObject({ day: "2026-09-29", used: { "linkedin|r@x.com|company": 2 } });
+    expect(report.calls).toHaveLength(2);
+    expect(facade(caps, []).caps("2026-09-28").calls).toEqual([]);
+  });
+});
+
+describe("the caps ledger on disk", () => {
+  it("writes a 0600 file per day beside the caps file, reads past a torn line, drops two-week-old days", () => {
+    const dir = mkdtempSync(join(tmpdir(), "caps-"));
+    const log = join(dir, "caps-calls");
+    mkdirSync(log);
+    writeFileSync(join(log, "2026-09-01.jsonl"), "{}\n");
+    writeFileSync(join(log, "2026-09-20.jsonl"), "{}\n");
+    const caps = fileCaps(join(dir, "caps.json"), () => noon);
+    const row = {
+      at: new Date(noon).toISOString(),
+      site: "linkedin",
+      account: "r@x.com",
+      route: "GET /company/{handle}",
+      use: { company: 1 },
+      caller: "wren:demo",
+      outcome: "ok" as const,
+    };
+    caps.note(row);
+    appendFileSync(join(log, "2026-09-29.jsonl"), '{"at":"torn');
+    expect(caps.calls()).toEqual([row]);
+    expect(statSync(join(log, "2026-09-29.jsonl")).mode & 0o777).toBe(0o600);
+    expect(existsSync(join(log, "2026-09-01.jsonl"))).toBe(false);
+    expect(existsSync(join(log, "2026-09-20.jsonl"))).toBe(true);
+    // A new instance (a restart) reads the same day.
+    expect(fileCaps(join(dir, "caps.json"), () => noon).calls("2026-09-29")).toEqual([row]);
   });
 });
