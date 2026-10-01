@@ -15,13 +15,17 @@ export interface DkimRecord {
 
 async function openDomain(fp: FlowPage, domain: string): Promise<void> {
   await fp.open(PAGE);
-  const picker = fp.page.getByRole("combobox").or(fp.page.getByRole("listbox")).first();
-  await picker.click({ timeout: 30_000 });
+  // Named: the header's search box is a combobox too. The runner's hands,
+  // not a bare click: Google's list opens only for a pointer that moves in.
+  const picker = { role: "listbox", name: "Selected domain" };
+  await fp.act({ kind: "click" }, picker, { goal: "open the domain list", timeoutMs: 30_000 });
+  await fp.act({ kind: "click" }, { role: "option", name: domain }, { goal: `pick ${domain}` });
   await fp.page
-    .getByRole("option", { name: domain })
-    .or(fp.page.getByText(domain, { exact: true }))
-    .first()
-    .click();
+    .getByRole("listbox", { name: /selected domain/i })
+    .getByRole("option", { name: domain, exact: true, selected: true })
+    .waitFor({ state: "attached", timeout: 15_000 });
+  // The panel below redraws for the new domain; let it settle before reading it.
+  await fp.wait(2_000);
 }
 
 export const googleDkimGenerate = defineFlow<{ domain: string }, DkimRecord>({
@@ -30,16 +34,18 @@ export const googleDkimGenerate = defineFlow<{ domain: string }, DkimRecord>({
   async run(fp, { domain }) {
     const { page } = fp;
     await openDomain(fp, domain);
-    const generate = page.getByRole("button", { name: /generate new record/i });
-    if (await generate.isVisible().catch(() => false)) {
-      await generate.click();
+    const shown = page.locator("text=/^v=DKIM1;/").first();
+    // A key already shown is the live one (a domain getting more inboxes):
+    // "Generate new record" stays on the page and would rotate it.
+    const had = await shown.waitFor({ timeout: 10_000 }).then(
+      () => true,
+      () => false,
+    );
+    if (!had) {
+      await page.getByRole("button", { name: /generate new record/i }).click({ timeout: 30_000 });
       await page.getByRole("button", { name: /^generate$/i }).click();
     }
-    const value = await page
-      .locator("text=/^v=DKIM1;/")
-      .first()
-      .innerText({ timeout: 30_000 })
-      .catch(() => null);
+    const value = await shown.innerText({ timeout: 30_000 }).catch(() => null);
     if (value === null) return fp.human(`no DKIM value shown for ${domain}`);
     return { name: "google._domainkey", value: value.trim() };
   },
@@ -51,7 +57,12 @@ export const googleDkimStart = defineFlow<{ domain: string }, "started" | "alrea
   async run(fp, { domain }) {
     const { page } = fp;
     await openDomain(fp, domain);
-    const on = page.getByText(/authenticating email/i);
+    // Several matches (the status, help text): one visible is the answer, and
+    // a bare locator would throw on strictness and read as "not on".
+    const on = page
+      .getByText(/authenticating email with dkim/i)
+      .filter({ visible: true })
+      .first();
     if (await on.isVisible().catch(() => false)) return "already";
     const start = page.getByRole("button", { name: /start authentication/i });
     if (

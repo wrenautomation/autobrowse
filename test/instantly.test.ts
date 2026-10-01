@@ -11,8 +11,24 @@ function fakeApi() {
     const auth = new Headers(init?.headers).get("authorization");
     calls.push(`${method} ${u.pathname} ${auth}${init?.body ? ` ${String(init.body)}` : ""}`);
     const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status });
+    if (u.pathname === "/api/v2/accounts" && !u.searchParams.has("starting_after"))
+      return json({
+        items: [{ email: "a@x.test", status: 1, warmup_status: 1 }],
+        next_starting_after: "a@x.test",
+      });
+    if (u.pathname === "/api/v2/accounts")
+      return json({ items: [{ email: "b@x.test", status: 1, warmup_status: 0 }] });
+    if (u.pathname === "/api/v2/accounts/a%40x.test" && method === "PATCH") return json({});
     if (u.pathname === "/api/v2/accounts/a%40x.test")
-      return json({ email: "a@x.test", status: 1, warmup_status: 0 });
+      return json({
+        email: "a@x.test",
+        status: 1,
+        warmup_status: 0,
+        warmup: { limit: 25, reply_rate: 35 },
+        daily_limit: 30,
+        sending_gap: null,
+        first_name: "A",
+      });
     if (u.pathname.startsWith("/api/v2/accounts/") && method === "GET")
       return json({ message: "Account not found" }, 404);
     if (u.pathname === "/api/v2/oauth/google/init")
@@ -27,6 +43,15 @@ function fakeApi() {
 }
 
 describe("instantly", () => {
+  it("pages through accounts and copies only the warmup settings", async () => {
+    const { calls, client } = fakeApi();
+    expect((await client.accounts()).map((a) => a.email)).toEqual(["a@x.test", "b@x.test"]);
+    const s = await client.settings("a@x.test");
+    expect(s).toEqual({ warmup: { limit: 25, reply_rate: 35 }, daily_limit: 30 });
+    await client.setSettings("a@x.test", s);
+    expect(calls.at(-1)).toBe(`PATCH /api/v2/accounts/a%40x.test Bearer k ${JSON.stringify(s)}`);
+  });
+
   it("speaks v2 with a bearer key", async () => {
     const { calls, client } = fakeApi();
     expect(await client.account("a@x.test")).toEqual({

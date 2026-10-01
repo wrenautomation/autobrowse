@@ -237,7 +237,11 @@ export function cloudflare(opts: {
   };
 }
 
-/** TXT content compares without the quotes Cloudflare may add. */
+/**
+ * TXT content compares without quotes and spaces: Cloudflare quotes and
+ * splits long values, and Google shows a DKIM key as `v=DKIM1; k=rsa; …`
+ * where DNS may hold `v=DKIM1;k=rsa;…`.
+ */
 function normalize(content: string): string {
-  return content.replace(/^"|"$/g, "").trim().toLowerCase();
+  return content.replace(/["\s]/g, "").toLowerCase();
 }

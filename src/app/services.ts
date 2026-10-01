@@ -83,7 +83,7 @@ import { cloudflare, verifyCloudflareToken } from "../clients/cloudflare.js";
 import { type GmailUserClient, gmailClient } from "../clients/gmail.js";
 import { type GoogleAdminClient, googleAdmin } from "../clients/google-admin.js";
 import { type HttpClient, httpClient, safeUrl } from "../clients/http.js";
-import { instantly } from "../clients/instantly.js";
+import { type InstantlyClient, instantly } from "../clients/instantly.js";
 import { type LinqClient, linqClient } from "../clients/linq.js";
 import { ssmRosterStore } from "../clients/roster.js";
 import { twilioReader } from "../clients/twilio.js";
@@ -1122,6 +1122,63 @@ export function channelsFor(
   return list;
 }
 
+/** Instantly with the key from the environment or the env store; null when neither has one. */
+export async function instantlyFor(
+  settings: Settings,
+  http = httpClient(),
+  ssm = ssmFor(settings),
+): Promise<InstantlyClient | null> {
+  const apiKey =
+    process.env.INSTANTLY_API_KEY ||
+    (await envStoreFor(settings, ssm)
+      .get("INSTANTLY_API_KEY")
+      .catch(() => null));
+  return apiKey ? instantly({ apiKey, http }) : null;
+}
+
+/** What the domain workflow calls: the worker's, and `try domain` in one process. */
+export function domainDepsFor(
+  settings: Settings,
+  browser: DomainDeps["browser"],
+  http = httpClient(),
+  ssm = ssmFor(settings),
+): DomainDeps {
+  return {
+    cloudflare: lazy(() =>
+      cloudflare({
+        apiToken: required(settings.cloudflareApiToken, "CLOUDFLARE_API_TOKEN"),
+        accountId: required(settings.cloudflareAccountId, "CLOUDFLARE_ACCOUNT_ID"),
+        http,
+      }),
+    ),
+    google: lazy(() => googleAdminFor(settings, http)),
+    gmail: gmailFor(settings, http),
+    roster: lazy(() => ssmRosterStore({ param: settings.rosterSsmParam, aws: awsFor(settings) })),
+    // The handoff to wren is Wren's own; another owner's roster is written and left there.
+    wren: isDefaultOwner(settings.owner)
+      ? wrenClient({
+          ingressUrl: settings.restateIngressUrl,
+          authToken: settings.restateAuthToken ?? null,
+          githubToken: settings.githubToken ?? null,
+          repo: settings.wrenRepo,
+          http,
+        })
+      : null,
+    browser,
+    credentials: credentialsFor(settings),
+    download: async (url) => {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`download ${safeUrl(url)}: HTTP ${r.status}`);
+      const dir = mkdtempSync(join(tmpdir(), "autobrowse-dl-"));
+      const file = join(dir, basename(new URL(url).pathname) || "file");
+      writeFileSync(file, Buffer.from(await r.arrayBuffer()));
+      return file;
+    },
+    instantly: () => instantlyFor(settings, http, ssm),
+    dmarcRua: settings.dmarcRua ?? null,
+  };
+}
+
 export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   const http = httpClient();
   const llm = llmFor(settings, http);
@@ -1168,47 +1225,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     }),
   );
 
-  const domainDeps: DomainDeps = {
-    cloudflare: lazy(() =>
-      cloudflare({
-        apiToken: required(settings.cloudflareApiToken, "CLOUDFLARE_API_TOKEN"),
-        accountId: required(settings.cloudflareAccountId, "CLOUDFLARE_ACCOUNT_ID"),
-        http,
-      }),
-    ),
-    google: lazy(() => googleAdminFor(settings, http)),
-    gmail,
-    roster: lazy(() => ssmRosterStore({ param: settings.rosterSsmParam, aws: awsFor(settings) })),
-    // The handoff to wren is Wren's own; another owner's roster is written and left there.
-    wren: isDefaultOwner(settings.owner)
-      ? wrenClient({
-          ingressUrl: settings.restateIngressUrl,
-          authToken: settings.restateAuthToken ?? null,
-          githubToken: settings.githubToken ?? null,
-          repo: settings.wrenRepo,
-          http,
-        })
-      : null,
-    browser,
-    credentials: credentialsFor(settings),
-    download: async (url) => {
-      const r = await fetch(url);
-      if (!r.ok) throw new Error(`download ${safeUrl(url)}: HTTP ${r.status}`);
-      const dir = mkdtempSync(join(tmpdir(), "autobrowse-dl-"));
-      const file = join(dir, basename(new URL(url).pathname) || "file");
-      writeFileSync(file, Buffer.from(await r.arrayBuffer()));
-      return file;
-    },
-    instantly: async () => {
-      const apiKey =
-        process.env.INSTANTLY_API_KEY ||
-        (await envStoreFor(settings, ssm)
-          .get("INSTANTLY_API_KEY")
-          .catch(() => null));
-      return apiKey ? instantly({ apiKey, http }) : null;
-    },
-    dmarcRua: settings.dmarcRua ?? null,
-  };
+  const domainDeps = domainDepsFor(settings, browser, http, ssm);
 
   const sink = sinkFor(settings, ssm);
   const bootstrapDeps = bootstrapDepsFor(settings, browser, sink, http);

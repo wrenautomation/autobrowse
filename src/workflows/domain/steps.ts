@@ -32,6 +32,8 @@ export interface DomainMemo {
   zoneId?: string;
   verificationToken?: string;
   dkim?: DkimRecord;
+  /** The DKIM TXT was already live: nothing for Google's resolvers to wait for. */
+  dkimLive?: boolean;
   rosterAdded?: string[];
   /** Free look-alikes when the asked-for domain is taken: what `pick` offers. */
   options?: DomainQuote[];
@@ -122,6 +124,7 @@ export function withInboxes<S extends string>(step: Step<S>): Step<S> {
 export const buy: Step<"buy"> = {
   name: "buy",
   irreversible: true,
+  harmless: (_plan, memo) => memo.owned === true,
   async run({ fx, deps, plan, memo, gate }) {
     if (memo.owned) return skipped("already owned");
     if (!plan.buy) throw new Error(`${plan.domain} is not owned and buy=false`);
@@ -222,11 +225,14 @@ export const mailDns: Step<"mail-dns"> = {
     ];
     const outcomes: string[] = [];
     for (const r of records) {
-      const o = await fx.run(`dns ${r.type} ${r.name}`, () =>
-        deps.cloudflare.upsertRecord(zoneId, r, {
-          replace: r.type === "MX" || r.name === "_dmarc",
-        }),
-      );
+      const o = await fx.run(`dns ${r.type} ${r.name}`, async () => {
+        // A DMARC policy already there (a report address, a tighter p=) is a person's: kept.
+        if (r.name === "_dmarc") {
+          const had = await deps.cloudflare.listRecords(zoneId, "TXT", "_dmarc");
+          if (had.some((x) => /^"?v=DMARC1/i.test(x.content))) return "kept";
+        }
+        return deps.cloudflare.upsertRecord(zoneId, r, { replace: r.type === "MX" });
+      });
       outcomes.push(`${r.type} ${r.name} ${o}`);
     }
     return done(outcomes.join(", "));
@@ -258,17 +264,19 @@ export const dkimDns: Step<"dkim-dns"> = {
         { replace: true },
       ),
     );
+    memo.dkimLive = o === "kept";
     return done(`TXT ${dkim.name} ${o}`);
   },
 };
 
 export const dkimStart: Step<"dkim-start"> = {
   name: "dkim-start",
-  async run({ fx, deps, plan }) {
-    // Google needs to see the TXT first; give the resolvers a moment before the first try.
-    await fx.sleep(
-      deps.dnsWaitMs === undefined ? 2 * 60_000 : Math.min(deps.dnsWaitMs, 2 * 60_000),
-    );
+  async run({ fx, deps, plan, memo }) {
+    // Google needs to see a new TXT first; give the resolvers a moment before the first try.
+    if (!memo.dkimLive)
+      await fx.sleep(
+        deps.dnsWaitMs === undefined ? 2 * 60_000 : Math.min(deps.dnsWaitMs, 2 * 60_000),
+      );
     const o = await fx.run("dkim start", () =>
       deps.browser.run(googleDkimStart, { domain: plan.domain }),
     );
@@ -282,20 +290,31 @@ export const inboxes: Step<"inboxes"> = {
   async run({ fx, deps, plan, gate }) {
     const outcomes: string[] = [];
     const emails = plan.inboxes.map((i) => inboxAddress(plan, i));
-    // Resetting a password somebody may be using is the `password` guard's call.
-    const existing = await fx.run("existing inboxes", async () => {
-      const found = await Promise.all(emails.map((e) => deps.google.getUser(e)));
-      return emails.filter((_, i) => found[i] !== null);
-    });
-    if (existing.length > 0) {
+    // An inbox that exists with its password in the store is ours already (a
+    // rerun): kept. One that exists without it needs a reset, which may cut
+    // off somebody using it: the `password` guard's call.
+    const state = await fx.run("existing inboxes", async () =>
+      Promise.all(
+        emails.map(async (e) => {
+          if (!(await deps.google.getUser(e))) return "new" as const;
+          return (await deps.credentials.get(inboxSite(e)))?.password ? "kept" : "reset";
+        }),
+      ),
+    );
+    const resets = emails.filter((_, i) => state[i] === "reset");
+    if (resets.length > 0) {
       const answer = gate(
         "password",
-        `Reset the password of ${existing.join(", ")} to a new random one (stored as google@<inbox>)?`,
+        `Reset the password of ${resets.join(", ")} to a new random one (stored as google@<inbox>)?`,
       );
       if (!answer.approved) return rejected(answer.note ?? "password reset declined");
     }
-    for (const inbox of plan.inboxes) {
+    for (const [i, inbox] of plan.inboxes.entries()) {
       const email = inboxAddress(plan, inbox);
+      if (state[i] === "kept") {
+        outcomes.push(`${email} kept`);
+        continue;
+      }
       // One journaled step per inbox: the password exists only inside it and
       // in the credential store. A rerun of an unfinished step resets the
       // password, so the store is never left holding a stale one. A reset
@@ -378,6 +397,7 @@ export const photo: Step<"photo"> = {
     for (const inbox of plan.inboxes) {
       const email = inboxAddress(plan, inbox);
       const o = await fx.run(`photo ${email}`, async () => {
+        if ((await deps.google.getUser(email))?.hasPhoto) return "already has a picture";
         const file = await deps.download(url);
         return deps.browser.run({ ...googleProfilePhoto, site: inboxSite(email) }, { file });
       });
@@ -441,6 +461,18 @@ export const warmup: Step<"warmup"> = {
       });
       outcomes.push(`${email} ${o}`);
     }
+    const like = plan.warmupLike;
+    if (like) {
+      // The fleet warms alike: the reference inbox's settings onto each new one.
+      const settings = await fx.run(`warmup settings of ${like}`, () => instantly.settings(like));
+      if (!settings.warmup) throw new Error(`Instantly has no warmup settings on ${like}`);
+      for (const inbox of plan.inboxes) {
+        const email = inboxAddress(plan, inbox);
+        if (email === like) continue;
+        await fx.run(`warmup settings ${email}`, () => instantly.setSettings(email, settings));
+      }
+      outcomes.push(`settings as ${like}`);
+    }
     return done(outcomes.join(", "));
   },
 };
@@ -448,6 +480,7 @@ export const warmup: Step<"warmup"> = {
 export const roster: Step<"roster"> = {
   name: "roster",
   irreversible: true,
+  harmless: (plan) => !plan.handoff,
   async run({ fx, deps, plan, memo }) {
     if (!plan.handoff) return skipped("handoff=false");
     const entries = plan.inboxes.map((i) => ({
@@ -480,6 +513,7 @@ export const roster: Step<"roster"> = {
 export const loops: Step<"loops"> = {
   name: "loops",
   irreversible: true,
+  harmless: (plan) => !plan.handoff,
   async run({ fx, deps, plan }) {
     if (!plan.handoff) return skipped("handoff=false");
     const wren = deps.wren;

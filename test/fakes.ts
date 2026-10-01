@@ -5,7 +5,11 @@ import { googleProfilePhoto } from "../src/browser/flows/google-profile-photo.js
 import { googleOauthConsent } from "../src/browser/flows/oauth-consent.js";
 import { NeedsHuman } from "../src/browser/session.js";
 import type { CloudflareClient, DnsRecord, Registration } from "../src/clients/cloudflare.js";
-import type { InstantlyAccount, InstantlyClient } from "../src/clients/instantly.js";
+import type {
+  InstantlyAccount,
+  InstantlyClient,
+  WarmupSettings,
+} from "../src/clients/instantly.js";
 import type { GateAnswer, GateName } from "../src/engine/effects.js";
 import type { RunEvent } from "../src/engine/events.js";
 import type { FeedPoint } from "../src/engine/feed.js";
@@ -163,6 +167,8 @@ export function fakeDeps(
   over: Partial<DomainDeps> & { cloudflare?: ReturnType<typeof fakeCloudflare> } = {},
 ) {
   const users = new Set<string>();
+  /** Inboxes Google already shows a picture for. */
+  const photos = new Set<string>();
   const domains = new Map<string, boolean>();
   const calls: string[] = [];
   let roster =
@@ -184,9 +190,12 @@ export function fakeDeps(
     failCheckTimes: number;
     calls: string[];
     rosterText: () => string;
+    /** Inboxes Google already shows a picture for. */
+    photos: Set<string>;
     browser: ReturnType<typeof fakeBrowser>;
   } = {
     calls,
+    photos,
     failCheckWith: null,
     failCheckTimes: Number.POSITIVE_INFINITY,
     rosterText: () => roster,
@@ -222,7 +231,7 @@ export function fakeDeps(
         return true;
       },
       async getUser(e) {
-        return users.has(e) ? { primaryEmail: e } : null;
+        return users.has(e) ? { primaryEmail: e, hasPhoto: photos.has(e) } : null;
       },
       async createUser(u) {
         calls.push(`createUser ${u.primaryEmail}`);
@@ -289,40 +298,55 @@ export function fakeDeps(
 
 /** Instantly: accounts appear once Google's consent went through for them. */
 export function fakeInstantly(calls: string[]) {
-  const accounts = new Map<string, InstantlyAccount>();
+  const have = new Map<string, InstantlyAccount>();
+  const settings = new Map<string, WarmupSettings>();
   let consented: string | null = null;
-  const client: InstantlyClient & { accounts: typeof accounts; consent: (email: string) => void } =
-    {
-      accounts,
-      consent: (email) => {
-        consented = email;
-      },
-      async account(email) {
-        return accounts.get(email) ?? null;
-      },
-      async oauthInit() {
-        return {
-          sessionId: "s1",
-          authUrl: "https://accounts.google.com/o/oauth2/auth?redirect_uri=x",
-        };
-      },
-      async oauthStatus() {
-        if (!consented) return { status: "pending" };
-        accounts.set(consented, { email: consented, status: 1, warmupStatus: 0 });
-        return { status: "success", email: consented };
-      },
-      async enableWarmup(emails) {
-        calls.push(`warmup ${emails.join(",")}`);
-        for (const e of emails) {
-          const a = accounts.get(e);
-          if (a) a.warmupStatus = 1;
-        }
-        return "job1";
-      },
-      async job() {
-        return "success";
-      },
-    };
+  const client: InstantlyClient & {
+    have: typeof have;
+    kept: typeof settings;
+    consent: (email: string) => void;
+  } = {
+    have,
+    kept: settings,
+    consent: (email) => {
+      consented = email;
+    },
+    async account(email) {
+      return have.get(email) ?? null;
+    },
+    async accounts() {
+      return [...have.values()];
+    },
+    async settings(email) {
+      return settings.get(email) ?? {};
+    },
+    async setSettings(email, s) {
+      calls.push(`settings ${email}`);
+      settings.set(email, structuredClone(s));
+    },
+    async oauthInit() {
+      return {
+        sessionId: "s1",
+        authUrl: "https://accounts.google.com/o/oauth2/auth?redirect_uri=x",
+      };
+    },
+    async oauthStatus() {
+      if (!consented) return { status: "pending" };
+      have.set(consented, { email: consented, status: 1, warmupStatus: 0 });
+      return { status: "success", email: consented };
+    },
+    async enableWarmup(emails) {
+      calls.push(`warmup ${emails.join(",")}`);
+      for (const e of emails) {
+        const a = have.get(e);
+        if (a) a.warmupStatus = 1;
+      }
+      return "job1";
+    },
+    async job() {
+      return "success";
+    },
+  };
   return client;
 }
 

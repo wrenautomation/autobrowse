@@ -159,6 +159,19 @@ ones, like wren. Not needed until a run is unattended.
   upload and not known to keep frames. Asset:
   `lander/public/brand/wren-pfp-animated.gif` (served on the site, so a
   plan's `photoUrl` can point at it).
+- 2026-10-01 More inboxes on a live domain is the same plan (15 added
+  across the five sender domains). Every step before `inboxes` is a no-op
+  there: `buy` and `roster`/`loops` (with `handoff: false`) are
+  `harmless`, so a dry run passes them; DMARC an owner already set is
+  kept, only MX is replaced; a live DKIM key is read, never regenerated
+  (a new one would break mail until DNS caught up), and the 2-minute wait
+  before Start is skipped. A rerun keeps an inbox whose password is
+  stored (no reset gate) and a picture Google already shows. `try domain`
+  runs it here without Restate. Delegation for wren-sender needed
+  `admin.directory.domain` and `siteverification` added.
+- 2026-10-01 `warmupLike: <inbox>` copies that inbox's Instantly warmup
+  settings (warmup block, daily limit, sending gap, slow ramp) onto each
+  new one; `autobrowse warmup-match <like>` does it for every inbox.
 - 2026-09-19 Gates are state + self-chained steps, not awakeables: a
   parked invocation blocked `pause`/`reset` and held the key for days.
 - 2026-09-19 Recording-first for browser flows; Stagehand not adopted.

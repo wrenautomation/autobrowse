@@ -126,6 +126,41 @@ describe("runFlow", () => {
     expect(deps.calls).toEqual([]);
   });
 
+  it("more inboxes on a live domain: the dry run passes buy, keeps DMARC and the DKIM key", async () => {
+    const cloudflare = fakeCloudflare({ registered: true, zone: "z1" });
+    cloudflare.records.push(
+      { id: "d1", type: "TXT", name: "_dmarc", content: "v=DMARC1; p=quarantine" },
+      { id: "k1", type: "TXT", name: "google._domainkey", content: "v=DKIM1; k=rsa; p=abc" },
+    );
+    const deps = fakeDeps({ cloudflare });
+    const { fx } = fakeEffects();
+    const out = await runFlow(fx, deps, plan({ dryRun: true, handoff: false }));
+    expect(out.status).toBe("planned");
+    expect(out.results.buy?.status).toBe("skipped");
+    expect(out.results["mail-dns"]?.detail).toContain("TXT _dmarc kept");
+    expect(out.results["dkim-dns"]?.detail).toBe("TXT google._domainkey kept");
+    expect(out.results.inboxes?.status).toBe("planned");
+    expect(cloudflare.records.find((r) => r.name === "_dmarc")?.content).toBe(
+      "v=DMARC1; p=quarantine",
+    );
+  });
+
+  it("copies the reference inbox's warmup settings onto each new inbox", async () => {
+    const deps = fakeDeps({ cloudflare: fakeCloudflare({ registered: true, zone: "z1" }) });
+    const instantly = await deps.instantly();
+    const like = { warmup: { limit: 25, reply_rate: 35 }, daily_limit: 30, sending_gap: 1 };
+    instantly?.kept.set("ref@fleet.test", like);
+    const { fx } = fakeEffects();
+    const out = await runFlow(fx, deps, plan({ warmupLike: "ref@fleet.test", handoff: false }));
+    expect(out.status).toBe("done");
+    expect(out.results.warmup?.detail).toMatch(/settings as ref@fleet.test$/);
+    expect(instantly?.kept.get("hello@wren-new.test")).toEqual(like);
+    expect(deps.calls.filter((c) => c.startsWith("settings"))).toEqual([
+      "settings will@wren-new.test",
+      "settings hello@wren-new.test",
+    ]);
+  });
+
   it("waits at a human gate when a browser flow needs one, then retries the step", async () => {
     let attempts = 0;
     const deps = fakeDeps({ cloudflare: fakeCloudflare({ registered: true, zone: "z1" }) });
@@ -222,7 +257,7 @@ describe("runFlow", () => {
     expect(first.status).toBe("waiting");
     expect(first.results.warmup?.detail).toMatch(/INSTANTLY_API_KEY/);
     deps.instantly = async () => instantly;
-    instantly?.accounts.set("will@wren-new.test", {
+    instantly?.have.set("will@wren-new.test", {
       email: "will@wren-new.test",
       status: 1,
       warmupStatus: 1,
@@ -264,20 +299,63 @@ describe("runFlow", () => {
       familyName: "J",
       password: "old",
     });
+    // The store lost the password but kept the authenticator seed.
     await deps.credentials.put("google@will@wren-new.test", {
       username: "will@wren-new.test",
-      password: "old",
       totpSecret: "JBSWY3DPEHPK3PXP",
     });
     const { fx } = fakeEffects();
     const out = await runFlow(fx, deps, plan(), scriptedAnswers({ password: [{}] }).answer);
     expect(out.status).toBe("done");
     const cred = await deps.credentials.get("google@will@wren-new.test");
-    expect(cred).toMatchObject({ totpSecret: "JBSWY3DPEHPK3PXP", previousPassword: "old" });
-    expect(cred?.password).not.toBe("old");
+    expect(cred).toMatchObject({ totpSecret: "JBSWY3DPEHPK3PXP" });
+    expect(cred?.password).toBeTruthy();
     expect(out.results.authenticator?.detail).toBe(
       "will@wren-new.test already, hello@wren-new.test TOTP enrolled",
     );
+  });
+
+  it("a rerun keeps an inbox whose password is stored and asks nothing", async () => {
+    const deps = fakeDeps({ cloudflare: fakeCloudflare({ registered: true, zone: "z1" }) });
+    await deps.google.createUser({
+      primaryEmail: "will@wren-new.test",
+      givenName: "W",
+      familyName: "J",
+      password: "old",
+    });
+    await deps.credentials.put("google@will@wren-new.test", {
+      username: "will@wren-new.test",
+      password: "old",
+    });
+    const { fx } = fakeEffects();
+    const { answer, asked } = scriptedAnswers({});
+    const out = await runFlow(fx, deps, plan(), answer);
+    expect(out.status).toBe("done");
+    expect(asked).toEqual([]);
+    expect(out.results.inboxes?.detail).toBe(
+      "will@wren-new.test kept, hello@wren-new.test created",
+    );
+    expect((await deps.credentials.get("google@will@wren-new.test"))?.password).toBe("old");
+  });
+
+  it("leaves a picture Google already shows", async () => {
+    const deps = fakeDeps({ cloudflare: fakeCloudflare({ registered: true, zone: "z1" }) });
+    await deps.google.createUser({
+      primaryEmail: "will@wren-new.test",
+      givenName: "W",
+      familyName: "J",
+      password: "old",
+    });
+    deps.photos.add("will@wren-new.test");
+    const { fx } = fakeEffects();
+    const out = await runFlow(
+      fx,
+      deps,
+      plan({ photoUrl: "https://x.test/brand/pfp.gif" }),
+      scriptedAnswers({ password: [{}] }).answer,
+    );
+    expect(out.results.photo?.detail).toMatch(/^will@wren-new.test already has a picture, /);
+    expect(deps.calls.filter((c) => c.startsWith("photo"))).toHaveLength(1);
   });
 
   it("honours no-handoff and no-warmup", async () => {

@@ -35,6 +35,8 @@ export interface StepDef<P, D, M, S extends string = string> {
   name: S;
   /** Spends money, creates an account, or does something a person would have to undo. */
   irreversible?: boolean;
+  /** True when this run of an irreversible step will skip (owned already, handoff off): a dry run goes through it. */
+  harmless?(plan: P, memo: M): boolean;
   run(ctx: StepCtx<P, D, M>): Promise<StepOutput>;
 }
 

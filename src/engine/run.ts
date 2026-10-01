@@ -116,7 +116,7 @@ export async function advance<P extends PlanBase, D, M, S extends string>(
     fx.set(KEYS.results, results);
     fx.set(KEYS.memo, memo);
   };
-  if (plan.dryRun && step.irreversible) {
+  if (plan.dryRun && step.irreversible && !step.harmless?.(settled, memo)) {
     results[name] = {
       status: "planned",
       detail: "dry run stops before the first irreversible step",

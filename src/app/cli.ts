@@ -14,7 +14,7 @@ import { cursorOf } from "../engine/rows.js";
 import { summarize } from "../engine/run.js";
 import { ownerKeys } from "../owner.js";
 import { DEFAULT_TLDS, domainIdeas } from "../workflows/domain/ideas.js";
-import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
+import { domainWorkflow, type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
 import { localBackend, proofsOf, workflowsOf } from "./backend.js";
 import { registerAccessCommands } from "./cli-access.js";
 import { registerAccountsCommands } from "./cli-accounts.js";
@@ -42,7 +42,13 @@ import { ingress } from "./client.js";
 import { fileDone } from "./needs.js";
 import { needsContextFor } from "./owed.js";
 import { awsFor, boot, ownerFromArgv } from "./owner.js";
-import { credentialsFor, envStoreFor, identitiesFor, WORKFLOWS } from "./services.js";
+import {
+  credentialsFor,
+  domainDepsFor,
+  envStoreFor,
+  identitiesFor,
+  WORKFLOWS,
+} from "./services.js";
 
 // `--owner` picks whose env, files and names load, so it is read before anything else.
 const argvOwner = ownerFromArgv(process.argv);
@@ -175,7 +181,10 @@ program
       const { backend, parts } = local({ headless: o.headed ? false : settings.browserHeadless });
       const workflow = (await workflowsOf(backend)).find((w) => w.name === name);
       if (!workflow) throw new Error(`unknown workflow ${name}; see: autobrowse workflows`);
-      if (WORKFLOWS.includes(workflow))
+      // The domain workflow's APIs are built here too: its browser legs then sign in from
+      // this machine's profiles and IP. bootstrap still wants the worker.
+      const handWritten = WORKFLOWS.includes(workflow);
+      if (handWritten && workflow !== domainWorkflow)
         throw new Error(`${name} needs the worker's deps (APIs); run it with: autobrowse run`);
       const raw = o.plan ? ((await readJson(o.plan)) as Record<string, unknown>) : {};
       const plan = workflow.plan.parse({ ...raw, dryRun: o.dryRun ?? false });
@@ -189,9 +198,11 @@ program
         return;
       }
       const out = await runFlow(
-        memoryEffects().fx,
+        memoryEffects({ sleep: (ms) => new Promise((r) => setTimeout(r, ms)) }).fx,
         workflow as never,
-        compiledDeps(parts.browser) as never,
+        (handWritten
+          ? domainDepsFor(settings, parts.browser)
+          : compiledDeps(parts.browser)) as never,
         plan,
         () =>
           o.ask ? null : { approved: true, note: "autobrowse try", at: new Date().toISOString() },
@@ -216,6 +227,8 @@ program
   .option("--signature-file <path>", "HTML signature for Gmail send-as")
   .option("--no-buy", "fail instead of buying when the domain is free")
   .option("--no-warmup", "skip warmup enrollment")
+  .option("--warmup-like <email>", "copy this Instantly inbox's warmup settings onto each new one")
+  .option("--photo-url <url>", "each inbox's profile picture (a GIF stays animated)")
   .option("--no-handoff", "do not touch wren's roster or loops")
   .option("--dry-run", "plan only; stop before the first irreversible step")
   .action(
@@ -227,6 +240,8 @@ program
         signatureFile?: string;
         buy: boolean;
         warmup: boolean;
+        warmupLike?: string;
+        photoUrl?: string;
         handoff: boolean;
         dryRun?: boolean;
       },
@@ -238,6 +253,8 @@ program
         ...(o.signatureFile ? { signatureHtml: await readFile(o.signatureFile, "utf8") } : {}),
         buy: o.buy,
         warmup: o.warmup,
+        ...(o.warmupLike ? { warmupLike: o.warmupLike } : {}),
+        ...(o.photoUrl ? { photoUrl: o.photoUrl } : {}),
         handoff: o.handoff,
         dryRun: o.dryRun ?? false,
       };
@@ -307,6 +324,38 @@ program
       mimeType,
     );
     console.log(`${address}: picture set (Gmail shows it within a day)`);
+  });
+
+program
+  .command("warmup-match <like> [emails...]")
+  .description(
+    "Instantly: copy one inbox's warmup and sending settings onto others (every other inbox when none named)",
+  )
+  .option("--dry-run", "say what differs, change nothing")
+  .action(async (like: string, emails: string[], o: { dryRun?: boolean }) => {
+    const { instantlyFor } = await import("./services.js");
+    const ins = await instantlyFor(settings);
+    if (!ins) throw new Error("no INSTANTLY_API_KEY in the environment or the env store");
+    const want = await ins.settings(like);
+    if (!want.warmup) throw new Error(`Instantly has no warmup settings on ${like}`);
+    const targets =
+      emails.length > 0
+        ? emails
+        : (await ins.accounts()).map((a) => a.email).filter((e) => e !== like);
+    for (const email of targets) {
+      const have = await ins.settings(email);
+      const differs = Object.keys(want).filter(
+        (k) =>
+          JSON.stringify(have[k as keyof typeof have]) !==
+          JSON.stringify(want[k as keyof typeof want]),
+      );
+      if (differs.length === 0) {
+        console.log(`${email}: already alike`);
+        continue;
+      }
+      if (!o.dryRun) await ins.setSettings(email, want);
+      console.log(`${email}: ${o.dryRun ? "differs in" : "set"} ${differs.join(", ")}`);
+    }
   });
 
 for (const verb of ["approve", "reject"] as const) {

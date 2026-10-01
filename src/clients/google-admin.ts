@@ -28,7 +28,8 @@ export interface GoogleAdminClient {
   verificationToken(domain: string): Promise<string>;
   /** Ask Google to check the TXT; false when it is not visible yet. */
   verifyDomain(domain: string): Promise<boolean>;
-  getUser(email: string): Promise<{ primaryEmail: string } | null>;
+  /** `hasPhoto`: the account carries a picture (Directory's thumbnailPhotoUrl). */
+  getUser(email: string): Promise<{ primaryEmail: string; hasPhoto: boolean } | null>;
   createUser(user: NewUser): Promise<{ primaryEmail: string }>;
   setPassword(email: string, password: string): Promise<void>;
   /** The name mail shows beside the address; a Workspace user cannot change it themselves. */
@@ -101,10 +102,11 @@ export function googleAdmin(opts: { token: TokenSupplier; http: HttpClient }): G
       throw new GoogleAdminError("verify domain", r.status, r.body);
     },
     async getUser(email) {
-      return call<{ primaryEmail: string }>(
+      const u = await call<{ primaryEmail: string; thumbnailPhotoUrl?: string }>(
         "get user",
         `${DIRECTORY}/users/${encodeURIComponent(email)}`,
       );
+      return u && { primaryEmail: u.primaryEmail, hasPhoto: !!u.thumbnailPhotoUrl };
     },
     async createUser(user) {
       const u = await call<{ primaryEmail: string }>("create user", `${DIRECTORY}/users`, {

@@ -70,7 +70,8 @@ export const googleOauthConsent = defineFlow<OauthConsentInput, { landed: string
         if (how !== "signed-in") return fp.human(`Google re-verification: ${how}`);
         continue;
       }
-      if (/choose an account/i.test(text)) {
+      // "Choose an account", or "Choose a Google Workspace account" for a Workspace client.
+      if (/choose an? (google (workspace )?)?account/i.test(text)) {
         const pick = input.account ? { text: input.account } : { css: "[data-identifier]" };
         if (!(await fp.has(pick)))
           return fp.human(`the account chooser does not list ${input.account ?? "any account"}`);

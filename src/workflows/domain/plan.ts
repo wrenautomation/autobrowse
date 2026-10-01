@@ -37,6 +37,11 @@ export const planSchema = z.object({
     .boolean()
     .default(true)
     .describe("Enrol the inboxes in Instantly warmup (API + the inbox's own consent)"),
+  warmupLike: z
+    .string()
+    .email()
+    .optional()
+    .describe("An Instantly inbox whose warmup and sending settings each new inbox copies"),
   handoff: z.boolean().default(true).describe("Hand the inboxes to wren: roster + loops"),
   /** Plan every step, do nothing irreversible; stops before the first one. */
   dryRun: z.boolean().default(false),

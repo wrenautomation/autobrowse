@@ -18,6 +18,18 @@ export interface InstantlyAccount {
   warmupStatus: number;
 }
 
+/**
+ * How an inbox warms and sends in Instantly, as its API names it: copied
+ * from one inbox onto others so a fleet warms alike.
+ */
+export interface WarmupSettings {
+  warmup?: Record<string, unknown>;
+  daily_limit?: number;
+  sending_gap?: number;
+  enable_slow_ramp?: boolean;
+}
+const SETTING_KEYS = ["warmup", "daily_limit", "sending_gap", "enable_slow_ramp"] as const;
+
 export type OauthStatus =
   | { status: "pending" }
   | { status: "success"; email: string }
@@ -27,6 +39,11 @@ export type OauthStatus =
 export interface InstantlyClient {
   /** The inbox as Instantly has it, or null when it is not in this workspace. */
   account(email: string): Promise<InstantlyAccount | null>;
+  /** Every inbox in this workspace. */
+  accounts(): Promise<InstantlyAccount[]>;
+  settings(email: string): Promise<WarmupSettings>;
+  /** Writes these settings onto the inbox (`PATCH /accounts/{email}`). */
+  setSettings(email: string, settings: WarmupSettings): Promise<void>;
   /** A 10-minute session and the Google authorize URL that feeds it. */
   oauthInit(): Promise<{ sessionId: string; authUrl: string }>;
   oauthStatus(sessionId: string): Promise<OauthStatus>;
@@ -46,7 +63,11 @@ export class InstantlyError extends Error {
 }
 
 export function instantly(opts: { apiKey: string; http: HttpClient }): InstantlyClient {
-  async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+  async function call<T>(
+    method: "GET" | "POST" | "PATCH",
+    path: string,
+    body?: unknown,
+  ): Promise<T> {
     const r = await opts.http.json<T & { message?: string }>(`${API}${path}`, {
       method,
       headers: { authorization: `Bearer ${opts.apiKey}` },
@@ -68,6 +89,35 @@ export function instantly(opts: { apiKey: string; http: HttpClient }): Instantly
         if (err instanceof InstantlyError && err.status === 404) return null;
         throw err;
       }
+    },
+    async accounts() {
+      const out: InstantlyAccount[] = [];
+      let after: string | undefined;
+      do {
+        const r = await call<{
+          items: { email: string; status: number; warmup_status: number }[];
+          next_starting_after?: string;
+        }>(
+          "GET",
+          `/accounts?limit=100${after ? `&starting_after=${encodeURIComponent(after)}` : ""}`,
+        );
+        for (const a of r.items)
+          out.push({ email: a.email, status: a.status, warmupStatus: a.warmup_status });
+        after = r.items.length > 0 ? r.next_starting_after : undefined;
+      } while (after);
+      return out;
+    },
+    async settings(email) {
+      const a = await call<Record<string, unknown>>(
+        "GET",
+        `/accounts/${encodeURIComponent(email)}`,
+      );
+      const out: Record<string, unknown> = {};
+      for (const k of SETTING_KEYS) if (a[k] !== undefined && a[k] !== null) out[k] = a[k];
+      return out as WarmupSettings;
+    },
+    async setSettings(email, settings) {
+      await call("PATCH", `/accounts/${encodeURIComponent(email)}`, settings);
     },
     async oauthInit() {
       const r = await call<{ session_id: string; auth_url: string }>(
