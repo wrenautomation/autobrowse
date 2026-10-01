@@ -233,6 +233,33 @@ describe("Compiled object", () => {
     expect(rows.find((x) => x.workflow === "example-title")).toMatchObject({ status: "done" });
   });
 
+  it("posts a run's events to the caller's feed, counted from 1; a hook off the list is a 400", async () => {
+    const opts = (headers: Record<string, string>) => clients.rpc.opts({ headers });
+    const tp = `00-${"a".repeat(32)}-${"b".repeat(16)}-01`;
+    await expect(
+      compiled("example-title", "k3").run(
+        { dryRun: false },
+        opts({ "x-feed-url": "https://evil.example.net/hook", "x-feed-tag": "t" }),
+      ),
+    ).rejects.toThrow(/not in FEED_HOSTS/);
+    await compiled("example-title", "k3").run(
+      { dryRun: false },
+      opts({
+        "x-feed-url": "https://feed.example.com/hook",
+        "x-feed-tag": "wren-run-1",
+        traceparent: tp,
+      }),
+    );
+    await until(
+      () => compiled("example-title", "k3").status(),
+      (s) => s.outcome?.status === "done",
+    );
+    const fed = host.feeds.filter((f) => f.tag === "wren-run-1");
+    expect(fed[0]).toMatchObject({ type: "started", seq: 1, traceparent: tp });
+    expect(fed.at(-1)).toMatchObject({ type: "finished", url: "https://feed.example.com/hook" });
+    expect(fed.map((f) => f.seq)).toEqual(fed.map((_, i) => i + 1));
+  });
+
   it("a flow deleted mid-run ends the run as failed; controls and status still work", async () => {
     await compiled("example-title", "k2").pause();
     await compiled("example-title", "k2").run({ dryRun: false });

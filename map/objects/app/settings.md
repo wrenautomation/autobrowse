@@ -17,7 +17,7 @@ One zod schema with defaults is the whole contract between the box, compose, `.e
 
 ## Shape
 
-- `Settings = z.infer<typeof schema>` — `src/app/config.ts:298`; `ENV_KEYS` — `:300-409`; `loadSettings(env)` — `:411`; `loadEnvFile(from)` — `:514`
+- `Settings = z.infer<typeof schema>` — `src/app/config.ts:302`; `ENV_KEYS` — `:300-409`; `loadSettings(env)` — `:411`; `loadEnvFile(from)` — `:514`
 - Files it names: `credentialsFile`, `walletFile`, `accountsFile`, `accessFile`, `fixesFile`, `screensFile`, `capsFile`, `needsDoneFile` (`:40-243`), `artifactsDir`, `recordingsDir`, `profilesDir`; a non-default [[owner]]'s are fixed under `ownersDir` (`OWNER_PATHS`, `:428`)
 - Restate shape: `planEndpoint` (listen, or tunnel to Restate Cloud) — `src/app/endpoint.ts:17-63`
 - Where values come from: `.env` (local), the box's prod.env (outside git; never printed), SSM through credvault for secrets

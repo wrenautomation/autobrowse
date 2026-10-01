@@ -139,6 +139,10 @@ const schema = z.object({
   /** Every run event, as JSON, to one URL (iMessage/Slack/dashboards). */
   webhookUrl: z.string().url().optional(),
   webhookToken: z.string().min(1).optional(),
+  /** Hosts a run's `x-feed-url` may post to, comma-separated (`*.example.com` for any under it); feeds are off when unset. */
+  feedHosts: z.string().optional(),
+  /** The bearer on every feed post. */
+  feedToken: z.string().min(1).optional(),
   /** Model behind the compiler's polish and the locator repairer. No key = both off. */
   llmProvider: z.enum(["anthropic", "openai", "cohere", "claude-code"]).default("anthropic"),
   llmModel: z.string().min(1).optional(),
@@ -352,6 +356,8 @@ export const ENV_KEYS = {
   uiHost: "UI_HOST",
   webhookUrl: "WEBHOOK_URL",
   webhookToken: "WEBHOOK_TOKEN",
+  feedHosts: "FEED_HOSTS",
+  feedToken: "FEED_TOKEN",
   llmProvider: "LLM_PROVIDER",
   llmModel: "LLM_MODEL",
   anthropicApiKey: "ANTHROPIC_API_KEY",

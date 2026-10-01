@@ -20,7 +20,7 @@ Play-pause: a human or the model drives, every act is journaled the same way, so
 - `SessionStatus` (starting … needs-human … closed); `SessionView`; `StartRequest`; `AgentSessions { start, list, get, pause, resume, stop, save, exec, close, flush }` — `src/agent/sessions.ts:18-90`; `AGENT = "agent"` — `:136`
 - `AgentOptions { explorer, llm, goal, inputs, secrets, maxSteps, ledger, session, prior, stopped, onHuman, maxRefs }` — `src/agent/explorer.ts:69-95`; `StepRecord` — `:57-67`
 - What the model sees: `digest(aria)` with refs, `pageForModel` — `src/agent/digest.ts:213,421`
-- Ledger: `StepLedger` rows in `~/.config/autobrowse/steps.jsonl` — `src/agent/ledger.ts:10-46`; `stepLedgerFor` `src/app/services.ts:578`; OTLP trace sink `traceSinkFor` `:288`
+- Ledger: `StepLedger` rows in `~/.config/autobrowse/steps.jsonl` — `src/agent/ledger.ts:10-46`; `stepLedgerFor` `src/app/services.ts:579`; OTLP trace sink `traceSinkFor` `:288`
 - Made by `agentFor` — `src/app/backend.ts:286`
 
 ## Connected to

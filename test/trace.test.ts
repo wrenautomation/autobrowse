@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { fakeLlm } from "../src/llm/fake.js";
 import {
   memorySink,
-  type otlpBody,
+  otlpBody,
   otlpSink,
   parseOtlpHeaders,
   tracedLlm,
@@ -65,5 +65,19 @@ describe("traced llm", () => {
       resourceSpans: Array<{ scopeSpans: Array<{ spans: unknown[] }> }>;
     };
     expect(body.resourceSpans[0]?.scopeSpans[0]?.spans).toHaveLength(2);
+  });
+});
+
+describe("a caller's traceparent", () => {
+  it("puts the run's model spans in the caller's trace, under its span, through nested contexts", async () => {
+    const sink = memorySink();
+    const llm = tracedLlm(fakeLlm(["ok"]), sink);
+    const tp = `00-${"c".repeat(32)}-${"d".repeat(16)}-01`;
+    await withTrace({ session: "w/k", traceparent: tp }, () =>
+      withTrace({ session: "agent-1", step: 2 }, () => llm.complete({ system: "s", prompt: "p" })),
+    );
+    expect(sink.spans[0]).toMatchObject({ traceId: "c".repeat(32), parentSpanId: "d".repeat(16) });
+    const body = JSON.stringify(otlpBody(sink.spans, "autobrowse"));
+    expect(body).toContain(`"parentSpanId":"${"d".repeat(16)}"`);
   });
 });

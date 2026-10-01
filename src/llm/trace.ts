@@ -16,12 +16,15 @@ export interface TraceContext {
   /** The agent session, compile or repair this call serves; the trace id derives from it. */
   session: string;
   step?: number;
+  /** A caller's W3C trace context: spans join its trace, under its span. Inherited by nested contexts. */
+  traceparent?: string;
 }
 
 const context = new AsyncLocalStorage<TraceContext>();
 
 export function withTrace<T>(ctx: TraceContext, fn: () => Promise<T>): Promise<T> {
-  return context.run(ctx, fn);
+  const outer = context.getStore()?.traceparent;
+  return context.run(outer && !ctx.traceparent ? { ...ctx, traceparent: outer } : ctx, fn);
 }
 
 export function currentTrace(): TraceContext | undefined {
@@ -33,6 +36,8 @@ export interface LlmSpan {
   /** 32 hex chars, stable per session so a run's calls sit in one trace. */
   traceId: string;
   spanId: string;
+  /** The caller's span, when a `traceparent` came with the run. */
+  parentSpanId?: string;
   /** Unix ms; OTLP wants ns, which `otlpBody` makes. */
   startMs: number;
   endMs: number;
@@ -72,10 +77,14 @@ export function tracedLlm(llm: Llm, sink: TraceSink): Llm {
       };
       const emit = (ok: boolean, more: LlmSpan["attributes"]) => {
         try {
+          const tp = ctx?.traceparent;
           sink.span({
             name: "llm.complete",
-            traceId: traceIdOf(ctx?.session ?? `call-${randomBytes(8).toString("hex")}`),
+            traceId: tp
+              ? tp.slice(3, 35)
+              : traceIdOf(ctx?.session ?? `call-${randomBytes(8).toString("hex")}`),
             spanId: randomBytes(8).toString("hex"),
+            ...(tp ? { parentSpanId: tp.slice(36, 52) } : {}),
             startMs,
             endMs: Date.now(),
             ok,
@@ -152,6 +161,7 @@ export function otlpBody(spans: readonly LlmSpan[], serviceName: string): unknow
             spans: spans.map((s) => ({
               traceId: s.traceId,
               spanId: s.spanId,
+              ...(s.parentSpanId ? { parentSpanId: s.parentSpanId } : {}),
               name: s.name,
               kind: 3, // CLIENT
               startTimeUnixNano: `${s.startMs}000000`,

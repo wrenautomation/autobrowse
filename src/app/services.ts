@@ -73,6 +73,7 @@ import {
   type Channel,
   channels,
   emailChannel,
+  forwardChannel,
   linqChannel,
   memoryChannel,
   phoneChannel,
@@ -99,7 +100,7 @@ import { DO_SERVICE, doService } from "../do/service.js";
 import { BROWSER_SERVICE, type BrowserService, browserService } from "../engine/browser-service.js";
 import { Unrecoverable } from "../engine/effects.js";
 import { parseGuards } from "../engine/guards.js";
-import { makeRunObject } from "../engine/object.js";
+import { type HostDeps, makeRunObject } from "../engine/object.js";
 import { type RunsRegistry, runsRegistryFor } from "../engine/registry.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import type { ExploreOptions } from "../explore/server.js";
@@ -124,7 +125,7 @@ import {
 import { type BudgetExceeded, type BudgetedLlm, budgetedLlm, fileLedger } from "../llm/budget.js";
 import { type Llm, makeLlm } from "../llm/index.js";
 import { countedLlm, fileLlmCalls } from "../llm/ledger.js";
-import { otlpSink, type TraceSink, tracedLlm } from "../llm/trace.js";
+import { otlpSink, type TraceSink, tracedLlm, withTrace } from "../llm/trace.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
 import { type Charge, type ChargeRow, reportCharge } from "../money/charges.js";
 import { isDefaultOwner, named, ownerKeys } from "../owner.js";
@@ -1083,6 +1084,13 @@ function personApprover(
   return null;
 }
 
+/** FEED_HOSTS as a list; empty when unset. */
+export const feedHostsOf = (settings: Settings): string[] =>
+  (settings.feedHosts ?? "")
+    .split(",")
+    .map((h) => h.trim())
+    .filter(Boolean);
+
 export function channelsFor(
   settings: Settings,
   gmail: GmailUserClient,
@@ -1102,6 +1110,13 @@ export function channelsFor(
         url: settings.webhookUrl,
         http,
         ...(settings.webhookToken ? { token: settings.webhookToken } : {}),
+      }),
+    );
+  if (feedHostsOf(settings).length > 0)
+    list.push(
+      forwardChannel({
+        ...(settings.feedToken ? { token: settings.feedToken } : {}),
+        log: (line) => console.warn(line),
       }),
     );
   return list;
@@ -1198,9 +1213,11 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   const sink = sinkFor(settings, ssm);
   const bootstrapDeps = bootstrapDepsFor(settings, browser, sink, http);
 
-  const host = {
-    emit: (e: Parameters<Channel["deliver"]>[0]) => channel.deliver(e),
+  const host: HostDeps = {
+    emit: (e, feed) => channel.deliver(e, feed),
     owner: settings.owner,
+    feedHosts: feedHostsOf(settings),
+    traced: (trace, fn) => withTrace(trace, fn),
   };
   /** The catalog is read on every listing; a broken flow is said once per distinct error, not per request. */
   const warned = new Set<string>();

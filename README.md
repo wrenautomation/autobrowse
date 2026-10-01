@@ -475,6 +475,11 @@ channel, and a reply on any of them is a command (`yes`, `no`, `pause`,
   no Mac; replies arrive at `POST /hooks/linq`, verified with
   `LINQ_WEBHOOK_SECRET`; the same chats serve SMS one-time codes)
 - a webhook (`WEBHOOK_URL`)
+- the caller's own hook, per run: start a run with `x-feed-url` (https,
+  host in `FEED_HOSTS`), `x-feed-tag` and an optional `traceparent`, and
+  its events are posted back as `{ tag, traceparent?, events: [{ seq,
+  event }] }` about once a second, bearer `FEED_TOKEN`; best effort, never
+  fails the run
 
 With `SENTRY_DSN` set, failed runs, failed steps and crashes become
 Sentry issues tagged workflow/key/step.

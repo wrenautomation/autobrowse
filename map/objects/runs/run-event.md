@@ -25,7 +25,7 @@ One stream feeds people (channels), the UI (bus) and the registry; rows are deri
 
 - **owns:** nothing
 - **owned-by:** [[run-object]] (emits through `HostDeps.emit`)
-- **joins:** [[channel]] (`deliver`), [[runs-registry]] (`record`), the UI bus (`src/ui/bus.ts`), [[gate]]
+- **joins:** [[channel]] (`deliver`; `forwardChannel` posts them unchanged to a caller's feed, numbered by `seq`), [[runs-registry]] (`record`), the UI bus (`src/ui/bus.ts`), [[gate]]
 
 ## If you change this
 

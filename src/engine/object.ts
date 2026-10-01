@@ -15,7 +15,8 @@ import { HttpError } from "../clients/http.js";
 import { named } from "../owner.js";
 import type { DistributiveOmit } from "../types.js";
 import { type Effects, type GateAnswer, type GateName, Unrecoverable } from "./effects.js";
-import type { RunEvent, RunRef } from "./events.js";
+import { type RunEvent, type RunRef, runId } from "./events.js";
+import { type Feed, type FeedPoint, FeedRefused, feedFrom } from "./feed.js";
 import { REGISTRY_KEY, type RunsRegistry, registryOf } from "./registry.js";
 import type { AdvanceOptions } from "./run.js";
 import {
@@ -33,6 +34,8 @@ const PLAN = "plan";
 const OUTCOME = "outcome";
 const PAUSED = "paused";
 const GEN = "gen";
+/** The caller's feed (`engine/feed.ts`) and how many events it has had. */
+const FEED = "feed";
 
 export type EventBody = DistributiveOmit<RunEvent, "run" | "at">;
 
@@ -47,8 +50,12 @@ export interface RunStatusView {
 
 /** What the host gives every run object besides the workflow's own deps. */
 export interface HostDeps {
-  /** Tell people and systems. Journaled per event; never throws the run. */
-  emit(event: RunEvent): Promise<void>;
+  /** Tell people and systems. Journaled per event; never throws the run. `feed`: the caller's hook, when it asked. */
+  emit(event: RunEvent, feed?: FeedPoint): Promise<void>;
+  /** Hosts a run's `x-feed-url` may name (FEED_HOSTS); none means a run asking for a feed is a 400. */
+  feedHosts?: readonly string[];
+  /** Run a step under the caller's W3C trace, so its model spans join that trace. */
+  traced?<T>(trace: { session: string; traceparent: string }, fn: () => Promise<T>): Promise<T>;
   /** Off in tests that run one object without the registry. */
   registry?: boolean;
   /** Whose runs these are: object and registry names carry it (designs/2026-09-30-owner-keys.md). */
@@ -214,7 +221,21 @@ export function makeRunObjectFrom<W extends AnyWorkflow>(
     } as RunEvent;
     if (host.registry !== false)
       ctx.objectSendClient<RunsRegistry>(registry, REGISTRY_KEY).record(event);
-    await ctx.run(`emit ${event.type}`, () => host.emit(event).catch(() => undefined));
+    const feed = await ctx.get<FeedPoint>(FEED);
+    const point = feed ? { ...feed, seq: feed.seq + 1 } : undefined;
+    if (point) ctx.set(FEED, point);
+    await ctx.run(`emit ${event.type}`, () => host.emit(event, point).catch(() => undefined));
+  };
+
+  /** The feed this `run` asks for; a bad one is the caller's 400 before anything runs. */
+  const feedOf = (ctx: restate.ObjectContext): Feed | null => {
+    try {
+      return feedFrom(ctx.request().headers, host.feedHosts ?? []);
+    } catch (err) {
+      if (err instanceof FeedRefused)
+        throw new restate.TerminalError(err.message, { errorCode: 400 });
+      throw err;
+    }
   };
 
   const next = (ctx: restate.ObjectContext, gen: number) =>
@@ -270,6 +291,8 @@ export function makeRunObjectFrom<W extends AnyWorkflow>(
         if (!parsed.success) throw new restate.TerminalError(`bad plan: ${parsed.error.message}`);
         if (await ctx.get<OpenGate>(KEYS.gate))
           throw new restate.TerminalError(`${ctx.key} is waiting at a gate: approve or reject it`);
+        const feed = feedOf(ctx);
+        if (feed) ctx.set(FEED, { ...feed, seq: (await ctx.get<FeedPoint>(FEED))?.seq ?? 0 });
         ctx.set(PLAN, raw);
         ctx.clear(OUTCOME);
         const gen = ((await ctx.get<number>(GEN)) ?? 0) + 1;
@@ -304,7 +327,12 @@ export function makeRunObjectFrom<W extends AnyWorkflow>(
         const { workflow, deps } = found;
         const plan = workflow.plan.parse(raw);
         const fx = effects(ctx);
-        const a = await advance(fx, workflow, deps, plan, opts);
+        const go = () => advance(fx, workflow, deps, plan, opts);
+        const tp = (await ctx.get<FeedPoint>(FEED))?.traceparent;
+        const a =
+          tp && host.traced
+            ? await host.traced({ session: runId(ref), traceparent: tp }, go)
+            : await go();
         if (a.kind === "continue") {
           await emit(ctx, ref, { type: "step", step: a.step, result: a.result });
           next(ctx, gen);
@@ -347,8 +375,10 @@ export function makeRunObjectFrom<W extends AnyWorkflow>(
       /** Forget everything about this run. A step in flight finishes first; its follow-up is ignored. */
       reset: async (ctx: restate.ObjectContext): Promise<void> => {
         const gen = (await ctx.get<number>(GEN)) ?? 0;
+        const feed = await ctx.get<FeedPoint>(FEED);
         ctx.clearAll();
         ctx.set(GEN, gen + 1);
+        if (feed) ctx.set(FEED, feed); // whoever watches still hears the reset
         await emit(ctx, refOf(ctx.key), { type: "reset" });
       },
 

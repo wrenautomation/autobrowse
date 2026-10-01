@@ -13,14 +13,15 @@ One Restate virtual object per run, keyed by the run's key: `makeRunObject` / `m
 
 ## Why this shape
 
-Each handler is one host invocation and state is saved before it returns (`src/engine/run.ts:97`). Transient failures retry with backoff for about a day; `Unrecoverable`, `NeedsHuman`, `FlowFailed` and 4xx stop at once (`src/engine/object.ts:60-77`).
+Each handler is one host invocation and state is saved before it returns (`src/engine/run.ts:97`). Transient failures retry with backoff for about a day; `Unrecoverable`, `NeedsHuman`, `FlowFailed` and 4xx stop at once (`src/engine/object.ts:67-84`).
 
 ## Shape
 
-- Handlers: `run`, `step`, `pause`, `play`, `approve`, `reject`, `reset`, `status` — `src/engine/object.ts:151-160`
+- Handlers: `run`, `step`, `pause`, `play`, `approve`, `reject`, `reset`, `status` — `src/engine/object.ts:158-167`
 - State keys: results, memo, answers, the open gate — `src/engine/run.ts:14-19`
-- `HostDeps.emit(event)` journals every [[run-event]]; `registry: false` in tests — `src/engine/object.ts:49-56`
-- `makeRunObjectFrom(name, resolve)`: one object serves many workflows found per key (the compiled ones) — `src/engine/object.ts:197`, `src/workflows/compiled.ts:106`
+- `HostDeps.emit(event, feed?)` journals every [[run-event]]; `registry: false` in tests — `src/engine/object.ts:52-63`
+- Feed: `run` with `x-feed-url`/`x-feed-tag`/`traceparent` keeps the caller's hook in state `feed` (a host off `HostDeps.feedHosts` is a 400 before anything runs); every emit hands it on with `seq` counted from 1; `reset` keeps it; a step with a `traceparent` runs under `HostDeps.traced` so model spans join the caller's trace — `src/engine/object.ts:226-240`, `:295`, `:333-334`, `src/engine/feed.ts:47-68`
+- `makeRunObjectFrom(name, resolve)`: one object serves many workflows found per key (the compiled ones) — `src/engine/object.ts:204`, `src/workflows/compiled.ts:106`
 - `Effects` seam a step gets: `run`, `get`, `set`, `clear`, `sleep`, `now` — `src/engine/effects.ts:12-21`
 
 ## Connected to
@@ -32,7 +33,7 @@ Each handler is one host invocation and state is saved before it returns (`src/e
 
 ## If you change this
 
-- **Hits:** `src/engine/run.ts`, `src/engine/memory.ts` (the test host), `src/workflows/compiled.ts`, `src/app/services.ts:1110` (`buildApp` registers them), CLI `run`/`status`, UI `/api/runs`, `src/app/client.ts`.
+- **Hits:** `src/engine/run.ts`, `src/engine/memory.ts` (the test host), `src/workflows/compiled.ts`, `src/app/services.ts:1125` (`buildApp` registers them), CLI `run`/`status`, UI `/api/runs`, `src/app/client.ts`.
 - **Does not hit:** flows, the site facade, agent sessions (in-process, not Restate).
 
 ## Surfaces

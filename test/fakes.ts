@@ -8,6 +8,7 @@ import type { CloudflareClient, DnsRecord, Registration } from "../src/clients/c
 import type { InstantlyAccount, InstantlyClient } from "../src/clients/instantly.js";
 import type { GateAnswer, GateName } from "../src/engine/effects.js";
 import type { RunEvent } from "../src/engine/events.js";
+import type { FeedPoint } from "../src/engine/feed.js";
 import { memoryEffects } from "../src/engine/memory.js";
 import type { OpenGate } from "../src/engine/run.js";
 import type { DomainDeps } from "../src/workflows/domain/index.js";
@@ -20,10 +21,14 @@ export const fakeEffects = () => memoryEffects({ now: () => new Date(NOW) });
 /** Collects what a run object tells the world; `subjects` mirrors the old notify emails. */
 export function fakeHost() {
   const events: RunEvent[] = [];
+  const feeds: (FeedPoint & { type: RunEvent["type"] })[] = [];
   return {
     events,
-    emit: async (e: RunEvent) => {
+    feeds,
+    feedHosts: ["feed.example.com"],
+    emit: async (e: RunEvent, feed?: FeedPoint) => {
       events.push(e);
+      if (feed) feeds.push({ ...feed, type: e.type });
     },
     subjects: () =>
       events.flatMap((e) =>

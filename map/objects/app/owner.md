@@ -21,10 +21,10 @@ One process serves one owner, so isolation is decided once at startup (`boot`), 
 - `awsConfig`: the default owner uses the process's credentials, any other the owners role tagged `owner=<o>`, else it throws — `src/owner.ts:44`; `awsFor(settings)`, the only AWS client factory — `src/app/owner.ts:169`
 - Setting classes: `OWNER_SETTINGS`, `PROCESS_SETTINGS`, `OPERATOR_TOOL_KEYS`; everything else is the operator's — `src/app/owner.ts:27-63`
 - `enterOwner` drops the operator's accounts from the env, then reads `<ownersDir>/<o>/.env`; a key that is the operator's or a fixed path throws — `src/app/owner.ts:130`; `boot()`, every entry point's first line — `:162`; `ownerFromArgv` — `:175`
-- Files: `OWNER_PATHS`, `ownerDir` — `src/app/config.ts:428`, `:455`; Keychain `autobrowse-owner-<o>` (`keychainOf`) — `src/auth/keep.ts:14`
+- Files: `OWNER_PATHS`, `ownerDir` — `src/app/config.ts:434`, `:455`; Keychain `autobrowse-owner-<o>` (`keychainOf`) — `src/auth/keep.ts:14`
 - AWS side: role `autobrowse-prod-owners`, session tag `owner` scopes SSM and S3 — `deploy/terraform/owners.tf:43`
 
-Citations: `src/owner.ts:11`, `src/app/owner.ts:130`, `src/app/config.ts:428`, `src/auth/keep.ts:14`, `deploy/terraform/owners.tf:43`
+Citations: `src/owner.ts:11`, `src/app/owner.ts:130`, `src/app/config.ts:434`, `src/auth/keep.ts:14`, `deploy/terraform/owners.tf:43`
 
 ## Connected to
 
