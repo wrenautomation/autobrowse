@@ -560,7 +560,8 @@ flow otherwise (gated reads, community posts). The caller has one client.
 Sites: `linkedin`, `youtube`, `instagram` (Graph API, long-lived token),
 `tiktok` (Content Posting API; `client_key`), `outlook` (Microsoft Graph:
 mail and calendar, `/me/messages`, `/me/sendMail`, `/me/events`), `gmail`
-(`/gmail/v1/users/me/...`; proven 2026-09-22), `meta` (one Facebook Login
+(`/gmail/v1/users/me/...`; proven 2026-09-22), `drive` (`/drive/v3/...`, read
+only: list a folder, export a Doc as text; proven 2026-10-01), `meta` (one Facebook Login
 app: Marketing API campaigns/ad sets/creatives/ads/insights under
 `/act_{id}/…`, Page posts/photos/videos with the Page's own token, Instagram
 publishing for the Page's professional account), `x` (API v2: `/2/tweets`,

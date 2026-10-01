@@ -37,6 +37,8 @@ export interface JsonResponse<T> {
   ok: boolean;
   /** Parsed JSON, or null when the body is empty or not JSON. */
   body: T | null;
+  /** The body as sent, for the few answers that are text (a Drive export). */
+  text?: string;
   headers: Headers;
 }
 
@@ -114,6 +116,7 @@ export function httpClient(opts: HttpOptions = {}): HttpClient {
             status: response.status,
             ok: response.ok,
             body: parseJson<T>(text),
+            text,
             headers: response.headers,
           };
         }
