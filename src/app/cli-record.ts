@@ -441,8 +441,10 @@ export function registerRecordCommands(
           since: new Date(),
           phone,
         });
+        // The browser runs as the new account's key (`reddit@alt`), so a
+        // sibling account's signed-in profile (`reddit`) never answers the signup.
         const { achieved } = await runAgent(settings, {
-          site,
+          site: key,
           goal: signupGoal({ ...account, site }, phone),
           url: o.url ?? null,
           inputs: {},
