@@ -16,7 +16,7 @@ or leaves a mailing list without you.
 | 6 | [The agent, `do`, healing](06-agent-and-do.md) | one verb that routes or builds |
 | 7 | [Accounts: login, signup, OAuth sign-in](07-accounts.md) | a site signed in by itself; a Wren account made by the agent |
 | 8 | [Chores: unsubscribe](08-chores.md) | the inbox off every list you did not mean to join |
-| 9 | [The box: deploy, idle-stop, wake](09-box.md) | prod on EC2 behind Restate Cloud, off when idle |
+| 9 | [The box (retired)](09-box.md) | prod moved to the Mac desk worker, 2026-10-02 |
 
 Demos:
 

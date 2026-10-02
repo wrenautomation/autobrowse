@@ -2,7 +2,7 @@
 # owner's process assumes with its own session tag `owner=<name>`. The policy is
 # scoped by that tag, so an owner's session reaches only its own SSM path and S3
 # prefixes. The default owner (wren) never assumes it; its machines are denied
-# every owner's path instead (box.tf, shots.tf).
+# every owner's path instead (shots.tf).
 
 locals {
   account         = data.aws_caller_identity.me.account_id
@@ -12,8 +12,8 @@ locals {
   owner_ssm_read  = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:GetParameterHistory"]
 }
 
-# Anyone in this account the operator lets assume it (the box's role; the
-# operator's own user), and only with exactly one tag: a plain owner name.
+# Anyone in this account the operator lets assume it (the operator's own
+# user), and only with exactly one tag: a plain owner name.
 data "aws_iam_policy_document" "owners_assume" {
   statement {
     sid     = "OneOwnerPerSession"
@@ -82,17 +82,3 @@ resource "aws_iam_role_policy" "owners" {
   policy = data.aws_iam_policy_document.owners.json
 }
 
-# The box may run an owner's worker: it assumes the owners role, tagged.
-data "aws_iam_policy_document" "box_owners" {
-  statement {
-    sid       = "BecomeAnOwner"
-    actions   = ["sts:AssumeRole", "sts:TagSession"]
-    resources = [aws_iam_role.owners.arn]
-  }
-}
-
-resource "aws_iam_role_policy" "box_owners" {
-  name   = "box-owners"
-  role   = aws_iam_role.box.id
-  policy = data.aws_iam_policy_document.box_owners.json
-}

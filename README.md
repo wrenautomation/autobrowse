@@ -412,13 +412,12 @@ minutes and hold a profile.
 
 ### AWS
 
-`deploy/`: one EC2 box, the image from ECR, secrets in SSM, no inbound port.
-With `RESTATE_TUNNEL_NAME` + `RESTATE_ENVIRONMENT_ID` + `RESTATE_CLOUD_REGION`
-+ `RESTATE_IDENTITY_KEY` set, the worker dials Restate Cloud's tunnel instead
-of listening and registers the tunnel URL itself. `deploy/README.md` is the
-runbook; a push to main deploys once the box exists. The box sleeps between
-jobs: `IDLE_STOP_MINUTES` makes the worker stop its own instance once nothing
-has needed it, and a caller (wren, `box.sh start`) wakes it.
+The AWS box was retired on 2026-10-02 (cost). Prod is the desk worker on the
+operator's Mac, which dials Restate Cloud's tunnel (`RESTATE_TUNNEL_NAME` +
+`RESTATE_ENVIRONMENT_ID` + `RESTATE_CLOUD_REGION` + `RESTATE_IDENTITY_KEY`)
+and registers the tunnel URL itself. `deploy/README.md` is the runbook.
+`IDLE_STOP_MINUTES` still stops an EC2 host the worker runs on, if one is
+ever used again.
 
 ### Owners
 

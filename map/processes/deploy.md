@@ -1,12 +1,14 @@
 ---
 type: process
-status: verified
+status: retired
 verified: 2026-09-28 @ 70aefc3
 consumes: [settings, app]
 produces: []
 ---
 
 # deploy
+
+> Retired 2026-10-02: the AWS box, its CI deploy and `box.sh` are gone. Prod is the Mac desk worker (`deploy/README.md`). Kept as history.
 
 A push to main becomes the worker running on the box, registered with Restate Cloud, and the box stops itself when idle.
 

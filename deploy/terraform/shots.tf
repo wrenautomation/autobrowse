@@ -30,30 +30,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "shots" {
   }
 }
 
-# The box writes shots; it never lists or deletes them. It reads only
-# inputs/: the files a plan named (`autobrowse run` ships them there).
-data "aws_iam_policy_document" "box_shots" {
-  statement {
-    sid       = "ShipShots"
-    actions   = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.shots.arn}/*"]
-  }
-  statement {
-    sid       = "ReadRunInputs"
-    actions   = ["s3:GetObject"]
-    resources = ["${aws_s3_bucket.shots.arn}/inputs/*"]
-  }
-  # Owners' shots and inputs (owners.tf) are theirs: the box's own role touches neither.
-  statement {
-    sid     = "NeverAnOwners"
-    effect  = "Deny"
-    actions = ["s3:PutObject", "s3:GetObject"]
-    resources = [
-      "${aws_s3_bucket.shots.arn}/owners/*",
-      "${aws_s3_bucket.shots.arn}/inputs/owners/*",
-    ]
-  }
-}
 
 # A plan's files are needed for the run, not kept: gone after a week.
 resource "aws_s3_bucket_lifecycle_configuration" "shots" {
@@ -68,10 +44,4 @@ resource "aws_s3_bucket_lifecycle_configuration" "shots" {
       days = 7
     }
   }
-}
-
-resource "aws_iam_role_policy" "box_shots" {
-  name   = "box-shots"
-  role   = aws_iam_role.box.id
-  policy = data.aws_iam_policy_document.box_shots.json
 }
