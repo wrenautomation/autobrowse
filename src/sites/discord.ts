@@ -332,17 +332,31 @@ export const discord: SiteApi = {
         description: z.string().max(120).optional(),
         /** A local path or URL to a png, jpg, gif or webp (gif only on a boosted server). */
         icon: z.string().min(1).optional(),
+        /** Who gets a push by default: every post, or only posts that @mention them. */
+        notifications: z.enum(["all", "mentions"]).optional(),
       }),
-      api: async ({ guild, icon, ...rest }, leg) => {
-        const g = await call<{ id: string; name: string; icon: string | null }>(
-          leg,
-          "PATCH",
-          `/guilds/${guild}`,
-          { ...rest, ...(icon ? { icon: await imageData(icon) } : {}) },
-        );
-        return { id: g.id, name: g.name, icon: g.icon };
+      api: async ({ guild, icon, notifications, ...rest }, leg) => {
+        const g = await call<{
+          id: string;
+          name: string;
+          icon: string | null;
+          default_message_notifications: number;
+        }>(leg, "PATCH", `/guilds/${guild}`, {
+          ...rest,
+          ...(icon ? { icon: await imageData(icon) } : {}),
+          ...(notifications
+            ? { default_message_notifications: notifications === "all" ? 0 : 1 }
+            : {}),
+        });
+        return {
+          id: g.id,
+          name: g.name,
+          icon: g.icon,
+          notifications: g.default_message_notifications === 1 ? "mentions" : "all",
+        };
       },
-      summary: "The server's name, description and icon (icon = a local path or URL)",
+      summary:
+        "The server's name, description, icon (a local path or URL) and default notifications (all | mentions)",
     }),
     route({
       method: "PUT",

@@ -80,6 +80,16 @@ describe("discord site", () => {
     });
   });
 
+  it("sets the server to ping only on @mentions", async () => {
+    const t = leg(() => ({
+      body: { id: "44444", name: "w", icon: null, default_message_notifications: 1 },
+    }));
+    const r = routeOf("PATCH", "/guilds/{guild}");
+    const out = await r.api(r.request.parse({ guild: "44444", notifications: "mentions" }), t.leg);
+    expect(JSON.parse(t.calls[0]?.body ?? "{}")).toEqual({ default_message_notifications: 1 });
+    expect(out).toMatchObject({ notifications: "mentions" });
+  });
+
   it("invites with channels, roles and webhooks, never admin", () => {
     const p = BigInt(BOT_PERMISSIONS);
     expect(p & 8n).toBe(0n);
