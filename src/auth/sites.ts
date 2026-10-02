@@ -768,13 +768,18 @@ const npm: SiteLogin = {
  * is confirmed by a link Discord emails: that wall is a person's.
  * UNVERIFIED until its first live run.
  */
-const DISCORD_SIGNED_IN = /discord\.com\/(channels|developers|oauth2)/;
+const DISCORD_SIGNED_IN = /discord\.com\/(app|channels|developers|oauth2)/;
 const discord: SiteLogin = {
   site: "discord",
   home: "https://discord.com/channels/@me",
   ask: "Your Discord login (email, password, authenticator key if 2FA is on): the account that owns the server",
   loggedIn: async (fp) =>
     DISCORD_SIGNED_IN.test(fp.url()) && !(await fp.has({ role: "button", name: "/^log ?in$/i" })),
+  // Mapped 2026-10-02: a bot token reset opens "Multi-Factor Authentication" with this box.
+  reauth: {
+    field: { role: "textbox", name: "/enter your password/i" },
+    submit: { role: "button", name: "/^submit$/i" },
+  },
   signIn: formLogin("discord", {
     start: "https://discord.com/login",
     username: { role: "textbox", name: "/email or phone/i" },

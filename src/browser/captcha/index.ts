@@ -6,7 +6,10 @@
  *             one human click, then wait for the tick
  *   grid      "select all squares with traffic lights": the challenge is
  *             photographed, the eyes name the squares, the hands click them
- *             and press Verify; new squares fading in are looked at again
+ *             and press Verify; new squares fading in are looked at again.
+ *             hCaptcha's canvas tasks ("click the…", "drag the animal into
+ *             its outline") have no squares: the eyes give points to click
+ *             or a drag, or say skip for a fresh task
  *   text      a picture of letters beside a box: the eyes read, the hands type
  *   slider    a puzzle piece to drag into its gap: the eyes say how far
  *   hold      "press and hold" (HUMAN, on Microsoft's signup): the button is
@@ -293,6 +296,7 @@ async function pickSquares(
   for (let look = 0; look < 4; look++) {
     const tiles = frame.locator(parts.tiles);
     const count = await tiles.count();
+    if (!count && vendor === "hcaptcha") return canvasTask(page, frame, hands, eyes, settleMs);
     if (!count) return "gave-up";
     const ask = (
       await frame
@@ -329,6 +333,108 @@ async function pickSquares(
     await page.waitForTimeout(500);
   }
   // Still open: a wrong pick or a fresh challenge; the next round looks again.
+  return "again";
+}
+
+/** A canvas task's answer: points to click, one drag, or a fresh task. */
+export type CanvasMove =
+  | { clicks: { x: number; y: number }[] }
+  | { drag: { from: { x: number; y: number }; to: { x: number; y: number } } }
+  | { skip: true };
+
+/** The eyes' reply in picture pixels, as CSS points inside a box `scale` times smaller; null when unreadable. */
+export function parseCanvasMove(
+  answer: string,
+  scale: number,
+  w: number,
+  h: number,
+): CanvasMove | null {
+  const m = /\{[\s\S]*\}/.exec(answer);
+  if (!m) return null;
+  const point = (v: unknown) => {
+    if (!Array.isArray(v) || v.length !== 2) return null;
+    const [x, y] = v.map((n) => Number(n) / scale);
+    if (x === undefined || y === undefined) return null;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x > w || y > h) return null;
+    return { x, y };
+  };
+  try {
+    const v = JSON.parse(m[0]) as {
+      clicks?: unknown;
+      drag?: { from?: unknown; to?: unknown };
+      skip?: unknown;
+    };
+    if (v.skip === true) return { skip: true };
+    if (Array.isArray(v.clicks)) {
+      const clicks = v.clicks.map(point);
+      if (!clicks.length || clicks.some((c) => c === null)) return null;
+      return { clicks: clicks as { x: number; y: number }[] };
+    }
+    if (v.drag) {
+      const from = point(v.drag.from);
+      const to = point(v.drag.to);
+      return from && to ? { drag: { from, to } } : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** A PNG's width in pixels, from its header. */
+const pngWidth = (png: Buffer) => png.readUInt32BE(16);
+
+/**
+ * hCaptcha's canvas task: the picture and its question to the eyes, their
+ * clicks or drag by the hands, then Next/Verify. Unsure, or an answer that
+ * does not parse: Skip (the same button before any move) for a fresh task.
+ */
+async function canvasTask(
+  page: Page,
+  frame: FrameLocator,
+  hands: Hands,
+  eyes: Eyes,
+  settleMs: number,
+): Promise<Step> {
+  const canvas = frame.locator("canvas").first();
+  if (!(await visible(canvas))) return "gave-up";
+  const box = await canvas.boundingBox(T);
+  if (!box) return "gave-up";
+  const ask = (
+    await frame
+      .locator(HCAPTCHA.prompt)
+      .first()
+      .innerText(T)
+      .catch(() => "")
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+  const png = await canvas.screenshot({ ...T, type: "png" });
+  const scale = pngWidth(png) / box.width || 1;
+  const answer = await eyes.look(
+    png,
+    `A captcha: ${ask || "solve the task in the picture"}. The picture is ${Math.round(box.width * scale)} by ${Math.round(box.height * scale)} pixels, x from the left, y from the top. Reply with pixel points in it: {"clicks":[[x,y],...]} for a task that says click or select; {"drag":{"from":[x,y],"to":[x,y]}} for one that says drag, move or place (from = the middle of the piece, to = the middle of where it goes); {"skip":true} when unsure.`,
+  );
+  const move = parseCanvasMove(answer, scale, box.width, box.height);
+  const submit = frame.locator(HCAPTCHA.verify).first();
+  if (!move || "skip" in move) {
+    await hands.click(submit, T); // reads "Skip" before any move
+    await page.waitForTimeout(2_000);
+    return "again";
+  }
+  if ("clicks" in move)
+    for (const at of move.clicks) {
+      await hands.click(canvas, { ...T, at });
+      await page.waitForTimeout(300);
+    }
+  else await hands.drag(canvas, move.drag.from, move.drag.to, T);
+  await page.waitForTimeout(500);
+  await hands.click(submit, T);
+  const until = Date.now() + settleMs;
+  while (Date.now() < until) {
+    if (!(await shown(page, HCAPTCHA.bframe))) return "ticked";
+    await page.waitForTimeout(500);
+  }
   return "again";
 }
 

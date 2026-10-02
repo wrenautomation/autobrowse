@@ -1,6 +1,11 @@
 import type { Page } from "playwright";
 import { describe, expect, it } from "vitest";
-import { findCaptcha, parseSquares, solveCaptcha } from "../src/browser/captcha/index.js";
+import {
+  findCaptcha,
+  parseCanvasMove,
+  parseSquares,
+  solveCaptcha,
+} from "../src/browser/captcha/index.js";
 import type { Hands } from "../src/browser/human/index.js";
 
 /** A page (its main frame, or a frame inside it) where only selectors containing one of `shown` are visible. */
@@ -85,5 +90,25 @@ describe("captcha", () => {
       vendor: "recaptcha",
       reason: "the box moved",
     });
+  });
+});
+
+describe("parseCanvasMove", () => {
+  it("reads clicks and drags in picture pixels as CSS points", () => {
+    expect(parseCanvasMove('{"clicks":[[100,40],[20,20]]}', 2, 200, 200)).toEqual({
+      clicks: [
+        { x: 50, y: 20 },
+        { x: 10, y: 10 },
+      ],
+    });
+    expect(parseCanvasMove('ok {"drag":{"from":[10,10],"to":[300,200]}}', 2, 200, 200)).toEqual({
+      drag: { from: { x: 5, y: 5 }, to: { x: 150, y: 100 } },
+    });
+  });
+  it("skips when unsure, refuses points outside the picture or nonsense", () => {
+    expect(parseCanvasMove('{"skip":true}', 1, 100, 100)).toEqual({ skip: true });
+    expect(parseCanvasMove('{"clicks":[[500,5]]}', 1, 100, 100)).toBeNull();
+    expect(parseCanvasMove('{"clicks":[]}', 1, 100, 100)).toBeNull();
+    expect(parseCanvasMove("no idea", 1, 100, 100)).toBeNull();
   });
 });

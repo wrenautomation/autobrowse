@@ -77,6 +77,12 @@ export interface SiteLogin {
    * again even though `home` is signed in, so `signIn` would find nothing to do.
    */
   signInHere?: { at: RegExp; run(ctx: SignInContext): Promise<void> };
+  /**
+   * The password asked again in place, signed in (Discord's box before a
+   * bot token reset): filled where it shows, no navigation, so the dialog
+   * and what waits behind it survive.
+   */
+  reauth?: { field: Hints; submit: Hints };
   /** How this site's authenticator setup page walks, when it is known; `enroll-totp` guesses otherwise. */
   totpSetup?: TotpSetupSpec;
   /** How this site's change-password page walks, for `creds rotate`. */
@@ -610,6 +616,17 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
 
 async function signInWith(name: string, login: SiteLogin, ctx: SignInContext): Promise<void> {
   const { fp } = ctx;
+  if (login.reauth && (await fp.has(login.reauth.field))) {
+    await fp.act({ kind: "fill", value: passwordOf(name, ctx.cred) }, login.reauth.field, {
+      goal: "type the password again",
+    });
+    await fp.act({ kind: "click" }, login.reauth.submit, { goal: "confirm with the password" });
+    for (let i = 0; i < 15; i++) {
+      await fp.wait(1_000);
+      if (!(await fp.has(login.reauth.field))) return;
+    }
+    throw new LoginFailed(name, "the password box stayed up");
+  }
   const here = login.signInHere;
   if (here?.at.test(fp.url())) {
     await here.run(ctx);

@@ -24,7 +24,7 @@ Robustness lives in one place: a pause to read, a curved reach, typing in runs w
 ## Connected to
 
 - **owned-by:** the runner (`RunnerOptions.pace`, `src/browser/flow.ts:216`)
-- **joins:** [[flow]], the captcha solver (`src/browser/captcha/index.ts:152`), the explore session
+- **joins:** [[flow]], the captcha solver (`src/browser/captcha/index.ts:155`), the explore session
 
 ## If you change this
 

@@ -18,12 +18,14 @@ export const DISCORD_BOT_TOKEN = "DISCORD_BOT_TOKEN";
 export const DISCORD_APP_ID = "DISCORD_APP_ID";
 
 /**
- * What the bot may do in a server: view and send, manage channels, roles and
- * webhooks. Not Administrator: a leaked token then cannot ban or delete the server.
+ * What the bot may do in a server: view and send, manage the server (name,
+ * icon), channels, roles and webhooks. Not Administrator: a leaked token then
+ * cannot ban or delete the server.
  */
 export const BOT_PERMISSIONS = (
   (1n << 10n) | // view channels
   (1n << 11n) | // send messages
+  (1n << 5n) | // manage server (name, icon)
   (1n << 4n) | // manage channels
   (1n << 28n) | // manage roles
   (1n << 29n)
@@ -425,7 +427,7 @@ export const discord: SiteApi = {
       needs: [DISCORD_APP_ID],
       how: { flow: "discord/invite", input: { appId: { env: DISCORD_APP_ID } } },
       summary:
-        "Add the bot to a server you manage (manage channels, roles, webhooks; not admin): one consent as the signed-in user",
+        "Add the bot to a server you manage (manage server, channels, roles, webhooks; not admin): one consent as the signed-in user",
     },
   ],
 };

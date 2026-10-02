@@ -17,7 +17,8 @@ Checkboxes are solved by the hands alone; pictures need `Eyes` (a model that see
 
 ## Shape
 
-- `Captcha { kind: checkbox|grid|text|slider, vendor: recaptcha|hcaptcha|turnstile|generic … }` — `src/browser/captcha/index.ts:23-31`; `Eyes`, `CaptchaOutcome`, `SolveOptions` — `:32-45`
+- `Captcha { kind: checkbox|grid|text|slider, vendor: recaptcha|hcaptcha|turnstile|generic … }` — `src/browser/captcha/index.ts:26-34`; `Eyes`, `CaptchaOutcome`, `SolveOptions` — `:32-45`
+- hCaptcha canvas task (no tiles: drag or click on one picture): `canvasTask` — `src/browser/captcha/index.ts:`; the eyes' move parsed by `parseCanvasMove` — `:346`
 - Wired by `captchaFor` — `src/app/services.ts:316`
 
 ## Connected to
