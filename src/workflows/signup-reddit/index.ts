@@ -1,10 +1,13 @@
 /**
  * Make a Reddit account on www.reddit.com/register/ with an email, a
  * username and a minted password, confirming the email with the code Reddit
- * sends. A draft: written from the 2026 register dialog (email → "Continue",
- * a six-digit code, then username + password → "Continue" makes the
- * account, then "Skip" through gender and interests), not yet proven by a
- * run. Run it headed on a home IP: Reddit bot-checks a datacenter one.
+ * sends. Shaped by the agent run that made reddit@alt on 2026-10-02: a
+ * checkbox captcha on open (`fp.open` solves it), email → "Continue", the
+ * "Verification code" field, then username + password → "Continue" makes the
+ * account; the gender and interests dialogs after it are left, not answered.
+ * The browser must run as the new account's key (a sibling account's
+ * profile answers "already signed in"). Run it on a home IP: Reddit
+ * bot-checks a datacenter one.
  *
  * Secrets (set as env, see SecretSource): email, password, code. The password
  * is minted and stored under `reddit@<label>` by `autobrowse signup reddit
@@ -42,6 +45,14 @@ export type Memo = Record<string, unknown>;
 type Step<S extends string> = StepDef<Plan, Deps, Memo, S>;
 
 const REGISTER = "https://www.reddit.com/register/";
+const OLD = "https://old.reddit.com";
+
+/** The little of the DOM the page script touches; the project compiles without lib dom. */
+interface El {
+  textContent: string | null;
+  querySelectorAll(sel: string): Iterable<El>;
+}
+declare const document: El;
 const RENDER_MS = 15_000;
 
 export interface SubmitEmailInput {
@@ -117,15 +128,18 @@ const createAccountFlow = defineFlow<CreateAccountInput, { username: string }>({
         irreversible: true,
       },
     );
-    // Gender, then interests: both optional, both have a Skip.
-    for (let i = 0; i < 3; i++) {
-      const skip = { role: "button" as const, name: "/^skip$/i" };
-      if (!(await fp.has(skip, 5_000))) break;
-      await fp.act({ kind: "click" }, skip, { goal: "skip the optional question" });
-    }
-    if (await fp.has({ role: "textbox", name: "/^username/i" }, 1_000))
+    if (await fp.has({ role: "textbox", name: "/^username/i" }, 5_000))
       return fp.human(`reddit: the signup stayed on the username page (taken, or a bot check)`);
-    return { username: input.username };
+    // The account exists once that page is gone. The tail (gender, then interests,
+    // which refuses to continue without a pick) is optional: leaving answers it.
+    // Old Reddit's header names the signed-in account, which may not be the
+    // username asked for: Reddit keeps its own suggestion when the fill is late.
+    await fp.open(`${OLD}/`);
+    const name = await fp.page.evaluate(
+      () => [...document.querySelectorAll("#header .user a")][0]?.textContent?.trim() ?? "",
+    );
+    if (!name) return fp.human(`reddit: the signup ended signed out (${fp.url()})`);
+    return { username: name };
   },
 });
 
@@ -159,11 +173,14 @@ const createAccount: Step<"create-account"> = {
     if (!answer.approved) return rejected(answer.note ?? "declined");
     // Outside fx.run on purpose: the journal must never hold it.
     const password = await deps.secrets.get("password");
-    await fx.run("browser signup-create", () =>
+    const made = await fx.run("browser signup-create", () =>
       deps.browser.run(createAccountFlow, { username: plan.username, password }),
     );
+    const name = made?.username ?? plan.username;
     return done(
-      `u/${plan.username} exists; sign it in with autobrowse login reddit@<label> --headed.`,
+      name === plan.username
+        ? `u/${name} exists and is signed in.`
+        : `u/${name} exists and is signed in (Reddit kept its own name, not u/${plan.username}).`,
     );
   },
 };
