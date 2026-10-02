@@ -22,6 +22,8 @@ export interface ApiLeg {
   http: HttpClient;
   /** Env names the route itself needs (which channel a post belongs on, say). */
   env: (name: string) => string | undefined;
+  /** Keeps a secret the call made (a webhook URL) in the sink, so the answer never carries it. */
+  keep?: (name: string, value: string) => Promise<void>;
 }
 
 /**

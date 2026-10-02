@@ -1,4 +1,5 @@
 export { CALCOM_ORIGIN, calcom } from "./calcom.js";
+export { DISCORD_API, discord, inviteUrl } from "./discord.js";
 export { DRIVE_ORIGIN, drive, driveOAuth } from "./drive.js";
 export {
   type CheckRow,
@@ -31,6 +32,7 @@ export { x, xOAuth } from "./x.js";
 export { youtube } from "./youtube.js";
 
 import { calcom } from "./calcom.js";
+import { discord } from "./discord.js";
 import { drive } from "./drive.js";
 import { gmail } from "./gmail.js";
 import { instagram } from "./instagram.js";
@@ -66,4 +68,5 @@ export const SITES: readonly SiteApi[] = [
   calcom,
   web,
   perplexity,
+  discord,
 ];

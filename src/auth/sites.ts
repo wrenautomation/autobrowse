@@ -763,6 +763,36 @@ const npm: SiteLogin = {
 };
 
 /**
+ * Discord: email (or phone) and password on one page, then hCaptcha when it
+ * doubts the device, then the authenticator when 2FA is on. A new location
+ * is confirmed by a link Discord emails: that wall is a person's.
+ * UNVERIFIED until its first live run.
+ */
+const DISCORD_SIGNED_IN = /discord\.com\/(channels|developers|oauth2)/;
+const discord: SiteLogin = {
+  site: "discord",
+  home: "https://discord.com/channels/@me",
+  ask: "Your Discord login (email, password, authenticator key if 2FA is on): the account that owns the server",
+  loggedIn: async (fp) =>
+    DISCORD_SIGNED_IN.test(fp.url()) && !(await fp.has({ role: "button", name: "/^log ?in$/i" })),
+  signIn: formLogin("discord", {
+    start: "https://discord.com/login",
+    username: { role: "textbox", name: "/email or phone/i" },
+    password: { role: "textbox", name: "/^password/i" },
+    submit: { role: "button", name: "/^log ?in$/i" },
+    captcha: { css: 'iframe[src*="hcaptcha"]' },
+    code: {
+      kind: "totp",
+      asks: /multi-factor|auth(entication)? code|two-factor/i,
+      field: { role: "textbox", name: "/code/i" },
+      submit: { role: "button", name: "/confirm|log ?in|verify/i" },
+    },
+    rejected: /login or password is invalid|invalid login/i,
+    success: DISCORD_SIGNED_IN,
+  }),
+};
+
+/**
  * Reddit: the account's own login (the handle, then the password). Mapped
  * 2026-09-29 in headless explore: /login/ is a "Log In" dialog, textbox
  * "Email or username", textbox "Password", button "Log In" (disabled until
@@ -842,4 +872,5 @@ export const SITE_LOGINS: readonly SiteLogin[] = [
   github,
   reddit,
   perplexity,
+  discord,
 ];

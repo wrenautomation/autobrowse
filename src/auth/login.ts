@@ -170,6 +170,8 @@ export interface FormLoginSpec {
   success?: RegExp;
   /** Text that means the password was rejected: stop, do not lock the account. */
   rejected?: RegExp;
+  /** A captcha the site may show after submit (Discord's hCaptcha): solved by the runner, else a person's. */
+  captcha?: Hints;
 }
 
 export class LoginFailed extends Error {
@@ -202,6 +204,11 @@ export function formLogin(site: string, spec: FormLoginSpec): SiteLogin["signIn"
     await fp.act({ kind: "fill", value: password }, spec.password, { goal: "type password" });
     await fp.act({ kind: "click" }, spec.submit, { goal: "submit login form" });
     await fp.wait(SETTLE_MS);
+    if (spec.captcha && (await fp.has(spec.captcha))) {
+      const got = await fp.captcha();
+      if (!got.solved) fp.human(`${site}: the sign-in captcha is a person's (${got.reason})`);
+      await fp.wait(SETTLE_MS);
+    }
     let text = await fp.text();
     if (spec.rejected?.test(text) && cred.previousPassword) {
       // A rotation the site took without saying so: the one before still works once.

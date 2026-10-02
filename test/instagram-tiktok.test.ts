@@ -189,6 +189,7 @@ describe("instagram and tiktok consents and OAuth shapes", () => {
       "calcom",
       "web",
       "perplexity",
+      "discord",
     ]);
     expect(instagramOAuth.consent).toEqual({ flow: "instagram/oauth-consent" });
     expect(tiktokOAuth.consent).toEqual({ flow: "tiktok/oauth-consent" });

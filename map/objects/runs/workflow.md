@@ -32,7 +32,7 @@ Steps never see Restate. A workflow is data plus step functions over the `Effect
 ## If you change this
 
 - **Hits:** `src/engine/run.ts` (advance and nextStep read `steps` and `settle`), `src/engine/object.ts`, `src/compiler/render.ts:256-340` (emits this shape), `src/engine/inputs.ts`, `src/do/catalog.ts:83`, every `src/workflows/*/index.ts`.
-- **Does not hit:** `src/browser/flow.ts` or the flow runner; site routes that name a workflow by string (`src/sites/types.ts:42`).
+- **Does not hit:** `src/browser/flow.ts` or the flow runner; site routes that name a workflow by string (`src/sites/types.ts:44`).
 
 ## Surfaces
 

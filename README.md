@@ -315,7 +315,8 @@ a row; it is work.
   `aws-port25-request` (EC2 email-limit removal form; the submit is a gate).
 - **Logins** (`src/auth/sites.ts`): cloudflare, google, google-admin,
   instantly, aws, anthropic, twilio, sentry, linkedin, instagram, tiktok,
-  outlook (the `microsoft` credential); providers google, github, microsoft
+  outlook (the `microsoft` credential), discord (hCaptcha by the runner,
+  2FA from the stored key); providers google, github, microsoft
   behind any "Continue with …" button.
 
 ## Run
@@ -506,6 +507,9 @@ is copied by hand:
 
 ```sh
 pnpm autobrowse site setup langfuse project-keys   # mints a key pair in the browser, keeps both
+pnpm autobrowse site setup discord bot-token       # a bot on discord.com/developers; DISCORD_APP_ID + DISCORD_BOT_TOKEN kept
+pnpm autobrowse site setup discord invite          # the bot joins your server (channels, roles, webhooks; not admin)
+pnpm autobrowse site call discord POST "/channels/<id>/webhooks" --body '{"name":"intake","keep":"LANDER_DISCORD_WEBHOOK"}'  # URL kept, never printed
 pnpm autobrowse langfuse wire                      # derives the three OTEL names from them
 pnpm autobrowse langfuse check                     # the door opens
 pnpm autobrowse langfuse recent --minutes 30       # the spans that actually landed

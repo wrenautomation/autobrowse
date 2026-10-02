@@ -505,7 +505,12 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           if (!ok) throw new SiteError(403, `${what}: refused`);
         }
         if (r.api && token !== null)
-          return r.api(parsed.data as never, { token, http: deps.http, env: deps.env });
+          return r.api(parsed.data as never, {
+            token,
+            http: deps.http,
+            env: deps.env,
+            keep: async (name, value) => deps.sink.put(name, value),
+          });
         if (r.browser) {
           // The same account the API leg would have used: its profile, so a browser
           // leg posts as the site's own identity and never as whoever the default

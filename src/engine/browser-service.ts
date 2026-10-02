@@ -12,6 +12,7 @@ import { z } from "zod";
 import { withCall } from "../browser/attempt.js";
 import { type BrowserFlow, FlowFailed, type FlowRunner } from "../browser/flow.js";
 import { calcomApiKey } from "../browser/flows/calcom-api-key.js";
+import { discordBotToken, discordInvite } from "../browser/flows/discord.js";
 import { facebookOauthConsent } from "../browser/flows/facebook-oauth-consent.js";
 import { fingerprint } from "../browser/flows/fingerprint.js";
 import { googleDkimGenerate, googleDkimStart } from "../browser/flows/google-dkim.js";
@@ -101,6 +102,8 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     npmGranularToken,
     npmTrustedPublisher,
     calcomApiKey,
+    discordBotToken,
+    discordInvite,
     facebookOauthConsent,
     tiktokOauthConsent,
     xOauthConsent,

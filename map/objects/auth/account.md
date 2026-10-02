@@ -13,7 +13,7 @@ One of the person's addresses and what it is for: `Identity` in `src/auth/identi
 
 ## Why this shape
 
-Purposes decide which account a site call or consent runs as when nobody names one: `default`, `pays`, `signup` are held by one account each; any other word is a group (`sends`). A site names a purpose, a setup step can override it (`src/auth/identities.ts:21-36`, `src/sites/types.ts:166-171`).
+Purposes decide which account a site call or consent runs as when nobody names one: `default`, `pays`, `signup` are held by one account each; any other word is a group (`sends`). A site names a purpose, a setup step can override it (`src/auth/identities.ts:21-36`, `src/sites/types.ts:168-173`).
 
 ## Shape
 

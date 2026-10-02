@@ -9,7 +9,7 @@ entity: src/auth/login.ts
 
 # Site login
 
-How one site is signed into and where its password may be typed: `SiteLogin` in `src/auth/login.ts`; the list is `SITE_LOGINS` in `src/auth/sites.ts:824`.
+How one site is signed into and where its password may be typed: `SiteLogin` in `src/auth/login.ts`; the list is `SITE_LOGINS` in `src/auth/sites.ts:854`.
 
 ## Why this shape
 
@@ -26,7 +26,7 @@ The runner meets a wall and calls one hook (`RunnerOptions.login`); the spec say
 
 - **owns:** its walk or form
 - **owned-by:** `SITE_LOGINS`
-- **joins:** [[credential]], [[identity-provider]] (`via`), [[sign-in-context]], [[screen]] (walks), [[guard]] (`passwordDomains`, `src/auth/login.ts:392`), [[need]]
+- **joins:** [[credential]], [[identity-provider]] (`via`), [[sign-in-context]], [[screen]] (walks), [[guard]] (`passwordDomains`, `src/auth/login.ts:399`), [[need]]
 - **looks-like-but-is-not:** [[site-api]] (the official API), `SITES` in `src/browser/flow.ts:63`
 
 ## If you change this
