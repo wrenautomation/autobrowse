@@ -510,6 +510,8 @@ pnpm autobrowse site setup langfuse project-keys   # mints a key pair in the bro
 pnpm autobrowse site setup discord bot-token       # a bot on discord.com/developers; DISCORD_APP_ID + DISCORD_BOT_TOKEN kept
 pnpm autobrowse site setup discord invite          # the bot joins your server (channels, roles, webhooks; not admin)
 pnpm autobrowse site call discord POST "/channels/<id>/webhooks" --body '{"name":"intake","keep":"LANDER_DISCORD_WEBHOOK"}'  # URL kept, never printed
+pnpm autobrowse site call discord PUT "/guilds/<id>/layout"   # a category + channel + webhook per sales lane; idempotent
+pnpm autobrowse site call discord PATCH "/guilds/<id>" --body '{"icon":"../lander/public/brand/wren-pfp.png"}'  # server icon
 pnpm autobrowse langfuse wire                      # derives the three OTEL names from them
 pnpm autobrowse langfuse check                     # the door opens
 pnpm autobrowse langfuse recent --minutes 30       # the spans that actually landed

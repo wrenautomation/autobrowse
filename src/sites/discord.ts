@@ -6,9 +6,11 @@
  * A webhook URL is a secret (it authorises posting): a new one goes straight
  * to the sink under the name the caller gives, never into the answer.
  */
+import { extname } from "node:path";
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
 import { type ApiLeg, route, type SiteApi } from "./types.js";
+import { bytesOf } from "./youtube.js";
 
 export const DISCORD_API = "https://discord.com/api/v10";
 export const DISCORD_BOT_TOKEN = "DISCORD_BOT_TOKEN";
@@ -80,6 +82,195 @@ interface Webhook {
 }
 /** A webhook without its secret half. */
 const bare = (w: Webhook) => ({ id: w.id, name: w.name, channel_id: w.channel_id });
+/** The URL that posts through a webhook, from its id and token. */
+const webhookUrl = (w: Webhook) => w.url ?? `https://discord.com/api/webhooks/${w.id}/${w.token}`;
+
+const IMAGE_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+};
+/** Discord takes an avatar or icon as a data URI. */
+export async function imageData(source: string, fetcher?: typeof fetch): Promise<string> {
+  const ext = extname(source.replace(/[?#].*$/, "")).toLowerCase();
+  const type = IMAGE_TYPES[ext];
+  if (!type) throw new Error(`discord: ${ext || "no extension"} is not png, jpg, gif or webp`);
+  const bytes = await bytesOf(source, fetcher);
+  if (bytes.byteLength > 10 * 1024 ** 2) throw new Error("discord: image over 10 MB");
+  return `data:${type};base64,${Buffer.from(bytes).toString("base64")}`;
+}
+
+/**
+ * A server laid out by sales channel: one category per group, one text
+ * channel per lane, each lane's pings through its own webhook, so one
+ * channel's data never lands in another's. The env names are the ones wren
+ * reads (`WREN_DISCORD_<LANE>_WEBHOOK_URL`) and the lander's intake form.
+ */
+export const WREN_LAYOUT: Layout = [
+  {
+    category: "Outbound",
+    channels: [
+      {
+        name: "email",
+        topic: "Cold email: replies, bounces, pauses",
+        webhook: "WREN_DISCORD_EMAIL_WEBHOOK_URL",
+      },
+      {
+        name: "sms",
+        topic: "Cold SMS: replies, opt-outs, health",
+        webhook: "WREN_DISCORD_SMS_WEBHOOK_URL",
+      },
+      {
+        name: "reach",
+        topic: "Reddit and LinkedIn DMs",
+        webhook: "WREN_DISCORD_REACH_WEBHOOK_URL",
+      },
+    ],
+  },
+  {
+    category: "Inbound",
+    channels: [
+      { name: "intake", topic: "Lander form submissions", webhook: "LANDER_DISCORD_WEBHOOK" },
+      {
+        name: "search",
+        topic: "Search Console and answer engines",
+        webhook: "WREN_DISCORD_SEARCH_WEBHOOK_URL",
+      },
+    ],
+  },
+  {
+    category: "Marketing",
+    channels: [
+      { name: "ads", topic: "Meta ads: spend and pauses", webhook: "WREN_DISCORD_ADS_WEBHOOK_URL" },
+      {
+        name: "content",
+        topic: "Organic posts: schedule and metrics",
+        webhook: "WREN_DISCORD_CONTENT_WEBHOOK_URL",
+      },
+    ],
+  },
+  {
+    category: "Clients",
+    channels: [
+      {
+        name: "clients",
+        topic: "Delivery and reactivation",
+        webhook: "WREN_DISCORD_CLIENTS_WEBHOOK_URL",
+      },
+    ],
+  },
+  {
+    category: "Ops",
+    channels: [
+      {
+        name: "ops",
+        topic: "Morning digest and system pings",
+        webhook: "WREN_DISCORD_WEBHOOK_URL",
+      },
+    ],
+  },
+];
+
+const envName = z.string().regex(/^[A-Z][A-Z0-9_]*$/);
+const layoutSchema = z
+  .array(
+    z.object({
+      category: z.string().min(1).max(100),
+      channels: z
+        .array(
+          z.object({
+            name: z.string().regex(/^[a-z0-9_-]{1,100}$/, "a lowercase channel name"),
+            topic: z.string().max(1024).optional(),
+            /** Env name the channel's webhook URL is kept as. */
+            webhook: envName.optional(),
+          }),
+        )
+        .min(1),
+    }),
+  )
+  .min(1);
+export type Layout = z.infer<typeof layoutSchema>;
+
+interface Channel {
+  id: string;
+  name: string;
+  type: number;
+  parent_id?: string | null;
+  topic?: string | null;
+}
+const WEBHOOK_NAME = "Wren";
+const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/**
+ * Makes the server match `layout`, idempotently: a missing category or channel
+ * is made, a channel elsewhere is moved under its category, a topic is set,
+ * a missing webhook is made and every lane's URL is kept. Channels the layout
+ * does not name are left alone: it never deletes.
+ */
+export async function applyLayout(leg: ApiLeg, guild: string, layout: Layout) {
+  if (!leg.keep) throw new Error("discord: no sink to keep the webhook URLs in");
+  const channels = await call<Channel[]>(leg, "GET", `/guilds/${guild}/channels`);
+  const done: { category: string; channel: string; did: string[]; kept?: string }[] = [];
+  for (const group of layout) {
+    let cat = channels.find(
+      (c) => c.type === CHANNEL_TYPES.category && same(c.name, group.category),
+    );
+    if (!cat) {
+      cat = await call<Channel>(leg, "POST", `/guilds/${guild}/channels`, {
+        name: group.category,
+        type: CHANNEL_TYPES.category,
+      });
+      channels.push(cat);
+    }
+    for (const want of group.channels) {
+      const did: string[] = [];
+      let ch =
+        channels.find(
+          (c) => c.type === CHANNEL_TYPES.text && c.parent_id === cat.id && c.name === want.name,
+        ) ?? channels.find((c) => c.type === CHANNEL_TYPES.text && c.name === want.name);
+      if (!ch) {
+        ch = await call<Channel>(leg, "POST", `/guilds/${guild}/channels`, {
+          name: want.name,
+          type: CHANNEL_TYPES.text,
+          parent_id: cat.id,
+          ...(want.topic ? { topic: want.topic } : {}),
+        });
+        channels.push(ch);
+        did.push("made");
+      } else {
+        const patch: Record<string, unknown> = {};
+        if (ch.parent_id !== cat.id) patch.parent_id = cat.id;
+        if (want.topic && (ch.topic ?? "") !== want.topic) patch.topic = want.topic;
+        if (Object.keys(patch).length > 0) {
+          ch = await call<Channel>(leg, "PATCH", `/channels/${ch.id}`, patch);
+          if ("parent_id" in patch) did.push("moved");
+          if ("topic" in patch) did.push("topic");
+        }
+      }
+      let kept: string | undefined;
+      if (want.webhook) {
+        const hooks = await call<Webhook[]>(leg, "GET", `/channels/${ch.id}/webhooks`);
+        let hook = hooks.find((w) => w.name === WEBHOOK_NAME && w.token);
+        if (!hook) {
+          hook = await call<Webhook>(leg, "POST", `/channels/${ch.id}/webhooks`, {
+            name: WEBHOOK_NAME,
+          });
+          did.push("webhook");
+        }
+        await leg.keep(want.webhook, webhookUrl(hook));
+        kept = want.webhook;
+      }
+      done.push({ category: cat.name, channel: ch.name, did, ...(kept ? { kept } : {}) });
+    }
+  }
+  const named = new Set(done.map((d) => d.channel));
+  const untouched = channels
+    .filter((c) => c.type === CHANNEL_TYPES.text && !named.has(c.name))
+    .map((c) => c.name);
+  return { channels: done, untouched };
+}
 
 export const discord: SiteApi = {
   site: "discord",
@@ -107,6 +298,57 @@ export const discord: SiteApi = {
       request: z.object({ guild: id }),
       api: ({ guild }, leg) => call(leg, "GET", `/guilds/${guild}?with_counts=true`),
       summary: "One server: name, boost tier, member counts, features",
+    }),
+    route({
+      method: "PATCH",
+      path: "/users/@me",
+      request: z.object({
+        username: z.string().min(2).max(32).optional(),
+        /** A local path or URL to a png, jpg, gif or webp. */
+        avatar: z.string().min(1).optional(),
+      }),
+      api: async ({ username, avatar }, leg) => {
+        const u = await call<{ id: string; username: string; avatar: string | null }>(
+          leg,
+          "PATCH",
+          "/users/@me",
+          {
+            ...(username ? { username } : {}),
+            ...(avatar ? { avatar: await imageData(avatar) } : {}),
+          },
+        );
+        return { id: u.id, username: u.username, avatar: u.avatar };
+      },
+      summary: "The bot's name and picture (avatar = a local path or URL to a png/jpg/gif/webp)",
+    }),
+    route({
+      method: "PATCH",
+      path: "/guilds/{guild}",
+      request: z.object({
+        guild: id,
+        name: z.string().min(2).max(100).optional(),
+        description: z.string().max(120).optional(),
+        /** A local path or URL to a png, jpg, gif or webp (gif only on a boosted server). */
+        icon: z.string().min(1).optional(),
+      }),
+      api: async ({ guild, icon, ...rest }, leg) => {
+        const g = await call<{ id: string; name: string; icon: string | null }>(
+          leg,
+          "PATCH",
+          `/guilds/${guild}`,
+          { ...rest, ...(icon ? { icon: await imageData(icon) } : {}) },
+        );
+        return { id: g.id, name: g.name, icon: g.icon };
+      },
+      summary: "The server's name, description and icon (icon = a local path or URL)",
+    }),
+    route({
+      method: "PUT",
+      path: "/guilds/{guild}/layout",
+      request: z.object({ guild: id, layout: layoutSchema.default(WREN_LAYOUT) }),
+      api: ({ guild, layout }, leg) => applyLayout(leg, guild, layout),
+      summary:
+        "Lay the server out by sales channel (no official path: autobrowse's own): a category per group, a channel per lane, each lane's webhook URL kept under its env name; idempotent, never deletes. Default layout = Wren's lanes",
     }),
     route({
       method: "GET",

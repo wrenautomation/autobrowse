@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { httpClient } from "../src/clients/http.js";
-import { BOT_PERMISSIONS, discord, inviteUrl } from "../src/sites/discord.js";
+import {
+  applyLayout,
+  BOT_PERMISSIONS,
+  discord,
+  imageData,
+  inviteUrl,
+  WREN_LAYOUT,
+} from "../src/sites/discord.js";
 import type { ApiLeg } from "../src/sites/types.js";
 import { fakeFetch } from "./fakes.js";
 
@@ -78,5 +85,68 @@ describe("discord site", () => {
     expect(p & 8n).toBe(0n);
     expect(p & (1n << 29n)).not.toBe(0n);
     expect(inviteUrl("123456", "777777")).toContain("guild_id=777777");
+  });
+
+  it("lays a server out by lane, then a second run only re-keeps the URLs", async () => {
+    // A tiny Discord: channels and webhooks in memory.
+    const chans: {
+      id: string;
+      name: string;
+      type: number;
+      parent_id?: string | null;
+      topic?: string | null;
+    }[] = [
+      { id: "10001", name: "general", type: 0, parent_id: null },
+      { id: "10002", name: "sms", type: 0, parent_id: null },
+    ];
+    const hooks: { id: string; name: string; channel_id: string; token: string }[] = [];
+    let n = 20000;
+    const t = leg(({ method, url, body }) => {
+      const path = url.pathname.replace("/api/v10", "");
+      const b = body ? JSON.parse(body) : {};
+      if (method === "GET" && path.endsWith("/channels")) return { body: chans };
+      if (method === "POST" && path.endsWith("/channels")) {
+        const c = { id: String(n++), ...b };
+        chans.push(c);
+        return { body: c };
+      }
+      const hook = path.match(/^\/channels\/(\d+)\/webhooks$/);
+      if (hook && method === "GET") return { body: hooks.filter((h) => h.channel_id === hook[1]) };
+      if (hook && method === "POST") {
+        const h = { id: String(n++), name: b.name, channel_id: hook[1] ?? "", token: `tok${n}` };
+        hooks.push(h);
+        return { body: h };
+      }
+      const patch = path.match(/^\/channels\/(\d+)$/);
+      if (patch && method === "PATCH") {
+        const c = chans.find((x) => x.id === patch[1]);
+        Object.assign(c ?? {}, b);
+        return { body: c };
+      }
+      return { status: 404, body: { message: "no" } };
+    });
+    const first = await applyLayout(t.leg, "44444", WREN_LAYOUT);
+    const sms = first.channels.find((c) => c.channel === "sms");
+    expect(sms?.did).toEqual(["moved", "topic", "webhook"]);
+    expect(first.channels.find((c) => c.channel === "intake")?.did).toEqual(["made", "webhook"]);
+    expect(first.untouched).toEqual(["general"]);
+    expect(t.kept.get("WREN_DISCORD_SMS_WEBHOOK_URL")).toMatch(
+      /^https:\/\/discord\.com\/api\/webhooks\/\d+\/tok/,
+    );
+    expect(JSON.stringify(first)).not.toContain("tok");
+    const made = chans.length;
+    const again = await applyLayout(t.leg, "44444", WREN_LAYOUT);
+    expect(again.channels.every((c) => c.did.length === 0)).toBe(true);
+    expect(chans.length).toBe(made);
+    expect(hooks.length).toBe(WREN_LAYOUT.flatMap((g) => g.channels).length);
+  });
+
+  it("turns an image into a data URI and refuses other files", async () => {
+    const png = new Uint8Array([137, 80, 78, 71]);
+    const f = async () => new Response(png);
+    expect(await imageData("https://x.test/pfp.png?sig=1", f as typeof fetch)).toBe(
+      `data:image/png;base64,${Buffer.from(png).toString("base64")}`,
+    );
+    await expect(imageData("notes.txt")).rejects.toThrow(/not png/);
   });
 });
