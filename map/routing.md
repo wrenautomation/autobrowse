@@ -8,7 +8,7 @@ Nouns, verbs, and what a change hits, for an agent editing this repo. The code i
 |---|---|
 | `objects/<cluster>/` | one card per noun (a type, a durable file), with `path:line` citations |
 | `objects/_index.md` | one line per noun: cluster, universe, status (generated) |
-| `processes/` | the movements that actually run: sign-in, run-step, site-call, build, heal, do, deploy |
+| `processes/` | the movements that actually run: sign-in, run-step, site-call, build, heal, do |
 | `effects/CONTEXT.md` | "changing X → open these cards", plus what points in from outside the tree |
 | `_meta/schema.md` | card types, frontmatter, naming; `_meta/rebuild.sh` regenerates `_index.md` and the twins |
 | `_templates/` | copy one to start a card |
@@ -19,7 +19,7 @@ Nouns, verbs, and what a change hits, for an agent editing this repo. The code i
 |---|---|
 | what is X | `objects/_index.md`, then the card |
 | what moves if I change X | `effects/CONTEXT.md` |
-| how a sign-in, run, site call, build, heal, `do`, or deploy goes | `processes/<verb>.md` |
+| how a sign-in, run, site call, build, heal, or `do` goes | `processes/<verb>.md` |
 | how the product works, the commands, the layout | `../README.md` (the entry file) |
 | why it is shaped this way | `../designs/` (dated docs with decision logs) |
 

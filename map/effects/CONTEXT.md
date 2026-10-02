@@ -24,24 +24,21 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | a walk's spec or how one is built or run | [[walk-spec]] | [[screen]] (`walk()`), [[outline]] (op schemas), walk files on disk (`WALK_VERSION`) |
 | what is counted per model call | [[llm-call]] | every `purpose` caller, `src/runs/tokens.ts` |
 | what spends and who says yes | [[approval]] | [[spend-policy]], [[card]], [[site-api]] `spends` |
-| a state file's path or format | [[state-files]] | the owning card, `deploy/compose.prod.yml` volumes |
-| an env variable | [[settings]] | `compose.yml`, `deploy/prod.env.example`, `README.md`, the box's env |
+| a state file's path or format | [[state-files]] | the owning card |
+| an env variable | [[settings]] | `compose.yml`, `deploy/prod.env.example`, `README.md` |
 | the backend port | [[backend]] | `src/ui/api.ts`, the SPA client `ui/src/api.ts`, CLI client |
 | `do` routing, the catalog | [[ability]] | [[access-key]] (scope cuts), [[do]] process, wren callers |
 | an owner's names, paths, or setting classes | [[owner]] | [[state-files]], [[settings]], [[runs-registry]], `deploy/terraform/owners.tf` (the `owner` tag) |
-| the box, compose, CI | [[deploy]] process | [[settings]], wren's wake by instance id |
 
 ## Pointing in (outside this tree; breaks silently)
 
 | From | Into | How it breaks |
 |---|---|---|
 | wren `packages/core/src/content/restate.ts` and its channel packages | Restate services `sites` (`call`, `status`, `setup`), `desk` (same handlers, the Mac), `do`, `browser` | a renamed service or handler, a changed route path or input shape |
-| wren `packages/config/src/index.ts` (`WREN_AUTOBROWSE_INSTANCE_ID`) | the box | a new instance id; `deploy/scripts/box.sh` semantics (a wake must not stop a person's box) |
 | wren `TokenRenewal`, credvault `syncedEnvStore` | SSM `/autobrowse/config` names (`accountEnv`) | a renamed token or account suffix |
 | `.claude/skills/autobrowse/scripts/*.sh` | `pnpm -s autobrowse explore` and the explore command set | a renamed CLI verb or command field |
 | `src/workflows/*/index.ts` (rendered) | `src/index.ts` exports (`COMPILED_LIB`) | an export removed or renamed |
-| `Dockerfile`, `deploy/compose.prod.yml`, first boot's user data | `src/app/main.ts`, env names | a moved entry file or a renamed variable |
+| `Dockerfile` | `src/app/main.ts`, env names | a moved entry file or a renamed variable |
 | `deploy/desk/install.sh` (launchd on the Mac) | `src/app/desk.ts`, `node_modules/tsx/dist/cli.mjs` | a moved entry file or tsx's cli path |
-| GitHub repo secrets `AWS_DEPLOY_ROLE_ARN`, `ECR_REPOSITORY`, `INSTANCE_ID` | `.github/workflows/deploy.yml` | infra recreated without updating them |
 | `deploy/terraform/` local state (never committed) | the box, CI role, shots bucket | a second machine has no state; read before apply |
 | `NEEDS-WILLIAM.md` (hand-kept) | mirrors `autobrowse needs` | drift when a need clears in code but not in prose |

@@ -51,7 +51,7 @@ Temp dirs `run-files-*`, `upload-*`, `passwords-*` are reaped (`src/browser/reap
 
 ## If you change this
 
-- **Hits:** the card that owns the file; `src/app/config.ts`; `deploy/compose.prod.yml` volumes; `src/browser/reap.ts`.
+- **Hits:** the card that owns the file; `src/app/config.ts`; `src/browser/reap.ts`.
 - **Does not hit:** anything in git except `src/workflows/`.
 
 ## Surfaces

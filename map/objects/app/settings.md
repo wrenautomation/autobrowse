@@ -30,7 +30,7 @@ One zod schema with defaults is the whole contract between the box, compose, `.e
 
 ## If you change this
 
-- **Hits:** `src/app/services.ts`, `src/app/main.ts`, `src/app/status.ts`, `compose.yml`, `deploy/compose.prod.yml`, `deploy/prod.env.example`, `README.md` (the env table), the box's `prod.env` (outside git).
+- **Hits:** `src/app/services.ts`, `src/app/main.ts`, `src/app/status.ts`, `compose.yml`, `deploy/prod.env.example`, `README.md` (the env table).
 - **Does not hit:** compiled workflows (they take deps, not settings).
 
 ## Surfaces
