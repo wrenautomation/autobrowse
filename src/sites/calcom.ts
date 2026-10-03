@@ -5,6 +5,7 @@
  * The key is minted in the browser (`setup calcom token`) and never
  * expires, so nothing renews it.
  */
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { CALCOM_API_KEY } from "../browser/flows/calcom-api-key.js";
 import { HttpError } from "../clients/http.js";
@@ -35,6 +36,30 @@ async function get(leg: ApiLeg, path: string, version: string | null, q: Query =
   if (!res.ok) throw new HttpError("GET", url, res.status);
   return res.body;
 }
+
+async function send<T>(leg: ApiLeg, method: "POST" | "DELETE", path: string, body?: unknown) {
+  const url = `${CALCOM_ORIGIN}${path}`;
+  const res = await leg.http.json<T & { error?: { message?: string } }>(url, {
+    method,
+    headers: { authorization: `Bearer ${leg.token}` },
+    ...(body === undefined ? {} : { body }),
+  });
+  if (!res.ok) throw new HttpError(method, url, res.status, res.body?.error?.message ?? "");
+  return res.body as T;
+}
+
+/** A webhook as Cal.com lists it, minus its signing secret. */
+interface CalcomWebhook {
+  id: number | string;
+  subscriberUrl: string;
+  triggers: string[];
+  active: boolean;
+  secret?: string;
+}
+const bareHook = ({ secret: _s, ...w }: CalcomWebhook) => w;
+
+/** What a booking webhook fires on: a call made, moved or called off. */
+export const BOOKING_TRIGGERS = ["BOOKING_CREATED", "BOOKING_RESCHEDULED", "BOOKING_CANCELLED"];
 
 export const calcom: SiteApi = {
   site: "calcom",
@@ -72,6 +97,52 @@ export const calcom: SiteApi = {
       api: (q, leg) => get(leg, "/v2/event-types", VERSION.eventTypes, q),
       summary:
         "The account's event types (the pilot call among them), with their slugs and lengths",
+    }),
+    route({
+      method: "GET",
+      path: "/v2/webhooks",
+      request: z.object({}),
+      api: async (_i, leg) => {
+        const r = (await get(leg, "/v2/webhooks", null)) as { data?: CalcomWebhook[] };
+        return (r.data ?? []).map(bareHook);
+      },
+      summary: "The account's webhooks (url, triggers, active), never their secrets",
+    }),
+    route({
+      method: "POST",
+      path: "/v2/webhooks",
+      request: z.object({
+        subscriberUrl: z.string().url(),
+        triggers: z.array(z.string()).min(1).default(BOOKING_TRIGGERS),
+        /** Env name the signing secret is kept under; autobrowse makes the secret, the answer never has it. */
+        keep: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
+      }),
+      api: async ({ subscriberUrl, triggers, keep }, leg) => {
+        if (!leg.keep) throw new Error("calcom: no sink to keep the webhook secret in");
+        const secret = randomBytes(32).toString("hex");
+        // Kept before Cal.com has it: a lost answer leaves a secret with no hook, never a hook nobody can verify.
+        await leg.keep(keep, secret);
+        const r = await send<{ data: CalcomWebhook }>(leg, "POST", "/v2/webhooks", {
+          active: true,
+          subscriberUrl,
+          triggers,
+          secret,
+          version: "2021-10-20",
+        });
+        return { ...bareHook(r.data), kept: keep };
+      },
+      summary:
+        "Make a webhook (default: bookings made, moved, cancelled) signed with a fresh secret kept as `keep` in the sink; the secret is never returned",
+    }),
+    route({
+      method: "DELETE",
+      path: "/v2/webhooks/{webhookId}",
+      request: z.object({ webhookId: z.string().min(1) }),
+      api: async ({ webhookId }, leg) => {
+        await send(leg, "DELETE", `/v2/webhooks/${encodeURIComponent(webhookId)}`);
+        return { deleted: webhookId };
+      },
+      summary: "Delete a webhook by id",
     }),
   ],
   setup: [

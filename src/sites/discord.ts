@@ -136,6 +136,11 @@ export const WREN_LAYOUT: Layout = [
     channels: [
       { name: "intake", topic: "Lander form submissions", webhook: "LANDER_DISCORD_WEBHOOK" },
       {
+        name: "meetings",
+        topic: "Calls booked, moved or cancelled on cal.com",
+        webhook: "LANDER_DISCORD_MEETINGS_WEBHOOK",
+      },
+      {
         name: "search",
         topic: "Search Console and answer engines",
         webhook: "WREN_DISCORD_SEARCH_WEBHOOK_URL",
