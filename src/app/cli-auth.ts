@@ -313,7 +313,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
   creds
     .command("password <site> [account]")
     .description(
-      "The password changed on the site (you changed it by hand): type it here, twice, never echoed; only the store is touched, no browser. Several accounts on the site: name one (label or username)",
+      "The password changed on the site (you changed it by hand): type it here, twice, never echoed; only the store is touched, no browser. Several accounts on the site: name one (role or username)",
     )
     .action(async (given: string, account?: string) => {
       const store = credentialsFor(settings);
@@ -331,7 +331,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
   creds
     .command("copy <site> [account]")
     .description(
-      "One field of a stored credential onto the clipboard (emptied after a minute); nothing is ever printed. Several accounts on the site: name one (label, username, or part of it); `creds list <site>` shows them",
+      "One field of a stored credential onto the clipboard (emptied after a minute); nothing is ever printed. Several accounts on the site: name one (role, username, or part of it); `creds list <site>` shows them",
     )
     .option("--field <what>", "password | username | totp | recovery | previous", "password")
     .action(async (given: string, account: string | undefined, o: { field: string }) => {

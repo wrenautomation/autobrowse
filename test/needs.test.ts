@@ -126,12 +126,13 @@ describe("needs", () => {
         {
           identities: [
             { address: "will@a.com", at: "google", for: ["sends"] },
-            { address: "will@b.com", at: "google", for: ["sends"] },
+            { address: "will@a.net", at: "google", for: ["sends"] },
           ],
         },
       ),
     );
-    expect(rows.map((r) => r.id)).toEqual(["login-google-will-a", "login-google-will-b"]);
+    expect(rows.map((r) => r.id)).toEqual(["login-google-will-a-com", "login-google-will-a-net"]);
+    expect(rows[1]?.how).toEqual(["autobrowse creds paste will@a.net"]);
   });
   it("done marks persist in a file", () => {
     const store = fileDone(join(mkdtempSync(join(tmpdir(), "needs-")), "done.json"));

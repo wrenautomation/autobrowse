@@ -8,6 +8,7 @@
  * clears when the person says `needs done <id>`. `autobrowse needs` is the
  * one place to look; NEEDS-WILLIAM.md only carries the words around it.
  */
+
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { type CredentialStore, type EnvListing, expiring } from "credvault";
@@ -22,6 +23,7 @@ import { RENEW_WITHIN_MS } from "../sites/renew.js";
 import type { OAuthSpec, SetupStep, SiteApi } from "../sites/types.js";
 import { consentProviderOf, policyAccount, profileOf } from "../sites/wire.js";
 import { youtubeOAuth } from "../sites/youtube.js";
+import { accent, bold, dim, good, warn } from "../style.js";
 import { isOperatorTool } from "./owner.js";
 
 export type NeedKind = "credential" | "keys" | "consent" | "phone" | "mac" | "money" | "decision";
@@ -183,19 +185,19 @@ export function siteNeeds(ctx: NeedsContext): Need[] {
 export function accountNeeds(ctx: NeedsContext): Need[] {
   const out: Need[] = [];
   const google = ctx.identities.filter((i) => i.at === "google");
-  // Sender mailboxes share local parts across domains (will@a, will@b): the domain keeps ids apart.
+  // Sender mailboxes share local parts across domains (will@a.com, will@a.net): the whole domain keeps ids apart.
   const local = (a: string) => a.split("@")[0] ?? a;
   const shared = (a: string) => google.filter((i) => local(i.address) === local(a)).length > 1;
   for (const id of google) {
     const label = shared(id.address)
-      ? `${local(id.address)}-${id.address.split("@")[1]?.split(".")[0] ?? ""}`
+      ? `${local(id.address)}-${(id.address.split("@")[1] ?? "").replace(/\./g, "-")}`
       : local(id.address);
     out.push({
       id: `login-google-${label}`,
       kind: "credential",
       what: `Google login for ${id.address} (${id.for.join(", ") || "no purpose yet"})`,
       unlocks: `consents and "Sign in with Google" as ${id.address}`,
-      how: [`autobrowse creds paste google@${label}`],
+      how: [`autobrowse creds paste ${id.address}`],
       check: async () => Boolean(await profileOf(ctx.credentials, "google", id.address)),
     });
     // A mailbox that only sends is read by wren's own inbox sync; autobrowse reads codes elsewhere.
@@ -569,19 +571,19 @@ export function formatNeeds(rows: NeedRow[], o: { all?: boolean } = {}): string 
   for (const kind of Object.keys(KIND_TITLES) as NeedKind[]) {
     const here = shown.filter((r) => r.kind === kind);
     if (!here.length) continue;
-    lines.push(`${KIND_TITLES[kind]}`);
+    lines.push(bold(KIND_TITLES[kind]));
     for (const r of here) {
-      const wait = r.after && !doneIds.has(r.after) ? ` (after ${r.after})` : "";
+      const wait = r.after && !doneIds.has(r.after) ? dim(` (after ${r.after})`) : "";
       const state = r.done
-        ? ` ✓ ${r.by === "you" ? "you said so" : "in hand"}${r.note ? `: ${r.note}` : ""}`
+        ? good(` ✓ ${r.by === "you" ? "you said so" : "in hand"}${r.note ? `: ${r.note}` : ""}`)
         : "";
-      lines.push(`  ${r.id}${wait}${state}`);
+      lines.push(`  ${accent(r.id)}${wait}${state}`);
       lines.push(`    ${r.what} → ${r.unlocks}`);
-      for (const h of r.how) lines.push(`    $ ${h}`);
+      for (const h of r.how) lines.push(dim(`    $ ${h}`));
     }
     lines.push("");
   }
   const open = rows.filter((r) => !r.done).length;
-  lines.push(`${open} open, ${rows.length - open} in hand`);
+  lines.push(`${open ? warn(`${open} open`) : `${open} open`}, ${rows.length - open} in hand`);
   return lines.join("\n");
 }

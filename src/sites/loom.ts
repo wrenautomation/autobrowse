@@ -64,7 +64,7 @@ export const loom: SiteApi = {
       irreversible: true,
       meter: () => ({ edits: 1 }),
       browser: { flow: "loom/delete" },
-      summary: "! Delete a video for good (its link stops working)",
+      summary: "Delete a video for good (its link stops working)",
     }),
   ],
   setup: [],

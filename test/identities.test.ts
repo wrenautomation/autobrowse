@@ -258,7 +258,13 @@ describe("accounts readiness", () => {
     ]);
     const text = formatReadiness(rows);
     expect(text).not.toContain("rt");
-    expect(text).toContain("credential google@wren");
+    expect(text.split("\n")[2]).toMatch(
+      /^w@wren\.com\s+google\s+default, signup\s+✓\s+✓ delegated\s+-$/,
+    );
+    expect(text.split("\n")[1]).toMatch(
+      /^jin@gmail\.com\s+google\s+pays\s+✓\s+✓ consent\s+gmail, youtube$/,
+    );
+    expect(text).toContain("autobrowse creds paste <address>");
     expect(formatReadiness([])).toContain("accounts add");
   });
 });

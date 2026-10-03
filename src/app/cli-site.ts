@@ -5,9 +5,11 @@
  * <name> setup <step>` makes a key or token, `site check` proves each token live,
  * `site caps` says who spent a day's capped reads.
  */
+
 import type { Command } from "commander";
 import type { CapsReport } from "../sites/facade.js";
-import { checkSite, type Method } from "../sites/index.js";
+import { type CheckRow, checkSite, type Method } from "../sites/index.js";
+import { accent, bad, bold, columns, dim, good, warn } from "../style.js";
 import type { LocalBackend } from "./backend.js";
 import { readJson } from "./cli-json.js";
 import type { Ingress } from "./client.js";
@@ -39,6 +41,12 @@ export function printCaps(r: CapsReport, rows: boolean): void {
       );
 }
 
+/** One site's who-am-I answer as cells: green when it answers, dim with no probe to try, red with why not. */
+export const checkRow = (c: CheckRow): string[] => [
+  accent(c.site),
+  c.ok ? good(`ok ${c.ms}ms`) : c.why === "no probe" ? dim(c.why) : bad(c.why ?? "failed"),
+];
+
 export function registerSiteCommands(program: Command, local: LocalBackend, box?: Ingress): void {
   const site = program
     .command("site")
@@ -46,12 +54,17 @@ export function registerSiteCommands(program: Command, local: LocalBackend, box?
     .action(async () => {
       const sites = local().backend.sites;
       if (!sites) throw new Error("no site apis here");
-      for (const s of await sites.list()) {
+      const rows = (await sites.list()).map((s) => {
         const left = s.setup.filter((x) => !x.done).map((x) => x.name);
-        console.log(
-          `${s.site.padEnd(10)} ${s.authed ? "token ok" : "no token"}  routes: ${s.routes.length}  setup left: ${left.join(", ") || "none"}`,
-        );
-      }
+        return [
+          accent(s.site),
+          s.authed ? good("token ok") : warn("no token"),
+          `${s.routes.length} routes`,
+          left.length ? warn(`setup left: ${left.join(", ")}`) : dim("set up"),
+        ];
+      });
+      for (const line of columns(rows)) console.log(line);
+      console.log(dim("\nautobrowse site status <site>: its routes and setup"));
     });
   site
     .command("status <site>")
@@ -60,15 +73,31 @@ export function registerSiteCommands(program: Command, local: LocalBackend, box?
       const sites = local().backend.sites;
       if (!sites) throw new Error("no site apis here");
       const s = await sites.status(name);
-      console.log(`${s.site} → ${s.origin}  ${s.authed ? "token ok" : "no token"}`);
-      for (const r of s.routes)
-        console.log(
-          `  ${r.method.padEnd(6)} ${r.path.padEnd(40)} ${r.via.padEnd(7)} ${r.irreversible ? "!" : " "} ${r.missing ?? r.summary}`,
-        );
-      for (const st of s.setup)
-        console.log(
-          `  setup ${st.name.padEnd(14)} ${st.done ? "done" : st.blockedOn.length ? `blocked on ${st.blockedOn.join(", ")}` : st.unrecorded ? `flow ${st.unrecorded} not recorded` : "ready"}  → ${st.makes.join(", ")}${st.input ? `  input ${JSON.stringify(st.input)}` : ""}`,
-        );
+      console.log(
+        `${bold(s.site)} ${dim(s.origin)}  ${s.authed ? good("token ok") : warn("no token")}`,
+      );
+      // `!` = irreversible; a route that cannot answer yet says what it lacks instead of what it does.
+      const routes = s.routes.map((r) => [
+        `  ${r.irreversible ? warn("!") : " "} ${r.method}`,
+        r.path,
+        dim(r.via),
+        r.missing ? warn(r.missing) : r.summary,
+      ]);
+      for (const line of columns(routes)) console.log(line);
+      if (!s.setup.length) return;
+      console.log(`\n${bold("setup")}`);
+      const steps = s.setup.map((st) => [
+        `  ${st.name}`,
+        st.done
+          ? good("done")
+          : st.blockedOn.length
+            ? warn(`blocked on ${st.blockedOn.join(", ")}`)
+            : st.unrecorded
+              ? warn(`flow ${st.unrecorded} not recorded`)
+              : "ready",
+        dim(`→ ${st.makes.join(", ")}${st.input ? `  input ${JSON.stringify(st.input)}` : ""}`),
+      ]);
+      for (const line of columns(steps)) console.log(line);
     });
   site
     .command("check [site]")
@@ -79,7 +108,7 @@ export function registerSiteCommands(program: Command, local: LocalBackend, box?
       if (!sites) throw new Error("no site apis here");
       const rows = name ? [await sites.status(name)] : await sites.list();
       const checks = await Promise.all(rows.map((r) => checkSite(sites, r, o.account ?? null)));
-      for (const c of checks) console.log(`${c.site.padEnd(10)} ${c.ok ? `ok ${c.ms}ms` : c.why}`);
+      for (const line of columns(checks.map(checkRow))) console.log(line);
       if (name && !checks[0]?.ok) process.exitCode = 1;
     });
   site

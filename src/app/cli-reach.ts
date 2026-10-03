@@ -4,6 +4,7 @@
  * (LinkedIn), `doctor` (what answers now). Keys come from the
  * environment, then the env store; a backend without one is skipped.
  */
+
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -14,7 +15,9 @@ import { writeLeads } from "../reach/linkedin-leads.js";
 import { csvRows, ensureMapsServer, mapsReady, mapsScrape, stopMapsServer } from "../reach/maps.js";
 import { type Env, READ_ORDER, readPage, SEARCH_ORDER, search } from "../reach/web.js";
 import { checkSite } from "../sites/index.js";
+import { bold, columns, dim, good, warn } from "../style.js";
 import type { LocalBackend } from "./backend.js";
+import { checkRow } from "./cli-site.js";
 
 /** This machine's environment first, then the env store; a store that cannot be reached is no key. */
 export function reachEnv(store: () => EnvStore): Env {
@@ -38,18 +41,21 @@ export function registerReachCommands(
     .command("doctor")
     .description("What answers now: search keys, the Maps scraper, and one live call per site")
     .action(async () => {
-      const has = async (n: string) => ((await env(n)) ? "ready" : `no ${n}`);
-      console.log(
-        `read    jina (${(await env("JINA_API_KEY")) ? "keyed" : "free tier"}), then fetch`,
-      );
-      console.log(
-        `search  exa: ${await has("EXA_API_KEY")} · brave: ${await has("BRAVE_API_KEY")} · duckduckgo: ready`,
-      );
-      console.log(`maps    ${await mapsReady()}`);
+      const has = async (n: string) => ((await env(n)) ? good("ready") : dim(`no ${n}`));
+      const maps = await mapsReady();
+      const rows = [
+        [bold("read"), `jina (${(await env("JINA_API_KEY")) ? "keyed" : "free tier"}), then fetch`],
+        [
+          bold("search"),
+          `exa ${await has("EXA_API_KEY")} · brave ${await has("BRAVE_API_KEY")} · duckduckgo ${good("ready")}`,
+        ],
+        [bold("maps"), maps.startsWith("ready") ? good(maps) : warn(maps)],
+      ];
       const sites = local().backend.sites;
-      if (!sites) return;
-      for (const c of await Promise.all((await sites.list()).map((r) => checkSite(sites, r))))
-        console.log(`site    ${c.site.padEnd(10)} ${c.ok ? `ok ${c.ms}ms` : c.why}`);
+      if (sites)
+        for (const c of await Promise.all((await sites.list()).map((r) => checkSite(sites, r))))
+          rows.push([bold("site"), ...checkRow(c)]);
+      for (const line of columns(rows)) console.log(line);
     });
   program
     .command("read <url>")

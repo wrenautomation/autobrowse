@@ -8,6 +8,7 @@
 import { type Credential, type CredentialStore, credentialSchema } from "credvault";
 import { z } from "zod";
 import { defineFlow, type FlowPage, type FlowRunner } from "../browser/flow.js";
+import { accent, bold, columns, dim } from "../style.js";
 import { credentialFor, resolveLogin, type SiteLogin, viaLogin } from "./login.js";
 import { PROVIDERS } from "./providers.js";
 import { MAIN, resolveAccount, shownRoles } from "./roles.js";
@@ -219,20 +220,24 @@ const oddKey = (r: PlatformAccount): string | null => {
  *     wren_automation  wren            password
  */
 export function formatAccounts(rows: readonly PlatformAccount[]): string {
-  const roles = (r: PlatformAccount) => r.roles.join(", ");
-  const u = Math.max(0, ...rows.map((r) => r.username.length));
-  const w = Math.max(0, ...rows.map((r) => roles(r).length));
   const lines: string[] = [];
+  const table = columns(
+    rows.map((r) => {
+      const odd = oddKey(r);
+      return [
+        `  ${r.username}`,
+        accent(r.roles.join(", ")),
+        `${r.how}${odd ? dim(`  (stored as ${odd})`) : ""}`,
+      ];
+    }),
+  );
   let last = "";
-  for (const r of rows) {
+  rows.forEach((r, i) => {
     const p = platformOf(r.name);
-    if (p !== last) lines.push(p);
+    if (p !== last) lines.push(bold(p));
     last = p;
-    const odd = oddKey(r);
-    lines.push(
-      `  ${r.username.padEnd(u)}  ${roles(r).padEnd(w)}  ${r.how}${odd ? `  (stored as ${odd})` : ""}`.trimEnd(),
-    );
-  }
+    lines.push(table[i] ?? "");
+  });
   return lines.join("\n");
 }
 

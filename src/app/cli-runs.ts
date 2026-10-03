@@ -8,10 +8,12 @@
  * - `tokens`: what autobrowse spends, and the verdict against tools that
  *   send the whole page (src/runs/tokens).
  */
+
 import type { Command } from "commander";
 import { readLlmCalls } from "../llm/ledger.js";
 import { baseSite, listRuns, openRuns, readRun, runFile } from "../runs/log.js";
 import { formatTokenReport, readCmds, tokenReport } from "../runs/tokens.js";
+import { accent, columns, dim, good, warn } from "../style.js";
 import { buildWalk } from "../walks/build.js";
 import { walkFlowName } from "../walks/flow.js";
 import { listWalks, loadWalk, saveWalk, walkFile } from "../walks/spec.js";
@@ -57,10 +59,20 @@ export function registerRunsCommands(
         for (const r of shown) console.log(JSON.stringify(r));
         return;
       }
-      for (const r of shown)
-        console.log(
-          `${r.run}  ${r.site.padEnd(14)} ${r.outcome.padEnd(8)} ${r.driver.padEnd(18)} ${String(r.cmds).padStart(4)} cmd ${k(r.tokens).padStart(6)} tok  ${masked(r.goal ?? "-").slice(0, 60)}`,
+      const paint = (outcome: string) =>
+        (outcome === "achieved" || outcome === "saved" ? good : outcome === "closed" ? dim : warn)(
+          outcome,
         );
+      const rows = shown.map((r) => [
+        dim(r.run),
+        accent(r.site),
+        paint(r.outcome),
+        r.driver,
+        `${String(r.cmds).padStart(4)} cmd`,
+        `${k(r.tokens).padStart(6)} tok`,
+        masked(r.goal ?? "-").slice(0, 60),
+      ]);
+      for (const line of columns(rows)) console.log(line);
       const open = openRuns(runsDir).filter((r) => !site || r.site === baseSite(site));
       if (open.length)
         console.log(`${open.length} still open (no end yet): ${open.map((r) => r.run).join(", ")}`);
@@ -134,10 +146,13 @@ export function registerRunsCommands(
     .description("Walks on this machine")
     .action(() => {
       const all = listWalks(walksDir);
-      for (const w of all)
-        console.log(
-          `${`${w.site}/walk-${w.name}`.padEnd(36)} ${String(w.screens).padStart(3)} screens ${String(w.runs).padStart(3)} runs${w.irreversible ? "  irreversible" : ""}  ${masked(w.goal).slice(0, 50)}`,
-        );
+      const rows = all.map((w) => [
+        `${w.irreversible ? warn("!") : " "} ${accent(`${w.site}/walk-${w.name}`)}`,
+        `${String(w.screens).padStart(3)} screens`,
+        `${String(w.runs).padStart(3)} runs`,
+        dim(masked(w.goal).slice(0, 50)),
+      ]);
+      for (const line of columns(rows)) console.log(line);
       if (!all.length)
         console.log("no walks yet: autobrowse walks build <site> <name> --goal-like <words>");
     });

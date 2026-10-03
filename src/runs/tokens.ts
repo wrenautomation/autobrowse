@@ -219,9 +219,14 @@ export function formatTokenReport(r: TokenReport): string[] {
         `  ${col(p.purpose, 16, false)}${col(p.n, 7)}${col(p.input, 11)}${col(p.cached, 11)}${col(p.output, 10)}${col(p.medianInput, 11)}`,
       );
   }
-  if (r.calls.byModel.length > 1)
+  if (r.calls.byModel.length > 1) {
+    const w = Math.max(5, ...r.calls.byModel.map((m) => m.model.length)) + 2;
+    out.push(
+      `  ${col("model", w, false)}${col("calls", 7)}${col("input", 11)}${col("output", 10)}`,
+    );
     for (const m of r.calls.byModel)
-      out.push(`  ${col(m.model, 36, false)}${col(m.n, 7)}${col(m.input, 11)}${col(m.output, 10)}`);
+      out.push(`  ${col(m.model, w, false)}${col(m.n, 7)}${col(m.input, 11)}${col(m.output, 10)}`);
+  }
   out.push("");
   const saved = r.answers.full ? r.answers.full / Math.max(1, r.answers.tokens) : 0;
   out.push(

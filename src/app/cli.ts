@@ -13,6 +13,7 @@ import type { GateName } from "../engine/effects.js";
 import { cursorOf } from "../engine/rows.js";
 import { summarize } from "../engine/run.js";
 import { ownerKeys } from "../owner.js";
+import { accent, bad, bold, columns, dim, good, warn } from "../style.js";
 import { DEFAULT_TLDS, domainIdeas } from "../workflows/domain/ideas.js";
 import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
 import { MAIN_SITE } from "../workflows/redirect/index.js";
@@ -40,6 +41,7 @@ import {
   registerWatchedCommands,
 } from "./cli-watched.js";
 import { ingress } from "./client.js";
+import { tidyHelp } from "./help.js";
 import { fileDone } from "./needs.js";
 import { needsContextFor } from "./owed.js";
 import { awsFor, boot, ownerFromArgv } from "./owner.js";
@@ -78,7 +80,7 @@ async function patient<T>(call: PromiseLike<T>, afterMs = 10_000): Promise<T> {
   const note = setTimeout(
     () =>
       console.error(
-        `still waiting after ${afterMs / 1000} s: Restate at ${settings.restateIngressUrl} has the call, but no worker is answering (a local one: pnpm worker; the box: deploy/scripts/box.sh status, box.sh start)`,
+        `still waiting after ${afterMs / 1000} s: Restate at ${settings.restateIngressUrl} has the call, but no worker is answering (start one: pnpm worker)`,
       ),
     afterMs,
   );
@@ -93,7 +95,7 @@ const program = new Command("autobrowse")
   .showHelpAfterError()
   .option(
     "--owner <name>",
-    "whose accounts, files and workers (designs/2026-09-30-owner-keys.md); default AUTOBROWSE_OWNER, else wren",
+    "whose accounts, files and workers; default AUTOBROWSE_OWNER, else wren",
   )
   .hook("preAction", () => {
     // The early read and commander's must agree: a value that only looked like the flag must not switch owners.
@@ -114,7 +116,6 @@ program
     "print a plan to fill in and pass back as `run <name> <key> --plan file.json`",
   )
   .action(async (name: string | undefined, o: { template?: boolean }) => {
-    const { proofLine } = await import("../workflows/proof.js");
     const { backend } = local();
     const [workflows, proofs] = await Promise.all([workflowsOf(backend), proofsOf(backend)]);
     if (name) {
@@ -122,21 +123,28 @@ program
       const w = workflows.find((x) => x.name === name);
       if (!w) throw new Error(`no workflow ${name}; see \`autobrowse workflows\``);
       if (o.template) return console.log(JSON.stringify(templateOf(w.plan), null, 2));
-      console.log(`${w.name}: ${w.description}`);
+      console.log(`${bold(w.name)}  ${w.description}`);
       console.log(
-        `steps: ${w.steps.map((s) => `${s.name}${s.irreversible ? "!" : ""}`).join(" → ")}`,
+        `${bold("steps")}   ${w.steps.map((s) => (s.irreversible ? warn(`${s.name}!`) : s.name)).join(dim(" → "))}`,
       );
-      console.log("inputs:");
+      console.log(bold("inputs"));
       for (const line of inputLines(inputsOf(w.plan))) console.log(line);
       return;
     }
-    for (const w of workflows) {
-      const proof = proofs[w.name];
-      const note = proof ? proofLine(proof) : w.name in proofs ? "draft" : "hand-written";
-      console.log(
-        `${w.name.padEnd(16)} ${w.description}  [${w.steps.map((s) => s.name).join(" → ")}]  ${note}`,
-      );
-    }
+    // One line each: name, how far it is proven, what it does. Steps and inputs: `workflows <name>`.
+    const state = (name: string) => {
+      const proof = proofs[name];
+      if (proof)
+        return proof.status === "done"
+          ? good(`proven ${proof.at.slice(0, 10)}`)
+          : bad(`proof ${proof.status}`);
+      return name in proofs ? warn("draft") : "hand-written";
+    };
+    for (const line of columns(
+      workflows.map((w) => [accent(w.name), state(w.name), w.description]),
+    ))
+      console.log(line);
+    console.log(dim("\nautobrowse workflows <name>: its steps and inputs"));
   });
 
 program
@@ -150,7 +158,6 @@ program
     const { SITES } = await import("../sites/index.js");
     const { listWalks } = await import("../walks/spec.js");
     const { walksDirFor } = await import("./services.js");
-    const { proofLine } = await import("../workflows/proof.js");
     const { backend } = local();
     const [workflows, proofs] = await Promise.all([workflowsOf(backend), proofsOf(backend)]);
     const site = o.site?.trim().toLowerCase();
@@ -170,35 +177,52 @@ program
     const mark = (leg: string) => (callers.get(leg)?.some((c) => c.irreversible) ? "!" : " ");
     const via = (leg: string) => {
       const c = callers.get(leg) ?? [];
-      return c.length ? c.map((x) => x.route).join(", ") : "no route (flow({name}) only)";
+      // No route: only `flow({name})` runs it. Many: the first two and a count.
+      if (!c.length) return "-";
+      const shown = c
+        .slice(0, 2)
+        .map((x) => x.route)
+        .join(", ");
+      return c.length > 2 ? `${shown} +${c.length - 2} more` : shown;
     };
     const flows = Object.keys(BROWSER_FLOWS)
       .filter((n) => !site || n.startsWith(`${site}/`))
       .sort();
-    console.log(`hand-written flows (src/browser/flows): ${flows.length}`);
-    for (const n of flows) console.log(`  ${mark(n)} ${n.padEnd(34)} ${via(n)}`);
+    const bang = (irreversible: boolean) => (irreversible ? warn("!") : " ");
+    const section = (title: string, n: number) => console.log(`${bold(title)} ${dim(`(${n})`)}`);
+    section("hand-written flows", flows.length);
+    for (const line of columns(flows.map((n) => [` ${bang(mark(n) === "!")} ${n}`, dim(via(n))])))
+      console.log(line);
     const compiled = workflows.filter(
       (w) => !site || w.name.startsWith(`${site}-`) || w.name.includes(`-${site}`),
     );
-    console.log(`\ncompiled workflows (src/workflows): ${compiled.length}`);
+    const { proofLine } = await import("../workflows/proof.js");
+    const proofOf = (name: string) => {
+      const proof = proofs[name];
+      if (proof) return proof.status === "done" ? good(proofLine(proof)) : bad(proofLine(proof));
+      return name in proofs ? warn("draft, never run") : "hand-written";
+    };
+    console.log("");
+    section("compiled workflows", compiled.length);
     for (const w of compiled) {
-      const proof = proofs[w.name];
-      const note = proof
-        ? proofLine(proof)
-        : w.name in proofs
-          ? "draft, never run"
-          : "hand-written";
-      const bang = w.steps.some((s) => s.irreversible) ? "!" : " ";
+      console.log(` ${bang(w.steps.some((s) => s.irreversible))} ${w.name}  ${proofOf(w.name)}`);
       console.log(
-        `  ${bang} ${w.name.padEnd(34)} ${note}; steps ${w.steps.map((s) => `${s.name}${s.irreversible ? "!" : ""}`).join(" → ")}; ${via(w.name)}`,
+        dim(
+          `     ${w.steps.map((s) => `${s.name}${s.irreversible ? "!" : ""}`).join(" → ")}${via(w.name) === "-" ? "" : `; ${via(w.name)}`}`,
+        ),
       );
     }
     const walks = listWalks(walksDirFor(settings)).filter((w) => !site || w.site === site);
-    console.log(`\nwalks (built from runs, ${walksDirFor(settings)}): ${walks.length}`);
-    for (const w of walks)
-      console.log(
-        `  ${w.irreversible ? "!" : " "} ${`${w.site}/walk-${w.name}`.padEnd(34)} ${w.screens} screens from ${w.runs} runs; ${w.goal.replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "<email>").slice(0, 60)}`,
-      );
+    console.log("");
+    section("walks, built from runs", walks.length);
+    for (const line of columns(
+      walks.map((w) => [
+        ` ${bang(w.irreversible)} ${w.site}/walk-${w.name}`,
+        `${w.screens} screens from ${w.runs} runs`,
+        dim(w.goal.replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "<email>").slice(0, 60)),
+      ]),
+    ))
+      console.log(line);
   });
 
 program
@@ -482,10 +506,23 @@ program
   .action(async (opts: { limit: string; before?: string }) => {
     const q = { limit: Number(opts.limit) || 100, ...(opts.before ? { before: opts.before } : {}) };
     const rows = await patient(api.registry().list(q));
-    for (const r of rows)
-      console.log(
-        `${r.status.padEnd(9)} ${`${r.workflow}/${r.key}`.padEnd(40)} ${r.gate ? `gate:${r.gate}` : (r.lastStep ?? "")}  ${r.updatedAt}`,
-      );
+    const paint = (st: string) =>
+      (st === "done"
+        ? good
+        : st === "failed" || st === "rejected"
+          ? bad
+          : st === "running"
+            ? accent
+            : warn)(st);
+    for (const line of columns(
+      rows.map((r) => [
+        paint(r.status),
+        `${r.workflow}/${r.key}`,
+        r.gate ? warn(`gate ${r.gate}`) : (r.lastStep ?? ""),
+        dim(r.updatedAt),
+      ]),
+    ))
+      console.log(line);
     const last = rows.at(-1);
     if (last && rows.length === q.limit) console.log(`next: --before ${cursorOf(last)}`);
   });
@@ -577,6 +614,7 @@ registerDesktopCommands(program, tmpdir());
 registerWalletCommands(program, settings);
 registerAccessCommands(program, settings);
 
+tidyHelp(program);
 program.parseAsync().catch((err: unknown) => {
   // Name the command that failed, so a bare "exit code 1" always says why.
   const command = process.argv

@@ -19,7 +19,7 @@ Purposes decide which account a site call or consent runs as when nobody names o
 
 - `Identity { address, at: google|microsoft, for: string[], note? }` — `src/auth/identities.ts:40-48`; store `fileIdentities` / `envIdentities` (`AUTOBROWSE_ACCOUNTS` on the box) / `layeredIdentities` — `:151-178`; file `~/.config/autobrowse/accounts.json` (`src/app/config.ts:247`)
 - `accountSite(nameOrAddress)`: a bare address is `google@<address>` — `:61`
-- `AccountRow { site, known, ask, username, via, url, has{…} }`, `Accounts { list, save, check }` — `src/auth/accounts.ts:16-53`
+- `AccountRow { site, known, ask, username, via, url, has{…} }`, `Accounts { list, save, check }` — `src/auth/accounts.ts:17-54`
 - New accounts: `NewAccount`, `accountKey` (which credential name), `signupGoal` — `src/auth/signup.ts:193-339`; `lookForAccount` asks the site first — `src/auth/exists.ts:78`
 
 ## Connected to
@@ -31,7 +31,7 @@ Purposes decide which account a site call or consent runs as when nobody names o
 
 ## If you change this
 
-- **Hits:** `src/sites/wire.ts`, `src/sites/renew.ts`, `src/app/needs.ts:183`, `src/app/owed.ts`, `src/app/cli-accounts.ts`, `src/app/cli-auth.ts`, UI `/api/accounts`, `/api/policy` (`src/ui/api.ts:245-309`).
+- **Hits:** `src/sites/wire.ts`, `src/sites/renew.ts`, `src/app/needs.ts:185`, `src/app/owed.ts`, `src/app/cli-accounts.ts`, `src/app/cli-auth.ts`, UI `/api/accounts`, `/api/policy` (`src/ui/api.ts:245-309`).
 - **Does not hit:** the runner; the vault format.
 
 ## Surfaces

@@ -22,6 +22,7 @@ import {
 import { gmailOAuth } from "../sites/gmail.js";
 import { accountEnv } from "../sites/oauth.js";
 import { profileOf } from "../sites/wire.js";
+import { bad, bold, columns, dim, good } from "../style.js";
 
 export interface AccountsCliDeps {
   identities: IdentityStore;
@@ -72,6 +73,7 @@ export async function readiness(deps: AccountsCliDeps, id: Identity): Promise<Ac
   };
 }
 
+/** One row per account: its purposes, then ✓/✗ for a login, a readable inbox, kept tokens; a fix line under the table for each ✗. */
 export function formatReadiness(rows: AccountReadiness[]): string {
   if (!rows.length)
     return [
@@ -79,20 +81,27 @@ export function formatReadiness(rows: AccountReadiness[]): string {
       ...Object.entries(PURPOSES).map(([k, v]) => `  ${k.padEnd(8)} ${v}`),
       "  <group>  any other word (sends): as many accounts as you like",
     ].join("\n");
-  const w = Math.max(...rows.map((r) => r.address.length));
-  return rows
-    .map((r) => {
-      const parts = [
-        `for ${r.for.length ? r.for.join(",") : "(nothing)"}`,
-        r.credential ? `credential ${r.credential}` : "no credential (creds paste)",
-        r.inbox
-          ? `inbox via ${r.inbox}${r.inbox === "service account" ? " (gmail.modify delegated to it)" : ""}`
-          : "inbox not readable (site setup gmail consent --account it)",
-        r.tokens.length ? `tokens ${r.tokens.join(",")}` : "no tokens",
-      ];
-      return `${r.address.padEnd(w)}  ${r.at.padEnd(9)} ${parts.join(" · ")}`;
-    })
-    .join("\n");
+  const yes = good("✓");
+  const no = bad("✗");
+  // `YOUTUBE_REFRESH_TOKEN` → `youtube`: the site is what a reader looks for.
+  const site = (t: string) => t.replace(/_(REFRESH|ACCESS)_TOKEN$|_TOKEN$/, "").toLowerCase();
+  const table = rows.map((r) => [
+    r.address,
+    r.at,
+    r.for.join(", ") || "(nothing)",
+    r.credential ? yes : no,
+    r.inbox === "consented" ? `${yes} consent` : r.inbox ? `${yes} delegated` : no,
+    r.tokens.map(site).join(", ") || "-",
+  ]);
+  const head = ["account", "at", "for", "login", "inbox", "tokens"];
+  const text = columns([head, ...table]);
+  const lines = [bold(text[0] ?? ""), ...text.slice(1)];
+  const fixes: string[] = [];
+  if (rows.some((r) => !r.credential))
+    fixes.push(`${no} login: ${dim("autobrowse creds paste <address>")}`);
+  if (rows.some((r) => !r.inbox && r.at === "google"))
+    fixes.push(`${no} inbox: ${dim("autobrowse site setup gmail consent --account <address>")}`);
+  return [...lines, ...(fixes.length ? ["", ...fixes] : [])].join("\n");
 }
 
 export function registerAccountsCommands(program: Command, deps: () => AccountsCliDeps): void {
