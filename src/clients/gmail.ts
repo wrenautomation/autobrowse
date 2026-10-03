@@ -81,10 +81,14 @@ export function messageText(m: RawMessage): string {
   };
   walk(m.payload);
   if (texts.length) return texts.join("\n");
+  // An HTML-only mail keeps its link targets (a confirm button) and drops its CSS.
   if (htmls.length)
     return htmls
       .join("\n")
+      .replace(/<(style|head)\b[\s\S]*?<\/\1>/gi, " ")
+      .replace(/<a\b[^>]*?\bhref\s*=\s*["']([^"']+)["'][^>]*>/gi, " $1 ")
       .replace(/<[^>]+>/g, " ")
+      .replace(/&amp;/g, "&")
       .replace(/\s+/g, " ");
   return m.snippet ?? "";
 }

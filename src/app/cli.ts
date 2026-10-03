@@ -48,6 +48,7 @@ import {
   domainDepsFor,
   envStoreFor,
   identitiesFor,
+  inboxActivityDepsFor,
   LOCAL_WORKFLOWS,
   WORKFLOWS,
 } from "./services.js";
@@ -264,9 +265,11 @@ program
       const out = await runFlow(
         memoryEffects({ sleep: (ms) => new Promise((r) => setTimeout(r, ms)) }).fx,
         workflow as never,
-        (handWritten
-          ? domainDepsFor(settings, parts.browser)
-          : compiledDeps(parts.browser)) as never,
+        (workflow.name === "inbox-activity"
+          ? inboxActivityDepsFor(settings, parts.browser)
+          : handWritten
+            ? domainDepsFor(settings, parts.browser)
+            : compiledDeps(parts.browser)) as never,
         plan,
         () =>
           o.ask ? null : { approved: true, note: "autobrowse try", at: new Date().toISOString() },

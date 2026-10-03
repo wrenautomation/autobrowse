@@ -153,6 +153,10 @@ import {
   makeCompiledRunObject,
 } from "../workflows/compiled.js";
 import { type DomainDeps, domainWorkflow } from "../workflows/domain/index.js";
+import {
+  type InboxActivityDeps,
+  inboxActivityWorkflow,
+} from "../workflows/inbox-activity/index.js";
 import type { Proof } from "../workflows/proof.js";
 import { redirectWorkflow } from "../workflows/redirect/index.js";
 import { senderDomainWorkflow } from "../workflows/sender-domain/index.js";
@@ -374,6 +378,7 @@ export const WORKFLOWS: readonly AnyWorkflow[] = [
   domainWorkflow,
   redirectWorkflow,
   senderDomainWorkflow,
+  inboxActivityWorkflow,
   bootstrapWorkflow,
 ];
 
@@ -382,6 +387,7 @@ export const LOCAL_WORKFLOWS: readonly AnyWorkflow[] = [
   domainWorkflow,
   redirectWorkflow,
   senderDomainWorkflow,
+  inboxActivityWorkflow,
 ];
 
 /** Where compiled workflows live and where the compiler writes; relative imports resolve to the library from there. */
@@ -1150,6 +1156,15 @@ export async function instantlyFor(
   return apiKey ? instantly({ apiKey, http }) : null;
 }
 
+/** What inbox-activity calls: the browser, the inbox's Gmail and plain HTTP. */
+export function inboxActivityDepsFor(
+  settings: Settings,
+  browser: InboxActivityDeps["browser"],
+  http = httpClient(),
+): InboxActivityDeps {
+  return { browser, gmail: gmailFor(settings, http), http };
+}
+
 /** What the domain workflow calls: the worker's, and `try domain` in one process. */
 export function domainDepsFor(
   settings: Settings,
@@ -1309,6 +1324,9 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       makeRunObject(domainWorkflow, domainDeps, host, { guards }),
       makeRunObject(redirectWorkflow, domainDeps, host, { guards }),
       makeRunObject(senderDomainWorkflow, domainDeps, host, { guards }),
+      makeRunObject(inboxActivityWorkflow, inboxActivityDepsFor(settings, browser, http), host, {
+        guards,
+      }),
       makeRunObject(bootstrapWorkflow, bootstrapDeps, host, { guards }),
       // Every compiled flow, present and future, runs under this one object.
       makeCompiledRunObject({

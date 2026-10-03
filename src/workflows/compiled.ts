@@ -25,7 +25,13 @@ import { type Proof, readProof } from "./proof.js";
 export { type CompiledDeps, compiledDeps };
 
 /** Hand-written workflows, wired with their own deps in services.ts. */
-export const HAND_WRITTEN = new Set(["domain", "redirect", "sender-domain", "bootstrap"]);
+export const HAND_WRITTEN = new Set([
+  "domain",
+  "redirect",
+  "sender-domain",
+  "inbox-activity",
+  "bootstrap",
+]);
 
 export interface CompiledWorkflow {
   workflow: AnyWorkflow;

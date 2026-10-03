@@ -236,3 +236,15 @@ describe("gmail site: one consent per account", () => {
     ).rejects.toMatchObject({ status: 501 });
   });
 });
+
+describe("messageText", () => {
+  it("keeps link targets of an HTML-only mail and drops its CSS", async () => {
+    const { messageText } = await import("../src/clients/gmail.js");
+    const html =
+      '<style>.a{b:c}</style><p>Hi</p><a class="x" href="https://t.test/c/1?a=1&amp;b=2">Confirm</a>';
+    const text = messageText({
+      payload: { mimeType: "text/html", body: { data: Buffer.from(html).toString("base64url") } },
+    } as never);
+    expect(text.trim()).toBe("Hi https://t.test/c/1?a=1&b=2 Confirm");
+  });
+});

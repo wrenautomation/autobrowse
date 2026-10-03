@@ -369,10 +369,16 @@ export function registerRecordCommands(
           email = id.address;
         }
         const inbox = o.inbox ?? email;
-        const readable = signupInbox(inbox, {
-          env: (n) => process.env[n],
-          workspaceDomain: settings.googleWorkspaceDomain ?? null,
-        });
+        // A secondary domain of our Workspace reads through delegation too: one search proves it.
+        const readable =
+          signupInbox(inbox, {
+            env: (n) => process.env[n],
+            workspaceDomain: settings.googleWorkspaceDomain ?? null,
+          }) ||
+          (await gmailFor(settings)
+            .search(inbox, "in:inbox", 1)
+            .then(() => true)
+            .catch(() => false));
         if (!readable)
           throw new Error(
             `${inbox}'s inbox is not readable, so the signup's code would never arrive: site setup gmail consent --account ${inbox} first, or --inbox one that is (autobrowse accounts)`,
