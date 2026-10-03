@@ -4,8 +4,9 @@
  * Comparison is constant-time; the token never appears in a log or URL.
  */
 import { timingSafeEqual } from "node:crypto";
-import type { MiddlewareHandler } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import { type KeyStore, OPERATOR, type Scope } from "../access/keys.js";
+import { fail } from "./http.js";
 
 export function tokenMatches(given: string | undefined, expected: string): boolean {
   if (!given) return false;
@@ -19,7 +20,8 @@ export function bearerAuth(token: string | undefined): MiddlewareHandler {
     if (token === undefined) return next();
     const header = c.req.header("authorization") ?? "";
     const given = header.startsWith("Bearer ") ? header.slice(7) : undefined;
-    if (!tokenMatches(given, token)) return c.json({ error: "unauthorized" }, 401);
+    if (!tokenMatches(given, token))
+      return fail(c, 401, "unauthorized: send Authorization: Bearer <token>");
     return next();
   };
 }
@@ -44,7 +46,7 @@ export function accessAuth(
         : token !== undefined && tokenMatches(given, token)
           ? OPERATOR
           : (keys?.resolve(given) ?? null);
-    if (!scope) return c.json({ error: "unauthorized" }, 401);
+    if (!scope) return fail(c, 401, "unauthorized: send Authorization: Bearer <token>");
     c.set("scope", scope);
     return next();
   };
@@ -64,31 +66,59 @@ export function originGuard(token: string | undefined): MiddlewareHandler {
     // Every browser sends Host; a request without one is no web page's.
     const host = c.req.header("host") ?? "";
     if (token === undefined && host && !LOOPBACK.test(host))
-      return c.json({ error: "local use answers loopback only" }, 403);
+      return fail(c, 403, "local use answers loopback only");
     const origin = c.req.header("origin");
     if (origin) {
       let from = "";
       try {
         from = new URL(origin).host;
       } catch {}
-      if (from !== host && !LOOPBACK.test(from))
-        return c.json({ error: "cross-site request refused" }, 403);
+      if (from !== host && !LOOPBACK.test(from)) return fail(c, 403, "cross-site request refused");
     }
     return next();
   };
 }
 
-/** Fixed-window limiter per key, for the inbound hook: a text message is never a flood. */
-export function rateLimit(opts: { perMinute: number; now?: () => number }): MiddlewareHandler {
+export interface RateLimitOptions {
+  perMinute: number;
+  /** Who a request counts against; default the first `x-forwarded-for` hop, else `local`. */
+  keyOf?: (c: Context) => string;
+  now?: () => number;
+}
+
+/**
+ * Fixed-window limiter, one window per caller per minute. Every answer says
+ * where the caller stands (`RateLimit-Limit`, `-Remaining`, `-Reset` in
+ * seconds); a refusal is 429 `rate_limited` with `Retry-After`. Expired
+ * windows are swept, so a flood of new callers never resets the others.
+ */
+export function rateLimit(opts: RateLimitOptions): MiddlewareHandler {
   const now = opts.now ?? Date.now;
+  const keyOf =
+    opts.keyOf ??
+    ((c: Context) => c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "local");
   const windows = new Map<string, { start: number; count: number }>();
   return async (c, next) => {
-    const key = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+    const key = keyOf(c);
     const t = now();
-    const w = windows.get(key);
-    if (!w || t - w.start >= 60_000) windows.set(key, { start: t, count: 1 });
-    else if (++w.count > opts.perMinute) return c.json({ error: "rate limited" }, 429);
-    if (windows.size > 10_000) windows.clear();
+    let w = windows.get(key);
+    if (!w || t - w.start >= 60_000) {
+      if (windows.size >= 10_000)
+        for (const [k, old] of windows) if (t - old.start >= 60_000) windows.delete(k);
+      w = { start: t, count: 0 };
+      windows.set(key, w);
+    }
+    w.count++;
+    const reset = Math.max(1, Math.ceil((w.start + 60_000 - t) / 1000));
+    c.header("RateLimit-Limit", String(opts.perMinute));
+    c.header("RateLimit-Remaining", String(Math.max(0, opts.perMinute - w.count)));
+    c.header("RateLimit-Reset", String(reset));
+    if (w.count > opts.perMinute) {
+      c.header("Retry-After", String(reset));
+      return fail(c, 429, `rate limited: ${opts.perMinute} a minute, try again in ${reset}s`, {
+        retryAfter: reset,
+      });
+    }
     return next();
   };
 }

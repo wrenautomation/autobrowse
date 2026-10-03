@@ -69,6 +69,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** The API's `code` (`invalid_query`, `rate_limited`, …): what to branch on, not the sentence. */
+    readonly code: string | null = null,
   ) {
     super(message);
   }
@@ -85,16 +87,20 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   const body = await res.json().catch(() => null);
-  if (!res.ok) throw new ApiError(res.status, body?.error ?? res.statusText);
+  if (!res.ok) throw new ApiError(res.status, body?.error ?? res.statusText, body?.code ?? null);
   return body as T;
 }
 
 const post = (path: string, body?: unknown) =>
   call(path, { method: "POST", body: body === undefined ? null : JSON.stringify(body) });
 
-const query = (q: Record<string, string | number | undefined>) => {
+/** A list (`status: ["waiting", "running"]`) goes as the API reads it: `status=waiting,running`. */
+const query = (q: Record<string, string | number | readonly string[] | undefined>) => {
   const p = new URLSearchParams();
-  for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== "") p.set(k, String(v));
+  for (const [k, v] of Object.entries(q)) {
+    const text = Array.isArray(v) ? v.join(",") : v;
+    if (text !== undefined && text !== "") p.set(k, String(text));
+  }
   const s = p.toString();
   return s ? `?${s}` : "";
 };

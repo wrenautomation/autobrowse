@@ -243,13 +243,21 @@ describe("api", () => {
     const used = await app.request(
       new Request("http://x/api/policy/use", {
         method: "PUT",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ purpose: "pays", address: "w@wren.test" }),
       }),
     );
     expect((await used.json()).accounts[0].for).toEqual(["default", "pays"]);
     expect(
-      (await app.request(new Request("http://x/api/policy/use", { method: "PUT", body: "{}" })))
-        .status,
+      (
+        await app.request(
+          new Request("http://x/api/policy/use", {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: "{}",
+          }),
+        )
+      ).status,
     ).toBe(400);
     const bare = await setup();
     expect((await bare.app.request("/api/needs")).status).toBe(501);
@@ -564,7 +572,16 @@ describe("api", () => {
     const notJson = await app.request(
       new Request("http://x/api/accounts/sentry", { method: "PUT", body: "nope" }),
     );
-    expect(notJson.status).toBe(400);
+    expect(notJson.status).toBe(415);
+    expect(await notJson.json()).toMatchObject({ code: "unsupported_media_type" });
+    const broken = await app.request(
+      new Request("http://x/api/accounts/sentry", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: "nope",
+      }),
+    );
+    expect(await broken.json()).toMatchObject({ code: "invalid_json" });
     const check = await app.request(post("/api/accounts/instantly/check"));
     expect(check.status).toBe(202);
     const job = (await check.json()) as { id: string };
@@ -649,6 +666,128 @@ describe("api", () => {
   });
 });
 
+describe("api conventions", () => {
+  const many = (n: number) => {
+    const base = fakeIngress().ingress;
+    const all = [...Array(n)].map(
+      (_, i) =>
+        ({
+          workflow: i % 2 ? "domain" : "chore",
+          key: `k${i}`,
+          startedAt: "t",
+          status: i % 3 ? "done" : "waiting",
+          updatedAt: new Date(1e12 + i * 1000).toISOString(),
+        }) as RunRow,
+    );
+    const asked: ListQuery[] = [];
+    const ingress = {
+      ...base,
+      run: base.run,
+      registry: () => ({
+        list: async (q: ListQuery) => {
+          asked.push(q);
+          return pageOf(all, q);
+        },
+      }),
+    } as unknown as Ingress;
+    return { ingress, asked };
+  };
+
+  it("filters runs in the registry and links the next page", async () => {
+    const { ingress, asked } = many(30);
+    const { app } = await setup(undefined, { ingress });
+    const first = await app.request("/api/runs?status=waiting&limit=4");
+    const rows = (await first.json()) as RunRow[];
+    expect(rows.map((r) => r.key)).toEqual(["k27", "k24", "k21", "k18"]);
+    expect(asked.at(-1)).toMatchObject({ status: ["waiting"], limit: 5 });
+    const link = first.headers.get("link") ?? "";
+    expect(link).toMatch(/rel="next"/);
+    const next = link.slice(1, link.indexOf(">"));
+    const rest = (await (await app.request(next)).json()) as RunRow[];
+    expect(rest.map((r) => r.key)).toEqual(["k15", "k12", "k9", "k6"]);
+    const tail = await app.request("/api/runs?status=waiting&limit=50");
+    expect(tail.headers.get("link")).toBeNull();
+    expect(((await tail.json()) as RunRow[]).length).toBe(10);
+    const chores = (await (
+      await app.request("/api/runs?workflow=chore&status=done,waiting&limit=3")
+    ).json()) as RunRow[];
+    expect(chores.every((r) => r.workflow === "chore")).toBe(true);
+  });
+
+  it("refuses a bad query, path or body with a code and the field", async () => {
+    const { app } = await setup();
+    const bad = await app.request("/api/runs?limit=0");
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toMatchObject({
+      code: "invalid_query",
+      error: expect.stringMatching(/^limit:/),
+      issues: [{ path: "limit" }],
+    });
+    expect(await (await app.request("/api/runs?status=sleeping")).json()).toMatchObject({
+      code: "invalid_query",
+    });
+    expect((await app.request("/api/jobs?limit=500")).status).toBe(400);
+    expect((await app.request("/api/jobs/x?wait=-1")).status).toBe(400);
+    expect(
+      await (await app.request("/api/accounts/Bad%20Site/check", { method: "POST" })).json(),
+    ).toMatchObject({ code: "invalid_path" });
+    const noPlan = await app.request(post("/api/runs/domain/x.com", { plan: { domain: 1 } }));
+    expect(await noPlan.json()).toMatchObject({
+      code: "invalid_body",
+      issues: [expect.objectContaining({ path: "plan.domain" })],
+    });
+  });
+
+  it("answers an unknown route as JSON, a big body 413, a thrown handler 500 without a stack", async () => {
+    const { app } = await setup(undefined, {
+      limits: { bodyBytes: 100 },
+      accounts: {
+        ...fakeAccounts,
+        list: async () => {
+          throw new Error("secret detail");
+        },
+      },
+    });
+    const missing = await app.request("/api/nope");
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toMatchObject({ code: "not_found" });
+    const big = await app.request(post("/api/do", { goal: "x".repeat(200) }));
+    expect(big.status).toBe(413);
+    expect(await big.json()).toMatchObject({ code: "payload_too_large" });
+    const thrown = await app.request("/api/accounts");
+    expect(thrown.status).toBe(500);
+    const body = await thrown.json();
+    expect(body.code).toBe("internal");
+    expect(JSON.stringify(body)).not.toMatch(/secret detail/);
+  });
+
+  it("rate limits per caller, with the standard headers", async () => {
+    const { app } = await setup(undefined, { limits: { reads: 2, writes: 1 } });
+    const one = await app.request("/api/workflows");
+    expect(one.headers.get("ratelimit-limit")).toBe("2");
+    expect(one.headers.get("ratelimit-remaining")).toBe("1");
+    await app.request("/api/workflows");
+    const over = await app.request("/api/workflows");
+    expect(over.status).toBe(429);
+    expect(Number(over.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect(await over.json()).toMatchObject({ code: "rate_limited" });
+    // Writes count apart from reads.
+    expect((await app.request(post("/api/do", { goal: "g", dryRun: true }))).status).toBe(200);
+    expect((await app.request(post("/api/do", { goal: "g", dryRun: true }))).status).toBe(429);
+  });
+
+  it("points a started job and run at where to read them", async () => {
+    const { app } = await setup();
+    const job = await app.request(post("/api/accounts/instantly/check"));
+    expect(job.headers.get("location")).toBe(
+      `/api/jobs/${((await job.json()) as { id: string }).id}`,
+    );
+    const run = await app.request(post("/api/runs/domain/x.com", { plan: { domain: "x.com" } }));
+    expect(run.status).toBe(202);
+    expect(run.headers.get("location")).toBe("/api/runs/domain/x.com");
+  });
+});
+
 describe("api: agent sessions", () => {
   function fakeAgent() {
     const views = new Map<string, SessionView>();
@@ -718,7 +857,7 @@ describe("api: agent sessions", () => {
       token: undefined,
       agent,
     });
-    expect((await app.request(post("/api/agent", { site: "google", goal: "g" }))).status).toBe(503);
+    expect((await app.request(post("/api/agent", { site: "google", goal: "g" }))).status).toBe(501);
     const bad = await withAgent.request(post("/api/agent", { site: "Bad Site", goal: "g" }));
     expect(bad.status).toBe(400);
     const started = await withAgent.request(
@@ -737,7 +876,7 @@ describe("api: agent sessions", () => {
     expect(
       (await withAgent.request(post("/api/agent/abc/save", { name: "Bad Name" }))).status,
     ).toBe(400);
-    expect((await withAgent.request(post("/api/agent/abc/dance", {}))).status).toBe(400);
+    expect((await withAgent.request(post("/api/agent/abc/dance", {}))).status).toBe(404);
     expect(
       (await withAgent.request(post("/api/agent/abc/exec", { cmd: "note", text: "x" }))).status,
     ).toBe(200);

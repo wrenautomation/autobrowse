@@ -32,7 +32,7 @@ Play-pause: a human or the model drives, every act is journaled the same way, so
 
 ## If you change this
 
-- **Hits:** `src/agent/explorer.ts`, `src/agent/heal.ts`, `src/agent/builder.ts`, `src/do/doer.ts`, `src/app/backend.ts:286`, UI `/api/agent/*` (`src/ui/api.ts:557-669`), `src/app/cli-do.ts`.
+- **Hits:** `src/agent/explorer.ts`, `src/agent/heal.ts`, `src/agent/builder.ts`, `src/do/doer.ts`, `src/app/backend.ts:286`, UI `/api/agent/*` (`src/ui/api.ts:710-825`), `src/app/cli-do.ts`.
 - **Does not hit:** the runner's repair path; compiled workflows already rendered.
 
 ## Surfaces

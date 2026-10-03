@@ -80,6 +80,27 @@ export interface ListQuery {
   limit?: number;
   /** The previous page's last row as `cursorOf` gives it: the next page starts after it. A bare `updatedAt` still works. */
   before?: string;
+  /** Only rows in one of these states (`waiting` = a gate is open). */
+  status?: RunRow["status"][];
+  /** Only this workflow's runs. */
+  workflow?: string;
+}
+
+/** Every state a row can be in, for a query to name. */
+export const ROW_STATUSES = [
+  "running",
+  "waiting",
+  "done",
+  "failed",
+  "rejected",
+  "reset",
+] as const satisfies readonly RunRow["status"][];
+
+/** The row passes the query's filters (not its page bounds). */
+export function rowMatches(r: RunRow, q: Pick<ListQuery, "status" | "workflow">): boolean {
+  return (
+    (!q.status?.length || q.status.includes(r.status)) && (!q.workflow || r.workflow === q.workflow)
+  );
 }
 
 export const LIST_LIMIT = 100;
@@ -119,7 +140,12 @@ export function pageOf(rows: RunRow[], q: ListQuery = {}): RunRow[] {
   return pageOfOrdered([...rows].sort(compareRows), q);
 }
 
-/** A page of a list already newest first: the cursor's edge is bisected to, no sort. */
+/**
+ * A page of a list already newest first. The list's order is the index: the
+ * cursor's edge is bisected to (no sort), then rows are walked from there
+ * until `limit` pass the filters. The list is capped (`KEEP_ROWS`), so a
+ * filter walks at most that many in memory; nothing filtered crosses the wire.
+ */
 export function pageOfOrdered(rows: readonly RunRow[], q: ListQuery = {}): RunRow[] {
   const limit = Math.max(1, Math.min(q.limit ?? LIST_LIMIT, 1_000));
   let lo = 0;
@@ -133,7 +159,13 @@ export function pageOfOrdered(rows: readonly RunRow[], q: ListQuery = {}): RunRo
       else lo = mid + 1;
     }
   }
-  return rows.slice(lo, lo + limit);
+  if (!q.status?.length && !q.workflow) return rows.slice(lo, lo + limit);
+  const out: RunRow[] = [];
+  for (let i = lo; i < rows.length && out.length < limit; i++) {
+    const r = rows[i] as RunRow;
+    if (rowMatches(r, q)) out.push(r);
+  }
+  return out;
 }
 
 /** The registry's stored shape, or the older map of rows: a list in order either way. */

@@ -39,7 +39,7 @@ Steps never see Restate. A workflow is data plus step functions over the `Effect
 | Surface | Role |
 |---|---|
 | CLI `run`, `try`, `workflows` (`src/app/cli.ts:111-310`) | starts, lists |
-| UI `/api/workflows`, `/api/runs` (`src/ui/api.ts:222,437`) | lists, starts |
+| UI `/api/workflows`, `/api/runs` (`src/ui/api.ts:300,557`) | lists, starts |
 | wren, over the Restate ingress | starts runs by object name |
 
 ## See

@@ -67,5 +67,6 @@ export async function listRecordingSummaries(root: string): Promise<RecordingSum
       out.push(summary);
     } catch {}
   }
-  return out.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  // Newest first, ties by name: the order `/api/recordings` pages through by `startedAt~name`.
+  return out.sort((a, b) => b.startedAt.localeCompare(a.startedAt) || b.name.localeCompare(a.name));
 }

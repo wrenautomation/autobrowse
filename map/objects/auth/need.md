@@ -29,7 +29,7 @@ The owed list clears itself: a credential present, a token kept, a consent done,
 
 ## If you change this
 
-- **Hits:** `src/app/owed.ts`, `src/app/cli-needs.ts`, UI `/api/needs` (`src/ui/api.ts:264-287`), `src/app/status.ts`.
+- **Hits:** `src/app/owed.ts`, `src/app/cli-needs.ts`, UI `/api/needs` (`src/ui/api.ts:358-381`), `src/app/status.ts`.
 - **Does not hit:** the run object; the facade's own token checks.
 
 ## Surfaces

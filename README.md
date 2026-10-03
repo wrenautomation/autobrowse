@@ -302,6 +302,12 @@ a row; it is work.
   workflows and tools. Gates, setup, accounts, wallet and settings stay the
   owner's (`UI_TOKEN`). `access list`, `access revoke`. Stored hashed in
   `ACCESS_FILE` (`designs/2026-09-27-agent-access.md`).
+- **HTTP API.** Errors are `{ error, code, issues? }`: `error` for a person,
+  `code` for a program (`invalid_query`, `not_found`, `rate_limited`, …).
+  Lists stay arrays, newest first; more pages come as `Link: <…>; rel="next"`.
+  `GET /api/runs?status=waiting,running&workflow=domain&limit=50` filters in
+  the registry. Each caller gets 600 reads and 120 writes a minute, bodies
+  up to 1 MB (`designs/2026-10-03-api-conventions.md`).
 
 ## Flows built
 

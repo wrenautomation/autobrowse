@@ -29,7 +29,7 @@ One stream feeds people (channels), the UI (bus) and the registry; rows are deri
 
 ## If you change this
 
-- **Hits:** `src/engine/rows.ts`, `src/engine/registry.ts`, every `src/channels/*.ts` renderer (`src/channels/render.ts`), `src/ui/bus.ts`, `src/ui/api.ts:486` (`/api/events`), `src/app/idle.ts` (touched by every event).
+- **Hits:** `src/engine/rows.ts`, `src/engine/registry.ts`, every `src/channels/*.ts` renderer (`src/channels/render.ts`), `src/ui/bus.ts`, `src/ui/api.ts:623` (`/api/events`), `src/app/idle.ts` (touched by every event).
 - **Does not hit:** step results inside the run object, agent session steps.
 
 ## Surfaces

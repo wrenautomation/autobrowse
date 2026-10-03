@@ -30,7 +30,7 @@ Plain data with a schema, so a person or a model edits names, proofs and gates b
 
 ## If you change this
 
-- **Hits:** `src/compiler/structure.ts`, `src/compiler/render.ts:256`, `src/compiler/polish.ts`, `src/compiler/patch.ts`, `src/agent/heal.ts:72-135`, every `src/workflows/*/outline.json`, UI `/api/workflows/:name/outline` (`src/ui/api.ts:346-369`).
+- **Hits:** `src/compiler/structure.ts`, `src/compiler/render.ts:256`, `src/compiler/polish.ts`, `src/compiler/patch.ts`, `src/agent/heal.ts:72-135`, every `src/workflows/*/outline.json`, UI `/api/workflows/:name/outline` (`src/ui/api.ts:442-465`).
 - **Does not hit:** hand-written workflows (`domain`, `bootstrap`); the engine.
 
 ## Surfaces

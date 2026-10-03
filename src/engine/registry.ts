@@ -35,6 +35,8 @@ export {
   pageOf,
   pageOfOrdered,
   placeRow,
+  ROW_STATUSES,
+  rowMatches,
   trimRows,
 } from "./rows.js";
 

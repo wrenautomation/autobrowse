@@ -25,7 +25,7 @@ A parked invocation would hold a Restate slot for days and could not be paused, 
 3. `ctx.gate(name, prompt)`: an answer is read from state; none → `GateOpen`, stored as the open gate, event `gate-opened`, return — `src/engine/run.ts:120-170`, `src/engine/effects.ts:40`
 4. `approve` / `reject` → `applyAnswer` (a no rejects the step, a yes on `human` reruns, else the answer is stored) then `step` again — `src/engine/run.ts:184-207`
 5. Errors: retry with backoff (`RETRY`), or stop on `unrecoverable` (`Unrecoverable`, `NeedsHuman`, `FlowFailed`, 4xx) — `src/engine/object.ts:67-84`
-6. Every change → `HostDeps.emit` → channels, the UI bus and `Runs.record` — `src/engine/object.ts:52-63`, `src/engine/registry.ts:41-43`
+6. Every change → `HostDeps.emit` → channels, the UI bus and `Runs.record` — `src/engine/object.ts:52-63`, `src/engine/registry.ts:52-57`
 7. Last step done → `settle`, `finished` event with `outcomeOf` — `src/engine/run.ts:212-244`
 
 ## If you change this

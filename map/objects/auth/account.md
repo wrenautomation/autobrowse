@@ -31,7 +31,7 @@ Purposes decide which account a site call or consent runs as when nobody names o
 
 ## If you change this
 
-- **Hits:** `src/sites/wire.ts`, `src/sites/renew.ts`, `src/app/needs.ts:185`, `src/app/owed.ts`, `src/app/cli-accounts.ts`, `src/app/cli-auth.ts`, UI `/api/accounts`, `/api/policy` (`src/ui/api.ts:245-309`).
+- **Hits:** `src/sites/wire.ts`, `src/sites/renew.ts`, `src/app/needs.ts:185`, `src/app/owed.ts`, `src/app/cli-accounts.ts`, `src/app/cli-auth.ts`, UI `/api/accounts`, `/api/policy` (`src/ui/api.ts:333-405`).
 - **Does not hit:** the runner; the vault format.
 
 ## Surfaces

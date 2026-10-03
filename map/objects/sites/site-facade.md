@@ -33,7 +33,7 @@ One place picks the account, mints the bearer, matches the path, books the accou
 
 ## If you change this
 
-- **Hits:** `src/sites/wire.ts`, `src/sites/service.ts`, `src/app/cli-site.ts`, `src/ui/api.ts:59` (`siteError`: status, `Retry-After`), `src/ui/api.ts:370-419`, `src/do/doer.ts` (`callSite`), `src/app/needs.ts`, wren's `Content` service and channel packages (Restate `sites/call`, `sites/status`, `sites/setup`, `sites/caps`).
+- **Hits:** `src/sites/wire.ts`, `src/sites/service.ts`, `src/app/cli-site.ts`, `src/ui/api.ts:75` (`siteError`: status, `Retry-After`), `src/ui/api.ts:466-520`, `src/do/doer.ts` (`callSite`), `src/app/needs.ts`, wren's `Content` service and channel packages (Restate `sites/call`, `sites/status`, `sites/setup`, `sites/caps`).
 - **Does not hit:** sign-ins; the run object.
 
 ## Surfaces

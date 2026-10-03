@@ -31,7 +31,7 @@ Callers speak the official REST shape. A route has an `api` leg and, only where 
 
 ## If you change this
 
-- **Hits:** `src/sites/facade.ts`, `src/sites/renew.ts` (`keptBy`), `src/sites/wire.ts`, `src/app/needs.ts:67-183`, `src/do/catalog.ts:83`, `src/app/cli-site.ts`, UI `/api/sites` (`src/ui/api.ts:370-419`), wren's channel packages (they call these routes by path).
+- **Hits:** `src/sites/facade.ts`, `src/sites/renew.ts` (`keptBy`), `src/sites/wire.ts`, `src/app/needs.ts:67-183`, `src/do/catalog.ts:83`, `src/app/cli-site.ts`, UI `/api/sites` (`src/ui/api.ts:466-520`), wren's channel packages (they call these routes by path).
 - **Does not hit:** sign-ins; the run object.
 
 ## Surfaces

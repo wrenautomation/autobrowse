@@ -19,7 +19,7 @@ The operator's UI token does everything; a key does only what its scope lists. K
 
 - `VERBS = do | run | sites | agent`; `scopeSchema { sites (site, site@label, site@*), workflows (prefix*), tools, can }`; `Scope` (the operator or rules), `OPERATOR` — `src/access/keys.ts:22-41`; `allowsSite` — `:53`
 - `StoredKey { name, hash, createdAt … }`; `KeyStore { list, add, revoke, resolve }`; `KEY_NAME` — `:76-92`; file `~/.config/autobrowse/access.json` (`src/app/config.ts:136`)
-- `refusal(scope, method, path, query, lookups)` — `src/access/fence.ts:28`; applied per request in the API — `src/ui/api.ts:154-160`
+- `refusal(scope, method, path, query, lookups)` — `src/access/fence.ts:28`; applied per request in the API — `src/ui/api.ts:233-239`
 
 ## Connected to
 
@@ -29,7 +29,7 @@ The operator's UI token does everything; a key does only what its scope lists. K
 
 ## If you change this
 
-- **Hits:** `src/ui/api.ts:143-169`, `src/ui/auth.ts`, `src/app/backend.ts:135` (`doAs`), `src/app/cli-access.ts`.
+- **Hits:** `src/ui/api.ts:202-248`, `src/ui/auth.ts`, `src/app/backend.ts:135` (`doAs`), `src/app/cli-access.ts`.
 - **Does not hit:** Restate handlers (the ingress has its own auth), sign-ins.
 
 ## Surfaces

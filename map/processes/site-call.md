@@ -31,7 +31,7 @@ One shape for everyone (CLI, HTTP, Restate `sites`, wren): the caller never know
 
 ## If you change this
 
-- **Hits:** `src/sites/wire.ts`, `src/sites/service.ts`, `src/app/cli-site.ts`, `src/ui/api.ts:370-419`, `src/do/doer.ts` (`callSite`), wren's channel packages (they call these paths over the ingress).
+- **Hits:** `src/sites/wire.ts`, `src/sites/service.ts`, `src/app/cli-site.ts`, `src/ui/api.ts:466-520`, `src/do/doer.ts` (`callSite`), wren's channel packages (they call these paths over the ingress).
 - **Does not hit:** sign-ins (a browser leg gets the wall hook from the runner); the run object.
 
 ## Surfaces
