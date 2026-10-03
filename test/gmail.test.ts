@@ -65,6 +65,26 @@ describe("gmail site: one consent per account", () => {
     expect(await tokens(spec, "nobody@x.dev")).toBeNull();
   });
 
+  it("a revoked refresh token is a terminal 409 naming the env, never the token", async () => {
+    const api = fakeFetch(() => ({
+      status: 400,
+      body: { error: "invalid_grant", error_description: "Token has been expired or revoked." },
+    }));
+    const env: Record<string, string> = {
+      GOOGLE_OAUTH_CLIENT_ID: "cid",
+      GOOGLE_OAUTH_CLIENT_SECRET: "cs",
+      GMAIL_REFRESH_TOKEN: "rt-own",
+    };
+    const spec = "oauth" in gmail.auth ? gmail.auth.oauth : (null as never);
+    const err = await accessTokens(
+      httpClient({ fetch: api.fetch }),
+      (n) => env[n],
+    )(spec).catch((e) => e);
+    expect(err).toMatchObject({ name: "SiteError", status: 409 });
+    expect(err.message).toContain("GMAIL_REFRESH_TOKEN");
+    expect(err.message).not.toContain("rt-own");
+  });
+
   it("googleTokens acts as a consented account through its token, never the service account", async () => {
     const api = fakeFetch(() => ({ body: { access_token: "at-will", expires_in: 3600 } }));
     const env: Record<string, string> = {

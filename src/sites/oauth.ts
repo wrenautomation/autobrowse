@@ -10,7 +10,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { CONSENT_RECEIVED } from "../browser/flows/oauth-consent.js";
 import { type HttpClient, HttpError } from "../clients/http.js";
-import type { OAuthSpec } from "./types.js";
+import { type OAuthSpec, SiteError } from "./types.js";
 
 interface TokenBody {
   access_token?: string;
@@ -125,7 +125,16 @@ export function accessTokens(
       { grant_type: "refresh_token", refresh_token: refresh, ...client.fields },
       "POST",
       client.headers,
-    );
+    ).catch((err) => {
+      // A revoked or expired refresh token never heals on retry: only a person re-consenting
+      // fixes it, so it is a terminal 409 (blocked), not an error a durable caller retries forever.
+      if (err instanceof HttpError && err.status < 500 && /invalid_grant/.test(err.message))
+        throw new SiteError(
+          409,
+          `${refreshName} was refused (invalid_grant: revoked or expired); re-consent the account`,
+        );
+      throw err;
+    });
     const token = body.access_token as string;
     cache.set(refreshName, { token, until: now() + ((body.expires_in ?? 3600) - 60) * 1000 });
     if (keep && body.refresh_token && body.refresh_token !== refresh)
