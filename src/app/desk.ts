@@ -39,4 +39,5 @@ const reg = await registerDeployment({
   http: httpClient(),
   authToken: settings.restateAuthToken ?? null,
 });
+// deploy/desk/update.mjs waits for this exact message after a restart.
 log.info({ deployment: reg.id, services: reg.services, browser: settings.browser }, "desk up");

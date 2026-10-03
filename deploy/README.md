@@ -5,6 +5,12 @@ worker (`src/app/desk.ts`) under launchd. It serves `desk` on Restate Cloud
 through the tunnel it dials, with the Mac's home IP and Chrome profiles. wren
 sends every `sites` call there. Calls wait in Restate while the Mac sleeps.
 
+A commit on `main` that touches `src/`, `package.json` or the lockfile restarts
+the worker within a minute (`deploy/desk/update.mjs`, a second launchd agent).
+Uncommitted edits there hold it. A restart that never logs "desk up" pings #ops.
+Log: `~/Library/Logs/autobrowse-desk-deploy.log`. Why:
+`designs/2026-10-03-desk-deploy.md`.
+
 The AWS box (t3.medium, ECR image, `/data` volume, CI deploy) was retired on
 2026-10-02 to cut cost. Its `/data` (profiles, artifacts) is archived at
 `s3://<shots bucket>/retired-box/2026-10-02-data.tgz`. Git history before that

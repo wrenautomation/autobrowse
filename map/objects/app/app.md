@@ -21,7 +21,7 @@ Deps are made in one file so the CLI, the worker and tests share the same wiring
 - Factories: `browserOptions` `:251`, `llmFor` `:334`, `credentialsFor` `:424`, `codesFor` `:618`, `loginFor` `:665`, `envStoreFor` `:920`, `approverFor` `:1017`, `channelsFor` `:1086`, wallet and profiles `:761-789`
 - `src/app/main.ts`: `buildApp` → Restate endpoint (`planEndpoint`, `registerDeployment` `src/app/register.ts:11`) → `startUiServer` (`src/ui/server.ts:34`) → `scheduleIdleStop` (`src/app/idle.ts:70`) and `selfStopper` (the box stops its own instance, `src/app/box.ts:67`)
 - Restate services registered: run objects (hand-written), `Compiled`, `Runs`, `browser`, `sites`, `do`
-- `src/app/desk.ts`: the Mac's lean worker, only `sitesService(app.sites, "desk")` (`src/sites/service.ts:61`) on its own tunnel name in the box's Restate environment; no UI, idle stop or evaluator. launchd keeps it up (`deploy/desk/install.sh`); the agent needs node to have Full Disk Access (the repo is under ~/Documents)
+- `src/app/desk.ts`: the Mac's lean worker, only `sitesService(app.sites, "desk")` (`src/sites/service.ts:61`) on its own tunnel name in the box's Restate environment; no UI, idle stop or evaluator. launchd keeps it up (`deploy/desk/install.sh`); the agent needs node to have Full Disk Access (the repo is under ~/Documents). A second agent runs `deploy/desk/update.mjs` each minute: a new commit touching `src/`, `package.json` or the lockfile restarts the worker
 - Library surface for other code: `src/index.ts` and the package `exports` (`.`, `./sites`, `./auth`, `./do`, `./agent`, `./flows`, `./llm`); bin `dist/app/cli.js`
 
 ## Connected to

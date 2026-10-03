@@ -40,5 +40,6 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | `src/workflows/*/index.ts` (rendered) | `src/index.ts` exports (`COMPILED_LIB`) | an export removed or renamed |
 | `Dockerfile` | `src/app/main.ts`, env names | a moved entry file or a renamed variable |
 | `deploy/desk/install.sh` (launchd on the Mac) | `src/app/desk.ts`, `node_modules/tsx/dist/cli.mjs` | a moved entry file or tsx's cli path |
+| `deploy/desk/update.mjs` (launchd, every minute) | the `desk up` log line in `src/app/desk.ts`, the desk label | a renamed log line: every deploy pings #ops as failed |
 | `deploy/terraform/` local state (never committed) | the box, CI role, shots bucket | a second machine has no state; read before apply |
 | `NEEDS-WILLIAM.md` (hand-kept) | mirrors `autobrowse needs` | drift when a need clears in code but not in prose |

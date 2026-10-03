@@ -3,17 +3,24 @@
 #   install.sh           write the agent and start it
 #   install.sh remove    stop it and delete the agent
 # Logs: ~/Library/Logs/autobrowse-desk.log. It reads the repo's .env like the CLI.
+# A second agent (DEPLOY_LABEL) runs update.mjs every minute: a new commit on main
+# restarts the worker (continuous deploy). Its log: ~/Library/Logs/autobrowse-desk-deploy.log.
 # The repo is under ~/Documents, which macOS keeps from a launchd agent until
 # node has Full Disk Access (System Settings → Privacy & Security; the path
 # this prints). Until then it exits "Operation not permitted" and retries.
 set -euo pipefail
 LABEL="com.wrenautomation.autobrowse-desk"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+DEPLOY_LABEL="$LABEL-deploy"
+DEPLOY_PLIST="$HOME/Library/LaunchAgents/$DEPLOY_LABEL.plist"
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 DOMAIN="gui/$(id -u)"
+launchctl bootout "$DOMAIN/$DEPLOY_LABEL" 2>/dev/null || true
 launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+# bootout returns before the worker exits; bootstrap fails (5: I/O error) until it has.
+for _ in $(seq 30); do launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1 || break; sleep 1; done
 if [ "${1:-}" = "remove" ]; then
-  rm -f "$PLIST"
+  rm -f "$PLIST" "$DEPLOY_PLIST"
   echo "desk removed"
   exit 0
 fi
@@ -40,5 +47,28 @@ cat > "$PLIST" <<PLIST
 </dict>
 </plist>
 PLIST
+cat > "$DEPLOY_PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$DEPLOY_LABEL</string>
+  <key>ProgramArguments</key>
+  <array><string>$NODE</string><string>$REPO/deploy/desk/update.mjs</string></array>
+  <key>WorkingDirectory</key><string>$REPO</string>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>$NODE_DIR:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>StartInterval</key><integer>60</integer>
+  <key>StandardOutPath</key><string>$HOME/Library/Logs/autobrowse-desk-deploy.log</string>
+  <key>StandardErrorPath</key><string>$HOME/Library/Logs/autobrowse-desk-deploy.log</string>
+</dict>
+</plist>
+PLIST
 launchctl bootstrap "$DOMAIN" "$PLIST"
+# The worker just started on this HEAD: the deploy agent's first tick has nothing to restart.
+mkdir -p "$HOME/.config/autobrowse"
+printf '{"deployed":"%s","held":null}\n' "$(git -C "$REPO" rev-parse HEAD)" > "$HOME/.config/autobrowse/desk-deploy.json"
+launchctl bootstrap "$DOMAIN" "$DEPLOY_PLIST"
 echo "desk started ($LABEL); log: ~/Library/Logs/autobrowse-desk.log; node: $NODE"
+echo "deploy watching main ($DEPLOY_LABEL); log: ~/Library/Logs/autobrowse-desk-deploy.log"
