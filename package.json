@@ -44,6 +44,10 @@
     "./llm": {
       "types": "./dist/llm/index.d.ts",
       "import": "./dist/llm/index.js"
+    },
+    "./layout": {
+      "types": "./dist/browser/layout.d.ts",
+      "import": "./dist/browser/layout.js"
     }
   },
   "bin": {

@@ -9,7 +9,8 @@ different release pace.
 
 On npm as `@wrenautomation/autobrowse`: `npx @wrenautomation/autobrowse --help`
 for the CLI, `import … from "@wrenautomation/autobrowse/sites"` (also `/auth`,
-`/do`, `/agent`, `/flows`, `/llm`) for the library. A `v*` tag publishes
+`/do`, `/agent`, `/flows`, `/llm`, `/layout`) for the library. `/layout` is page
+text laid out as it looks (`layoutText(page, limit)` on a Playwright page; `layout(boxes)` is pure). A `v*` tag publishes
 (`.github/workflows/release.yml`, trusted publishing).
 
 New here: `walkthrough/` is the guided path (setup → secrets → sites →
