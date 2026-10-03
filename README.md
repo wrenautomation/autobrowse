@@ -291,6 +291,10 @@ a row; it is work.
   provider (`creds set` then `creds via`): the password goes first, the
   provider if it is refused. `creds same github github@x` folds two entries
   into one; `creds rename <from> <to>` moves a name and its browser profile.
+- **Accounts by who and what for.** Each account has a username and roles
+  (`main`, `alt`, `wren`). `x`, `x@wren` and `x@wren_automation` all reach
+  the same one. `creds list` shows username, roles, sign-in.
+  `creds role x wren <account>` moves a role (`designs/2026-10-02-account-roles.md`).
 - **Agent access.** `autobrowse access grant <agent> --sites <site,site@account>
   --workflows <names> --can do` prints the agent's key once. An agent
   that sends it as its bearer sees and calls only those sites, accounts,

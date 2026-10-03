@@ -36,7 +36,8 @@ Nouns, verbs, and what a change hits, for an agent editing this repo. The code i
 | gate | engine `GateName` on a run (purchase, password, send, choose, human); `PaymentGate` = one browser act that spends | guards (`src/engine/guards.ts`) switch engine gates off; they never touch the payment gate |
 | identity | `auth/identities` = an account with purposes; `browser/identity` = the browser's UA and geometry | |
 | IdentityProvider | `auth/providers` = a sign-in (google, github, microsoft); `auth/identities` = where an account lives (google, microsoft) | |
-| account | an `Identity` (address + purposes); a `<site>@<label>` credential name; an `AccountRow` (what is stored per site) | |
+| account | an `Identity` (address + purposes); a credential (username + roles, `auth/roles`); an `AccountRow` (what is stored per site) | |
+| role / purpose | role = what one account is for on its site (`main`, `wren`); purpose = which address a site call runs as (`default`, `pays`) | |
 | session | browser `Session` (a context + page); agent `SessionView`; explore session (a port + journal) | |
 | owner | a tenant: `AUTOBROWSE_OWNER`, its files, SSM path, Restate names (`src/owner.ts:11`) | a card's `owner` (`src/money/profile.ts`); the access scope `operator`, the UI token (`src/access/keys.ts:41`) |
 | need / owed | `Need` = one thing only the person can give, with a check; `Owed` = the list with done-marks | `NEEDS-WILLIAM.md` is kept by hand |

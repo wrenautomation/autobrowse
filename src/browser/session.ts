@@ -101,6 +101,8 @@ export interface BrowserOptions {
    * profile would ask for the password again.
    */
   profile?: string;
+  /** The profile directory a name opens: the stored account it names (`x@wren_automation` → `x@wren`). */
+  profileName?: (name: string) => Promise<string>;
   /** The person's own browser, for the sites they opted in (`browser/own`). */
   own?: OwnBrowser | null;
   /** A local browser's proxy, by profile (`browser/proxy`); none goes out directly. */
@@ -129,12 +131,14 @@ export interface Session {
 
 export async function openSession(site: string, opts: BrowserOptions): Promise<Session> {
   if (runsInOwn(opts.own, site)) return openOwn(opts.own);
+  const asked = opts.profile ?? site;
+  const profile = (await opts.profileName?.(asked)) ?? asked;
   let context: BrowserContext;
   let browser: Browser | null = null;
   if (opts.tier === "browserbase") {
     if (!opts.browserbase)
       throw new Error("BROWSER=browserbase needs BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID");
-    const contextId = await browserbaseContext(opts.profile ?? site, opts.browserbase);
+    const contextId = await browserbaseContext(profile, opts.browserbase);
     const session = await browserbaseSession(opts.browserbase, contextId);
     browser = await (await chromium()).connectOverCDP(session.connectUrl);
     context = browser.contexts()[0] ?? (await browser.newContext());
@@ -144,11 +148,11 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
     browser = await (await chromium()).connectOverCDP(opts.cdpUrl);
     context = browser.contexts()[0] ?? (await browser.newContext());
   } else {
-    const profileDir = join(expandHome(opts.profilesDir), opts.profile ?? site);
+    const profileDir = join(expandHome(opts.profilesDir), profile);
     // A browser left by a dead owner would hold this profile; stop those first.
     await reapOrphans(expandHome(opts.profilesDir));
     void reapTempDirs(); // files a crashed upload left, in the background
-    context = await launchLocal(profileDir, opts, opts.proxy?.(opts.profile ?? site) ?? null);
+    context = await launchLocal(profileDir, opts, opts.proxy?.(profile) ?? null);
     if (opts.headless === false) keepOutOfTheWay();
     // `navigator.webdriver` is already false (LOCAL_ARGS). No init-script shim: an own
     // `webdriver` property on navigator, reading undefined, is itself a tell.

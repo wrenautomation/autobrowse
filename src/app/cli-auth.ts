@@ -4,11 +4,11 @@
  * stdin, never as arguments (argv is visible to every process).
  */
 
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync, renameSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type { Command } from "commander";
 import { credentialSchema } from "credvault";
-import { accountsOn, formatAccounts, pickAccount } from "../auth/accounts.js";
+import { accountsOn, formatAccounts, pickAccount, platformOf } from "../auth/accounts.js";
 import { accountSite } from "../auth/identities.js";
 import {
   enrollPasskeyFlow,
@@ -26,6 +26,7 @@ import {
   viaLogin,
 } from "../auth/index.js";
 import { CRED_ENV } from "../auth/keep.js";
+import { dropRole, giveRole } from "../auth/roles.js";
 import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
 import { fileScreens } from "../browser/screens.js";
 import { expandHome } from "../google-auth.js";
@@ -95,6 +96,17 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     });
 
   const creds = program.command("creds").description("Site credentials for automated sign-in");
+  /** The browser profile carries the sign-in: it moves with the key, unless a browser has it open. */
+  const moveProfile = (from: string, to: string): string => {
+    const dir = expandHome(settings.profilesDir);
+    const [oldDir, newDir] = [join(dir, from), join(dir, to)];
+    if (!existsSync(oldDir)) return "";
+    if (existsSync(newDir)) return `; its profile stays (${to} has one)`;
+    if (existsSync(join(oldDir, "SingletonLock")))
+      return `; its profile stays (a browser has it open: autobrowse creds rename ${from} ${to} after)`;
+    renameSync(oldDir, newDir);
+    return ", profile too";
+  };
   creds
     .command("set <site>")
     .description(
@@ -191,15 +203,8 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       await store.put(to, cred);
       if (!(await store.get(to))) throw new Error(`${to} did not store; ${from} left as is`);
       await store.remove(from);
-      // The browser profile carries the sign-in: it moves with the name.
-      const { existsSync, renameSync } = await import("node:fs");
-      const { join } = await import("node:path");
-      const dir = expandHome(settings.profilesDir);
-      const [oldDir, newDir] = [join(dir, from), join(dir, to)];
-      const moved = existsSync(oldDir) && !existsSync(newDir);
-      if (moved) renameSync(oldDir, newDir);
       console.log(
-        `${from} is now ${to}${moved ? ", profile too" : existsSync(oldDir) ? `; its profile stays (${to} has one)` : ""}; creds history ${from} keeps the old one`,
+        `${from} is now ${to}${moveProfile(from, to)}; creds history ${from} keeps the old one`,
       );
     });
   creds
@@ -510,7 +515,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
   creds
     .command("list [platform]")
     .description(
-      "Every stored account, grouped by platform: its credential name, username, how it signs in; one platform when named",
+      "Every stored account by platform: who it is (username), what it is for (roles: `creds role`), how it signs in; one platform when named",
     )
     .action(async (platform?: string) => {
       const rows = await accountsOn(credentialsFor(settings, { armed: false }), platform);
@@ -518,6 +523,33 @@ export function registerAuthCommands(program: Command, settings: Settings): void
         rows.length ? formatAccounts(rows) : `no credentials${platform ? ` on ${platform}` : ""}`,
       );
     });
+  creds
+    .command("role <site> <role> [account]")
+    .description(
+      "Give an account a role on its site (main, alt, wren): `site@role` then names it. The role leaves the account that had it; `--drop` takes it off",
+    )
+    .option("--drop", "take the role off whichever account has it")
+    .action(
+      async (siteArg: string, role: string, account: string | undefined, o: { drop?: boolean }) => {
+        const site = platformOf(accountSite(siteArg));
+        const store = credentialsFor(settings, { armed: false });
+        if (o.drop) {
+          const had = await dropRole(store.stored, site, role);
+          console.log(
+            had ? `${site}@${role} dropped (was ${had})` : `no account on ${site} has ${role}`,
+          );
+          return;
+        }
+        const key = await pickAccount(store, site, account);
+        const move = await giveRole(store.stored, key, role);
+        for (const r of move.renamed)
+          console.log(`${r.from} → ${r.to}${moveProfile(r.from, r.to)}`);
+        const username = (await store.stored.get(key))?.username ?? key;
+        console.log(
+          `${site}@${role} is ${username}${move.took.length ? ` (was ${move.took.join(", ")})` : ""}`,
+        );
+      },
+    );
   creds
     .command("canary <name>")
     .description(

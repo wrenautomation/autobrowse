@@ -99,25 +99,36 @@ describe("accounts on a platform", () => {
     instagram: { username: "wrenautomation", password: "a" },
     "instagram@william": { username: "william.jin", password: "b" },
     "x@wren": { username: "x@wrenautomation.com", password: "c" },
+    "reddit@a": { username: "first", password: "e" },
+    "reddit@b": { username: "second", password: "f" },
     stripe: { username: "billing@wrenautomation.com", password: "d", canary: true },
   });
 
-  it("lists each platform's accounts with usernames whole, canaries left out", async () => {
+  it("lists each account by username, then its roles; canaries left out", async () => {
     const rows = await accountsOn(store);
-    expect(rows.map((r) => r.name)).toEqual(["instagram", "instagram@william", "x@wren"]);
+    expect(rows.map((r) => r.name)).toEqual([
+      "instagram",
+      "instagram@william",
+      "reddit@a",
+      "reddit@b",
+      "x@wren",
+    ]);
+    expect(rows.map((r) => r.roles)).toEqual([["main"], ["william"], ["a"], ["b"], ["wren"]]);
     expect(formatAccounts(await accountsOn(store, "instagram"))).toBe(
-      "instagram\n  instagram          wrenautomation  password\n  instagram@william  william.jin     password",
+      "instagram\n  wrenautomation  main     password\n  william.jin     william  password",
     );
   });
 
-  it("picks one by name, label, username or a unique part of it; else lists them", async () => {
+  it("picks one by role, key, username or a unique part of it; the bare site is main; else lists them", async () => {
     expect(await pickAccount(store, "x")).toBe("x@wren");
     expect(await pickAccount(store, "instagram@william")).toBe("instagram@william");
     expect(await pickAccount(store, "instagram", "william")).toBe("instagram@william");
     expect(await pickAccount(store, "instagram", "wrenautomation")).toBe("instagram");
     expect(await pickAccount(store, "instagram", "jin")).toBe("instagram@william");
-    await expect(pickAccount(store, "instagram")).rejects.toThrow(
-      /2 accounts on instagram.*\n.*wrenautomation/s,
+    expect(await pickAccount(store, "instagram")).toBe("instagram");
+    expect(await pickAccount(store, "reddit", "second")).toBe("reddit@b");
+    await expect(pickAccount(store, "reddit")).rejects.toThrow(
+      /2 accounts on reddit, none main.*\n.*first/s,
     );
     await expect(pickAccount(store, "instagram", "nobody")).rejects.toThrow(/no account nobody/);
     await expect(pickAccount(store, "stripe")).rejects.toThrow(/no credential stored/);

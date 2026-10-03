@@ -17,7 +17,7 @@ A profile per site name keeps sign-ins between runs. Three tiers say where the b
 
 ## Shape
 
-- `Session { context, page, shared?, passkeys, close }` — `src/browser/session.ts:117-128`
+- `Session { context, page, shared?, passkeys, close }` — `src/browser/session.ts:119-130`
 - `BrowserOptions` — `:79`; `NeedsHuman` (a person is needed; artifacts set by the runner) — `:30-37`; `Artifacts` — `:39-49`
 - Proxy (opt-in, `BROWSER_PROXY` + `BROWSER_PROXY_SITES`): a local launch for a listed site (`x`: every x profile) or profile (`linkedin@research` only) goes out through it — `src/browser/proxy.ts`; X and LinkedIn flag datacenter IPs (the box), so a static ISP proxy is the fix there, one per account. A proxied launch blocks WebRTC's unproxied UDP (it would show the page the real IP) and says `BROWSER_PROXY_TIMEZONE`; others say `BROWSER_TIMEZONE` (Chrome reads `TZ`)
 - How real it looks, measured: `autobrowse fingerprint [profile] [--box]` (the `fingerprint/check` flow, `src/browser/flows/fingerprint.ts`) reads the IP's network and zone and the page (UA, WebGL, codecs, WebRTC) and lists the tells
@@ -30,12 +30,12 @@ A profile per site name keeps sign-ins between runs. Three tiers say where the b
 
 - **owns:** passkeys (`Passkeys`, `src/browser/webauthn.ts:32`)
 - **owned-by:** [[flow]] (the runner opens one per flow), the explore session
-- **joins:** [[settings]] (`browserOptions`, `src/app/services.ts:252`), [[state-files]] (`profiles/`)
+- **joins:** [[settings]] (`browserOptions`, `src/app/services.ts:253`), [[state-files]] (`profiles/`)
 - **looks-like-but-is-not:** [[agent-session]]; `Identity` in `src/auth/identities.ts`
 
 ## If you change this
 
-- **Hits:** `src/browser/flow.ts:384` (`flowRunner`), `src/explore/server.ts:500`, `src/browser/park.ts`, `src/browser/reap.ts`, `src/browser/own.ts`, `src/app/services.ts:204-288`.
+- **Hits:** `src/browser/flow.ts:384` (`flowRunner`), `src/explore/server.ts:500`, `src/browser/park.ts`, `src/browser/reap.ts`, `src/browser/own.ts`, `src/app/services.ts:205-291`.
 - **Does not hit:** flows themselves (they see `FlowPage`), the agent's step loop.
 
 ## Surfaces

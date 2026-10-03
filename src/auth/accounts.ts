@@ -10,6 +10,7 @@ import { z } from "zod";
 import { defineFlow, type FlowPage, type FlowRunner } from "../browser/flow.js";
 import { credentialFor, resolveLogin, type SiteLogin, viaLogin } from "./login.js";
 import { PROVIDERS } from "./providers.js";
+import { MAIN, resolveAccount, shownRoles } from "./roles.js";
 import { SITE_LOGINS } from "./sites.js";
 
 export interface AccountRow {
@@ -145,10 +146,12 @@ export const platformOf = (name: string): string => name.split("@")[0] ?? name;
 /** Where a site's accounts are stored: `gmail`, `drive` → `google` (an app of it); else itself. */
 const storedOn = (site: string): string => platformOf(credentialFor(SITE_LOGINS, platformOf(site)));
 
-/** One stored account on a platform: its credential name and whose it is. */
+/** One stored account on a platform: who it is, what it is for, how it signs in. */
 export interface PlatformAccount {
+  /** The stored key (`x@wren`); a person names the account by role or username instead. */
   name: string;
   username: string;
+  roles: string[];
   how: string;
 }
 
@@ -167,6 +170,7 @@ export async function accountsOn(
     out.push({
       name,
       username: c.username || "(no username)",
+      roles: c.roles ?? [],
       // Every way in, in the order tried (`methodsOf`).
       how:
         [
@@ -178,29 +182,66 @@ export async function accountsOn(
           .join(", then ") || "no way in stored",
     });
   }
-  return out;
+  // Roles as a person reads them (`x@wren` answers to `wren`); main first, then by role.
+  const count = new Map<string, number>();
+  for (const r of out) count.set(platformOf(r.name), (count.get(platformOf(r.name)) ?? 0) + 1);
+  for (const r of out)
+    r.roles = shownRoles(
+      { key: r.name, username: r.username, roles: r.roles },
+      count.get(platformOf(r.name)) ?? 1,
+    );
+  const rank = (r: PlatformAccount) => (r.roles.includes(MAIN) ? 0 : r.roles.length ? 1 : 2);
+  return out.sort(
+    (a, b) =>
+      platformOf(a.name).localeCompare(platformOf(b.name)) ||
+      rank(a) - rank(b) ||
+      (a.roles[0] ?? a.username).localeCompare(b.roles[0] ?? b.username),
+  );
 }
 
-/** Accounts grouped under their platform, usernames whole: what `creds list` prints. */
+/**
+ * The stored key, when no name a person would type reaches it: not the
+ * bare site (main or only), not `site@<role>`, not `site@<username>`.
+ */
+const oddKey = (r: PlatformAccount): string | null => {
+  const site = platformOf(r.name);
+  const label = r.name.slice(site.length + 1).toLowerCase();
+  if (!label || r.roles.includes(label) || label === r.username.toLowerCase()) return null;
+  return r.name;
+};
+
+/**
+ * Accounts grouped under their platform: the username first, then its
+ * roles, then how it signs in. What `creds list` prints.
+ *
+ *   x
+ *     me@gmail.com     main, personal  password
+ *     wren_automation  wren            password
+ */
 export function formatAccounts(rows: readonly PlatformAccount[]): string {
-  const w = Math.max(0, ...rows.map((r) => r.name.length));
+  const roles = (r: PlatformAccount) => r.roles.join(", ");
   const u = Math.max(0, ...rows.map((r) => r.username.length));
+  const w = Math.max(0, ...rows.map((r) => roles(r).length));
   const lines: string[] = [];
   let last = "";
   for (const r of rows) {
     const p = platformOf(r.name);
     if (p !== last) lines.push(p);
     last = p;
-    lines.push(`  ${r.name.padEnd(w)}  ${r.username.padEnd(u)}  ${r.how}`);
+    const odd = oddKey(r);
+    lines.push(
+      `  ${r.username.padEnd(u)}  ${roles(r).padEnd(w)}  ${r.how}${odd ? `  (stored as ${odd})` : ""}`.trimEnd(),
+    );
   }
   return lines.join("\n");
 }
 
 /**
- * The one account `which` names on a platform: its credential name
- * (`x@wren`), its label (`wren`), its username, or a unique part of the
- * username. `site@label` given: that. Several and nothing to choose by, or
- * no match: an error listing them, so the caller picks.
+ * The one account `which` names on a platform: a role (`wren`), a stored key
+ * (`x@wren`), its username, or a unique part of the username. `site@x`
+ * given: the account that name means (`namedStore`). The bare site: its
+ * main account, or its only one. Several and nothing to choose by, or no
+ * match: an error listing them, so the caller picks.
  */
 export async function pickAccount(
   store: CredentialStore,
@@ -208,24 +249,25 @@ export async function pickAccount(
   which?: string,
 ): Promise<string> {
   const all = await accountsOn(store, site);
-  if (site.includes("@") && !which) {
-    const name = credentialFor(SITE_LOGINS, site);
-    if (all.some((a) => a.name === name)) return name;
-    throw new Error(`no credential ${name}${listed(all)}`);
-  }
+  const held = all.map((a) => ({ key: a.name, username: a.username, roles: a.roles }));
+  const named = (n: string) => resolveAccount(held, n);
   if (!which) {
-    const only = all.length === 1 ? all[0] : undefined;
-    if (only) return only.name;
+    const name = site.includes("@") ? credentialFor(SITE_LOGINS, site) : storedOn(site);
+    const hit = named(name);
+    if (hit) return hit;
     throw new Error(
-      all.length
-        ? `${all.length} accounts on ${site}; name one (label or username)${listed(all)}`
-        : `no credential stored for ${site}`,
+      site.includes("@")
+        ? `no account ${name}${listed(all)}`
+        : all.length
+          ? `${all.length} accounts on ${site}, none main; name one (role or username)${listed(all)}`
+          : `no credential stored for ${site}`,
     );
   }
   const w = which.toLowerCase();
+  const exact = named(`${storedOn(site)}@${w}`);
+  if (exact) return exact;
   const tiers: ((a: PlatformAccount) => boolean)[] = [
-    (a) => a.name === which || a.name === `${storedOn(site)}@${w}`,
-    (a) => a.username.toLowerCase() === w,
+    (a) => a.name === which,
     (a) => a.username.toLowerCase().split("@")[0] === w,
     (a) => a.username.toLowerCase().includes(w),
   ];

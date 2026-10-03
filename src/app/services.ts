@@ -49,6 +49,7 @@ import {
   totpSource,
 } from "../auth/index.js";
 import { CRED_ENV, keychainOf, WALLET_KEYCHAIN } from "../auth/keep.js";
+import { type NamedStore, namedStore } from "../auth/roles.js";
 import { loginSecrets, type SecretValues } from "../auth/signup.js";
 import { fileDoneActs } from "../browser/attempt.js";
 import type { Eyes } from "../browser/captcha/index.js";
@@ -269,6 +270,8 @@ export function browserOptions(
     passkeys: async (site) => {
       return (await store.get(credentialFor(SITE_LOGINS, site)))?.passkeys ?? [];
     },
+    // `x@<username>` opens the profile of the account it names (`x@wren`).
+    profileName: async (name) => (await store.keyOf(name)) ?? name,
     tier: settings.browser,
     cdpUrl: settings.browserCdpUrl ?? null,
     own: ownBrowserOf(settings.ownBrowser, settings.ownBrowserSites),
@@ -451,7 +454,7 @@ export function credentialsFor(
     /** Off for a pull or a push: the file alone, not the shared store. */
     shared?: boolean;
   } = {},
-): CredentialStore {
+): NamedStore {
   const cipher =
     settings.credentialsCipher === "keychain"
       ? aesGcmCipher(keychainKey(keychainOf(settings.owner)))
@@ -487,12 +490,14 @@ export function credentialsFor(
           return layeredCredentials([synced, env], synced);
         })()
       : layeredCredentials([env, file]);
-  if (o.armed === false) return store;
-  return canaryStore(store, {
+  // Addressed by account names (`x`, `x@wren`, `x@<username>`); roles are read below the canary layer.
+  if (o.armed === false) return namedStore(store);
+  const armed = canaryStore(store, {
     audit: auditFor(settings),
     ...(o.notify ? { notify: o.notify } : {}),
     ...(o.by ? { by: o.by } : {}),
   });
+  return namedStore(armed, store);
 }
 
 /** Ships new screenshots to the bucket; null when no bucket is set (they stay local). */

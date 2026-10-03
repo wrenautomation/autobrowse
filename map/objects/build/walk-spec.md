@@ -21,7 +21,7 @@ Data run by one interpreter, not rendered TypeScript: a walk is rebuilt from new
 - `screenSpecSchema` (url, up to 12 landmarks, ops, `goal`, `after`, `once`, `seen`) — `:46`; `walkSpecSchema` (fields, secrets by key, `from` runs, `irreversible`) with its checks — `:65-124`
 - Store: `saveWalk` (0600), `loadWalk`, `listWalks` — `:136-185`
 - Build: `visitsOf` cuts a run into visits — `src/walks/build.ts:103`; `walkFromRuns` clusters visits into screens, newest run's ops win — `:190`; `buildWalk` picks ended runs (`USABLE`) — `:487-493`
-- Run: `walkFlow` — `src/walks/flow.ts:195`; `walkFor` resolves secrets through stored logins (`walkSecrets`) — `src/app/services.ts:531`, `:561`; the Restate `flow` handler falls back to it — `src/engine/browser-service.ts:155`
+- Run: `walkFlow` — `src/walks/flow.ts:195`; `walkFor` resolves secrets through stored logins (`walkSecrets`) — `src/app/services.ts:536`, `:561`; the Restate `flow` handler falls back to it — `src/engine/browser-service.ts:155`
 
 ## Connected to
 
