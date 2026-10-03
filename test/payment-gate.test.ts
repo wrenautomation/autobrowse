@@ -1,6 +1,16 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { askLine, askOverChannel } from "../src/gates/ask.js";
-import { amountNear, chargesNow, paymentGate, totalIn } from "../src/gates/payment.js";
+import {
+  amountNear,
+  chargesNow,
+  PaymentFlowYes,
+  paymentFlowOf,
+  paymentGate,
+  totalIn,
+} from "../src/gates/payment.js";
 
 describe("paymentGate", () => {
   it("gates billing fields and spending buttons, nothing else", () => {
@@ -102,4 +112,28 @@ describe("askOverChannel", () => {
   it("is no answer, not a no, when nobody replies by the deadline", async () => {
     expect(await channel([]).approver(ask)).toBeNull();
   });
+});
+
+describe("one yes per payment flow", () => {
+  it("a site's subdomains are one flow; country-code second levels kept", () => {
+    expect(paymentFlowOf("https://www.racknerd.com/kvm-vps")).toBe("racknerd.com");
+    expect(paymentFlowOf("https://my.racknerd.com/cart.php?a=checkout")).toBe("racknerd.com");
+    expect(paymentFlowOf("https://shop.example.co.uk/pay")).toBe("example.co.uk");
+    expect(paymentFlowOf("http://127.0.0.1:9000/pay")).toBe("127.0.0.1");
+    expect(paymentFlowOf("data:text/html,x")).toBe("data:text/html,x");
+  });
+
+  it("a yes outlives the session that heard it, and runs out", () => {
+    const file = join(mkdtempSync(join(tmpdir(), "flows-")), "payment-flows.json");
+    let t = 1_000;
+    new PaymentFlowYes(file, () => t).grant("racknerd.com", 60_000);
+    const restarted = new PaymentFlowYes(file, () => t);
+    expect(restarted.covers("racknerd.com")).toBe(true);
+    expect(restarted.covers("example.com")).toBe(false);
+    t += 60_001;
+    expect(restarted.covers("racknerd.com")).toBe(false);
+  });
+
+  it("no file is no yes", () =>
+    expect(new PaymentFlowYes("/nonexistent/dir/flows.json").covers("racknerd.com")).toBe(false));
 });

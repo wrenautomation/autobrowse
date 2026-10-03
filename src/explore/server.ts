@@ -57,9 +57,11 @@ import {
   type Approver,
   amountNear,
   chargesNow,
+  PaymentFlowYes,
   PaymentGate,
   PendingApprovals,
   paymentAmount,
+  paymentFlowOf,
   paymentGate,
 } from "../gates/payment.js";
 import type { Amount } from "../gates/spend.js";
@@ -754,10 +756,10 @@ async function serve(
   /**
    * One yes per payment flow (William, 2026-09-25: "only ask one yes or no
    * for whether you want to start the payment flow and pay, not repeated
-   * questions"): a yes on a host covers every money act there (billing
-   * fields, the card, checkout, pay) for FLOW_MS. A no is asked again.
+   * questions"): a yes on a site (www. and my. alike) covers every money act there (billing
+   * fields, the card, checkout, pay) for FLOW_MS, across session restarts. A no is asked again.
    */
-  const flowYes = new Map<string, number>();
+  const flowYes = new PaymentFlowYes(join(tmpdir(), "autobrowse", "payment-flows.json"));
   const decide = async (
     _key: string,
     what: string,
@@ -766,20 +768,20 @@ async function serve(
     amount: Amount | null = null,
   ) => {
     if (!approvals) throw new PaymentGate(what, "no-approver");
-    // A web page's flow is its host; a data: page or a desktop app is its own.
-    const host = URL.canParse(url) ? new URL(url).host || url : url;
-    if ((flowYes.get(host) ?? 0) > Date.now()) return;
+    // The flow is the site (my. and www. are one checkout); the yes survives a session restart.
+    const flow = paymentFlowOf(url);
+    if (flowYes.covers(flow)) return;
     await approvals.decide(
-      `pay ${host}`,
+      `pay ${flow}`,
       {
-        what: `start paying on ${host.length > 60 ? "this page" : host}: ${what} (one yes covers the card and the pay clicks here for ${FLOW_MS / 60_000} min)`,
+        what: `start paying on ${flow.length > 60 ? "this page" : flow}: ${what} (one yes covers the card and the pay clicks here for ${FLOW_MS / 60_000} min)`,
         url,
         site: opts.site,
         ...(amount ? { amount } : {}),
       },
       wait,
     );
-    flowYes.set(host, Date.now() + FLOW_MS);
+    flowYes.grant(flow, FLOW_MS);
   };
   /** Instant for a console; a person's hands when an agent drives (`pace`). */
   const hands = handsFor(opts.pace ?? null);

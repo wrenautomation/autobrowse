@@ -5,6 +5,8 @@
  * detection is by the element, not the site, so a checkout nobody mapped
  * still stops. False positives cost one question; a miss costs money.
  */
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { Hints } from "../browser/locate.js";
 import type { Amount } from "./spend.js";
 import { amountIn } from "./spend.js";
@@ -174,5 +176,56 @@ export class PendingApprovals {
     // Silence is not a no: the next try asks again.
     if (entry.answer === null) throw new PaymentGate(ask.what, "no-answer");
     if (!entry.answer) throw new PaymentGate(ask.what, "denied");
+  }
+}
+
+/** Second-level labels that sit under a country code and are not a site (`shop.co.uk`). */
+const SHARED_SECOND_LEVEL = new Set(["co", "com", "net", "org", "gov", "ac", "edu"]);
+
+/**
+ * The site a payment flow belongs to: the registrable domain, so `www.` and `my.`
+ * on one company are one flow (a store and its billing portal). A data: page or a
+ * desktop app is its own flow.
+ */
+export function paymentFlowOf(url: string): string {
+  const host = URL.canParse(url) ? new URL(url).hostname : "";
+  if (!host) return url;
+  if (/^[\d.]+$/.test(host) || !host.includes(".")) return host;
+  const labels = host.split(".");
+  const tld = labels.at(-1) ?? "";
+  const sld = labels.at(-2) ?? "";
+  const keep = tld.length === 2 && SHARED_SECOND_LEVEL.has(sld) ? 3 : 2;
+  return labels.slice(-keep).join(".");
+}
+
+/**
+ * One yes per payment flow, kept on disk so it outlives the session: a restart
+ * (a fresh sign-in, a crash) mid-checkout must not ask again. Each entry is the
+ * flow's site and when its yes runs out.
+ */
+export class PaymentFlowYes {
+  constructor(
+    private readonly file: string,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  private read(): Record<string, number> {
+    try {
+      const all = JSON.parse(readFileSync(this.file, "utf8")) as Record<string, number>;
+      const t = this.now();
+      return Object.fromEntries(Object.entries(all).filter(([, until]) => until > t));
+    } catch {
+      return {};
+    }
+  }
+
+  covers(flow: string): boolean {
+    return (this.read()[flow] ?? 0) > this.now();
+  }
+
+  grant(flow: string, ms: number): void {
+    const all = { ...this.read(), [flow]: this.now() + ms };
+    mkdirSync(dirname(this.file), { recursive: true });
+    writeFileSync(this.file, JSON.stringify(all), { mode: 0o600 });
   }
 }
