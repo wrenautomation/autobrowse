@@ -270,8 +270,12 @@ export function browserOptions(
     passkeys: async (site) => {
       return (await store.get(credentialFor(SITE_LOGINS, site)))?.passkeys ?? [];
     },
-    // `x@<username>` opens the profile of the account it names (`x@wren`).
-    profileName: async (name) => (await store.keyOf(name)) ?? name,
+    // `x@<username>` opens the profile of the account it names (`x@wren`); so does a
+    // site that signs in as one account (google-admin as `google@admin`).
+    profileName: async (name) => {
+      const as = credentialFor(SITE_LOGINS, name);
+      return (await store.keyOf(as.includes("@") ? as : name)) ?? name;
+    },
     tier: settings.browser,
     cdpUrl: settings.browserCdpUrl ?? null,
     own: ownBrowserOf(settings.ownBrowser, settings.ownBrowserSites),

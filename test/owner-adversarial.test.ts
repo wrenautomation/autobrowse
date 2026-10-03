@@ -219,10 +219,13 @@ describe("an owner's env", () => {
       expect(err?.message, name).toContain(name);
       expect(err?.message, name).not.toContain(value);
     }
-    writeFileSync(join(dir, "acme", ".env"), "AWS_REGION=x1\nUI_TOKEN=x2\nCREDENTIALS_FILE=x3\n");
+    writeFileSync(
+      join(dir, "acme", ".env"),
+      "AWS_REGION=leak-one\nUI_TOKEN=leak-two\nCREDENTIALS_FILE=leak-three\n",
+    );
     const all = thrown(() => enterOwner({ AUTOBROWSE_OWNER: "acme", OWNERS_DIR: dir }));
     expect(all?.message).toMatch(/AWS_REGION, UI_TOKEN, CREDENTIALS_FILE/);
-    expect(all?.message).not.toMatch(/x1|x2|x3/);
+    expect(all?.message).not.toMatch(/leak-/);
   });
 
   it("drops the operator's accounts whatever their case or shape, keeps what the process needs", () => {

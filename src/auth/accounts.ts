@@ -11,7 +11,7 @@ import { defineFlow, type FlowPage, type FlowRunner } from "../browser/flow.js";
 import { accent, bold, columns, dim } from "../style.js";
 import { credentialFor, resolveLogin, type SiteLogin, viaLogin } from "./login.js";
 import { PROVIDERS } from "./providers.js";
-import { MAIN, resolveAccount, shownRoles } from "./roles.js";
+import { MAIN, type NamedStore, resolveAccount, shownRoles } from "./roles.js";
 import { SITE_LOGINS } from "./sites.js";
 
 export interface AccountRow {
@@ -103,8 +103,13 @@ export function accountsOf(opts: {
   return {
     async list() {
       // Every spec'd site (credential or not, under the spec's own credential name), then the rest of the store.
+      // A spec's credential that names a stored account (`google@admin`) is that account's row.
+      const keyOf = (store as Partial<NamedStore>).keyOf;
       const names = new Set<string>();
-      for (const l of logins) names.add(l.credential ?? l.site);
+      for (const l of logins) {
+        const name = l.credential ?? l.site;
+        names.add((await keyOf?.(name)) ?? name);
+      }
       for (const s of await store.list()) names.add(s);
       const rows = await Promise.all([...names].map(row));
       return rows.sort((a, b) => a.site.localeCompare(b.site));

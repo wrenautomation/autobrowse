@@ -33,7 +33,7 @@ Each handler is one host invocation and state is saved before it returns (`src/e
 
 ## If you change this
 
-- **Hits:** `src/engine/run.ts`, `src/engine/memory.ts` (the test host), `src/workflows/compiled.ts`, `src/app/services.ts:1187` (`buildApp` registers them), CLI `run`/`status`, UI `/api/runs`, `src/app/client.ts`.
+- **Hits:** `src/engine/run.ts`, `src/engine/memory.ts` (the test host), `src/workflows/compiled.ts`, `src/app/services.ts:1191` (`buildApp` registers them), CLI `run`/`status`, UI `/api/runs`, `src/app/client.ts`.
 - **Does not hit:** flows, the site facade, agent sessions (in-process, not Restate).
 
 ## Surfaces

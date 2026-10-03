@@ -30,12 +30,12 @@ A profile per site name keeps sign-ins between runs. Three tiers say where the b
 
 - **owns:** passkeys (`Passkeys`, `src/browser/webauthn.ts:32`)
 - **owned-by:** [[flow]] (the runner opens one per flow), the explore session
-- **joins:** [[settings]] (`browserOptions`, `src/app/services.ts:253`), [[state-files]] (`profiles/`)
+- **joins:** [[settings]] (`browserOptions`, `src/app/services.ts:259`), [[state-files]] (`profiles/`)
 - **looks-like-but-is-not:** [[agent-session]]; `Identity` in `src/auth/identities.ts`
 
 ## If you change this
 
-- **Hits:** `src/browser/flow.ts:384` (`flowRunner`), `src/explore/server.ts:500`, `src/browser/park.ts`, `src/browser/reap.ts`, `src/browser/own.ts`, `src/app/services.ts:205-291`.
+- **Hits:** `src/browser/flow.ts:384` (`flowRunner`), `src/explore/server.ts:500`, `src/browser/park.ts`, `src/browser/reap.ts`, `src/browser/own.ts`, `src/app/services.ts:205-295`.
 - **Does not hit:** flows themselves (they see `FlowPage`), the agent's step loop.
 
 ## Surfaces

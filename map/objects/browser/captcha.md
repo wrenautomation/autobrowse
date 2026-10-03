@@ -19,7 +19,7 @@ Checkboxes are solved by the hands alone; pictures need `Eyes` (a model that see
 
 - `Captcha { kind: checkbox|grid|text|slider, vendor: recaptcha|hcaptcha|turnstile|generic … }` — `src/browser/captcha/index.ts:26-34`; `Eyes`, `CaptchaOutcome`, `SolveOptions` — `:32-45`
 - hCaptcha canvas task (no tiles: drag or click on one picture): `canvasTask` — `src/browser/captcha/index.ts:`; the eyes' move parsed by `parseCanvasMove` — `:346`
-- Wired by `captchaFor` — `src/app/services.ts:319`
+- Wired by `captchaFor` — `src/app/services.ts:329`
 
 ## Connected to
 
@@ -28,7 +28,7 @@ Checkboxes are solved by the hands alone; pictures need `Eyes` (a model that see
 
 ## If you change this
 
-- **Hits:** `src/browser/flow.ts`, `src/explore/server.ts`, `src/app/services.ts:319`.
+- **Hits:** `src/browser/flow.ts`, `src/explore/server.ts`, `src/app/services.ts:323`.
 - **Does not hit:** sign-ins (a captcha is answered before the wall hook), the engine.
 
 ## Surfaces

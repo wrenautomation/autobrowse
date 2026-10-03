@@ -60,4 +60,25 @@ x
   `todoist` / `todoist@william-net` share a username (password vs Google
   sign-in). `google-wren` duplicates `google@wren` under another site name.
   google@ entries for the 24 deleted inboxes stay until he says so. Nothing
-  merged or deleted.
+  merged or deleted. (Merged 2026-10-03, below.)
+- **2026-10-03: look-alikes merged, on William's say.** Each pair was checked
+  in process first (same username, same password, no extra codes or
+  passkeys). `google-admin` and `google-wren` were copies of `google@wren`:
+  removed, and `google@wren` took the `admin` role. `notion` and `todoist`
+  each became one account with both ways in (`creds same`). The 24 dead-inbox
+  Google entries were already gone (10-02); their profiles moved to
+  `profiles-retired/2026-10-03/` and their `sends` rows left `accounts.json`.
+  Live Google accounts: personal (main), william@wrenautomation.com (wren,
+  admin), william@wren-automation.net (sends), alt, wj.dev.
+- **A site signs in as a role, not a copy.** google-admin's spec names
+  `google@admin`. `profileName` opens the profile of the account that name
+  resolves to, so the admin console and google@wren share one profile. The
+  old `google-admin` profile was the real signed-in one (a `-` key sorted
+  first in the old scan); it became `profiles/google@wren`, and the thin
+  `google@wren` dir was retired beside the others.
+- **`<provider>-<label>` keys dropped.** Second accounts live only as
+  `<provider>@<label>`. The `-` branch in `credFor`, `profileOf` and
+  `usernameOf` matched `tiktok-developers` as a tiktok account.
+- **`creds same` guards.** Two passwords that differ are refused (set one on
+  both first). The merged entry is read back before the other is removed, and
+  the other's roles carry over.

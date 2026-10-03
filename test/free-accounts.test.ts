@@ -46,4 +46,21 @@ describe("freeAccountStep", () => {
       stored: true,
     });
   });
+
+  it("one account with a password and a Google way in counts for both", async () => {
+    const store = memoryCredentials({
+      todoist: {
+        username: INBOX,
+        password: "p",
+        via: "google",
+        madeAt: "2026-10-02T00:00:00.000Z",
+      },
+    });
+    const google = entry("todoist", "google");
+    expect(await freeAccountStep(store, todoist, INBOX)).toEqual({ kind: "made", key: "todoist" });
+    expect(await freeAccountStep(store, google, INBOX)).toMatchObject({
+      key: "todoist",
+      stored: true,
+    });
+  });
 });

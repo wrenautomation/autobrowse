@@ -116,7 +116,7 @@ export async function profileOf(
   if (byName && same(byName.username, account)) return named;
   const mine: Array<[string, NonNullable<Awaited<ReturnType<CredentialStore["get"]>>>]> = [];
   for (const name of await credentials.list()) {
-    if (!name.startsWith(`${site}@`) && !name.startsWith(`${site}-`)) continue;
+    if (!name.startsWith(`${site}@`)) continue;
     const c = await credentials.get(name);
     if (!c) continue;
     if (same(c.username, account)) return name;
@@ -129,7 +129,7 @@ export async function profileOf(
 
 /**
  * The username of a credential the caller named as the account: the site's
- * own (`linkedin`) or one of its `site@label` / `site-label` logins. Null for
+ * own (`linkedin`) or one of its `site@label` logins. Null for
  * anything else, which is then an address.
  */
 export async function usernameOf(
@@ -138,7 +138,7 @@ export async function usernameOf(
   name: string,
 ): Promise<string | null> {
   const n = name.trim().toLowerCase();
-  if (n !== site && !n.startsWith(`${site}@`) && !n.startsWith(`${site}-`)) return null;
+  if (n !== site && !n.startsWith(`${site}@`)) return null;
   return (await credentials.get(n))?.username ?? null;
 }
 

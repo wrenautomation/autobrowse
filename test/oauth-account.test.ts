@@ -70,12 +70,13 @@ describe("oauth sign-in account", () => {
 });
 
 describe("provider credential by account", () => {
-  it("finds a <provider>-<label> credential whose username matches", async () => {
+  it("finds a <provider>@<label> credential whose username matches, never <provider>-<x>", async () => {
     const { fp } = fakePage({ text: [""], present: () => false });
     const credentials = memoryCredentials({
       perplexity: { username: "admin@wren.test", password: "p", via: "google" },
       google: { username: "will@wren.test", password: "g" },
-      "google-admin": { username: "admin@wren.test", password: "a" },
+      "google@admin": { username: "admin@wren.test", password: "a" },
+      "google-wren": { username: "dup@wren.test", password: "d" },
       "google@ops": { username: "ops@wren.test", password: "o" },
       "googleish-x": { username: "x@wren.test", password: "x" },
     });
@@ -85,5 +86,6 @@ describe("provider credential by account", () => {
     expect((await ctx.credFor("google", "ops@wren.test")).password).toBe("o");
     expect((await ctx.credFor("google", "will@wren.test")).password).toBe("g");
     await expect(ctx.credFor("google", "x@wren.test")).rejects.toThrow(/no google credential/);
+    await expect(ctx.credFor("google", "dup@wren.test")).rejects.toThrow(/no google credential/);
   });
 });

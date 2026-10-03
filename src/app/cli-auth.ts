@@ -218,11 +218,20 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       const store = credentialsFor(settings);
       const [a, b] = [await store.get(site), await store.get(other)];
       if (!a || !b) throw new Error(`both need a stored credential: ${!a ? site : other}`);
+      // Two passwords that differ: one is stale, and which is not ours to guess.
+      if (a.password && b.password && a.password !== b.password)
+        throw new Error(
+          `${site} and ${other} hold different passwords: set the current one on both (creds password), then merge`,
+        );
       const own = a.password ? a : b.password ? b : a;
       const via = a.via ?? b.via;
       const address = [a, b].find((c) => c.via)?.username;
+      // What only the other holds (its url, when it was made) comes along; site's own wins.
+      const rest = own === a ? b : a;
       await store.put(site, {
+        ...rest,
         ...own,
+        roles: a.roles ?? [],
         username: own.password ? own.username : a.username,
         ...(via ? { via } : {}),
         ...(address && own.password ? { codesInbox: own.codesInbox ?? address } : {}),
@@ -232,7 +241,13 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       });
       if (!store.remove)
         throw new Error("this store cannot remove; the merge is stored, remove the other by hand");
+      const back = await store.get(site);
+      if (!back || back.password !== own.password || back.via !== via)
+        throw new Error(`${site} did not read back as merged; ${other} left as is`);
       await store.remove(other);
+      const key = (await store.keyOf(site)) ?? site;
+      for (const role of (b.roles ?? []).filter((r) => !(a.roles ?? []).includes(r)))
+        await giveRole(store.stored, key, role);
       const ways = [
         own.password && "password",
         via && `via ${via}`,

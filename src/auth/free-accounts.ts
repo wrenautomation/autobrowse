@@ -62,7 +62,8 @@ export async function freeAccountStep(
     const made = mine.find(([, c]) => c?.madeAt && c.password);
     return made ? { kind: "made", key: made[0] } : { kind: "signup", site: a.site, url: a.url };
   }
-  const google = mine.find(([, c]) => c?.via === "google" && !c.password);
+  // One account with both ways in (`creds same`) counts for both.
+  const google = mine.find(([, c]) => c?.via === "google");
   if (google) return { kind: "google", key: google[0], url: a.url, stored: true };
   const [local = "", domain = ""] = who.split("@");
   const label = `${local}-${domain.split(".")[0] ?? ""}`.replace(/[^a-z0-9-]+/g, "");

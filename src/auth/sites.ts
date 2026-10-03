@@ -318,6 +318,8 @@ const GOOGLE_APPS: readonly SiteLogin[] = [
 
 const googleAdmin: SiteLogin = {
   site: "google-admin",
+  // The Workspace admin is a Google account with the `admin` role (`creds role google admin <account>`).
+  credential: "google@admin",
   home: "https://admin.google.com/",
   ask: "A Google Workspace admin (admin.google.com) for the mail domains; a personal Gmail is refused there",
   loggedIn: async (fp) =>
@@ -336,7 +338,7 @@ const googleAdmin: SiteLogin = {
     if (await ctx.fp.has({ text: "/administrator account/i" }))
       throw new LoginFailed(
         "google-admin",
-        `${ctx.cred.username} is not a Workspace admin; store the admin account as credential "google-admin"`,
+        `${ctx.cred.username} is not a Workspace admin; give the admin account the role: autobrowse creds role google admin <account>`,
       );
   },
   signInHere: GOOGLE_SIGN_IN_HERE,

@@ -8,10 +8,21 @@ import {
   pickAccount,
   rowOf,
 } from "../src/auth/accounts.js";
+import { namedStore } from "../src/auth/roles.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";
 import type { FlowRunner } from "../src/browser/flow.js";
 
 describe("accounts", () => {
+  it("a spec that signs in by role (google@admin) shares the row of the account holding it", async () => {
+    const raw = memoryCredentials({
+      "google@wren": { username: "w@x.com", password: "pw", roles: ["admin"] },
+    });
+    const sites = (await accountsOf({ store: namedStore(raw), logins: SITE_LOGINS }).list()).map(
+      (r) => r.site,
+    );
+    expect(sites).toContain("google@wren");
+    expect(sites).not.toContain("google@admin");
+  });
   it("lists every spec'd site by its credential name, then the rest of the store, never values", async () => {
     const store = memoryCredentials({
       google: { username: "w@x.com", password: "pw", totpSecret: "JBSWY3DPEHPK3PXP" },
@@ -30,8 +41,8 @@ describe("accounts", () => {
       has: { password: true, totpSecret: true, passkeys: false },
     });
     expect(JSON.stringify(rows)).not.toMatch(/pw|JBSWY3DP/);
-    // the admin console has its own credential: its own row, empty
-    expect(rows.find((r) => r.site === "google-admin")).toMatchObject({
+    // the admin console signs in as the google account with the admin role: none here, an empty row
+    expect(rows.find((r) => r.site === "google@admin")).toMatchObject({
       known: true,
       username: null,
     });

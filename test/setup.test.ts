@@ -25,7 +25,7 @@ describe("setup", () => {
     const needs = needsFor(SITE_LOGINS);
     expect(needs[0]?.name).toBe("google");
     expect(needs[0]?.sites).toContain("google");
-    expect(needs.map((n) => n.name)).toContain("google-admin");
+    expect(needs.map((n) => n.name)).toContain("google@admin");
     expect(needs.find((n) => n.name === "cloudflare")?.viaChoices).toEqual(["google"]);
   });
   it("stores a via credential without asking for a password, skips what is left empty", async () => {
@@ -36,7 +36,7 @@ describe("setup", () => {
       "", // google
       "y",
       "admin@x.co", // cloudflare via google
-      "", // google-admin skipped
+      "", // google@admin skipped
       "", // instantly skipped
       "", // aws skipped
       "", // anthropic skipped
@@ -52,7 +52,7 @@ describe("setup", () => {
     const out = await runSetup(io, store, SITE_LOGINS);
     expect(out.stored).toEqual(["google", "cloudflare"]);
     expect(out.skipped).toEqual([
-      "google-admin",
+      "google@admin",
       "instantly",
       "aws",
       "anthropic",
@@ -77,7 +77,7 @@ describe("setup", () => {
     const store = memoryCredentials({
       google: { username: "a", password: "b" },
       cloudflare: { username: "-", password: "-", via: "google" },
-      "google-admin": { username: "e", password: "f" },
+      "google@admin": { username: "e", password: "f" },
       instantly: { username: "c", password: "d" },
       aws: { username: "root@x.co", password: "g" },
       anthropic: { username: "-", password: "-", via: "google" },

@@ -550,9 +550,9 @@ export function signInContext(p: SignInParts): SignInContext {
       if (!c) throw new LoginFailed(site, `no credential stored for ${other}`);
       names.set(c, other);
       if (!account || sameUser(c.username, account)) return c;
-      // A second account at the provider lives as `<provider>@<label>` (or `<provider>-<label>`: google-admin).
+      // A second account at the provider lives as `<provider>@<label>`.
       for (const name of await p.credentials.list()) {
-        if (!name.startsWith(`${other}@`) && !name.startsWith(`${other}-`)) continue;
+        if (!name.startsWith(`${other}@`)) continue;
         const alt = await p.credentials.get(name);
         if (alt && sameUser(alt.username, account)) {
           names.set(alt, name);
