@@ -53,17 +53,24 @@ export interface RepairReport extends RepairProposal {
 
 const SNAPSHOT_LIMIT = 200;
 
-/** Interactive elements as the recorder would describe them: cheap to send, enough to choose. */
+/**
+ * Interactive elements as the recorder would describe them: cheap to send,
+ * enough to choose. In page order, through open shadow roots (web-component
+ * sites put their buttons there; `document.querySelectorAll` stops at the
+ * host), and editable regions (a post composer is a `contenteditable` div).
+ */
 const SNAPSHOT_SCRIPT = `(max) => {
   const trim = (s) => (s ? s.replace(/\\s+/g, " ").trim().slice(0, 60) : "");
+  const SEL = "a, button, input, select, textarea, [role], summary, [contenteditable]:not([contenteditable=false])";
   const out = [];
-  for (const e of document.querySelectorAll("a, button, input, select, textarea, [role], summary")) {
-    if (out.length >= max) break;
+  const row = (e) => {
     const rect = e.getBoundingClientRect();
-    if (!rect.width && !rect.height) continue;
+    if (!rect.width && !rect.height) return;
     const attr = (n) => e.getAttribute(n);
+    const tag = e.tagName.toLowerCase();
     out.push([
-      e.tagName.toLowerCase(),
+      tag,
+      e.isContentEditable && tag !== "input" && tag !== "textarea" ? "editable" : "",
       attr("role") ? "role=" + attr("role") : "",
       attr("type") ? "type=" + attr("type") : "",
       e.id ? "id=" + e.id : "",
@@ -72,7 +79,15 @@ const SNAPSHOT_SCRIPT = `(max) => {
       attr("placeholder") ? "placeholder=" + trim(attr("placeholder")) : "",
       trim(e.textContent) ? "text=" + trim(e.textContent) : "",
     ].filter(Boolean).join(" "));
-  }
+  };
+  const visit = (root) => {
+    for (const e of root.querySelectorAll("*")) {
+      if (out.length >= max) return;
+      if (e.matches(SEL)) row(e);
+      if (e.shadowRoot) visit(e.shadowRoot);
+    }
+  };
+  visit(document);
   return out;
 }`;
 

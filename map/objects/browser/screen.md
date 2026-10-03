@@ -20,7 +20,7 @@ Sign-ins branch. Determinism is per known screen, not per fixed sequence: a walk
 - `Screen { name, looks, at?, shows?, hides?, says?, is?, act?, goal?, overlay?, repeats? }` — `src/browser/screens.ts:34-57`; `isOn` needs at least one check — `:284`
 - `Walk` (screens, `maxSteps` default 12, `fail`) — `:329`; `walk(ctx, w)` — `:418`
 - `LearnedScreen { site, url, landmarks, walk?, screen?, click?, reason, found, used }` and `LearnedScreens` store — `:64-94`; file `SCREENS_FILE` = `~/.config/autobrowse/screens.json` (`src/app/config.ts:114`)
-- `ScreenReader` (a model names an unknown page) — `:102`, `llmScreenReader` `src/browser/repair.ts:141`
+- `ScreenReader` (a model names an unknown page) — `:102`, `llmScreenReader` `src/browser/repair.ts:156`
 - Walks in force: Google (`src/auth/google.ts`), Cloudflare (`src/auth/sites.ts`); runner interrupts (a cookie banner) share the file
 
 ## Connected to
@@ -31,7 +31,7 @@ Sign-ins branch. Determinism is per known screen, not per fixed sequence: a walk
 
 ## If you change this
 
-- **Hits:** `src/auth/google.ts`, `src/auth/sites.ts` (cloudflare walk), `src/browser/flow.ts` (interrupt lookup), `src/browser/repair.ts:141`, `autobrowse screens` (`src/app/cli-record.ts`), `test/site-fakes.ts`.
+- **Hits:** `src/auth/google.ts`, `src/auth/sites.ts` (cloudflare walk), `src/browser/flow.ts` (interrupt lookup), `src/browser/repair.ts:156`, `autobrowse screens` (`src/app/cli-record.ts`), `test/site-fakes.ts`.
 - **Does not hit:** compiled workflows and their outline; fixes.
 
 ## Surfaces

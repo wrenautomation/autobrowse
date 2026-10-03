@@ -18,7 +18,7 @@ The runner repairs one act at a time through a model (`llmRepairer`). Keeping wh
 ## Shape
 
 - `Fix { flow, goal, failed, hints, detours?, reason, url, found, used }` — `src/browser/fixes.ts:15-31`; `Fixes` store `find/learn/used/flush/drop/list/forget` — `:33-50`; `FIXES_FILE` = `~/.config/autobrowse/fixes.json` (`src/app/config.ts:112`)
-- `RepairRequest`, `RepairProposal { hints, reason, detour? }`, `Repairer`, `RepairReport` — `src/browser/repair.ts:19-50`; `rememberingRepairer(memory, next)` — `:192`
+- `RepairRequest`, `RepairProposal { hints, reason, detour? }`, `Repairer`, `RepairReport` — `src/browser/repair.ts:19-50`; `rememberingRepairer(memory, next)` — `:207`
 - Irreversible acts are never repaired unless `repairIrreversible` — `src/browser/flow.ts:235`
 - Patch into source: `swapHints`, `replaceOp` — `src/compiler/patch.ts:63-90`; `applyFixes` — `src/agent/heal.ts:253`
 
