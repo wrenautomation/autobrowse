@@ -20,7 +20,7 @@ Steps never see Restate. A workflow is data plus step functions over the `Effect
 - `name`, `description`, `plan: z.ZodType<P>` (every plan carries `dryRun`), `steps[]`, `emptyMemo()`, optional `settle(plan, memo)` — `src/engine/workflow.ts:44-64`
 - `StepDef.run(ctx)` returns `done | skipped | rejected` with a detail line; `irreversible` marks money or accounts; a dry run stops before one unless its `harmless(plan, memo)` says this run skips it — `src/engine/workflow.ts:16-42`, `src/engine/run.ts:119-124`
 - `StepCtx` = `fx`, `deps`, `plan`, `memo`, `gate(name, prompt)` — `src/engine/workflow.ts:25-32`
-- Hand-written: `domain`, `redirect`, `sender-domain` (= domain steps then redirect steps), `bootstrap` (`HAND_WRITTEN`, `src/workflows/compiled.ts:28`). Every other dir under `src/workflows/` is compiled.
+- Hand-written: `domain`, `redirect`, `sender-domain` (= domain steps then redirect steps), `inbox-activity`, `workspace-inbox` (one inbox: domain and inbox-activity steps run on its plan via `onPlan`, plus `domain-ready`, `consent`, `account`; `src/workflows/workspace-inbox/index.ts`), `bootstrap` (`HAND_WRITTEN`, `src/workflows/compiled.ts:28`). Every other dir under `src/workflows/` is compiled.
 
 ## Connected to
 
@@ -38,7 +38,7 @@ Steps never see Restate. A workflow is data plus step functions over the `Effect
 
 | Surface | Role |
 |---|---|
-| CLI `run`, `try`, `workflows` (`src/app/cli.ts:109-306`) | starts, lists |
+| CLI `run`, `try`, `workflows` (`src/app/cli.ts:111-310`) | starts, lists |
 | UI `/api/workflows`, `/api/runs` (`src/ui/api.ts:222,437`) | lists, starts |
 | wren, over the Restate ingress | starts runs by object name |
 

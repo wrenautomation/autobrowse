@@ -30,7 +30,7 @@ A parked invocation would hold a Restate slot for days and could not be paused, 
 
 ## If you change this
 
-- **Hits:** `src/engine/object.ts`, `src/engine/memory.ts` (the test host must match), `src/workflows/compiled.ts:106`, `src/compiler/render.ts` (what a rendered step may do), `src/channels/commands.ts`, UI runs page.
+- **Hits:** `src/engine/object.ts`, `src/engine/memory.ts` (the test host must match), `src/workflows/compiled.ts:107`, `src/compiler/render.ts` (what a rendered step may do), `src/channels/commands.ts`, UI runs page.
 - **Does not hit:** the browser runner (a flow is one step's body), site calls.
 
 ## Surfaces

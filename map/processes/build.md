@@ -26,7 +26,7 @@ Recording is the one input, so a build never depends on anyone's memory of what 
 4. `checkCompiled(dir)`: tsc and vitest on the rendered dir — `src/compiler/check.ts:14`
 5. `finishCompiled` → `finish` (rounds until the check passes; `dropped()` guards against a model deleting steps) — `src/app/backend.ts:193`, `src/compiler/finish.ts:131-210`
 6. `proveCompiled` → `proveWorkflow` (gates declined) → `proof.json` — `src/app/backend.ts:151`, `src/workflows/proof.ts:80-93`
-7. The catalog sees the new dir at once through the `Compiled` object — `src/workflows/compiled.ts:47-106`
+7. The catalog sees the new dir at once through the `Compiled` object — `src/workflows/compiled.ts:48-107`
 
 ## If you change this
 

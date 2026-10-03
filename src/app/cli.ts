@@ -52,7 +52,9 @@ import {
   identitiesFor,
   inboxActivityDepsFor,
   LOCAL_WORKFLOWS,
+  sinkFor,
   WORKFLOWS,
+  workspaceInboxDepsFor,
 } from "./services.js";
 
 // `--owner` picks whose env, files and names load, so it is read before anything else.
@@ -291,9 +293,11 @@ program
         workflow as never,
         (workflow.name === "inbox-activity"
           ? inboxActivityDepsFor(settings, parts.browser)
-          : handWritten
-            ? domainDepsFor(settings, parts.browser)
-            : compiledDeps(parts.browser)) as never,
+          : workflow.name === "workspace-inbox"
+            ? workspaceInboxDepsFor(settings, parts.browser, parts.sites, sinkFor(settings))
+            : handWritten
+              ? domainDepsFor(settings, parts.browser)
+              : compiledDeps(parts.browser)) as never,
         plan,
         () =>
           o.ask ? null : { approved: true, note: "autobrowse try", at: new Date().toISOString() },
@@ -369,6 +373,68 @@ program
     await patient(api.run("redirect", domain).run({ domain, redirectTo: o.to }));
     console.log(`started redirect/${domain}; watch: autobrowse status redirect ${domain}`);
   });
+
+program
+  .command("inbox <address> <first> <last>")
+  .description(
+    "One Workspace inbox, ready (workflow workspace-inbox): user, password + authenticator stored, signature, photo, Gmail consent, accounts row",
+  )
+  .option("--consent <sites>", "sites to keep a consent token for, comma list", "gmail")
+  .option("--for <purposes>", "its purposes in the accounts list, comma list", "sends")
+  .option("--signature-file <path>", "HTML signature for Gmail send-as")
+  .option("--photo-url <url>", "its profile picture (a GIF stays animated)")
+  .option("--warmup", "enrol it in Instantly warmup")
+  .option("--warmup-like <email>", "copy this Instantly inbox's warmup settings onto it")
+  .option("--handoff", "put it on wren's roster and start its loops (it starts sending)")
+  .option("--niches <list>", "comma list, or all (with --handoff)", "all")
+  .option("--activity", "subscribe it to free newsletters and open their confirm links")
+  .option("--dry-run", "plan only; stop before the first irreversible step")
+  .action(
+    async (
+      address: string,
+      first: string,
+      last: string,
+      o: {
+        consent: string;
+        for: string;
+        signatureFile?: string;
+        photoUrl?: string;
+        warmup?: boolean;
+        warmupLike?: string;
+        handoff?: boolean;
+        niches: string;
+        activity?: boolean;
+        dryRun?: boolean;
+      },
+    ) => {
+      const list = (v: string) =>
+        v
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      const key = address.toLowerCase();
+      await patient(
+        api.run("workspace-inbox", key).run({
+          address: key,
+          givenName: first,
+          familyName: last,
+          consents: list(o.consent),
+          purposes: list(o.for),
+          ...(o.signatureFile ? { signatureHtml: await readFile(o.signatureFile, "utf8") } : {}),
+          ...(o.photoUrl ? { photoUrl: o.photoUrl } : {}),
+          warmup: o.warmup ?? false,
+          ...(o.warmupLike ? { warmupLike: o.warmupLike } : {}),
+          handoff: o.handoff ?? false,
+          niches: o.niches === "all" ? "all" : list(o.niches),
+          activity: o.activity ?? false,
+          dryRun: o.dryRun ?? false,
+        }),
+      );
+      console.log(
+        `started workspace-inbox/${key}; watch: autobrowse status workspace-inbox ${key}`,
+      );
+    },
+  );
 
 program
   .command("domains <words...>")

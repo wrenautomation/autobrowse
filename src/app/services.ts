@@ -161,6 +161,11 @@ import {
 import type { Proof } from "../workflows/proof.js";
 import { redirectWorkflow } from "../workflows/redirect/index.js";
 import { senderDomainWorkflow } from "../workflows/sender-domain/index.js";
+import {
+  type Consents,
+  type WorkspaceInboxDeps,
+  workspaceInboxWorkflow,
+} from "../workflows/workspace-inbox/index.js";
 import type { Settings } from "./config.js";
 import { holding, type Idle, idleTracker } from "./idle.js";
 import { awsFor } from "./owner.js";
@@ -386,6 +391,7 @@ export const WORKFLOWS: readonly AnyWorkflow[] = [
   redirectWorkflow,
   senderDomainWorkflow,
   inboxActivityWorkflow,
+  workspaceInboxWorkflow,
   bootstrapWorkflow,
 ];
 
@@ -395,6 +401,7 @@ export const LOCAL_WORKFLOWS: readonly AnyWorkflow[] = [
   redirectWorkflow,
   senderDomainWorkflow,
   inboxActivityWorkflow,
+  workspaceInboxWorkflow,
 ];
 
 /** Where compiled workflows live and where the compiler writes; relative imports resolve to the library from there. */
@@ -1174,6 +1181,42 @@ export function inboxActivityDepsFor(
   return { browser, gmail: gmailFor(settings, http), http };
 }
 
+/** A site's consent through the facade as one address; held = every token it makes is in the sink. */
+export function consentsOf(sites: SiteFacade, sink: Pick<EnvStore, "list">): Consents {
+  const makes = async (site: string) => {
+    const step = (await sites.status(site)).setup.find((s) => s.name === "consent");
+    if (!step) throw new Error(`${site} has no consent setup step`);
+    return step.makes;
+  };
+  return {
+    async held(site, address) {
+      const names = await makes(site);
+      const kept = new Set((await sink.list()).map((e) => e.name));
+      return names.length > 0 && names.every((n) => kept.has(accountEnv(n, address)));
+    },
+    async run(site, address) {
+      return (await sites.setup(site, "consent", address)).made;
+    },
+  };
+}
+
+/** What workspace-inbox calls: the domain family's APIs, plain HTTP, the sites' consents, the accounts list. */
+export function workspaceInboxDepsFor(
+  settings: Settings,
+  browser: DomainDeps["browser"],
+  sites: SiteFacade,
+  sink: Pick<EnvStore, "list">,
+  http = httpClient(),
+  ssm = ssmFor(settings),
+): WorkspaceInboxDeps {
+  return {
+    ...domainDepsFor(settings, browser, http, ssm),
+    http,
+    identities: identitiesFor(settings),
+    consents: consentsOf(sites, sink),
+  };
+}
+
 /** What the domain workflow calls: the worker's, and `try domain` in one process. */
 export function domainDepsFor(
   settings: Settings,
@@ -1336,6 +1379,12 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       makeRunObject(inboxActivityWorkflow, inboxActivityDepsFor(settings, browser, http), host, {
         guards,
       }),
+      makeRunObject(
+        workspaceInboxWorkflow,
+        workspaceInboxDepsFor(settings, browser, sites, sink, http, ssm),
+        host,
+        { guards },
+      ),
       makeRunObject(bootstrapWorkflow, bootstrapDeps, host, { guards }),
       // Every compiled flow, present and future, runs under this one object.
       makeCompiledRunObject({

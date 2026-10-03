@@ -308,6 +308,10 @@ a row; it is work.
   Workspace → verify → mail DNS → DKIM → inboxes → signatures →
   authenticator → photo → warmup (Instantly API) → roster → loops. Gated at the
   purchase. Each inbox is credential + profile `google@<email>`.
+- **Workspace inbox** (`designs/2026-10-03-workspace-inbox.md`): one inbox on
+  a domain already in Workspace. User, password and authenticator stored,
+  signature, photo, Gmail consent token, accounts row. Warmup, roster and
+  newsletters are opt-in. Reuses the domain and inbox-activity steps.
 - **Hand-written legs** (`src/browser/flows/`, callable as the Restate
   `browser` service's `flow`): `google-admin/dkim-*`,
   `google-admin/workspace-logo`, `google/profile-photo`, `google/oauth-consent`,
@@ -375,6 +379,7 @@ pnpm autobrowse domains wren automation --max 15   # sending-domain ideas: ours 
 pnpm autobrowse domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin --dry-run
 pnpm autobrowse domain wren-six.com --inbox will:William:Jin --inbox hello:William:Jin
 pnpm autobrowse try domain --plan plan.json --ask     # same workflow in-process, no Restate (more inboxes on a live domain too)
+pnpm autobrowse inbox will@wren-six.com Will Jin      # one inbox, ready: user, sign-in, signature, Gmail consent, accounts row
 pnpm autobrowse warmup-match will@wren-six.com --dry-run   # which Instantly inboxes differ from that one's warmup settings; drop --dry-run to copy them
 pnpm autobrowse workflows                      # what this worker can run
 pnpm autobrowse flows --site reddit            # every deterministic leg: hand-written flows + the routes on them, compiled workflows + proof, walks

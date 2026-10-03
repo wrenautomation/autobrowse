@@ -30,6 +30,7 @@ export const HAND_WRITTEN = new Set([
   "redirect",
   "sender-domain",
   "inbox-activity",
+  "workspace-inbox",
   "bootstrap",
 ]);
 

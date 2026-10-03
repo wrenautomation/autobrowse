@@ -21,7 +21,7 @@ The journal is resume state and goes on `close`; history has to outlive it so wa
 - `RunOutcome`: achieved, failed, saved, closed, idle — `:33`; `RunSummary` (one line per ended life in `index.jsonl`) — `:93-107`
 - `runLog(dir, site, {id})` writes rows synchronously and chains them (credvault `rowHash`) — `:163-244`; `readRun`, `listRuns`, `openRuns` (the last life died without `end`) — `:247-319`
 - The explore server opens a run on the first command or a `goal`, ends it on `done`, `save`, `close` or idle — `openRun` `src/explore/server.ts:637`, `endRun` `:660`; the `goal`/`done` commands — `:191`
-- Dir: `runsDirFor` — `src/app/services.ts:551`
+- Dir: `runsDirFor` — `src/app/services.ts:558`
 
 ## Connected to
 

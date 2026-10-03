@@ -112,7 +112,7 @@ export function confirmLinks(text: string): string[] {
   return [...new Set(found)];
 }
 
-const subscribe: Step = {
+export const subscribe: Step = {
   name: "subscribe",
   irreversible: true,
   async run({ fx, deps, plan, memo }) {
@@ -135,7 +135,7 @@ const subscribe: Step = {
   },
 };
 
-const confirm: Step = {
+export const confirm: Step = {
   name: "confirm",
   async run({ fx, deps, plan, memo }) {
     const since = new Date(memo.since ?? (await fx.now()).toISOString());
