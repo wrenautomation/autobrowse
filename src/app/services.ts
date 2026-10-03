@@ -154,6 +154,8 @@ import {
 } from "../workflows/compiled.js";
 import { type DomainDeps, domainWorkflow } from "../workflows/domain/index.js";
 import type { Proof } from "../workflows/proof.js";
+import { redirectWorkflow } from "../workflows/redirect/index.js";
+import { senderDomainWorkflow } from "../workflows/sender-domain/index.js";
 import type { Settings } from "./config.js";
 import { holding, type Idle, idleTracker } from "./idle.js";
 import { awsFor } from "./owner.js";
@@ -368,7 +370,19 @@ export function budgetOf(llm: Llm | null): { cap: number; usedToday: number } | 
 }
 
 /** The hand-written workflows; compiled ones are found per run by the Compiled object (see workflows/compiled.ts). */
-export const WORKFLOWS: readonly AnyWorkflow[] = [domainWorkflow, bootstrapWorkflow];
+export const WORKFLOWS: readonly AnyWorkflow[] = [
+  domainWorkflow,
+  redirectWorkflow,
+  senderDomainWorkflow,
+  bootstrapWorkflow,
+];
+
+/** Hand-written workflows whose deps this machine builds (`autobrowse try`): the domain family. */
+export const LOCAL_WORKFLOWS: readonly AnyWorkflow[] = [
+  domainWorkflow,
+  redirectWorkflow,
+  senderDomainWorkflow,
+];
 
 /** Where compiled workflows live and where the compiler writes; relative imports resolve to the library from there. */
 export const COMPILED_DIR = "src/workflows";
@@ -1293,6 +1307,8 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
         named(DO_SERVICE, settings.owner),
       ),
       makeRunObject(domainWorkflow, domainDeps, host, { guards }),
+      makeRunObject(redirectWorkflow, domainDeps, host, { guards }),
+      makeRunObject(senderDomainWorkflow, domainDeps, host, { guards }),
       makeRunObject(bootstrapWorkflow, bootstrapDeps, host, { guards }),
       // Every compiled flow, present and future, runs under this one object.
       makeCompiledRunObject({

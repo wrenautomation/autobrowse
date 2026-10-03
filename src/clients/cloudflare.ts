@@ -14,6 +14,17 @@ export interface DnsRecord {
   content: string;
   priority?: number;
   ttl?: number;
+  /** Behind Cloudflare's proxy (orange cloud): needed for a redirect rule to answer. */
+  proxied?: boolean;
+}
+
+/** A page rule that 301s every URL on a zone to one place. */
+export interface Redirect {
+  id: string;
+  /** The URL pattern, e.g. `*wren-automation.net/*`. */
+  from: string;
+  to: string;
+  status: number;
 }
 
 /** What Cloudflare would charge for a domain, from its registry check. Costs are USD strings ("8.50"). */
@@ -56,6 +67,13 @@ export interface CloudflareClient {
     type?: DnsRecord["type"],
     name?: string,
   ): Promise<Array<DnsRecord & { id: string }>>;
+  /** The zone's forwarding page rules. */
+  redirects(zoneId: string): Promise<Redirect[]>;
+  /** Idempotent: a rule already forwarding `from` is updated to `to`, else one is made. */
+  setRedirect(
+    zoneId: string,
+    r: { from: string; to: string },
+  ): Promise<"created" | "kept" | "updated">;
 }
 
 type Envelope<T> = {
@@ -202,6 +220,7 @@ export function cloudflare(opts: {
           content: string;
           priority?: number;
           ttl: number;
+          proxied?: boolean;
         }>
       >("GET", `/zones/${zoneId}/dns_records?${q.toString()}`);
       return rows.map((r) => ({
@@ -211,22 +230,27 @@ export function cloudflare(opts: {
         content: r.content,
         ...(r.priority === undefined ? {} : { priority: r.priority }),
         ttl: r.ttl,
+        ...(r.proxied === undefined ? {} : { proxied: r.proxied }),
       }));
     },
     async upsertRecord(zoneId, record, o = {}) {
       const zone = { name: await zoneName(zoneId) };
       const existing = await this.listRecords(zoneId, record.type, record.name);
-      const same = existing.find((r) => normalize(r.content) === normalize(record.content));
-      if (same) return "kept";
+      const sameContent = existing.find((r) => normalize(r.content) === normalize(record.content));
+      const proxyOk = (r: { proxied?: boolean }) =>
+        record.proxied === undefined || r.proxied === record.proxied;
+      if (sameContent && proxyOk(sameContent)) return "kept";
       const body = {
         type: record.type,
         name: fqdn(zone.name, record.name),
         content: record.content,
         ttl: record.ttl ?? 1,
         ...(record.priority === undefined ? {} : { priority: record.priority }),
+        ...(record.proxied === undefined ? {} : { proxied: record.proxied }),
       };
       // TXT and MX may legitimately hold several records under one name; only replace when asked.
-      const victim = o.replace ? existing[0] : undefined;
+      // The same content behind the wrong proxy setting is always fixed in place.
+      const victim = sameContent ?? (o.replace ? existing[0] : undefined);
       if (victim) {
         await call("PUT", `/zones/${zoneId}/dns_records/${victim.id}`, body);
         return "replaced";
@@ -234,8 +258,38 @@ export function cloudflare(opts: {
       await call("POST", `/zones/${zoneId}/dns_records`, body);
       return "created";
     },
+    async redirects(zoneId) {
+      const rules = await call<PageRule[]>("GET", `/zones/${zoneId}/pagerules`);
+      return rules.flatMap((r) => {
+        const fwd = r.actions.find((a) => a.id === "forwarding_url");
+        const from = r.targets[0]?.constraint.value;
+        if (!fwd?.value || from === undefined) return [];
+        return [{ id: r.id, from, to: fwd.value.url, status: fwd.value.status_code }];
+      });
+    },
+    async setRedirect(zoneId, r) {
+      const body = {
+        targets: [{ target: "url", constraint: { operator: "matches", value: r.from } }],
+        actions: [{ id: "forwarding_url", value: { url: r.to, status_code: 301 } }],
+        status: "active",
+      };
+      const have = (await this.redirects(zoneId)).find((x) => x.from === r.from);
+      if (have && have.to === r.to && have.status === 301) return "kept";
+      if (have) {
+        await call("PUT", `/zones/${zoneId}/pagerules/${have.id}`, body);
+        return "updated";
+      }
+      await call("POST", `/zones/${zoneId}/pagerules`, body);
+      return "created";
+    },
   };
 }
+
+type PageRule = {
+  id: string;
+  targets: Array<{ constraint: { value: string } }>;
+  actions: Array<{ id: string; value?: { url: string; status_code: number } }>;
+};
 
 /**
  * TXT content compares without quotes and spaces: Cloudflare quotes and

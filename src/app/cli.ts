@@ -14,7 +14,8 @@ import { cursorOf } from "../engine/rows.js";
 import { summarize } from "../engine/run.js";
 import { ownerKeys } from "../owner.js";
 import { DEFAULT_TLDS, domainIdeas } from "../workflows/domain/ideas.js";
-import { domainWorkflow, type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
+import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
+import { MAIN_SITE } from "../workflows/redirect/index.js";
 import { localBackend, proofsOf, workflowsOf } from "./backend.js";
 import { registerAccessCommands } from "./cli-access.js";
 import { registerAccountsCommands } from "./cli-accounts.js";
@@ -47,6 +48,7 @@ import {
   domainDepsFor,
   envStoreFor,
   identitiesFor,
+  LOCAL_WORKFLOWS,
   WORKFLOWS,
 } from "./services.js";
 
@@ -243,10 +245,10 @@ program
       const { backend, parts } = local({ headless: o.headed ? false : settings.browserHeadless });
       const workflow = (await workflowsOf(backend)).find((w) => w.name === name);
       if (!workflow) throw new Error(`unknown workflow ${name}; see: autobrowse workflows`);
-      // The domain workflow's APIs are built here too: its browser legs then sign in from
+      // The domain family's APIs are built here too: its browser legs then sign in from
       // this machine's profiles and IP. bootstrap still wants the worker.
       const handWritten = WORKFLOWS.includes(workflow);
-      if (handWritten && workflow !== domainWorkflow)
+      if (handWritten && !LOCAL_WORKFLOWS.includes(workflow))
         throw new Error(`${name} needs the worker's deps (APIs); run it with: autobrowse run`);
       const raw = o.plan ? ((await readJson(o.plan)) as Record<string, unknown>) : {};
       const plan = workflow.plan.parse({ ...raw, dryRun: o.dryRun ?? false });
@@ -292,12 +294,17 @@ program
   .option("--warmup-like <email>", "copy this Instantly inbox's warmup settings onto each new one")
   .option("--photo-url <url>", "each inbox's profile picture (a GIF stays animated)")
   .option("--no-handoff", "do not touch wren's roster or loops")
+  .option(
+    "--redirect [url]",
+    "then 301 the domain's site to the main one (runs sender-domain = domain + redirect)",
+  )
   .option("--dry-run", "plan only; stop before the first irreversible step")
   .action(
     async (
       domain: string,
       o: {
         inbox: string[];
+        redirect?: string | true;
         niches: string;
         signatureFile?: string;
         buy: boolean;
@@ -320,10 +327,21 @@ program
         handoff: o.handoff,
         dryRun: o.dryRun ?? false,
       };
-      await patient(api.run("domain", domain).run(plan));
-      console.log(`started domain/${domain}; watch: autobrowse status domain ${domain}`);
+      const flow = o.redirect ? "sender-domain" : "domain";
+      const redirect = typeof o.redirect === "string" ? { redirectTo: o.redirect } : {};
+      await patient(api.run(flow, domain).run({ ...plan, ...redirect }));
+      console.log(`started ${flow}/${domain}; watch: autobrowse status ${flow} ${domain}`);
     },
   );
+
+program
+  .command("redirect <domain>")
+  .description("301 every URL on a domain (already on Cloudflare) to the main site")
+  .option("--to <url>", "where it lands", MAIN_SITE)
+  .action(async (domain: string, o: { to: string }) => {
+    await patient(api.run("redirect", domain).run({ domain, redirectTo: o.to }));
+    console.log(`started redirect/${domain}; watch: autobrowse status redirect ${domain}`);
+  });
 
 program
   .command("domains <words...>")

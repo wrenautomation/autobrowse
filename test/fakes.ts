@@ -4,7 +4,12 @@ import { googleDkimGenerate, googleDkimStart } from "../src/browser/flows/google
 import { googleProfilePhoto } from "../src/browser/flows/google-profile-photo.js";
 import { googleOauthConsent } from "../src/browser/flows/oauth-consent.js";
 import { NeedsHuman } from "../src/browser/session.js";
-import type { CloudflareClient, DnsRecord, Registration } from "../src/clients/cloudflare.js";
+import type {
+  CloudflareClient,
+  DnsRecord,
+  Redirect,
+  Registration,
+} from "../src/clients/cloudflare.js";
 import type {
   InstantlyAccount,
   InstantlyClient,
@@ -108,12 +113,15 @@ export function fakeCloudflare(
   const records: Array<DnsRecord & { id: string }> = [];
   const registrations = new Map<string, Registration>();
   let zone = opts.zone === undefined ? null : opts.zone;
+  const rules: Redirect[] = [];
   const client: CloudflareClient & {
     records: typeof records;
+    rules: typeof rules;
     created: string[];
     purchases: string[];
   } = {
     records,
+    rules,
     created: [],
     purchases: [],
     async check(domains) {
@@ -150,13 +158,30 @@ export function fakeCloudflare(
       const same = records.find(
         (r) => r.type === record.type && r.name === record.name && r.content === record.content,
       );
-      if (same) return "kept";
+      if (same && (record.proxied === undefined || same.proxied === record.proxied)) return "kept";
+      if (same) {
+        same.proxied = record.proxied;
+        return "replaced";
+      }
       const existing = records.find((r) => r.type === record.type && r.name === record.name);
       if (existing && o.replace) {
         existing.content = record.content;
         return "replaced";
       }
       records.push({ ...record, id: `r${records.length + 1}` });
+      return "created";
+    },
+    async redirects() {
+      return rules;
+    },
+    async setRedirect(_z, r) {
+      const have = rules.find((x) => x.from === r.from);
+      if (have?.to === r.to) return "kept";
+      if (have) {
+        have.to = r.to;
+        return "updated";
+      }
+      rules.push({ id: `p${rules.length + 1}`, ...r, status: 301 });
       return "created";
     },
   };
