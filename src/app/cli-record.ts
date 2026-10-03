@@ -306,6 +306,57 @@ export function registerRecordCommands(
     );
 
   program
+    .command("inbox-accounts <inbox>")
+    .description(
+      "Give a sending inbox the free accounts in FREE_ACCOUNTS (src/auth/free-accounts.ts): email ones by `signup`, Google ones by `login` through the inbox's own Google; skips what it already holds",
+    )
+    .option("--dry-run", "say what each account needs, do nothing")
+    .action(async (inbox: string, o: { dryRun?: boolean }) => {
+      const { FREE_ACCOUNTS, freeAccountStep } = await import("../auth/free-accounts.js");
+      const { credentialsFor } = await import("./services.js");
+      const store = credentialsFor(settings);
+      const failed: string[] = [];
+      for (const a of FREE_ACCOUNTS) {
+        const step = await freeAccountStep(store, a, inbox);
+        if (step.kind === "made") {
+          console.log(`${a.site}: made (${step.key})`);
+          continue;
+        }
+        const runs =
+          step.kind === "signup"
+            ? [["signup", a.site, "--email", inbox, "--url", a.url]]
+            : [
+                ...(step.stored
+                  ? []
+                  : [["creds", "via", step.key, "google", "--account", inbox, "--url", a.url]]),
+                ["login", step.key],
+              ];
+        console.log(`${a.site}: ${runs.map((r) => `autobrowse ${r.join(" ")}`).join(", then ")}`);
+        if (o.dryRun) continue;
+        for (const args of runs) {
+          // Its own process: each signup or login opens and closes its own browser.
+          if ((await autobrowse(args)) !== 0) {
+            failed.push(a.site);
+            break;
+          }
+        }
+      }
+      if (failed.length) throw new Error(`${inbox}: not done on ${failed.join(", ")} (see above)`);
+    });
+
+  /** This CLI again, as a child, with the output passed through; its exit code. */
+  async function autobrowse(args: string[]): Promise<number> {
+    const { spawn } = await import("node:child_process");
+    const entry = process.argv[1] ?? "";
+    return new Promise((res) =>
+      spawn(process.execPath, [...process.execArgv, entry, ...args], { stdio: "inherit" }).on(
+        "exit",
+        (code) => res(code ?? 1),
+      ),
+    );
+  }
+
+  program
     .command("signup <site>")
     .description(
       "Make an account: the password is minted and stored sealed under <site> first, then the agent fills the signup placing email/password/code/phone by name (it never sees them); hands off at a captcha",

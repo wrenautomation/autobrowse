@@ -252,7 +252,7 @@ describe("formLogin", () => {
   it("fails loudly when the page is still not signed in", async () => {
     const { fp } = fakePage({ text: ["login", "something else"], present: () => true });
     await expect(formLogin("s", spec)({ fp, cred, code: async () => "1" })).rejects.toThrow(
-      /still on/,
+      /not signed in after the password: .* shows "something else"/,
     );
   });
 });
@@ -384,7 +384,7 @@ describe("sign in via a provider on a site nobody wrote a spec for", () => {
       page: {} as FlowPage["page"],
       async open() {},
       url: () => urls[Math.min(at, urls.length - 1)] as string,
-      text: async () => "",
+      text: async () => "Your workspace", // a page with words; a blank one is a spinner
       html: async () => "",
       has: async (h) => h.name === "/google/i" || h.name === "/^continue$/i",
       // Time passes: the page moves on one step per wait, as a real round trip would.
@@ -482,7 +482,9 @@ describe("loginProvider on the site's own sign-in page", () => {
       url: "https://accounts.site.test/pwd",
     });
     onWall.fp.waitForUrl = async () => false; // the page never leaves the sign-in surface
-    await expect(login(onWall.fp, "s")).rejects.toThrow(/still on/);
+    await expect(login(onWall.fp, "s")).rejects.toThrow(
+      /not signed in 30s after the form: https:\/\/accounts\.site\.test\/pwd/,
+    );
     expect(calls).toEqual(["here"]);
     const elsewhere = fakePage({ text: [], present: () => true, url: "https://site.test/x" });
     expect(await login(elsewhere.fp, "s")).toBe("signed-in");
@@ -533,7 +535,9 @@ describe("landAfterOauth", () => {
     await landAfterOauth("x", spec, home.ctx);
     expect(home.acts).toEqual([]);
     const stuck = at(["https://accounts.google.test/", "https://login.x.test/error"]);
-    await expect(landAfterOauth("x", spec, stuck.ctx)).rejects.toThrow(/still on .*error/);
+    await expect(landAfterOauth("x", spec, stuck.ctx)).rejects.toThrow(
+      /round trip: https:\/\/login\.x\.test\/error/,
+    );
   });
 });
 

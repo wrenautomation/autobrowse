@@ -167,7 +167,7 @@ describe("explore mode", () => {
     await send({ cmd: "fill", hints: { css: "#d" }, value: "" });
     const leak = await send({ cmd: "place", hints: { css: "#d" }, secret: "minted" });
     expect(leak.status).toBe(500);
-    expect(leak.body.error).toMatch(/scratch \(minted\)'s password is not typed on/);
+    expect(leak.body.error).toMatch(/scratch's minted is not typed on .*SIGNUP_ALSO_HOSTS/);
     expect(
       (await send({ cmd: "eval", js: "document.querySelector('#d').value" })).body.result,
     ).toBe("");

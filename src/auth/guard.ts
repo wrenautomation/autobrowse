@@ -14,8 +14,11 @@ export class SecretLeak extends Error {
     readonly credential: string,
     readonly host: string,
     what = "password",
+    fix?: string,
   ) {
-    super(`${credential}'s ${what} is not typed on ${host}: not one of its origins`);
+    super(
+      `${credential}'s ${what} is not typed on ${host}: not one of its origins${fix ? ` (${fix})` : ""}`,
+    );
     this.name = "SecretLeak";
   }
 }

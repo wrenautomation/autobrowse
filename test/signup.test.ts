@@ -219,6 +219,10 @@ describe("signupHosts", () => {
     expect(signupHosts("x")("x.com")).toBe(true);
     expect(signupHosts("x")("google.com")).toBe(false);
   });
+  it("lets a signup follow its parent's identity page, and only that one", () => {
+    expect(signupHosts("trello", "https://trello.com/signup")("id.atlassian.com")).toBe(true);
+    expect(signupHosts("todoist")("id.atlassian.com")).toBe(false);
+  });
 });
 
 describe("codeSecrets", () => {

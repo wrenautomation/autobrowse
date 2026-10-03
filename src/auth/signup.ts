@@ -173,9 +173,23 @@ export function loginSecrets(
 export function signupHosts(site: string, url?: string | null): (host: string) => boolean {
   const word = site.split("@")[0]?.toLowerCase() ?? site;
   const own = url ? new URL(url).host.toLowerCase() : null;
-  return (host) =>
-    host.toLowerCase().includes(word) || (own !== null && host.toLowerCase() === own);
+  const also = SIGNUP_ALSO_HOSTS[word] ?? [];
+  return (host) => {
+    const h = host.toLowerCase();
+    return h.includes(word) || h === own || also.includes(h);
+  };
 }
+
+/**
+ * Sites whose signup moves to a parent company's identity page, where the
+ * new account's email and password belong too (Trello's form is Atlassian's,
+ * refused there until 2026-10-02).
+ */
+export const SIGNUP_ALSO_HOSTS: Readonly<Record<string, readonly string[]>> = {
+  trello: ["id.atlassian.com"],
+  jira: ["id.atlassian.com"],
+  confluence: ["id.atlassian.com"],
+};
 
 /**
  * Whether codes sent to `inbox` can be read: it consented (`GMAIL_REFRESH_TOKEN__<IT>`)

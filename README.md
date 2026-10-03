@@ -359,6 +359,7 @@ pnpm autobrowse creds push linkedin               # that stored credential into 
 pnpm autobrowse creds push --all                  # every stored site (canaries never travel)
 pnpm autobrowse creds pull [sites...]             # the other way, on a second laptop; --overwrite to replace what is here
 pnpm autobrowse signup instagram --email hello@wrenautomation.com --name "Wren Automation" --handle wrenautomation --headed
+pnpm autobrowse inbox-accounts will@new.com       # the free accounts in src/auth/free-accounts.ts for one inbox (email signups + Google logins); skips what it holds
 pnpm autobrowse record buy-domain --site cloudflare --url https://dash.cloudflare.com/ --terminal
 pnpm autobrowse compile buy-domain             # → src/workflows/buy-domain/ with its outline.json (on the Runs page at once; no restart)
 pnpm autobrowse try google-name                # run a compiled workflow here, no Restate: the proof it is deterministic

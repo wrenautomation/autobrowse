@@ -2,12 +2,13 @@
  * Give a sending inbox ordinary mail of its own: subscribe it to a few free
  * newsletters through their own subscribe page in the browser, then open
  * the confirm link any of them mails, and the verify links of the free
- * accounts `autobrowse signup <site> --email <inbox>` made (`--senders`).
+ * accounts `autobrowse inbox-accounts <inbox>` made (FREE_ACCOUNTS).
  * Substack's subscribe API answers 200 to a bare POST and then sends
  * nothing (2026-10-02), so the page is the way in. Mail is read through the
  * Gmail client (delegation for our Workspace). A rerun skips what it did.
  */
 import { z } from "zod";
+import { FREE_ACCOUNT_SENDERS } from "../../auth/free-accounts.js";
 import { defineFlow } from "../../browser/flow.js";
 import type { HttpClient } from "../../clients/http.js";
 import { defineWorkflow, done, type StepDef } from "../../engine/workflow.js";
@@ -36,7 +37,7 @@ export const inboxActivityPlanSchema = z.object({
     .describe("Substack publications, by their home URL"),
   senders: z
     .array(z.string())
-    .default([])
+    .default([...FREE_ACCOUNT_SENDERS])
     .describe(
       "Hosts of free accounts made for this inbox (todoist.com): their verify mail is opened too",
     ),

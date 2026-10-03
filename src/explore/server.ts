@@ -1111,7 +1111,13 @@ async function serve(
           by: `place ${c.secret}`,
           allowed,
         });
-        if (!allowed) throw new SecretLeak(`${opts.site} (${c.secret})`, host);
+        if (!allowed)
+          throw new SecretLeak(
+            opts.site,
+            host,
+            `${c.secret}`,
+            "a signup that moves to a parent's identity host lists it in SIGNUP_ALSO_HOSTS",
+          );
         await gate("fill", c, wait);
         await hands.think(page);
         // A secret arrives whole, as autofill or a password manager puts it; nobody types a minted password.

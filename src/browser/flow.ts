@@ -23,6 +23,7 @@ import { type Fixes, flowKey } from "./fixes.js";
 import { type Hands, HUMAN_PACE, handsFor, instantHands, type Pace } from "./human/index.js";
 import { type Hints, locate, textOf } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
+import { describePage } from "./page-state.js";
 import type { SessionPark } from "./park.js";
 import {
   COMMITTING,
@@ -734,7 +735,11 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           for (let attempt = 1; ; attempt++) {
             const wall = await looksLikeWall(session.page);
             if (!wall) return;
-            const after = attempt > 1 ? " after signing in" : "";
+            // Signed in, yet the page still asks: say what it shows, not just "a login page".
+            const after =
+              attempt > 1
+                ? ` after a sign-in that reported success (${describePage(session.page.url(), await session.page.innerText("body").catch(() => ""))}); if that is the login page itself, store a page behind it as the credential's url`
+                : "";
             if (wall.kind === "captcha" && runner.captcha && !triedCaptcha) {
               triedCaptcha = true;
               const got = await fp.captcha();

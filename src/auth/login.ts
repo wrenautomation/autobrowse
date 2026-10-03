@@ -12,6 +12,7 @@
 import type { Credential, CredentialStore, SecretAudit } from "credvault";
 import type { FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
+import { pageState, untilLoaded } from "../browser/page-state.js";
 import { wallOf } from "../browser/session.js";
 import { safeUrls } from "../clients/http.js";
 import { type CodeKind, type CodeSource, inboxLock } from "./codes.js";
@@ -249,7 +250,8 @@ export function formLogin(site: string, spec: FormLoginSpec): SiteLogin["signIn"
     const ok = spec.success
       ? spec.success.test(text) || spec.success.test(fp.url())
       : !(await fp.has(spec.password));
-    if (!ok) throw new LoginFailed(site, `still on ${fp.url()} after sign-in`);
+    if (!ok)
+      throw new LoginFailed(site, `not signed in after the password: ${await pageState(fp)}`);
   };
 }
 
@@ -280,9 +282,14 @@ export interface OauthLoginSpec {
 /** The provider's button as this site shows it: the spec's hint, else the first of the provider's readings on the page. */
 async function providerButton(fp: FlowPage, p: IdentityProvider, hint?: Hints): Promise<Hints> {
   if (hint) return hint;
+  // An app shell paints its buttons late (Notion's "Loading...", 2026-10-02).
+  await untilLoaded(fp, LOADING_MS);
   for (const h of p.buttons) if (await fp.has(h, 1_500)) return h;
-  throw new LoginFailed(fp.url(), `no "${p.site}" button on this page`);
+  throw new LoginFailed(fp.url(), `no "${p.site}" button: ${await pageState(fp)}`);
 }
+
+/** How long a site's own spinner may stand between a press and the next page. */
+const LOADING_MS = 30_000;
 
 /** Sign in through an identity provider's button: popup or redirect, then back to the site. */
 export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signIn"] {
@@ -310,8 +317,15 @@ export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signI
       page = (await popup) ?? opened();
       if (!page) {
         if (failed) throw failed;
-        if (!(await fp.waitForUrl(provider.host, 15_000)) && !provider.host.test(fp.url()))
-          throw new LoginFailed(site, `no ${provider.site} sign-in page after pressing the button`);
+        // The site's own hop (Todoist's /oauth-start spinner) can take its time.
+        const reached = async (ms: number) =>
+          (await fp.waitForUrl(provider.host, ms)) || provider.host.test(fp.url());
+        const spinning = async () => !(await untilLoaded(fp, 0));
+        if (!(await reached(15_000)) && !((await spinning()) && (await reached(LOADING_MS))))
+          throw new LoginFailed(
+            site,
+            `pressed the ${provider.site} button but never reached ${provider.site}: ${await pageState(fp)}`,
+          );
       }
     }
     if (page) fp.switchTo(page);
@@ -335,7 +349,9 @@ export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signI
 export function viaLogin(site: string, cred: Credential): SiteLogin {
   const provider = providerOf(cred.via as Provider);
   // A page that still holds a password field is a sign-in form under some other URL (Telnyx, 2026-09-29).
+  // A spinner is neither signed in nor out: wait it out before judging.
   const signedIn = async (fp: FlowPage) =>
+    (await untilLoaded(fp, LOADING_MS)) &&
     !provider.host.test(fp.url()) &&
     wallOf(fp.url(), (await fp.text()).slice(0, 4000)) === null &&
     !(await fp.has({ css: "input[type=password]" }, 500));
@@ -365,25 +381,27 @@ export async function landAfterOauth(
 ): Promise<void> {
   const { fp } = ctx;
   const provider = spec.provider ?? "google";
-  const fail = () => new LoginFailed(site, `still on ${fp.url()} after the ${provider} round trip`);
+  const fail = async () =>
+    new LoginFailed(site, `not signed in after the ${provider} round trip: ${await pageState(fp)}`);
   const challenge = spec.challenge;
   const success = spec.success;
   if (challenge) {
     const at = (u: string) =>
       (success instanceof RegExp && success.test(u)) || challenge.at.test(u);
-    if (!(await fp.waitForUrl(at, 30_000)) && !at(fp.url())) throw fail();
+    if (!(await fp.waitForUrl(at, 30_000)) && !at(fp.url())) throw await fail();
     if (challenge.at.test(fp.url())) await challenge.run(ctx);
   }
   if (success instanceof RegExp) {
-    if (!(await fp.waitForUrl(success, 30_000)) && !success.test(fp.url())) throw fail();
+    if (!(await fp.waitForUrl(success, 30_000)) && !success.test(fp.url())) throw await fail();
     return;
   }
-  // A check on the page rather than a URL: give the round trip a moment to land, then ask.
+  // A check on the page rather than a URL: let the app shell load, then ask a few times.
+  await untilLoaded(fp, LOADING_MS);
   for (let i = 0; i < 10; i++) {
     if (await success(fp)) return;
     await fp.wait(SETTLE_MS);
   }
-  throw fail();
+  throw await fail();
 }
 
 const sameUser = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -631,7 +649,7 @@ async function signInWith(name: string, login: SiteLogin, ctx: SignInContext): P
   if (here?.at.test(fp.url())) {
     await here.run(ctx);
     if (!(await fp.waitForUrl((u) => !here.at.test(u), 30_000)))
-      throw new LoginFailed(name, `still on ${fp.url()} after signing in`);
+      throw new LoginFailed(name, `not signed in 30s after the form: ${await pageState(fp)}`);
     return;
   }
   await login.signIn(ctx);
