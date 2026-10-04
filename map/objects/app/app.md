@@ -17,7 +17,7 @@ Deps are made in one file so the CLI, the worker and tests share the same wiring
 
 ## Shape
 
-- `App { services, channel, workflows(), proofs(), catalog, browser, bus, memory, sink, sites, idle, screen, credentials, onFailure, doer }` — `src/app/services.ts:389-424`; `buildApp(settings, log)` — `:1110`
+- `App { services, channel, workflows(), proofs(), catalog, browser, bus, memory, sink, sites, idle, screen, credentials, onFailure, doer }` — `src/app/services.ts:390-425`; `buildApp(settings, log)` — `:1111`
 - Factories: `browserOptions` `:251`, `llmFor` `:334`, `credentialsFor` `:424`, `codesFor` `:618`, `loginFor` `:665`, `envStoreFor` `:920`, `approverFor` `:1017`, `channelsFor` `:1086`, wallet and profiles `:761-789`
 - `src/app/main.ts`: `buildApp` → Restate endpoint (`planEndpoint`, `registerDeployment` `src/app/register.ts:11`) → `startUiServer` (`src/ui/server.ts:34`) → `scheduleIdleStop` (`src/app/idle.ts:70`) and `selfStopper` (the box stops its own instance, `src/app/box.ts:67`)
 - Restate services registered: run objects (hand-written), `Compiled`, `Runs`, `browser`, `sites`, `do`
@@ -32,7 +32,7 @@ Deps are made in one file so the CLI, the worker and tests share the same wiring
 
 ## If you change this
 
-- **Hits:** `src/app/main.ts`, `src/app/backend.ts:333-473` (`localParts`, `backendFor`, `localBackend`), every `src/app/cli-*.ts`, `src/app/status.ts`, `test/` fixtures that build parts.
+- **Hits:** `src/app/main.ts`, `src/app/backend.ts:338-479` (`localParts`, `backendFor`, `localBackend`), every `src/app/cli-*.ts`, `src/app/status.ts`, `test/` fixtures that build parts.
 - **Does not hit:** the engine's types; flows.
 
 ## Surfaces

@@ -17,6 +17,7 @@ import type { SiteLogin } from "../auth/login.js";
 import { signupInbox } from "../auth/signup.js";
 import { expandHome } from "../google-auth.js";
 import { isDefaultOwner } from "../owner.js";
+import { ringNames } from "../reach/key-ring.js";
 import { gmailOAuth } from "../sites/gmail.js";
 import { accountEnv } from "../sites/oauth.js";
 import { RENEW_WITHIN_MS } from "../sites/renew.js";
@@ -289,10 +290,15 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
       unlocks:
         "web search on the box (DuckDuckGo bot-checks its datacenter IP): wren's `crm` research over `sites web GET /search`",
       how: [
-        "dashboard.exa.ai → API keys → copy; autobrowse env set EXA_API_KEY --clipboard",
+        "dashboard.exa.ai → API keys → copy; autobrowse env set EXA_API_KEY --clipboard (more keys: EXA_API_KEY_1..n and NUM_EXA=n; one out of credit is skipped until the 1st)",
         "or api-dashboard.search.brave.com → copy; autobrowse env set BRAVE_API_KEY --clipboard",
       ],
-      check: async () => (await holds(ctx, "EXA_API_KEY")) || (await holds(ctx, "BRAVE_API_KEY")),
+      check: async () => {
+        const n = ctx.env("NUM_EXA");
+        for (const name of [...ringNames("EXA", n), "BRAVE_API_KEY"])
+          if (await holds(ctx, name)) return true;
+        return false;
+      },
     },
     {
       id: "anthropic-credits",

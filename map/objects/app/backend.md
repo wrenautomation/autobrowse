@@ -17,7 +17,7 @@ Every face reads the same shape: workflows and proofs (value or loader), prove, 
 
 ## Shape
 
-- `Backend` — `src/app/backend.ts:90-142`; `workflowsOf`, `proofsOf` — `:145-148`
+- `Backend` — `src/app/backend.ts:91-143`; `workflowsOf`, `proofsOf` — `:150-153`
 - `proveCompiled` `:151`, `compileRecording` `:165`, `finishCompiled` `:193`, `healer` `:217`, `explorerOpener` `:247`, `agentFor` `:286`
 - `BackendParts`, `localParts`, `BackendOptions`, `backendFor`, `LocalOptions`, `localBackend` — `:315-473`
 - Faces: `api(deps: ApiDeps extends Backend)` — `src/ui/api.ts:50,202`; `Jobs` (prove and heal run here) — `src/ui/jobs.ts:30`; the CLI client `src/app/client.ts`

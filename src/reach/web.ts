@@ -4,8 +4,11 @@
  * answers wins, one that is not set up is skipped, and a broken one is
  * rerouted around by reordering the list, not by new code. Keys are read by
  * name (EXA_API_KEY, BRAVE_API_KEY, JINA_API_KEY) and only ever sent in a
- * header; a backend without its key is skipped, never an error.
+ * header; a backend without its key is skipped, never an error. Exa takes
+ * several keys (`NUM_EXA`, `EXA_API_KEY_1..n`) and moves past one out of
+ * credit (`key-ring.ts`).
  */
+import { memorySpent, NoLiveKey, type SpentKeys, withKey } from "./key-ring.js";
 
 export type Env = (name: string) => Promise<string | undefined>;
 
@@ -40,6 +43,36 @@ export interface Hits {
 interface Deps {
   env: Env;
   fetch?: typeof fetch;
+  /** Exa keys out of credit; absent, this process remembers them itself. */
+  spent?: SpentKeys;
+}
+
+const processSpent = memorySpent();
+
+/** One Exa call on the first key with credit left. A non-2xx answer comes back as is. */
+const exaSend = (deps: Deps, path: string, body: unknown): Promise<Response> =>
+  withKey("EXA", deps.env, deps.spent ?? processSpent, (key) =>
+    (deps.fetch ?? fetch)(`https://api.exa.ai${path}`, {
+      method: "POST",
+      headers: { "x-api-key": key, "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    }),
+  );
+
+/** Exa's answer as JSON, or the WebMiss a caller of an Exa-only route gets. */
+async function exaJson(deps: Deps, path: string, body: unknown): Promise<unknown> {
+  try {
+    const res = await exaSend(deps, path, body);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    if (e instanceof NoLiveKey)
+      throw e.held
+        ? new WebMiss(`nothing answered: exa (${e.message})`, 402)
+        : new WebMiss("nothing answered: exa (skipped: no EXA_API_KEY)", 501);
+    throw new WebMiss(`nothing answered: exa (${String(e)})`, 502);
+  }
 }
 
 /** A desktop browser's name: some sites answer a bare fetch with a bot page. */
@@ -53,11 +86,11 @@ class Skip extends Error {}
  * No backend could answer, or the caller named one that does not exist: a final
  * answer, not a blip to retry. 501 when every backend was skipped (no key set),
  * 502 when they ran and failed, 400 for an unknown `via` or a bad URL, 404 when
- * Exa's cache has no such page.
+ * Exa's cache has no such page, 402 when every Exa key is out of credit.
  */
 export class WebMiss extends Error {
-  readonly status: 400 | 404 | 501 | 502;
-  constructor(message: string, status: 400 | 404 | 501 | 502) {
+  readonly status: 400 | 402 | 404 | 501 | 502;
+  constructor(message: string, status: 400 | 402 | 404 | 501 | 502) {
     super(message);
     this.name = "WebMiss";
     this.status = status;
@@ -223,12 +256,12 @@ export async function search(
   };
   const run: Record<string, () => Promise<Hit[]>> = {
     exa: async () => {
-      const key = await keyOf("EXA_API_KEY");
-      const res = await get(f, "https://api.exa.ai/search", {
-        method: "POST",
-        headers: { "x-api-key": key, "content-type": "application/json" },
-        body: JSON.stringify({ query, numResults: n, type: "auto" }),
-      });
+      const res = await exaSend(deps, "/search", { query, numResults: n, type: "auto" }).catch(
+        (e) => {
+          throw e instanceof NoLiveKey ? new Skip(e.message) : e;
+        },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const body = (await res.json()) as { results?: Array<{ title?: string; url: string }> };
       return (body.results ?? []).map((r) => ({
         title: r.title ?? r.url,
@@ -431,25 +464,13 @@ function schoolsOf(lines: string[]): School[] {
  * other backend reads profiles.
  */
 export async function people(query: string, deps: Deps, o: { n?: number } = {}): Promise<People> {
-  const key = await deps.env("EXA_API_KEY");
-  if (!key) throw new WebMiss("nothing answered: exa (skipped: no EXA_API_KEY)", 501);
-  let res: Response;
-  try {
-    res = await get(deps.fetch ?? fetch, "https://api.exa.ai/search", {
-      method: "POST",
-      headers: { "x-api-key": key, "content-type": "application/json" },
-      body: JSON.stringify({
-        query,
-        category: "people",
-        numResults: o.n ?? 10,
-        type: "auto",
-        contents: { text: { maxCharacters: 8000 } },
-      }),
-    });
-  } catch (e) {
-    throw new WebMiss(`nothing answered: exa (${String(e)})`, 502);
-  }
-  const body = (await res.json()) as { results?: Array<{ url: string; text?: string }> };
+  const body = (await exaJson(deps, "/search", {
+    query,
+    category: "people",
+    numResults: o.n ?? 10,
+    type: "auto",
+    contents: { text: { maxCharacters: 8000 } },
+  })) as { results?: Array<{ url: string; text?: string }> };
   const out: Person[] = [];
   for (const r of body.results ?? []) {
     const p = r.text ? exaProfile(r.text) : null;
@@ -639,26 +660,6 @@ export function exaCompany(text: string): CompanyFacts | null {
   return out;
 }
 
-const exaKey = async (deps: Deps): Promise<string> => {
-  const key = await deps.env("EXA_API_KEY");
-  if (!key) throw new WebMiss("nothing answered: exa (skipped: no EXA_API_KEY)", 501);
-  return key;
-};
-
-async function exaPost(deps: Deps, path: string, body: unknown): Promise<unknown> {
-  const key = await exaKey(deps);
-  try {
-    const res = await get(deps.fetch ?? fetch, `https://api.exa.ai${path}`, {
-      method: "POST",
-      headers: { "x-api-key": key, "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    return await res.json();
-  } catch (e) {
-    throw new WebMiss(`nothing answered: exa (${String(e)})`, 502);
-  }
-}
-
 /** Characters of a cached page kept: a big company's page runs past 20k, every field sits in the first part. */
 const PAGE_CHARS = 20_000;
 
@@ -669,7 +670,7 @@ const PAGE_CHARS = 20_000;
  * message: it names a person.
  */
 async function cachedPage(url: string, deps: Deps): Promise<{ text: string; source: string }> {
-  const body = (await exaPost(deps, "/contents", {
+  const body = (await exaJson(deps, "/contents", {
     urls: [url],
     livecrawl: "never",
     text: { maxCharacters: PAGE_CHARS },
@@ -746,7 +747,7 @@ export async function companies(
 ): Promise<Companies> {
   const want = hostOf(domain);
   if (!want.includes(".")) throw new WebMiss("domain: want a bare domain like acme.com", 400);
-  const body = (await exaPost(deps, "/search", {
+  const body = (await exaJson(deps, "/search", {
     query: want,
     category: "company",
     numResults: o.n ?? 3,

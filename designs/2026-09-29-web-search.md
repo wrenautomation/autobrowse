@@ -39,6 +39,7 @@ result and the AI Overview, behind an API. Add Exa and Perplexity as sources.
 | 11 | LinkedIn pages from Exa's cache, never live (2026-10-03) | `GET /linkedin/profile` and `/linkedin/company` post `livecrawl: "never"` to Exa `/contents`: LinkedIn sees no request, no account is used. Parsed to the `linkedin` site's shapes so wren swaps legs without new types; raw `text` kept. Wren's design: `wren/designs/2026-10-03-lead-sheet.md` |
 | 12 | One `exa` budget in mills (2026-10-03) | Exa bills in dollars: `/people` and `/companies` 7, a cache read 1, cap 330 a day (about $10 a month, the free credit). Raising it is William's call. A 404 still spends its mill here; Exa charges nothing for it. `/search`'s Exa leg stays unmetered |
 | 13 | A page Exa lacks is 404 (2026-10-03) | Exa answers 200 with `ENTITY_NOT_FOUND` in `statuses`. 404 lets wren count it as one refusal; the URL stays out of the message |
+| 14 | Exa keys rotate, keycycle style (2026-10-04) | William holds several free Exa keys. `NUM_EXA` + `EXA_API_KEY_1..n` (llm.env's format), plain `EXA_API_KEY` first. A 402, or a 4xx naming credits, marks the key spent until the 1st (UTC) in `spent-keys.json` by fingerprint, and the call moves on; any other failure stays terminal. The `exa` cap is 330 per live key. Every key spent: 402, and `/search` skips to Brave |
 
 ## Proven
 

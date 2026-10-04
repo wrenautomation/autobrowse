@@ -11,6 +11,7 @@ import { join, resolve } from "node:path";
 import type { Command } from "commander";
 import type { EnvStore } from "credvault";
 import type { Person, Profile } from "../browser/flows/linkedin-reach.js";
+import { ringCount, type SpentKeys } from "../reach/key-ring.js";
 import { writeLeads } from "../reach/linkedin-leads.js";
 import { csvRows, ensureMapsServer, mapsReady, mapsScrape, stopMapsServer } from "../reach/maps.js";
 import { type Env, READ_ORDER, readPage, SEARCH_ORDER, search } from "../reach/web.js";
@@ -35,6 +36,7 @@ export function registerReachCommands(
   program: Command,
   store: () => EnvStore,
   local: LocalBackend,
+  spent: SpentKeys,
 ): void {
   const env = reachEnv(store);
   program
@@ -42,12 +44,18 @@ export function registerReachCommands(
     .description("What answers now: search keys, the Maps scraper, and one live call per site")
     .action(async () => {
       const has = async (n: string) => ((await env(n)) ? good("ready") : dim(`no ${n}`));
+      // Live keys of those held: `exa 2/3` has one out of credit until the 1st.
+      const exaRing = async () => {
+        const { live, held } = await ringCount("EXA", env, spent);
+        const text = `${live}/${held}`;
+        return !held ? dim("no EXA_API_KEY") : live === held ? good(text) : warn(text);
+      };
       const maps = await mapsReady();
       const rows = [
         [bold("read"), `jina (${(await env("JINA_API_KEY")) ? "keyed" : "free tier"}), then fetch`],
         [
           bold("search"),
-          `exa ${await has("EXA_API_KEY")} · brave ${await has("BRAVE_API_KEY")} · duckduckgo ${good("ready")}`,
+          `exa ${await exaRing()} · brave ${await has("BRAVE_API_KEY")} · duckduckgo ${good("ready")}`,
         ],
         [bold("maps"), maps.startsWith("ready") ? good(maps) : warn(maps)],
       ];
@@ -84,7 +92,7 @@ export function registerReachCommands(
       const via = order(o.via);
       const r = await search(
         words.join(" "),
-        { env },
+        { env, spent },
         { n: Number(o.n) || 10, ...(via ? { order: via } : {}) },
       );
       if (o.json) return console.log(JSON.stringify(r));

@@ -20,17 +20,17 @@ Spend is the person's decision. The policy defaults to never (`NO_AUTO_SPEND`); 
 - `SpendPolicy { allow, autoYesUnder, dailyCap, hardCap }` — `src/gates/spend.ts:41-58`; `Amount`, `amountIn` — `:12-39`
 - `Decided = auto | person | granted | cap | denied | unanswered`; `SpendRecord`; `SpendLedger` — `:60-90`; `spentToday` — `:104`
 - `Grant`, `Grants` (`spend grant`) — `:117-180`; `policedApprover(ask, o)` — `:197`
-- Wired: `spendPolicyFor`, `spendLedgerFor`, `spendGrantsFor` — `src/app/services.ts:1049-1064`
+- Wired: `spendPolicyFor`, `spendLedgerFor`, `spendGrantsFor` — `src/app/services.ts:1050-1065`
 
 ## Connected to
 
 - **owned-by:** [[approval]] (wraps the approver)
 - **joins:** [[site-api]] (`spends`), [[settings]] (the policy env), the ledger surface (`/api/ledger`)
-- **looks-like-but-is-not:** the LLM budget (`budgetOf`, `src/app/services.ts:382`)
+- **looks-like-but-is-not:** the LLM budget (`budgetOf`, `src/app/services.ts:383`)
 
 ## If you change this
 
-- **Hits:** `src/gates/payment.ts` callers, `src/app/services.ts:1034-1064`, `src/app/cli-wallet.ts` (`spend` verbs), `src/auth/ledger.ts` (ledger window includes spend rows).
+- **Hits:** `src/gates/payment.ts` callers, `src/app/services.ts:1035-1065`, `src/app/cli-wallet.ts` (`spend` verbs), `src/auth/ledger.ts` (ledger window includes spend rows).
 - **Does not hit:** engine gates; the wallet's cards.
 
 ## Surfaces

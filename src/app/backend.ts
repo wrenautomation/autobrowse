@@ -8,7 +8,7 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Scope } from "../access/keys.js";
 import { type HealOutcome, healFailure } from "../agent/heal.js";
 import { type AgentSessions, agentSessions } from "../agent/sessions.js";
@@ -44,6 +44,7 @@ import {
 import type { Approver } from "../gates/payment.js";
 import { expandHome } from "../google-auth.js";
 import type { Llm } from "../llm/types.js";
+import { fileSpent, type SpentKeys } from "../reach/key-ring.js";
 import { loadRecording } from "../recorder/store.js";
 import type { Recording } from "../recorder/types.js";
 import { fileCaps } from "../sites/caps.js";
@@ -142,6 +143,10 @@ export interface Backend {
 }
 
 /** The port allows a value or a loader for these; every face reads them the same way. */
+/** Paid keys out of credit, beside the caps file: every process on this machine reads the same marks. */
+export const spentKeysFor = (settings: Pick<Settings, "capsFile">): SpentKeys =>
+  fileSpent(join(dirname(expandHome(settings.capsFile)), "spent-keys.json"));
+
 export const workflowsOf = async (b: Backend): Promise<readonly AnyWorkflow[]> =>
   typeof b.workflows === "function" ? b.workflows() : b.workflows;
 export const proofsOf = async (b: Backend): Promise<Record<string, Proof | null>> =>
@@ -356,6 +361,7 @@ export function localParts(settings: Settings, o: { headless?: boolean } = {}): 
       kept: () => sink.list(),
       reload: (have) => missingEntries(sink, have),
       caps: fileCaps(expandHome(settings.capsFile)),
+      spent: spentKeysFor(settings),
     }),
     credentials: credentialsFor(settings),
     bus: eventBus(),

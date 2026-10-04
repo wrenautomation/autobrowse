@@ -17,9 +17,9 @@ One place picks the account, mints the bearer, matches the path, books the accou
 
 ## Shape
 
-- `SiteFacade { list, status, call(site, method, path, input, account?, from?), caps(day?, site?), setup(site, step, account?, profile?, input?), renew? }` — `src/sites/facade.ts:133-163`; `CallFrom { caller?, invocation? }`, `CapsReport { day, used, calls }` — `:121-131`
+- `SiteFacade { list, status, call(site, method, path, input, account?, from?), caps(day?, site?), setup(site, step, account?, profile?, input?), renew? }` — `src/sites/facade.ts:136-166`; `CallFrom { caller?, invocation? }`, `CapsReport { day, used, calls }` — `:124-134`
 - `SiteFacadeDeps { http, env, sink, runner, flow, compiled?, oauthPort?, profileFor?, providerOf?, accountFor?, approve?, caps?, sleep?, accountOf? }` — `:33-82`; `matchPath` — `:203`; `checkSite` — `:173`
-- `SiteParts` (what `sitesFor` needs, including `reload` for tokens minted elsewhere) — `src/sites/wire.ts:29-66`; `usernameOf` — `:134-142`
+- `SiteParts` (what `sitesFor` needs, including `reload` for tokens minted elsewhere) — `src/sites/wire.ts:30-69`; `usernameOf` — `:137-145`
 - `DailyCaps { take, slot, today, note, calls }`, `Pace { gapMs, jitterMs?, maxWaitMs? }`, `fileCaps` (`CAPS_FILE`, `/data/caps.json` on the box), `memoryCaps` — `src/sites/caps.ts:52-67`; `MeteredCall { at, site, account, route, use, caller, invocation?, outcome, bucket? }` — `:70-84`; the day files — `:156-189`
 - Restate: `SITES_SERVICE = "sites"`, `DESK_SERVICE = "desk"` (the Mac), `sitesService(facade, name)` with `call`, `status`, `caps`, `renew`, `setup` — `src/sites/service.ts:16-122`
 - Paths are interpolated by the caller; a template path plus a param in the input is HTTP 400

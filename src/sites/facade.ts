@@ -11,6 +11,7 @@ import type { SecretSink } from "../deps/sink.js";
 import { type JsonSchema, jsonSchemaOf } from "../engine/inputs.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import type { Approver } from "../gates/payment.js";
+import { ringCount, type SpentKeys } from "../reach/key-ring.js";
 import type { Proof, RunAs } from "../workflows/proof.js";
 import type { DailyCaps, MeteredCall } from "./caps.js";
 import { accessTokens, accountEnv, pointTo, runConsent } from "./oauth.js";
@@ -71,6 +72,8 @@ export interface SiteFacadeDeps {
   approve?: Approver | null;
   /** Counts routes' `meter` against the site's `caps`, per account per day, and books `pace` slots; absent: nothing is capped. */
   caps?: DailyCaps;
+  /** Paid keys out of credit (`reach/key-ring.ts`), for `capsPerKey` and api legs that rotate keys. */
+  spent?: SpentKeys;
   /** How a paced call waits for its slot (tests pass a fake). */
   sleep?: (ms: number) => Promise<void>;
   /**
@@ -383,6 +386,22 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     }
     return {};
   };
+  /** `capsPerKey` buckets at their cap times the ring's live keys (one at least, so a missing key says so). */
+  const capsOfKeys = async (s: SiteApi): Promise<Record<string, number>> => {
+    const out: Record<string, number> = {};
+    for (const [bucket, base] of Object.entries(s.capsPerKey ?? {})) {
+      const cap = s.caps?.[bucket];
+      if (cap === undefined || !deps.spent) continue;
+      const { live } = await ringCount(
+        base,
+        async (n) => deps.env(n),
+        deps.spent,
+        (deps.now ?? Date.now)(),
+      );
+      out[bucket] = cap * Math.max(1, live);
+    }
+    return out;
+  };
   return {
     list: () => Promise.all(sites.map(status)),
     status: (name) => status(site(name)),
@@ -458,7 +477,11 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           slot.retryAfter,
         );
       if (use && s.caps && deps.caps) {
-        const limits = { ...s.caps, ...(await capsOfAccount(s, chosen)) };
+        const limits = {
+          ...s.caps,
+          ...(await capsOfKeys(s)),
+          ...(await capsOfAccount(s, chosen)),
+        };
         const t = deps.caps.take(s.site, chosen ?? s.site, use, limits);
         if (!t.ok) {
           note("capped", t.bucket);
@@ -510,6 +533,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
             http: deps.http,
             env: deps.env,
             keep: async (name, value) => deps.sink.put(name, value),
+            ...(deps.spent ? { spent: deps.spent } : {}),
           });
         if (r.browser) {
           // The same account the API leg would have used: its profile, so a browser

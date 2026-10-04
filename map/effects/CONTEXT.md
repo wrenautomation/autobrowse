@@ -16,6 +16,7 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | a provider sign-in (Google, GitHub, Microsoft) | [[identity-provider]] | every site with `via`, OAuth consent flows |
 | an official API route or setup step | [[site-api]] | [[site-facade]], [[token]], [[ability]], [[need]], wren callers by path |
 | a site's daily caps or a route's meter | [[site-api]] | [[site-facade]] (429 + `retryAfter`), `caps.json` in [[state-files]], wren callers that back off |
+| an Exa key, `NUM_EXA`, or the out-of-credit rule | `src/reach/key-ring.ts` | `web`'s Exa routes and `exa` cap (`capsPerKey`, [[site-api]]), `spent-keys.json` in [[state-files]], `doctor`'s `exa live/held`, owner env (`EXA_API_KEY_*` is the operator's) |
 | token names, renewal, the env store | [[token]] | [[site-facade]], wren `TokenRenewal` |
 | accounts and purposes | [[account]] | [[site-facade]] (which account runs), [[need]], `Policy` |
 | the compiler's output | [[compiled-workflow]] | [[outline]], [[proof]], [[heal]] process, `src/index.ts` exports |

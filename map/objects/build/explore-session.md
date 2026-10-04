@@ -24,7 +24,7 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 - A target with no `frame` the page lacks is looked for in each visible iframe (`withFrame`, `src/browser/frames.ts`), so `place` on a card provider's hosted field (Braintree) works with plain role/name hints — `:1045-1049`
 - History: every command, act and ending also goes to the session's [[explore-run]] (`goal`, `done`; `openRun` `:633`, `endRun` `:660`), which outlives the journal
 - `text` reads the page as laid out (`layoutText`, `src/browser/layout.ts`): rendered text blocks cut apart by whitespace (XY-cut) into rows, tables and columns; `layout: false` is `innerText`
-- Opened by `explorerOpener` — `src/app/backend.ts:247`; the CLI `record`/`explore` verbs in `src/app/cli-record.ts`
+- Opened by `explorerOpener` — `src/app/backend.ts:252`; the CLI `record`/`explore` verbs in `src/app/cli-record.ts`
 
 ## Connected to
 
@@ -35,7 +35,7 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 
 ## If you change this
 
-- **Hits:** `src/agent/explorer.ts`, `test/layout.test.ts` (the `text` layout), `src/agent/sessions.ts`, `src/app/cli-record.ts`, `src/app/backend.ts:247`, `.claude/skills/autobrowse/explore.md` and the skill's scripts (the command list is documented there), `src/mcp/server.ts`.
+- **Hits:** `src/agent/explorer.ts`, `test/layout.test.ts` (the `text` layout), `src/agent/sessions.ts`, `src/app/cli-record.ts`, `src/app/backend.ts:252`, `.claude/skills/autobrowse/explore.md` and the skill's scripts (the command list is documented there), `src/mcp/server.ts`.
 - **Does not hit:** compiled workflows already rendered; the run object.
 
 ## Surfaces

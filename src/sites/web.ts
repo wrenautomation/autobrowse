@@ -67,6 +67,8 @@ export const web: SiteApi = {
   signedOut: true,
   // Google's page is capped in searches; Exa in mills of a dollar. /search's backends meter themselves.
   caps: { google: 300, exa: 330 },
+  // 330 mills ($0.33) a day per live Exa key: each key's free $10 a month gets used.
+  capsPerKey: { exa: "EXA" },
   pace: { gapMs: 5_000, jitterMs: 10_000 },
   routes: [
     route({
@@ -80,9 +82,11 @@ export const web: SiteApi = {
         via: order,
       }),
       api: ({ q, n, via }, leg) =>
-        search(q, { env: async (k) => leg.env(k) }, { n, ...(via ? { order: via } : {}) }).catch(
-          final,
-        ),
+        search(
+          q,
+          { env: async (k) => leg.env(k), ...(leg.spent ? { spent: leg.spent } : {}) },
+          { n, ...(via ? { order: via } : {}) },
+        ).catch(final),
     }),
     route({
       method: "GET",
@@ -94,7 +98,12 @@ export const web: SiteApi = {
         n: z.coerce.number().int().min(1).max(25).default(10),
       }),
       meter: () => ({ exa: 7 }),
-      api: ({ q, n }, leg) => people(q, { env: async (k) => leg.env(k) }, { n }).catch(final),
+      api: ({ q, n }, leg) =>
+        people(
+          q,
+          { env: async (k) => leg.env(k), ...(leg.spent ? { spent: leg.spent } : {}) },
+          { n },
+        ).catch(final),
     }),
     route({
       method: "GET",
@@ -109,7 +118,11 @@ export const web: SiteApi = {
       }),
       meter: () => ({ exa: 7 }),
       api: ({ domain, n }, leg) =>
-        companies(domain, { env: async (k) => leg.env(k) }, { n }).catch(final),
+        companies(
+          domain,
+          { env: async (k) => leg.env(k), ...(leg.spent ? { spent: leg.spent } : {}) },
+          { n },
+        ).catch(final),
     }),
     route({
       method: "GET",
@@ -119,7 +132,10 @@ export const web: SiteApi = {
       request: z.object({ url: pageOf("in") }),
       meter: () => ({ exa: 1 }),
       api: ({ url }, leg) =>
-        cachedLinkedinProfile(url, { env: async (k) => leg.env(k) }).catch(final),
+        cachedLinkedinProfile(url, {
+          env: async (k) => leg.env(k),
+          ...(leg.spent ? { spent: leg.spent } : {}),
+        }).catch(final),
     }),
     route({
       method: "GET",
@@ -129,7 +145,10 @@ export const web: SiteApi = {
       request: z.object({ url: pageOf("company") }),
       meter: () => ({ exa: 1 }),
       api: ({ url }, leg) =>
-        cachedLinkedinCompany(url, { env: async (k) => leg.env(k) }).catch(final),
+        cachedLinkedinCompany(url, {
+          env: async (k) => leg.env(k),
+          ...(leg.spent ? { spent: leg.spent } : {}),
+        }).catch(final),
     }),
     route({
       method: "GET",
@@ -144,7 +163,7 @@ export const web: SiteApi = {
       api: ({ url, max, via }, leg) =>
         readPage(
           url,
-          { env: async (k) => leg.env(k) },
+          { env: async (k) => leg.env(k), ...(leg.spent ? { spent: leg.spent } : {}) },
           { max, ...(via ? { order: via } : {}) },
         ).catch(final),
     }),

@@ -18,9 +18,9 @@ Rendered source is the truth from then on (the header in each module says so). O
 ## Shape
 
 - `CompiledWorkflow { workflow, dir, proof }`; `loadCompiledWorkflows(root)`; `HAND_WRITTEN` — `src/workflows/compiled.ts:28-72`; `COMPILED_OBJECT`, `splitCompiledKey`, `CompiledCatalog`, `compiledCatalog` — `:72-104`
-- Dir: `COMPILED_DIR = "src/workflows"`, modules import the library as `COMPILED_LIB = "../../index.js"` — `src/app/services.ts:408-409`
+- Dir: `COMPILED_DIR = "src/workflows"`, modules import the library as `COMPILED_LIB = "../../index.js"` — `src/app/services.ts:409-410`
 - Deps a rendered module gets: `CompiledDeps { browser, secrets, shell, desktop, sink }`, browser bound to the flow's site — `src/workflows/compiled-deps.ts:18-40`
-- Render → check → finish: `render` `src/compiler/render.ts:256`; `checkCompiled` (tsc + vitest) `src/compiler/check.ts:14`; `finish` (a model fills plan inputs, send gate, proof reads, `dropped()` guard) `src/compiler/finish.ts:131-210`; `compileRecording`, `finishCompiled` `src/app/backend.ts:164-214`
+- Render → check → finish: `render` `src/compiler/render.ts:256`; `checkCompiled` (tsc + vitest) `src/compiler/check.ts:14`; `finish` (a model fills plan inputs, send gate, proof reads, `dropped()` guard) `src/compiler/finish.ts:131-210`; `compileRecording`, `finishCompiled` `src/app/backend.ts:169-219`
 - Files per dir: `index.ts`, `index.test.ts`, `outline.json`, `proof.json`
 
 ## Connected to
@@ -32,7 +32,7 @@ Rendered source is the truth from then on (the header in each module says so). O
 
 ## If you change this
 
-- **Hits:** `src/compiler/render.ts` (what future modules look like), `src/index.ts` (what rendered modules import; an export removed there breaks every module), `src/workflows/compiled-deps.ts`, `src/workflows/proof.ts`, `src/agent/heal.ts`, `src/do/catalog.ts`, `src/sites/facade.ts` (`compiled.run`), `src/app/services.ts:408`.
+- **Hits:** `src/compiler/render.ts` (what future modules look like), `src/index.ts` (what rendered modules import; an export removed there breaks every module), `src/workflows/compiled-deps.ts`, `src/workflows/proof.ts`, `src/agent/heal.ts`, `src/do/catalog.ts`, `src/sites/facade.ts` (`compiled.run`), `src/app/services.ts:409`.
 - **Does not hit:** `src/workflows/domain`, `redirect`, `sender-domain`, `inbox-activity`, `workspace-inbox`, `bootstrap`; the browser service.
 
 ## Surfaces

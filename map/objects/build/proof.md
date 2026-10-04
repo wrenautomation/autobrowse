@@ -18,7 +18,7 @@ A proof never buys: gates are declined. The same runner with gates approved is h
 ## Shape
 
 - `Proof { at, status, steps[{name, status, detail}], output }` — `src/workflows/proof.ts:18-25`; `PROOF_FILE` — `:16`; `RunAs { site, profile }` and `runnerAs` (a second account at the provider) — `:35-47`
-- `writeProof`, `readProof`, `proofLine` — `:89-104`; `proveCompiled` — `src/app/backend.ts:151`; jobs run it (`src/ui/jobs.ts:30`)
+- `writeProof`, `readProof`, `proofLine` — `:89-104`; `proveCompiled` — `src/app/backend.ts:156`; jobs run it (`src/ui/jobs.ts:30`)
 
 ## Connected to
 
@@ -28,7 +28,7 @@ A proof never buys: gates are declined. The same runner with gates approved is h
 
 ## If you change this
 
-- **Hits:** `src/workflows/compiled.ts` (catalog reads it), `src/app/backend.ts:151`, `src/sites/facade.ts:84`, `src/do/doer.ts` (`runWorkflow`), UI `/api/workflows/:name/prove` (`src/ui/api.ts:431`), `src/agent/heal.ts` (`prove`).
+- **Hits:** `src/workflows/compiled.ts` (catalog reads it), `src/app/backend.ts:156`, `src/sites/facade.ts:87`, `src/do/doer.ts` (`runWorkflow`), UI `/api/workflows/:name/prove` (`src/ui/api.ts:431`), `src/agent/heal.ts` (`prove`).
 - **Does not hit:** the run object; hand-written workflows.
 
 ## Surfaces

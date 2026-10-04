@@ -13,7 +13,7 @@ One of the person's addresses and what it is for: `Identity` in `src/auth/identi
 
 ## Why this shape
 
-Purposes decide which account a site call or consent runs as when nobody names one: `default`, `pays`, `signup` are held by one account each; any other word is a group (`sends`). A site names a purpose, a setup step can override it (`src/auth/identities.ts:21-36`, `src/sites/types.ts:168-173`).
+Purposes decide which account a site call or consent runs as when nobody names one: `default`, `pays`, `signup` are held by one account each; any other word is a group (`sends`). A site names a purpose, a setup step can override it (`src/auth/identities.ts:21-36`, `src/sites/types.ts:171-176`).
 
 ## Shape
 
@@ -25,13 +25,13 @@ Purposes decide which account a site call or consent runs as when nobody names o
 ## Connected to
 
 - **owns:** purposes
-- **owned-by:** [[app]] (`identitiesFor`, `src/app/services.ts:453`)
-- **joins:** [[credential]] (the row is its view), [[site-facade]] (`accountFor`, `policyAccount` `src/sites/wire.ts:83-104`), [[need]] (`accountNeeds`), `Policy` (`src/app/owed.ts:41`)
+- **owned-by:** [[app]] (`identitiesFor`, `src/app/services.ts:454`)
+- **joins:** [[credential]] (the row is its view), [[site-facade]] (`accountFor`, `policyAccount` `src/sites/wire.ts:86-107`), [[need]] (`accountNeeds`), `Policy` (`src/app/owed.ts:41`)
 - **looks-like-but-is-not:** `Identity` in `src/browser/identity.ts:16` (the browser's UA); an access key
 
 ## If you change this
 
-- **Hits:** `src/sites/wire.ts`, `src/sites/renew.ts`, `src/app/needs.ts:185`, `src/app/owed.ts`, `src/app/cli-accounts.ts`, `src/app/cli-auth.ts`, UI `/api/accounts`, `/api/policy` (`src/ui/api.ts:333-405`).
+- **Hits:** `src/sites/wire.ts`, `src/sites/renew.ts`, `src/app/needs.ts:186`, `src/app/owed.ts`, `src/app/cli-accounts.ts`, `src/app/cli-auth.ts`, UI `/api/accounts`, `/api/policy` (`src/ui/api.ts:333-405`).
 - **Does not hit:** the runner; the vault format.
 
 ## Surfaces

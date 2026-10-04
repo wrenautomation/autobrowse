@@ -130,6 +130,7 @@ import { otlpSink, type TraceSink, tracedLlm, withTrace } from "../llm/trace.js"
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
 import { type Charge, type ChargeRow, reportCharge } from "../money/charges.js";
 import { isDefaultOwner, named, ownerKeys } from "../owner.js";
+import { fileSpent } from "../reach/key-ring.js";
 import { s3BlobStore } from "../shots/s3.js";
 import { keepArtifact, keepRecording, type ShipReport, shipShots } from "../shots/ship.js";
 import { fileCaps } from "../sites/caps.js";
@@ -1354,6 +1355,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       kept: () => sink.list(),
       reload: (have) => missingEntries(sink, have),
       caps: fileCaps(expandHome(settings.capsFile)),
+      spent: fileSpent(join(dirname(expandHome(settings.capsFile)), "spent-keys.json")),
     }),
   );
   const late: { doer: Doer | null } = { doer: null };

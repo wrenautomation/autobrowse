@@ -617,6 +617,7 @@ pnpm autobrowse site check                    # one who-am-I call per site: is e
 pnpm autobrowse read https://firm.test --max 4000   # a page as plain text, no browser
 pnpm autobrowse search fee-only RIA Austin -n 5     # web search: exa, brave, then duckduckgo
 pnpm autobrowse maps "ria in austin tx" --max-minutes 10   # Google Maps listings as a CSV (Docker); wren --format google-maps
+pnpm autobrowse env set EXA_API_KEY_2 --clipboard   # more Exa keys: EXA_API_KEY_1..n with NUM_EXA=n; one out of credit is skipped until the 1st
 pnpm autobrowse site call web GET "/linkedin/profile?url=linkedin.com/in/<vanity>"   # from Exa's cache; LinkedIn sees nothing
 pnpm autobrowse site call web GET "/linkedin/company?url=linkedin.com/company/<handle>"
 pnpm autobrowse site call web GET "/companies?domain=acme.com"   # Exa's company search: LinkedIn page, homepage match

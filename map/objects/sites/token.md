@@ -13,13 +13,13 @@ A site API key or OAuth token kept in the env store under a name, per account: m
 
 ## Why this shape
 
-Access tokens are minted on demand from the refresh token and cached until they expire; a rolled refresh token is kept back under the same name. A token minted on the laptop is seen on the box by a one-time reload on a miss, because every SSM read is a KMS decrypt (`src/sites/wire.ts:53-66`).
+Access tokens are minted on demand from the refresh token and cached until they expire; a rolled refresh token is kept back under the same name. A token minted on the laptop is seen on the box by a one-time reload on a miss, because every SSM read is a KMS decrypt (`src/sites/wire.ts:54-69`).
 
 ## Shape
 
 - `accountEnv(name, account)` = the per-account name — `src/sites/oauth.ts:80`; `accessTokens(http, env, now, keep)` — `:102-135`; `runConsent` — `:203`; `pkcePair`, `codeFrom` — `:74,148`; `WEB_REDIRECT` (the https redirect Meta, Instagram and TikTok register) — `:71`
 - Renewal: `RENEW_WITHIN_MS` 14 days, `Renewal`, `RenewalPlan`, `renewals`, `renewDue`, `nextLapse` — `src/sites/renew.ts:18-144`
-- Store: `SecretSink.put(name, value, o)` — `src/deps/sink.ts:9-12`; `envStoreFor` / `sinkFor` (SSM `/autobrowse/config` via credvault `EnvStore`, `.env` locally) — `src/app/services.ts:957,768`; `autobrowse env` (`src/app/cli-env.ts`)
+- Store: `SecretSink.put(name, value, o)` — `src/deps/sink.ts:9-12`; `envStoreFor` / `sinkFor` (SSM `/autobrowse/config` via credvault `EnvStore`, `.env` locally) — `src/app/services.ts:958,769`; `autobrowse env` (`src/app/cli-env.ts`)
 - Loopback redirect `OAUTH_PORT` 9400; a `keep` op in a recording lands here too
 
 ## Connected to

@@ -20,7 +20,7 @@ Plain data with a schema, so a person or a model edits names, proofs and gates b
 - `outline { name, site, description, fields, secrets, steps }`; a `{field}` in a step URL must be a declared field — `src/compiler/outline.ts:115-139`
 - Steps: `browser` (url, ops), `terminal` (commands), `desktop` (ops) — `:102-113`; ops and desktop ops — `:34-84`; `fieldSchema` — `:85`
 - `OUTLINE_FILE = "outline.json"` — `:145`; `structure(rec)` makes one — `src/compiler/structure.ts:135`; `polish` names things with a model — `src/compiler/polish.ts:55`
-- Patched by `swapHints` / `replaceOp` (`src/compiler/patch.ts:63-90`) and by heal; read and saved through `Backend.outline` (`src/app/backend.ts:100-103`)
+- Patched by `swapHints` / `replaceOp` (`src/compiler/patch.ts:63-90`) and by heal; read and saved through `Backend.outline` (`src/app/backend.ts:101-104`)
 
 ## Connected to
 

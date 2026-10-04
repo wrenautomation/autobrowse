@@ -18,6 +18,7 @@ import { type HttpClient, httpClient } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
 import { BROWSER_FLOWS } from "../engine/browser-service.js";
 import type { Approver } from "../gates/payment.js";
+import type { SpentKeys } from "../reach/key-ring.js";
 import type { CompiledCatalog } from "../workflows/compiled.js";
 import { runCompiled } from "../workflows/proof.js";
 import type { DailyCaps } from "./caps.js";
@@ -59,6 +60,8 @@ export interface SiteParts {
   reload?: (have: (name: string) => boolean) => Promise<EnvEntry[]>;
   /** Per-account daily caps on metered routes (LinkedIn reads); absent: uncapped. */
   caps?: DailyCaps;
+  /** Paid keys out of credit (Exa's ring); absent: each process remembers its own. */
+  spent?: SpentKeys;
 }
 
 /** How long a store read on a token miss stands before a miss reads again. */
@@ -171,6 +174,7 @@ export function sitesFor(p: SiteParts): SiteFacade {
     oauthPort: p.oauthPort,
     approve: p.approve ?? null,
     ...(p.caps ? { caps: p.caps } : {}),
+    ...(p.spent ? { spent: p.spent } : {}),
     ...(p.credentials
       ? {
           profileFor: (site, account) => profileOf(p.credentials as CredentialStore, site, account),

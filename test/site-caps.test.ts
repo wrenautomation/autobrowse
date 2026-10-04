@@ -14,6 +14,7 @@ import { linkedinCompanyJobs } from "../src/browser/flows/linkedin-reach.js";
 import { xProfile, xSearch } from "../src/browser/flows/x-read.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
+import { fingerprint, memorySpent } from "../src/reach/key-ring.js";
 import { fileCaps, memoryCaps } from "../src/sites/caps.js";
 import { linkedin, SiteError, siteFacade, web, x } from "../src/sites/index.js";
 import { usernameOf } from "../src/sites/wire.js";
@@ -168,6 +169,33 @@ describe("the exa budget on web", () => {
       sites.call("web", "GET", "/linkedin/company", { url: "https://acme.com/about" }),
     ).rejects.toMatchObject({ status: 400 });
     expect(caps.today()["web|web|exa"]).toBe(8);
+  });
+
+  it("the cap is 330 per live key: a second key doubles it, a spent one does not count", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ results: [] })));
+    const caps = memoryCaps(() => noon);
+    caps.take("web", "web", { exa: 400 }, { exa: 1000 });
+    const spent = memorySpent();
+    const keys: Record<string, string> = {
+      NUM_EXA: "2",
+      EXA_API_KEY_1: "synthetic-a",
+      EXA_API_KEY_2: "synthetic-b",
+    };
+    const sites = siteFacade([web], {
+      http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+      env: (n) => keys[n],
+      sink: memorySink(),
+      runner: fakeBrowser([]),
+      flow: () => null,
+      caps,
+      spent,
+      now: () => noon,
+    });
+    await sites.call("web", "GET", "/people", { q: "q" });
+    spent.mark(fingerprint("synthetic-b"), noon + 1000);
+    await expect(sites.call("web", "GET", "/people", { q: "q" })).rejects.toMatchObject({
+      status: 429,
+    });
   });
 
   it("past 330 mills a day the call is refused, never sent", async () => {

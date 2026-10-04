@@ -12,6 +12,7 @@ import type { z } from "zod";
 import type { IdentityProvider } from "../auth/identities.js";
 import type { HttpClient } from "../clients/http.js";
 import type { Amount } from "../gates/spend.js";
+import type { SpentKeys } from "../reach/key-ring.js";
 import type { Pace } from "./caps.js";
 
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -24,6 +25,8 @@ export interface ApiLeg {
   env: (name: string) => string | undefined;
   /** Keeps a secret the call made (a webhook URL) in the sink, so the answer never carries it. */
   keep?: (name: string, value: string) => Promise<void>;
+  /** Paid keys out of credit, kept on disk (`reach/key-ring.ts`). */
+  spent?: SpentKeys;
 }
 
 /**
@@ -194,6 +197,11 @@ export interface SiteApi {
    * `linkedin@research`): a person's own profile reads less than a work one.
    */
   accountCaps?: Record<string, Record<string, number>>;
+  /**
+   * Buckets whose cap is per key of a key ring (`{ exa: "EXA" }`): the day's cap
+   * is `caps[bucket]` times the ring's live keys, so each key's credit gets used.
+   */
+  capsPerKey?: Record<string, string>;
   /** Spacing between one account's browser-leg calls, so its reads look like a person's. */
   pace?: Pace;
 }
