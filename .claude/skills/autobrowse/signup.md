@@ -39,6 +39,10 @@ gives it (flags go after the port in `start.sh`):
 
 A missing secret's error names the flag.
 
+Billing email, phone and tax id need no `place`: once a card lands, and again
+before a spend click, explore sets every such field to the card owner's
+profile (the answer says `billing: [...]`). Never type another email there.
+
 Phone: a separate country picker → pick the country, then `phoneLocal`. One box
 that reads the country from the digits (a flag changes as you type) → `phone`;
 the local number there is read as another country.

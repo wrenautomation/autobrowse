@@ -13,7 +13,7 @@ A payment card in the wallet, placed into a checkout by field name after one yes
 
 ## Why this shape
 
-Cards never pass through a model or a log: `place{secret:"card.number"}` reads the wallet inside the explore server; the model sees only brand, kind and last four (`describeCard`, `cardEnding`). A profile field goes the same way (`place{secret:"profile.taxId"}`), on any host: it is the person's own, not a site's login. The wallet has its own Keychain item so opening credentials never opens cards (`WALLET_KEYCHAIN`, `src/auth/keep.ts:17`).
+Cards never pass through a model or a log: `place{secret:"card.number"}` reads the wallet inside the explore server; the model sees only brand, kind and last four (`describeCard`, `cardEnding`). A profile field goes the same way (`place{secret:"profile.taxId"}`), on any host: it is the person's own, not a site's login. Billing contacts are enforced, not asked for (William, 2026-10-04): when a card lands and before a spend click, every visible billing email, phone and tax id field in every frame gets the card owner's value (`fillBilling`, `BILLING_FIELDS`; `billingKind`, `holdsBilling`), so a site's prefilled login email never becomes the receipt address. The wallet has its own Keychain item so opening credentials never opens cards (`WALLET_KEYCHAIN`, `src/auth/keep.ts:17`).
 
 ## Shape
 

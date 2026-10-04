@@ -11,8 +11,10 @@ import { plainCipher } from "credvault";
 import { describe, expect, it } from "vitest";
 import {
   backedUpProfiles,
+  billingKind,
   contactsOf,
   fileProfiles,
+  holdsBilling,
   ownerOf,
   type Profile,
   profileField,
@@ -256,6 +258,19 @@ describe("profiles", () => {
     expect(profileField(p, "taxId")).toBe("123456789RT0001");
     expect(profileField(p, "city")).toBe("Edmonton");
     expect(profileField({ id: "w", name: "W" }, "taxId")).toBeNull();
+  });
+  it("a billing form's email, phone and tax id are told apart by the field, and kept when they already match", () => {
+    expect(billingKind("email billing_email email  Email")).toBe("email");
+    expect(billingKind("tel phone tel-national  Phone number")).toBe("phone");
+    expect(billingKind("text taxId   Tax ID")).toBe("taxId");
+    expect(billingKind("text vat_number   VAT")).toBe("taxId");
+    expect(billingKind("text name name  Full name")).toBeNull();
+    expect(billingKind("text telegram   Telegram")).toBeNull();
+    expect(holdsBilling("email", " Me@Example.com", "me@example.com")).toBe(true);
+    expect(holdsBilling("email", "login@site.com", "me@example.com")).toBe(false);
+    expect(holdsBilling("phone", "(555) 123-4567", "+15551234567")).toBe(true);
+    expect(holdsBilling("phone", "", "+15551234567")).toBe(false);
+    expect(holdsBilling("taxId", "123456789 rt0001", "123456789RT0001")).toBe(true);
   });
   it("a card bills to its owner, else the only profile", () => {
     const a = { id: "william", name: "W" };

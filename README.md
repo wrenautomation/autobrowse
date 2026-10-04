@@ -161,7 +161,8 @@ a row; it is work.
   `place{secret:"profile.taxId"}` fills a field from the Mac's wallet
   profile (`name`, `email`, `phone`, an address field; `profile@<id>.…`
   picks one). It is the person's own, not a site's login, so any host may
-  have it.
+  have it. A billing email, phone or tax id field is set to the card owner's
+  on its own when a card lands and before a spend click.
 - **Env store.** Secrets travel through SSM Parameter Store, one
   SecureString per name under `/autobrowse/config` (KMS at rest, IAM at
   the door, every read in CloudTrail; no extra vendor). `autobrowse env

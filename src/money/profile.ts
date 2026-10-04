@@ -78,6 +78,35 @@ export function contactsOf(
   return { ...(email ? { email } : {}), ...(phone ? { phone } : {}) };
 }
 
+/**
+ * What a billing form's contact fields hold: the card owner's, never the
+ * site's login email or whatever it prefilled (William, 2026-10-04).
+ */
+export interface BillingContacts extends Contacts {
+  taxId?: string;
+}
+export type BillingKind = keyof BillingContacts;
+
+/** Which billing contact an input asks for, from its type, name, id, autocomplete, label, placeholder; null: none. */
+export function billingKind(label: string): BillingKind | null {
+  const w = label.replace(/[_-]+/g, " ");
+  if (/\b(tax ?(id|number)|vat|gst|hst)\b/i.test(w)) return "taxId";
+  if (/\be ?mail\b/i.test(w)) return "email";
+  if (/\b(phone|mobile|tel)\b/i.test(w)) return "phone";
+  return null;
+}
+
+/** Whether a field already holds it: emails by case, phones by their last 10 digits, tax ids without spaces. */
+export function holdsBilling(kind: BillingKind, have: string, want: string): boolean {
+  if (kind === "phone") {
+    const d = (s: string) => s.replace(/\D/g, "").slice(-10);
+    return d(have).length === 10 && d(have) === d(want);
+  }
+  const norm = (s: string) =>
+    kind === "taxId" ? s.toUpperCase().replace(/\s+/g, "") : s.trim().toLowerCase();
+  return norm(have) === norm(want);
+}
+
 /** `+15551234567` → `••4567`: enough to know which phone, not the number. */
 export const phoneEnding = (p: string) => `••${p.slice(-4)}`;
 

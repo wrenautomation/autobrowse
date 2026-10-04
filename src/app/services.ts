@@ -854,6 +854,7 @@ export function cardsFor(settings: Settings): ExploreOptions["cards"] {
       ...card,
       ...(owner?.address ? { billing: owner.address } : {}),
       tell: contactsOf(card, owner),
+      ...(owner?.taxId ? { taxId: owner.taxId } : {}),
     };
   };
 }

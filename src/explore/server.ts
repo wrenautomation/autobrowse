@@ -69,7 +69,11 @@ import { type Charge, type Receipt, receiptOutcome, stillAsking } from "../money
 import {
   ADDRESS_FIELDS,
   type Address,
+  type BillingContacts,
+  type BillingKind,
+  billingKind,
   type Contacts,
+  holdsBilling,
   type Profile,
   profileField,
   profileSecret,
@@ -119,6 +123,22 @@ const targetSchema = z.object({ hints: hintsSchema });
 const FLOW_MS = 30 * 60_000;
 /** How long a spending click's page gets to say paid or declined before it counts as no charge. */
 const SETTLE_MS = Number(process.env.EXPLORE_CHARGE_SETTLE_MS ?? 60_000);
+/** A frame's visible, editable text inputs, each tagged `data-ab-billing` so a locator finds it again; `billingKind` reads the label. */
+const BILLING_FIELDS = `(() => {
+  const skip = /^(hidden|password|checkbox|radio|submit|button|file|search|number)$/;
+  const out = [];
+  let i = 0;
+  for (const el of document.querySelectorAll("input")) {
+    if (skip.test(el.type) || el.disabled || el.readOnly) continue;
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) continue;
+    const label = [el.type, el.name, el.id, el.autocomplete, el.placeholder,
+      el.getAttribute("aria-label"), el.labels && el.labels[0] ? el.labels[0].innerText : ""].join(" ");
+    el.setAttribute("data-ab-billing", String(i));
+    out.push({ i: i++, label, value: el.value });
+  }
+  return out;
+})()`;
 
 export const commandSchema = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("open"), url: z.string().url() }),
@@ -369,7 +389,7 @@ export interface ExploreOptions {
     host: string;
     label: string | null;
     subscription: boolean;
-  }) => Promise<Card & { billing?: Address; tell?: Contacts }>;
+  }) => Promise<Card & { billing?: Address; tell?: Contacts; taxId?: string }>;
   /**
    * The owner's profiles, where they live (the Mac): `place{secret:"profile.<field>"}`
    * (or `profile@<id>.<field>`) fills one of its fields, such as `taxId` on a
@@ -850,8 +870,46 @@ async function serve(
   };
   /** Card-and-host pairs a person said yes to this session; the card last placed, for the receipt. */
   const cardsYes = new Set<string>();
-  let placedCard: { line: string; recurring: boolean; tell?: Contacts } | null = null;
+  let placedCard: {
+    line: string;
+    recurring: boolean;
+    tell?: Contacts;
+    contacts: BillingContacts;
+  } | null = null;
   const pageText = async () => (await page.innerText("body").catch(() => "")).slice(0, 20_000);
+  /**
+   * William (2026-10-04): a billing form's email, phone and tax id are always the
+   * card owner's (the placed card's contacts, else the only profile's), never the
+   * login email a site prefilled. Run when a card lands and before a spend click,
+   * in every frame (Stripe's fields live in iframes). Names the kinds it set.
+   */
+  const fillBilling = async (): Promise<BillingKind[]> => {
+    const p = placedCard ? null : await opts.profiles?.(null).catch(() => null);
+    const want: BillingContacts =
+      placedCard?.contacts ??
+      (p
+        ? {
+            ...(p.email ? { email: p.email } : {}),
+            ...(p.phone ? { phone: p.phone } : {}),
+            ...(p.taxId ? { taxId: p.taxId } : {}),
+          }
+        : {});
+    if (!Object.keys(want).length) return [];
+    const set: BillingKind[] = [];
+    for (const frame of page.frames()) {
+      const fields = await frame
+        .evaluate<{ i: number; label: string; value: string }[]>(BILLING_FIELDS)
+        .catch(() => []);
+      for (const f of fields) {
+        const kind = billingKind(f.label);
+        const value = kind ? want[kind] : undefined;
+        if (!kind || !value || holdsBilling(kind, f.value, value)) continue;
+        await hands.paste(frame.locator(`[data-ab-billing="${f.i}"]`), value, { timeout: 10_000 });
+        set.push(kind);
+      }
+    }
+    return set;
+  };
   const placeCard = async (
     c: Extract<Command, { cmd: "place" }>,
     want: { label: string | null; field: string },
@@ -871,7 +929,7 @@ async function serve(
         by: `place ${c.secret}`,
         allowed,
       });
-    let card: Card & { billing?: Address; tell?: Contacts };
+    let card: Card & { billing?: Address; tell?: Contacts; taxId?: string };
     try {
       card = await opts.cards({ host, label: want.label, subscription: recurring });
     } catch (err) {
@@ -907,8 +965,14 @@ async function serve(
       await opts.cardsOnFile
         ?.placed({ at: new Date().toISOString(), site: opts.site, host, card: cardEnding(card) })
         .catch(() => undefined);
-    placedCard = { line: cardEnding(card), recurring, ...(card.tell ? { tell: card.tell } : {}) };
-    return { ok: true, secret: c.secret };
+    placedCard = {
+      line: cardEnding(card),
+      recurring,
+      ...(card.tell ? { tell: card.tell } : {}),
+      contacts: { ...card.tell, ...(card.taxId ? { taxId: card.taxId } : {}) },
+    };
+    const billing = await fillBilling();
+    return { ok: true, secret: c.secret, ...(billing.length ? { billing } : {}) };
   };
   /** After a yes and the click: the page it landed on is the receipt. A failed report never fails the click. */
   const reportSpend = async (spent: { what: string; amount: Amount | null }) => {
@@ -1072,13 +1136,15 @@ async function serve(
       }
       case "click": {
         const spent = await gate("click", c, wait);
+        const billing = spent ? await fillBilling() : [];
         await hands.think(page);
         await hands.click(find(c), { timeout: 10_000, ...(c.at ? { at: c.at } : {}) });
         await settle(page);
         journalAct(c, (target) => ({ kind: "click", target }));
         // A receipt only for the click that takes money; checkout or "add a card" only led there.
-        if (spent?.charges) return { url: page.url(), told: await reportSpend(spent) };
-        return { url: page.url() };
+        const set = billing.length ? { billing } : {};
+        if (spent?.charges) return { url: page.url(), ...set, told: await reportSpend(spent) };
+        return { url: page.url(), ...set };
       }
       case "drag": {
         await hands.think(page);

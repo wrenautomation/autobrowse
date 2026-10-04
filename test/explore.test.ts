@@ -315,13 +315,19 @@ describe("explore mode", () => {
   it("puts a card on a page after one yes per card and host", async () => {
     // (a new flow: the first test's yes covers PAGE itself)
     await send({ cmd: "open", url: `${PAGE}#card` });
+    // The site prefilled its login email where the receipt goes.
+    await send({
+      cmd: "eval",
+      js: `document.body.insertAdjacentHTML("beforeend", '<label>Email <input type="email" id="em" value="login@site.co"></label>')`,
+    });
     answer = true;
     // A card field: one yes per card and host, then each field lands; the value never crosses the socket.
     const number = await send(
       { cmd: "place", hints: { role: "textbox", name: "Domain" }, secret: "card.number" },
       true,
     );
-    expect(number.body).toMatchObject({ ok: true, secret: "card.number" });
+    expect(number.body).toMatchObject({ ok: true, secret: "card.number", billing: ["email"] });
+    expect((await send({ cmd: "eval", js: "em.value" })).body.result).toBe("card-owner@x.co");
     expect(asks.at(-1)).toMatch(/^start paying on .*: put main: Visa credit ••4242 on /);
     await send({ cmd: "place", hints: { css: "#p" }, secret: "card@main.cvc" }, true);
     expect(asks.filter((a) => a.includes("put main"))).toHaveLength(1);
