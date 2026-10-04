@@ -371,7 +371,8 @@ const hasFocus = (target: Locator): Promise<boolean> =>
  */
 /**
  * A dropdown takes a value by its option, not by keys: a native select, or a
- * button that opens a list (Azure's card expiry month). True when it was one.
+ * button that opens a list (Azure's card expiry month, Dynadot's plain divs
+ * with no roles). True when it was one.
  */
 async function chosen(
   target: Locator,
@@ -380,19 +381,31 @@ async function chosen(
   tap: (l: Locator) => Promise<void>,
 ): Promise<boolean> {
   const kind = await target
-    .evaluate((el) =>
-      el.tagName === "SELECT"
-        ? "select"
-        : el.tagName !== "INPUT" && el.getAttribute("role") === "combobox"
-          ? "list"
-          : null,
-    )
+    .evaluate((el) => {
+      if (el.tagName === "SELECT") return "select";
+      // A label fills its field (Playwright retargets); fields and editors take keys.
+      if (/^(INPUT|TEXTAREA|LABEL)$/.test(el.tagName)) return null;
+      if (el.getAttribute("role") === "combobox") return "list";
+      const takesKeys =
+        (el as HTMLElement).isContentEditable ||
+        el.querySelector("input, textarea, select, [contenteditable]");
+      return takesKeys ? null : "list";
+    })
     .catch(() => null);
   if (kind === "select") await target.selectOption(text, o);
   else if (kind === "list") {
     await tap(target);
-    const option = target.page().getByRole("option", { name: text, exact: true });
-    await tap(option.locator("visible=true").first());
+    const page = target.page();
+    const option = page.getByRole("option", { name: text, exact: true }).locator("visible=true");
+    const shown = await option
+      .first()
+      .waitFor({ state: "visible", timeout: 2_000 })
+      .then(() => true)
+      .catch(() => false);
+    // A list with no roles: the first visible element whose whole text is the value.
+    await tap(
+      shown ? option.first() : page.getByText(text, { exact: true }).locator("visible=true").first(),
+    );
   }
   return kind !== null;
 }
