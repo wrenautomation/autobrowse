@@ -51,15 +51,31 @@ export class DynadotError extends Error {
 
 type Answer = { ResponseCode?: string | number; SuccessCode?: string | number; Error?: string };
 
-export function dynadot(opts: { apiKey: string; http: HttpClient }): DynadotClient {
+/** Dynadot's own wait after "Too many requests", and how many times a refused call goes again. */
+const BUSY_MS = 61_000;
+const BUSY_TRIES = 3;
+
+export function dynadot(opts: {
+  apiKey: string;
+  http: HttpClient;
+  sleep?: (ms: number) => Promise<void>;
+}): DynadotClient {
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   async function call<T>(command: string, params: Record<string, string> = {}): Promise<T> {
     const q = new URLSearchParams({ key: opts.apiKey, command, ...params });
-    const r = await opts.http.json<Record<string, T & Answer>>(`${API}?${q}`);
-    const body = r.body ? Object.values(r.body)[0] : undefined;
-    if (!r.ok || !body) throw new DynadotError(command, `HTTP ${r.status} at ${safeUrl(API)}`);
-    const code = Number(body.ResponseCode ?? body.SuccessCode ?? -1);
-    if (code !== 0) throw new DynadotError(command, body.Error ?? `code ${code}`);
-    return body;
+    for (let tries = 1; ; tries++) {
+      const r = await opts.http.json<Record<string, T & Answer>>(`${API}?${q}`);
+      const body = r.body ? Object.values(r.body)[0] : undefined;
+      if (!r.ok || !body) throw new DynadotError(command, `HTTP ${r.status} at ${safeUrl(API)}`);
+      const code = Number(body.ResponseCode ?? body.SuccessCode ?? -1);
+      if (code === 0) return body;
+      // A refused call ran nothing, so even `register` is safe to send again.
+      if (/too many requests/i.test(body.Error ?? "") && tries < BUSY_TRIES) {
+        await sleep(BUSY_MS);
+        continue;
+      }
+      throw new DynadotError(command, body.Error ?? `code ${code}`);
+    }
   }
   const usd = (text: string | undefined, label: string) => {
     const m = text?.match(new RegExp(`${label} price: ([\\d.]+) in USD`, "i"));
