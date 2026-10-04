@@ -10,7 +10,6 @@ import {
   type PageLook,
   tellsOf,
 } from "../src/browser/flows/fingerprint.js";
-import { proxyFor, proxyOf } from "../src/browser/proxy.js";
 import { readPage, search, WebMiss } from "../src/reach/web.js";
 import { type ApiLeg, SiteError } from "../src/sites/types.js";
 import { web } from "../src/sites/web.js";
@@ -301,69 +300,12 @@ describe("fingerprint flow", () => {
   });
 });
 
-describe("proxy for a profile", () => {
-  const of = (sites: string) => proxyFor("http://h:1", sites);
-
-  it("a site covers its profiles; a profile covers only itself", () => {
-    expect(of("x")("x@wren")).not.toBeNull();
-    expect(of("x")("x")).not.toBeNull();
-    expect(of("x@wren")("x")).toBeNull();
-    expect(of("x@wren")("x@other")).toBeNull();
-    expect(of("linkedin@research")("linkedin@research")).not.toBeNull();
-    expect(of("linkedin@research")("linkedin")).toBeNull();
-    expect(of("x")("xx")).toBeNull();
-  });
-
-  it("ignores case and spaces, on both sides", () => {
-    expect(of(" LinkedIn@Research , X ")("linkedin@RESEARCH")).not.toBeNull();
-    expect(of("linkedin@research")("LinkedIn@Research")).not.toBeNull();
-    expect(of("X")("X@Wren")).not.toBeNull();
-  });
-
-  it("* covers every profile; empty entries cover none", () => {
-    expect(of("*")("anything@else")).not.toBeNull();
-    expect(of(" , ,")("x")).toBeNull();
-    expect(of(",x,")("x")).not.toBeNull();
-    // An empty base (`@wren`) is not the empty entry the split left.
-    expect(of("x,")("@wren")).toBeNull();
-  });
-
-  it("no URL or no sites: nothing is proxied, and a bad URL is only parsed when used", () => {
-    expect(proxyFor(undefined, "*")("x")).toBeNull();
-    expect(proxyFor("", "*")("x")).toBeNull();
-    expect(proxyFor("not a url", "")("x")).toBeNull();
-    expect(() => proxyFor("not a url", "x")).toThrow(/not a URL/);
-  });
-
-  it("parses http, https and socks5; host with port, v6 host, no port", () => {
-    expect(proxyOf("HTTPS://User:Pw@Proxy.Example:443")).toEqual({
-      server: "https://proxy.example",
-      username: "User",
-      password: "Pw",
-    });
-    expect(proxyOf("http://[2001:db8::1]:8080")).toEqual({ server: "http://[2001:db8::1]:8080" });
-    expect(proxyOf("http://h")).toEqual({ server: "http://h" });
-    expect(proxyOf("socks5://h:1080")).toEqual({ server: "socks5://h:1080" });
-    expect(proxyOf("http://u@h:1")).toEqual({ server: "http://h:1", username: "u" });
-    expect(() => proxyOf("socks5://u:p@h:1080")).toThrow(/no login on a socks5/);
-    expect(() => proxyOf("socks4://h:1080")).toThrow(/http, https or socks5/);
-  });
-
-  it("a socks5 URL carrying only a password is refused too", () => {
-    expect(() => proxyOf("socks5://:secret@h:1080")).toThrow(/no login on a socks5/);
-  });
-});
-
 describe("browser time zones in settings", () => {
   const base = { RESTATE_INGRESS_URL: "http://127.0.0.1:8080" };
-  const zone = (v: string) =>
-    loadSettings({ ...base, BROWSER_TIMEZONE: v, BROWSER_PROXY_TIMEZONE: v });
+  const zone = (v: string) => loadSettings({ ...base, BROWSER_TIMEZONE: v });
 
   it("takes IANA zones and UTC; unset is unset", () => {
-    expect(zone("America/New_York")).toMatchObject({
-      browserTimezone: "America/New_York",
-      browserProxyTimezone: "America/New_York",
-    });
+    expect(zone("America/New_York").browserTimezone).toBe("America/New_York");
     expect(zone("UTC").browserTimezone).toBe("UTC");
     expect(loadSettings(base).browserTimezone).toBeUndefined();
     expect(loadSettings({ ...base, BROWSER_TIMEZONE: "" }).browserTimezone).toBeUndefined();
@@ -371,17 +313,14 @@ describe("browser time zones in settings", () => {
 
   it("refuses a typo, naming the key, not a guess", () => {
     expect(() => zone("America/New_Yrok")).toThrow(/BROWSER_TIMEZONE: not an IANA time zone/);
-    expect(() => loadSettings({ ...base, BROWSER_PROXY_TIMEZONE: "EST5" })).toThrow(
-      /BROWSER_PROXY_TIMEZONE: not an IANA time zone/,
-    );
     expect(() => zone("america/new_york")).toThrow(/not an IANA/);
   });
 
   it("takes Asia/Kolkata, the name ipinfo gives", () => {
-    expect(zone("Asia/Kolkata").browserProxyTimezone).toBe("Asia/Kolkata");
+    expect(zone("Asia/Kolkata").browserTimezone).toBe("Asia/Kolkata");
   });
   it("takes Europe/Kyiv", () => {
-    expect(zone("Europe/Kyiv").browserProxyTimezone).toBe("Europe/Kyiv");
+    expect(zone("Europe/Kyiv").browserTimezone).toBe("Europe/Kyiv");
   });
   it("takes Etc/UTC", () => {
     expect(zone("Etc/UTC").browserTimezone).toBe("Etc/UTC");

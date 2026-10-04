@@ -146,6 +146,11 @@ export interface FlowPage {
    * has eyes. Never throws for an unsolved one; the outcome says why.
    */
   captcha(): Promise<CaptchaOutcome>;
+  /**
+   * A new IP for this profile, when its exit rotates (`browser/egress`): true
+   * once the line has the new address. False on the machine's own line.
+   */
+  newIp(): Promise<boolean>;
   /** Stop here and ask a person. */
   human(reason: string): never;
   /** What a screens walk asks of the runner: the page's shape, learned screens, a model (`browser/screens`). */
@@ -532,6 +537,12 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               { kind: "captcha", goal: "solve the captcha" },
               () => solveWithRetries(),
               (got) => (got.solved ? "ok" : "failed"),
+            ),
+          newIp: () =>
+            stepped(
+              { kind: "new-ip", goal: "get a new IP from the exit" },
+              async () => (await session.newIp?.()) ?? false,
+              (got) => (got ? "ok" : "failed"),
             ),
           human(reason) {
             throw new NeedsHuman(`${flow.site}: ${reason}`);

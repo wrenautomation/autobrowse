@@ -289,13 +289,23 @@ async function landed(fp: FlowPage): Promise<"results" | "none" | null> {
 
 const NOTHING: RawSerp = { overview: null, results: [], ads: [], questions: [] };
 
-/** Past Google's /sorry check (a reCAPTCHA), or a person's. */
-async function pastSorry(fp: FlowPage): Promise<void> {
-  if (!/\/sorry\//.test(fp.url())) return;
+/** New IPs asked for on one /sorry page before the captcha (`browser/egress`). */
+const NEW_IPS = 2;
+const onSorry = (fp: FlowPage) => /\/sorry\//.test(fp.url());
+
+/**
+ * Past Google's /sorry check (a reCAPTCHA): a fresh IP from a rotating exit
+ * first (free, and a carrier IP usually passes), then the solver, then a person.
+ */
+async function pastSorry(fp: FlowPage, url: string): Promise<void> {
+  for (let i = 0; i < NEW_IPS && onSorry(fp); i++) {
+    if (!(await fp.newIp())) break;
+    await fp.open(url);
+  }
+  if (!onSorry(fp)) return;
   const got = await fp.captcha();
   if (!got.solved) fp.human(`google: the "unusual traffic" check is a person's (${got.reason})`);
-  if (/\/sorry\//.test(fp.url()))
-    fp.human("google: still on the unusual-traffic page after the captcha");
+  if (onSorry(fp)) fp.human("google: still on the unusual-traffic page after the captcha");
 }
 
 /** "Show more" inside the Overview, if it is folded; then let it settle. */
@@ -315,7 +325,7 @@ async function unfoldOverview(fp: FlowPage): Promise<void> {
 
 async function readPage(fp: FlowPage, url: string, overview: boolean): Promise<RawSerp> {
   await fp.open(url);
-  await pastSorry(fp);
+  await pastSorry(fp, url);
   if (await fp.has({ role: "button", name: "/^accept all$/i" }, 1_000))
     await fp.act(
       { kind: "click" },

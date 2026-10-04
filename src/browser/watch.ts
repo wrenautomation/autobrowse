@@ -25,7 +25,7 @@ import type { Page } from "playwright";
 import { redactAria, redactText } from "../recorder/redact.js";
 import type { Hints } from "./locate.js";
 
-export type StepKind = "open" | "act" | "captcha" | "sign-in";
+export type StepKind = "open" | "act" | "captcha" | "new-ip" | "sign-in";
 
 export interface Step {
   n: number;

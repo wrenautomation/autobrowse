@@ -55,6 +55,7 @@ import { loginSecrets, type SecretValues } from "../auth/signup.js";
 import { fileDoneActs } from "../browser/attempt.js";
 import type { Eyes } from "../browser/captcha/index.js";
 import { eyesOf } from "../browser/captcha/llm-eyes.js";
+import { egressOf } from "../browser/egress.js";
 import { fileFixes } from "../browser/fixes.js";
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import { flowRunner } from "../browser/flow.js";
@@ -62,7 +63,6 @@ import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { HUMAN_PACE, type Pace } from "../browser/human/index.js";
 import { ownBrowserOf } from "../browser/own.js";
 import { SessionPark } from "../browser/park.js";
-import { proxyFor } from "../browser/proxy.js";
 import {
   llmRepairer,
   llmScreenReader,
@@ -90,7 +90,7 @@ import { type HttpClient, httpClient, safeUrl } from "../clients/http.js";
 import { inboxInsiders } from "../clients/inbox-insiders.js";
 import { type InstantlyClient, instantly } from "../clients/instantly.js";
 import { type LinqClient, linqClient } from "../clients/linq.js";
-import { ssmRosterStore } from "../clients/roster.js";
+import { ssmTextStore } from "../clients/roster.js";
 import { twilioReader } from "../clients/twilio.js";
 import { wrenClient } from "../clients/wren.js";
 import type { SecretSink } from "../deps/sink.js";
@@ -291,9 +291,11 @@ export function browserOptions(
     tier: settings.browser,
     cdpUrl: settings.browserCdpUrl ?? null,
     own: ownBrowserOf(settings.ownBrowser, settings.ownBrowserSites),
-    proxy: proxyFor(settings.browserProxy, settings.browserProxySites),
+    // Exits are named in the env (`EGRESS_SITES`, `EGRESS_<NAME>`), so read there.
+    egress: egressOf((n) => process.env[n], {
+      signsIn: (site) => SITE_LOGINS.some((l) => l.site === site),
+    }),
     ...(settings.browserTimezone ? { timezone: settings.browserTimezone } : {}),
-    ...(settings.browserProxyTimezone ? { proxyTimezone: settings.browserProxyTimezone } : {}),
     profilesDir: settings.profilesDir,
     channel: settings.browserChannel,
     artifactsDir: settings.artifactsDir,
@@ -1209,6 +1211,20 @@ export function inboxFleetDepsFor(
     }),
     aws: lazy(() => awsDomain(awsFor(settings))),
     credentials: credentialsFor(settings),
+    mailboxes: {
+      async merge(rows) {
+        const store = ssmTextStore({ param: settings.mailboxesSsmParam, aws: awsFor(settings) });
+        // Only a missing parameter starts empty; any other failed read must not drop the rows there.
+        const held = await store.read().then(
+          (text) => JSON.parse(text) as Record<string, unknown>,
+          (err: { name?: string }) => {
+            if (err.name === "ParameterNotFound") return {};
+            throw err;
+          },
+        );
+        await store.write(JSON.stringify({ ...held, ...rows }));
+      },
+    },
     probe: publicProbe(),
   };
 }
@@ -1288,7 +1304,7 @@ export function domainDepsFor(
     ),
     google: lazy(() => googleAdminFor(settings, http)),
     gmail: gmailFor(settings, http),
-    roster: lazy(() => ssmRosterStore({ param: settings.rosterSsmParam, aws: awsFor(settings) })),
+    roster: lazy(() => ssmTextStore({ param: settings.rosterSsmParam, aws: awsFor(settings) })),
     // The handoff to wren is Wren's own; another owner's roster is written and left there.
     wren: isDefaultOwner(settings.owner)
       ? wrenClient({

@@ -10,6 +10,8 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Command } from "commander";
 import type { EnvStore } from "credvault";
+import { SITE_LOGINS } from "../auth/sites.js";
+import { egressOf } from "../browser/egress.js";
 import type { Person, Profile } from "../browser/flows/linkedin-reach.js";
 import { ringCount, type SpentKeys } from "../reach/key-ring.js";
 import { writeLeads } from "../reach/linkedin-leads.js";
@@ -39,9 +41,20 @@ export function registerReachCommands(
   spent: SpentKeys,
 ): void {
   const env = reachEnv(store);
+  /** Which profiles leave through which exit (`browser/egress`), or the config error. */
+  const egressLine = () => {
+    try {
+      const lines = egressOf((n) => process.env[n], {
+        signsIn: (site) => SITE_LOGINS.some((l) => l.site === site),
+      }).describe();
+      return lines.length ? lines.join(" · ") : dim("desk (every profile on this machine's line)");
+    } catch (err) {
+      return warn((err as Error).message);
+    }
+  };
   program
     .command("doctor")
-    .description("What answers now: search keys, the Maps scraper, and one live call per site")
+    .description("What answers now: search keys, the Maps scraper, browser exits, and one live call per site")
     .action(async () => {
       const has = async (n: string) => ((await env(n)) ? good("ready") : dim(`no ${n}`));
       // Live keys of those held: `exa 2/3` has one out of credit until the 1st.
@@ -58,6 +71,7 @@ export function registerReachCommands(
           `exa ${await exaRing()} · brave ${await has("BRAVE_API_KEY")} · duckduckgo ${good("ready")}`,
         ],
         [bold("maps"), maps.startsWith("ready") ? good(maps) : warn(maps)],
+        [bold("egress"), egressLine()],
       ];
       const sites = local().backend.sites;
       if (sites)

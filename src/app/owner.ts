@@ -62,8 +62,8 @@ export const OPERATOR_TOOL_KEYS = new Set([
   "BRAVE_API_KEY",
   "JINA_API_KEY",
 ]);
-/** `EXA_API_KEY_1..n`: Exa's key ring (`reach/key-ring.ts`). */
-const OPERATOR_TOOL_PREFIXES = ["LANGFUSE_", "EXA_API_KEY_"];
+/** `EXA_API_KEY_1..n`: Exa's key ring (`reach/key-ring.ts`). `EGRESS_`: the lines browsers leave from (`browser/egress`). */
+const OPERATOR_TOOL_PREFIXES = ["LANGFUSE_", "EXA_API_KEY_", "EGRESS_"];
 
 /** Flags about the process itself; never an owner's to set. */
 const FLAGS = new Set(["AUTOBROWSE_OWNER", "AUTOBROWSE_OWNER_ROLE_ARN", "AUTOBROWSE_DEBUG"]);

@@ -51,6 +51,8 @@ const schema = z.object({
   googleAdminUser: z.string().email().optional(),
   /** Where wren reads its roster. */
   rosterSsmParam: z.string().min(1).default("/wren/prod/senders_config"),
+  /** Where wren reads the SMTP and IMAP logins of mailboxes it sends through. */
+  mailboxesSsmParam: z.string().min(1).default("/wren/prod/mailboxes"),
   awsRegion: z.string().min(1).default("us-east-1"),
   /** Who gets approval requests and completion notes, and the fleet inbox they come from. */
   notifyTo: z.string().email().optional(),
@@ -74,14 +76,8 @@ const schema = z.object({
   ownBrowser: z.string().min(1).optional(),
   /** Comma list of sites that run in the own browser, e.g. `github`. */
   ownBrowserSites: z.string().optional(),
-  /** A static ISP/residential proxy URL with its login (`browser/proxy`); never printed. */
-  browserProxy: z.string().min(1).optional(),
-  /** Comma list of sites whose local browser goes through `browserProxy`, e.g. `x,linkedin`. */
-  browserProxySites: z.string().optional(),
-  /** The zone a local browser says, where its IP is (`America/New_York` on us-east-1); the machine's when unset. */
+  /** The zone a local browser says, where its IP is (`America/New_York` on us-east-1); the machine's when unset. Exits say their own (`browser/egress`). */
   browserTimezone: timeZone.optional(),
-  /** The zone a proxied browser says: the proxy's city. */
-  browserProxyTimezone: timeZone.optional(),
   /** Persistent browser profiles (logins survive between runs). */
   profilesDir: z.string().min(1).default("~/.config/autobrowse/profiles"),
   /** Local browser: the installed Chrome (default, falls back) or Playwright's chromium (containers). */
@@ -314,6 +310,7 @@ export const ENV_KEYS = {
   googleWorkspaceDomain: "GOOGLE_WORKSPACE_DOMAIN",
   googleAdminUser: "GOOGLE_ADMIN_USER",
   rosterSsmParam: "ROSTER_SSM_PARAM",
+  mailboxesSsmParam: "MAILBOXES_SSM_PARAM",
   awsRegion: "AWS_REGION",
   notifyTo: "NOTIFY_TO",
   notifyFrom: "NOTIFY_FROM",
@@ -327,10 +324,7 @@ export const ENV_KEYS = {
   browserCdpUrl: "BROWSER_CDP_URL",
   ownBrowser: "OWN_BROWSER",
   ownBrowserSites: "OWN_BROWSER_SITES",
-  browserProxy: "BROWSER_PROXY",
-  browserProxySites: "BROWSER_PROXY_SITES",
   browserTimezone: "BROWSER_TIMEZONE",
-  browserProxyTimezone: "BROWSER_PROXY_TIMEZONE",
   profilesDir: "PROFILES_DIR",
   browserChannel: "BROWSER_CHANNEL",
   browserHeadless: "BROWSER_HEADLESS",
@@ -506,6 +500,8 @@ function ownerLayout(settings: Settings, env: NodeJS.ProcessEnv): Settings {
     ...settings,
     ...paths,
     rosterSsmParam: env[ENV_KEYS.rosterSsmParam] || `/autobrowse/owners/${settings.owner}/roster`,
+    mailboxesSsmParam:
+      env[ENV_KEYS.mailboxesSsmParam] || `/autobrowse/owners/${settings.owner}/mailboxes`,
     // Memory is kept per owner; the operator's assistant is its own.
     backboardAssistant:
       env[ENV_KEYS.backboardAssistant] || `${settings.backboardAssistant}-${settings.owner}`,

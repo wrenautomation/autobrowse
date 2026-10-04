@@ -10,10 +10,10 @@ import { join } from "node:path";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { type HttpClient, safeUrls } from "../clients/http.js";
 import { expandHome } from "../google-auth.js";
+import type { Egress, Exit } from "./egress.js";
 import { geometry, type Identity, learnIdentity, wearIdentity } from "./identity.js";
 import type { Hints } from "./locate.js";
 import { notReachable, type OwnBrowser, ownEndpoint, runsInOwn } from "./own.js";
-import type { BrowserProxy, ProxyFor } from "./proxy.js";
 import { reapOrphans, reapTempDirs } from "./reap.js";
 import { type PasskeyRecord, type Passkeys, virtualAuthenticator } from "./webauthn.js";
 
@@ -105,15 +105,14 @@ export interface BrowserOptions {
   profileName?: (name: string) => Promise<string>;
   /** The person's own browser, for the sites they opted in (`browser/own`). */
   own?: OwnBrowser | null;
-  /** A local browser's proxy, by profile (`browser/proxy`); none goes out directly. */
-  proxy?: ProxyFor;
+  /** Where each local profile leaves from (`browser/egress`); none = the machine's own line. */
+  egress?: Egress;
   /**
    * The time zone a local browser says (`America/New_York`): the one where its
-   * IP is, or a site sees a Virginia IP on UTC. `proxyTimezone` for a proxied
-   * profile (the proxy's city), `timezone` for the rest; the machine's own when unset.
+   * IP is, or a site sees a Virginia IP on UTC. A profile behind an exit says
+   * the exit's (`EGRESS_<NAME>_TZ`); the rest this; the machine's own when unset.
    */
   timezone?: string;
-  proxyTimezone?: string;
 }
 
 export interface Session {
@@ -126,6 +125,8 @@ export interface Session {
   shared?: boolean;
   /** The virtual authenticator: export after an enrollment. */
   passkeys: Passkeys;
+  /** A new IP from the profile's exit, when it rotates (`browser/egress`); false otherwise. */
+  newIp?: () => Promise<boolean>;
   close(): Promise<void>;
 }
 
@@ -152,17 +153,19 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
     // A browser left by a dead owner would hold this profile; stop those first.
     await reapOrphans(expandHome(opts.profilesDir));
     void reapTempDirs(); // files a crashed upload left, in the background
-    context = await launchLocal(profileDir, opts, opts.proxy?.(profile) ?? null);
+    context = await launchLocal(profileDir, opts, opts.egress?.exitFor(profile) ?? null);
     if (opts.headless === false) keepOutOfTheWay();
     // `navigator.webdriver` is already false (LOCAL_ARGS). No init-script shim: an own
     // `webdriver` property on navigator, reading undefined, is itself a tell.
   }
   const page = context.pages()[0] ?? (await context.newPage());
   const passkeys = virtualAuthenticator(context, await opts.passkeys?.(site).catch(() => []));
+  const local = opts.tier !== "browserbase" && opts.tier !== "cdp";
   return {
     context,
     page,
     passkeys,
+    ...(local && opts.egress ? { newIp: () => (opts.egress as Egress).newIp(profile) } : {}),
     async close() {
       // An attached app keeps its windows; only what we launched or rented closes.
       if (opts.tier === "cdp") {
@@ -256,8 +259,9 @@ let headedIdentity: Identity | null = null;
 async function launchLocal(
   profileDir: string,
   opts: BrowserOptions,
-  proxy: BrowserProxy | null,
+  exit: Exit | null,
 ): Promise<BrowserContext> {
+  const proxy = exit?.proxy ?? null;
   const headless = opts.headless ?? true;
   const { args: sizeArgs, ...size } = geometry(headless);
   // Headless says the headed identity (identity.ts). Not through Playwright's
@@ -265,7 +269,7 @@ async function launchLocal(
   // `Sec-CH-UA-Arch: "x86"` and platform version "10_15_7" from an arm Mac on 26.x.
   const uaArgs = (ua: string | null) => (headless && ua ? [`--user-agent=${ua}`] : []);
   // Chrome takes its zone from TZ: Date, Intl and workers agree, where a CDP override covers pages only.
-  const tz = proxy ? (opts.proxyTimezone ?? opts.timezone) : opts.timezone;
+  const tz = exit?.timezone ?? opts.timezone;
   const base = (ua: string | null) => ({
     headless,
     ...size,

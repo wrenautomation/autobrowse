@@ -8,7 +8,6 @@ import {
   tweetOf,
   userOf,
 } from "../src/browser/flows/x-read.js";
-import { proxyFor, proxyOf } from "../src/browser/proxy.js";
 import { scrollCollect } from "../src/browser/scroll-collect.js";
 
 const raw = (o: Partial<RawTweet>): RawTweet => ({
@@ -151,34 +150,5 @@ describe("scrollCollect", () => {
       settleMs: 0,
     });
     expect(got).toEqual({ rows: ["a", "b"], ended: "end" });
-  });
-});
-
-describe("browser proxy", () => {
-  it("serves only the listed sites, by the profile's base site", () => {
-    const of = proxyFor("http://u%40x:p%3Aw@isp.example:8080", "x, LinkedIn");
-    expect(of("x@wren")).toEqual({
-      server: "http://isp.example:8080",
-      username: "u@x",
-      password: "p:w",
-    });
-    expect(of("linkedin")).not.toBeNull();
-    expect(of("google")).toBeNull();
-    expect(proxyFor(undefined, "x")("x")).toBeNull();
-    expect(proxyFor("http://h:1", "")("x")).toBeNull();
-    // One profile, not the whole site: his own `linkedin` stays on its own IP.
-    const one = proxyFor("http://h:1", "linkedin@research");
-    expect(one("linkedin@research")).not.toBeNull();
-    expect(one("linkedin")).toBeNull();
-  });
-
-  it("a bad URL is refused without echoing it", () => {
-    expect(() => proxyOf("secret-pass@nohost")).toThrow(/^BROWSER_PROXY is not a URL/);
-    expect(() => proxyOf("ftp://user:secret@h:1")).toThrow(/http, https or socks5/);
-    try {
-      proxyOf("ftp://user:secret@h:1");
-    } catch (e) {
-      expect(String(e)).not.toContain("secret");
-    }
   });
 });
