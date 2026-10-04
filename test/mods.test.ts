@@ -1,12 +1,19 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileCredentials } from "credvault";
 import { describe, expect, it } from "vitest";
+import { SITE_LOGINS } from "../src/auth/sites.js";
 import { memoryFixes } from "../src/browser/fixes.js";
 import { memoryScreens } from "../src/browser/screens.js";
-import { checkMod, installMod, removeMod } from "../src/mods/install.js";
-import { modScreens, withModFixes, withModScreens } from "../src/mods/mod.js";
+import { checkMod, installMod, removeMod, searchMods, sha256 } from "../src/mods/install.js";
+import {
+  type DataLogin,
+  dataLoginSchema,
+  loginProblems,
+  registerDataLogins,
+} from "../src/mods/login.js";
+import { modScreens, modWorkflowRoots, withModFixes, withModScreens } from "../src/mods/mod.js";
 import { packMod, scrubFrom } from "../src/mods/pack.js";
 import { listWalks, loadWalk, saveWalk, type WalkSpec } from "../src/walks/spec.js";
 
@@ -204,7 +211,7 @@ describe("installed mods", () => {
     saveWalk(o.walks, walk());
     const p = pack(o);
     const mod = checkMod(p.dir, { version: "0.3.0" });
-    installMod(p.dir, mod, o.mods, p.dir);
+    await installMod(p.dir, mod, o.mods, p.dir);
     expect(loadWalk(o.walks, "scratch", "join-list")?.from).toHaveLength(1);
     expect(listWalks(o.walks)).toHaveLength(1);
     expect(listWalks(o.walks)[0]?.mod).toBeUndefined();
@@ -239,7 +246,7 @@ describe("installed mods", () => {
       out: join(o.dir, "out"),
       version: "0.3.0",
     });
-    installMod(p.dir, checkMod(p.dir, { version: "0.3.0" }), o.mods, p.dir);
+    await installMod(p.dir, checkMod(p.dir, { version: "0.3.0" }), o.mods, p.dir);
     const own = memoryScreens();
     const screens = withModScreens(own, modScreens(o.mods));
     const look = { url: "scratch.test/join", landmarks: ["heading join", "button go", "text x"] };
@@ -273,5 +280,190 @@ describe("installed mods", () => {
     expect(fixes.find("scratch/join", "click Join", failed)?.hints.name).toBe("Join");
     fixes.used("scratch/join", "click Join", failed);
     expect(own.list()).toMatchObject([{ flow: "scratch/join", from: "autobrowse-mod-scratch" }]);
+  });
+});
+
+const login = (o: Partial<DataLogin> = {}): DataLogin =>
+  dataLoginSchema.parse({
+    site: "scratch",
+    home: "https://app.scratch.test/home",
+    signedIn: { url: "app\\.scratch\\.test/home" },
+    form: {
+      start: `https://scratch.test/login?as=${USER}`,
+      username: { role: "textbox", name: "Email" },
+      password: { role: "textbox", name: "Password" },
+      submit: { role: "button", name: "/^sign in$/i" },
+      code: [
+        {
+          kind: "totp",
+          field: { role: "textbox", name: "Code" },
+          submit: { role: "button", name: "Verify" },
+        },
+      ],
+    },
+    ...o,
+  });
+
+describe("logins as data", () => {
+  it("pack --login scrubs it and lists its credential; add accepts it", async () => {
+    const o = await owner();
+    const p = packMod({
+      site: "scratch",
+      walksDir: o.walks,
+      walks: [],
+      login: login({ ask: `Your scratch account (${USER})` }),
+      scrub: o.scrub,
+      out: join(o.dir, "out"),
+      version: "0.3.0",
+    });
+    const body = readFileSync(join(p.dir, "logins/scratch.json"), "utf8");
+    expect(body).not.toContain(USER);
+    expect(JSON.parse(body).form.start).toBe("https://scratch.test/login");
+    expect(p.mod).toMatchObject({
+      credentials: ["scratch:main"],
+      domains: ["app.scratch.test", "scratch.test"],
+    });
+    expect(checkMod(p.dir, { version: "0.3.0" }).files[0]?.kind).toBe("login");
+  });
+
+  it("refuses a login that replaces a built-in, or sends the password to a host without the site's name", () => {
+    const mod = {
+      sites: ["scratch", "google"],
+      domains: ["scratch.test", "elsewhere.test", "google.com"],
+    };
+    expect(loginProblems(login(), mod)).toEqual([]);
+    expect(
+      loginProblems(login({ site: "google", home: "https://accounts.google.com/" }), mod),
+    ).toEqual(["google has a built-in login; a mod can't replace it"]);
+    expect(loginProblems(login({ origins: ["elsewhere.test"] }), mod)).toEqual([
+      "origin elsewhere.test does not carry the name scratch",
+    ]);
+    expect(loginProblems(login({ home: "https://other.test/" }), mod)).toEqual([
+      "home other.test is outside domains",
+      "home other.test does not carry the name scratch",
+    ]);
+  });
+
+  it("an installed mod's login joins SITE_LOGINS after every built-in; a built-in of the same name wins", async () => {
+    const o = await owner();
+    const p = packMod({
+      site: "scratch",
+      walksDir: o.walks,
+      walks: [],
+      login: login(),
+      scrub: o.scrub,
+      out: join(o.dir, "out"),
+      version: "0.3.0",
+    });
+    await installMod(p.dir, checkMod(p.dir, { version: "0.3.0" }), o.mods, p.dir);
+    // The owner's own login for a built-in site is skipped: the built-in wins.
+    mkdirSync(join(o.dir, "logins"));
+    writeFileSync(
+      join(o.dir, "logins", "google.json"),
+      JSON.stringify(login({ site: "google", home: "https://google.com/" })),
+    );
+    const google = SITE_LOGINS.find((l) => l.site === "google");
+    registerDataLogins(join(o.dir, "logins"), o.mods);
+    expect(SITE_LOGINS.find((l) => l.site === "google")).toBe(google);
+    expect(SITE_LOGINS.at(-1)).toMatchObject({
+      site: "scratch",
+      home: "https://app.scratch.test/home",
+    });
+  });
+});
+
+describe("code mods", () => {
+  /** A hand-made mod with one workflow file: a code kind. */
+  function codeMod(dir: string) {
+    const body = 'export const workflow = { name: "scratch-code", steps: [] };\n';
+    mkdirSync(join(dir, "workflows", "scratch-code"), { recursive: true });
+    writeFileSync(join(dir, "workflows", "scratch-code", "index.ts"), body);
+    writeFileSync(
+      join(dir, "mod.json"),
+      JSON.stringify({
+        name: "autobrowse-mod-code",
+        version: "0.1.0",
+        autobrowse: ">=0.3.0",
+        description: "a workflow",
+        sites: ["scratch"],
+        domains: ["scratch.test"],
+        gates: [],
+        credentials: [],
+        irreversible: false,
+        files: [
+          { kind: "workflow", path: "workflows/scratch-code/index.ts", sha256: sha256(body) },
+        ],
+      }),
+    );
+  }
+
+  it("are refused without --trust, and an installed mod's code never loads untrusted", async () => {
+    const o = await owner();
+    const src = join(o.dir, "code");
+    codeMod(src);
+    expect(() => checkMod(src, { version: "0.3.0" })).toThrow(/--trust/);
+    const mod = checkMod(src, { version: "0.3.0", trust: true });
+    await expect(installMod(src, mod, o.mods, src)).rejects.toThrow(/--trust/);
+    expect(existsSync(join(o.mods, "autobrowse-mod-code"))).toBe(false);
+    // Copied in by hand, without the trusted mark: its workflows are not read.
+    const dest = join(o.mods, "autobrowse-mod-code");
+    codeMod(dest);
+    writeFileSync(join(dest, "installed.json"), JSON.stringify({ source: src, at: "2026-10-04" }));
+    expect(modWorkflowRoots(o.mods)).toEqual([]);
+    writeFileSync(
+      join(dest, "installed.json"),
+      JSON.stringify({ source: src, at: "2026-10-04", trusted: true }),
+    );
+    expect(modWorkflowRoots(o.mods)).toEqual([join(dest, "workflows")]);
+  });
+});
+
+describe("mods search", () => {
+  it("reads each hit's autobrowseMod field; a hit without one counts as code", async () => {
+    const pages: Record<string, unknown> = {
+      "/-/v1/search": {
+        objects: [
+          { package: { name: "autobrowse-mod-scratch", version: "0.1.0" } },
+          { package: { name: "@x/autobrowse-mod-odd", version: "1.0.0" } },
+        ],
+      },
+      "/autobrowse-mod-scratch/0.1.0": {
+        description: "scratch",
+        autobrowseMod: {
+          sites: ["scratch"],
+          domains: ["scratch.test"],
+          gates: ["send"],
+          code: false,
+        },
+      },
+      "/@x%2fautobrowse-mod-odd/1.0.0": { description: "odd" },
+    };
+    const get = (async (url: string) => {
+      const u = new URL(url);
+      if (u.pathname === "/-/v1/search")
+        expect(u.searchParams.get("text")).toBe("keywords:autobrowse-mod scratch");
+      const body = pages[u.pathname];
+      return new Response(JSON.stringify(body), { status: body ? 200 : 404 });
+    }) as typeof fetch;
+    expect(await searchMods("scratch", get)).toEqual([
+      {
+        name: "autobrowse-mod-scratch",
+        version: "0.1.0",
+        description: "scratch",
+        sites: ["scratch"],
+        domains: ["scratch.test"],
+        gates: ["send"],
+        code: false,
+      },
+      {
+        name: "@x/autobrowse-mod-odd",
+        version: "1.0.0",
+        description: "odd",
+        sites: [],
+        domains: [],
+        gates: [],
+        code: true,
+      },
+    ]);
   });
 });

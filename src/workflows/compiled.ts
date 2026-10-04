@@ -97,12 +97,22 @@ export interface CompiledCatalog {
   proofs(): Promise<Record<string, Proof | null>>;
 }
 
-/** Reads the directory on every call: a compile shows up at once, and a directory listing is cheap. */
+/**
+ * Reads the directory on every call: a compile shows up at once, and a
+ * directory listing is cheap. `more` adds roots read after `root` (trusted
+ * mods' workflows); a name already taken keeps the first.
+ */
 export function compiledCatalog(
   root: string,
   onError: (dir: string, err: unknown) => void = () => undefined,
+  more: () => string[] = () => [],
 ): CompiledCatalog {
-  const list = () => loadCompiledWorkflows(root, onError);
+  const list = async () => {
+    const all = (
+      await Promise.all([root, ...more()].map((r) => loadCompiledWorkflows(r, onError)))
+    ).flat();
+    return all.filter((c, i) => all.findIndex((d) => d.workflow.name === c.workflow.name) === i);
+  };
   return {
     list,
     get: async (name) => (await list()).find((c) => c.workflow.name === name) ?? null,

@@ -2,8 +2,9 @@
  * Mods: what autobrowse learned about a site, packed so another owner or
  * install can use it without learning it again (designs/2026-10-04-mods.md).
  * A mod is `mod.json` plus data files an existing interpreter reads (walks,
- * screens, fixes). Installed mods sit in `<state>/mods/<dir>/`; the owner's
- * own files always win over a mod's.
+ * screens, fixes, logins), or code (a compiled workflow) that loads only
+ * when its owner added it with `--trust`. Installed mods sit in
+ * `<state>/mods/<dir>/`; the owner's own files always win over a mod's.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -15,15 +16,23 @@ import { hintsSchema } from "../compiler/outline.js";
 export const MOD_KEYWORD = "autobrowse-mod";
 export const GATES = ["purchase", "password", "send", "choose", "human"] as const;
 
-/** Where each kind's files sit in a mod. Data kinds only: no file here can run new code. */
-export const KIND_DIRS = { walk: "walks/", screens: "screens/", fixes: "fixes/" } as const;
+/** Where each kind's files sit in a mod. */
+export const KIND_DIRS = {
+  walk: "walks/",
+  screens: "screens/",
+  fixes: "fixes/",
+  login: "logins/",
+  workflow: "workflows/",
+} as const;
 export type ModKind = keyof typeof KIND_DIRS;
 const KINDS = Object.keys(KIND_DIRS) as [ModKind, ...ModKind[]];
+/** Kinds that run new code: never loaded without `--trust`. */
+export const CODE_KINDS: ReadonlySet<ModKind> = new Set(["workflow"]);
 
 const SITE = /^[a-z0-9][a-z0-9._-]*$/;
 const DOMAIN = /^([a-z0-9-]+\.)+[a-z0-9-]+$|^(localhost|127\.0\.0\.1)(:\d+)?$/;
 /** A safe relative path: no `..`, no leading `/`, plain characters. */
-const PATH = /^(?!.*\.\.)[a-z0-9][\w./-]*\.json$/i;
+const PATH = /^(?!.*\.\.)[a-z0-9][\w./-]*\.(json|ts)$/i;
 
 /** An npm name: `name` or `@scope/name`. */
 export const MOD_NAME = /^(@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/;
@@ -60,6 +69,17 @@ export const modSchema = z
           code: "custom",
           path: ["files", i, "path"],
           message: `a ${f.kind} lives under ${KIND_DIRS[f.kind]}`,
+        });
+      if (
+        f.kind === "workflow"
+          ? !/^workflows\/[a-z][a-z0-9-]*\//.test(f.path)
+          : !f.path.endsWith(".json")
+      )
+        ctx.addIssue({
+          code: "custom",
+          path: ["files", i, "path"],
+          message:
+            f.kind === "workflow" ? "a workflow lives at workflows/<name>/" : "data is .json",
         });
       if (seen.has(f.path))
         ctx.addIssue({ code: "custom", path: ["files", i], message: "listed twice" });
@@ -112,6 +132,8 @@ export interface Installed {
   /** Where it came from and when (`installed.json`). */
   source: string;
   at: string;
+  /** Added with `--trust`: its code kinds load. */
+  trusted: boolean;
 }
 
 /** Every mod installed under `modsDir`; one that does not parse is skipped. */
@@ -126,8 +148,9 @@ export function installedMods(modsDir: string): Installed[] {
       const rec = JSON.parse(readFileSync(join(dir, "installed.json"), "utf8")) as {
         source: string;
         at: string;
+        trusted?: boolean;
       };
-      out.push({ dir, mod, source: rec.source, at: rec.at });
+      out.push({ dir, mod, source: rec.source, at: rec.at, trusted: rec.trusted === true });
     } catch {
       // Half-written or hand-broken: not loaded.
     }
@@ -168,6 +191,12 @@ export const modFixes = (modsDir: string): Fix[] =>
       from: m.mod.name,
     })),
   );
+
+/** Trusted mods' compiled-workflow roots (`<mod>/workflows`); an untrusted mod's code never loads. */
+export const modWorkflowRoots = (modsDir: string): string[] =>
+  installedMods(modsDir)
+    .filter((m) => m.trusted && m.mod.files.some((f) => CODE_KINDS.has(f.kind)))
+    .map((m) => join(m.dir, "workflows"));
 
 /**
  * The owner's learned screens first, then mods'. A mod's screen that works

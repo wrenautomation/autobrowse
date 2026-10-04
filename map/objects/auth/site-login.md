@@ -9,7 +9,7 @@ entity: src/auth/login.ts
 
 # Site login
 
-How one site is signed into and where its password may be typed: `SiteLogin` in `src/auth/login.ts`; the list is `SITE_LOGINS` in `src/auth/sites.ts:861`.
+How one site is signed into and where its password may be typed: `SiteLogin` in `src/auth/login.ts`; the list is `SITE_LOGINS` in `src/auth/sites.ts:861`, which gains the owner's and installed mods' logins as data at start ([[mod]]).
 
 ## Why this shape
 
@@ -21,11 +21,12 @@ The runner meets a wall and calls one hook (`RunnerOptions.login`); the spec say
 - Builders: `formLogin` `:194`, `oauthLogin` `:275` (`before` clicks open the sign-in; a site made through a provider signs in as its own account there, never the provider's default credential), `viaLogin` `:322`; `LoginFailed` (this method failed, try the next) `:175`
 - `loginProvider(sites, opts)` = the runner's hook: resolves the site, picks methods, signs in, returns `signed-in | no-credential | unknown-site` — `:545-602`
 - Wired: `loginFor` — `src/app/services.ts:703`
+- As data: `logins/<site>.json` (owner's own, or a [[mod]]'s) built through `formLogin`/`oauthLogin` by `loginOf` — `src/mods/login.ts:86`; added after every built-in by `addSiteLogins`, a taken name skipped — `src/auth/sites.ts:896`
 
 ## Connected to
 
 - **owns:** its walk or form
-- **owned-by:** `SITE_LOGINS`
+- **owned-by:** `SITE_LOGINS` (built-ins, then data logins)
 - **joins:** [[credential]], [[identity-provider]] (`via`), [[sign-in-context]], [[screen]] (walks), [[guard]] (`passwordDomains`, `src/auth/login.ts:423`), [[need]]
 - **looks-like-but-is-not:** [[site-api]] (the official API), `SITES` in `src/browser/flow.ts:63`
 

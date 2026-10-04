@@ -54,6 +54,7 @@ import {
   inboxActivityDepsFor,
   inboxFleetDepsFor,
   LOCAL_WORKFLOWS,
+  loadDataLogins,
   sinkFor,
   WORKFLOWS,
   workspaceInboxDepsFor,
@@ -67,6 +68,7 @@ if (argvOwner === "") {
 }
 if (argvOwner) process.env.AUTOBROWSE_OWNER = argvOwner;
 const { settings } = boot();
+loadDataLogins(settings);
 const api = ingress({
   url: settings.restateIngressUrl,
   authToken: settings.restateAuthToken ?? null,

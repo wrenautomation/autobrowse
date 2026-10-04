@@ -881,3 +881,20 @@ export const SITE_LOGINS: readonly SiteLogin[] = [
   perplexity,
   discord,
 ];
+
+const BUILT_IN = new Set(SITE_LOGINS);
+
+/** A built-in login for this site or credential name, if any (not one added from data). */
+export const builtInLogin = (name: string): SiteLogin | undefined =>
+  SITE_LOGINS.find((l) => BUILT_IN.has(l) && (l.site === name || l.credential === name));
+
+/**
+ * Logins from data (src/mods/login.ts), added at start after every
+ * built-in. One whose site or credential name is already taken is skipped:
+ * a built-in, then the first added, wins.
+ */
+export function addSiteLogins(more: readonly SiteLogin[]): void {
+  for (const l of more)
+    if (!SITE_LOGINS.some((s) => s.site === l.site || (s.credential ?? s.site) === l.site))
+      (SITE_LOGINS as SiteLogin[]).push(l);
+}

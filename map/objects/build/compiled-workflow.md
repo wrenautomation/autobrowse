@@ -22,12 +22,13 @@ Rendered source is the truth from then on (the header in each module says so). O
 - Deps a rendered module gets: `CompiledDeps { browser, secrets, shell, desktop, sink }`, browser bound to the flow's site — `src/workflows/compiled-deps.ts:18-40`
 - Render → check → finish: `render` `src/compiler/render.ts:256`; `checkCompiled` (tsc + vitest) `src/compiler/check.ts:14`; `finish` (a model fills plan inputs, send gate, proof reads, `dropped()` guard) `src/compiler/finish.ts:131-210`; `compileRecording`, `finishCompiled` `src/app/backend.ts:169-219`
 - Files per dir: `index.ts`, `index.test.ts`, `outline.json`, `proof.json`
+- Trusted [[mod]] workflows: `compiledCatalog(root, onError, more)` reads `more()` roots after `root`, a taken name keeps the first — `src/workflows/compiled.ts:105`; roots from `modWorkflowRoots` — `src/mods/mod.ts:196`
 
 ## Connected to
 
 - **owns:** its dir and proof
 - **owned-by:** [[app]] (`App.catalog`, `App.workflows()`)
-- **joins:** [[workflow]], [[outline]], [[proof]], [[run-object]] (`Compiled`), [[site-api]] (`{ workflow }` legs), [[ability]], [[fix]] (patched), [[guard]]
+- **joins:** [[workflow]], [[outline]], [[proof]], [[mod]] (trusted code kind), [[run-object]] (`Compiled`), [[site-api]] (`{ workflow }` legs), [[ability]], [[fix]] (patched), [[guard]]
 - **looks-like-but-is-not:** a hand-written workflow (`domain`, `redirect`, `sender-domain`, `inbox-activity`, `workspace-inbox`, `inbox-fleet`, `bootstrap`); a [[flow]]
 
 ## If you change this

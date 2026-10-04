@@ -1,5 +1,5 @@
 /**
- * `mods pack`: a mod from the owner's own walks, screens and fixes. Scrubbed
+ * `mods pack`: a mod from the owner's own walks, screens, fixes and login. Scrubbed
  * before anything is written: no secret values, no addresses or usernames,
  * no query strings or fragments, no run ids, no example values. Whatever
  * still matches a stored credential value is refused. Publishing is a
@@ -15,6 +15,7 @@ import type { LearnedScreen } from "../browser/screens.js";
 import { baseSite } from "../runs/log.js";
 import { loadWalk, type WalkOp, type WalkSpec, walkFile } from "../walks/spec.js";
 import { sha256 } from "./install.js";
+import { type DataLogin, dataLoginSchema } from "./login.js";
 import {
   hostOf,
   MOD_KEYWORD,
@@ -179,12 +180,36 @@ function scrubWalk(w: WalkSpec, x: Scrubber): WalkSpec {
  * Build a mod for `site` into `out`. Walks by name (the owner's own only),
  * plus the site's learned screens and kept fixes when given.
  */
+/** A login: URLs lose queries; any field that names the owner is dropped (a required one refuses the pack). */
+function scrubLogin(l: DataLogin, x: Scrubber): DataLogin {
+  const walk = (v: unknown, where: string): unknown => {
+    if (Array.isArray(v)) return v.map((e, i) => walk(e, `${where}.${i}`));
+    if (!v || typeof v !== "object") return v;
+    const out: Record<string, unknown> = {};
+    for (const [k, e] of Object.entries(v)) {
+      if (typeof e === "string" && (k === "home" || k === "start"))
+        out[k] = x.url(e, `${where}.${k}`);
+      else if (typeof e === "string" && x.dirty(e)) x.dropped.push(`${where}.${k}`);
+      else out[k] = walk(e, `${where}.${k}`);
+    }
+    return out;
+  };
+  const clean = dataLoginSchema.safeParse(walk(l, "login"));
+  if (!clean.success)
+    throw new Error(
+      `pack refused: the login needs a field that names you (${x.dropped.join(", ")})`,
+    );
+  return clean.data;
+}
+
 export function packMod(o: {
   site: string;
   walksDir: string;
   walks: string[];
   screens?: LearnedScreen[];
   fixes?: Fix[];
+  /** The owner's own `logins/<site>.json`. */
+  login?: DataLogin;
   scrub: Scrub;
   out: string;
   /** This autobrowse's version: the mod needs at least it. */
@@ -248,6 +273,15 @@ export function packMod(o: {
       kept.push(`${rows.length} fix(es) for ${flow}`);
     }
   }
+  let login: DataLogin | null = null;
+  if (o.login) {
+    if (o.login.site !== site) throw new Error(`the login is for ${o.login.site}, not ${site}`);
+    login = scrubLogin(o.login, x);
+    add("login", `logins/${site}.json`, login);
+    kept.push(
+      `login ${site} (${login.form ? "form" : `oauth via ${login.oauth?.provider ?? "google"}`})`,
+    );
+  }
   if (!files.length) throw new Error(`nothing to pack for ${site}`);
 
   const hosts = new Set<string>();
@@ -259,8 +293,12 @@ export function packMod(o: {
     }
   }
   for (const f of files)
-    if (f.kind !== "walk")
+    if (f.kind === "screens" || f.kind === "fixes")
       for (const r of JSON.parse(f.body) as { url: string }[]) hosts.add(hostOf(r.url));
+  if (login)
+    for (const h of [login.home, login.form?.start ?? login.oauth?.start ?? login.home])
+      hosts.add(hostOf(h));
+  for (const h of login?.origins ?? []) hosts.add(h);
   const irreversible = walks.some(
     (w) =>
       w.irreversible ||
@@ -273,6 +311,7 @@ export function packMod(o: {
       const [base, label] = who.split("@") as [string, string | undefined];
       credentials.add(`${baseSite(base)}:${label ?? "main"}`);
     }
+  if (login) credentials.add(`${login.oauth ? (login.oauth.provider ?? "google") : site}:main`);
   const gates = new Set<Mod["gates"][number]>();
   if (irreversible) gates.add("send");
   if (walks.some((w) => w.screens.some((s) => s.ops.some((op) => op.kind === "captcha"))))

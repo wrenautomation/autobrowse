@@ -1,8 +1,9 @@
 /**
- * `autobrowse mods`: pack what this owner learned about a site, and add,
- * list or remove mods others packed (src/mods, designs/2026-10-04-mods.md).
+ * `autobrowse mods`: pack what this owner learned about a site, and search,
+ * add, list or remove mods others packed (src/mods, designs/2026-10-04-mods.md).
  * Publishing a packed mod is a person's `npm publish`; nothing here does it.
  */
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Command } from "commander";
 import { fileFixes } from "../browser/fixes.js";
@@ -15,12 +16,14 @@ import {
   installMod,
   permissionLines,
   removeMod,
+  searchMods,
 } from "../mods/install.js";
+import { dataLoginSchema } from "../mods/login.js";
 import { installedMods } from "../mods/mod.js";
 import { packMod, scrubFrom } from "../mods/pack.js";
 import { listWalks } from "../walks/spec.js";
 import type { Settings } from "./config.js";
-import { credentialsFor, modsDirFor, walksDirFor } from "./services.js";
+import { credentialsFor, loginsDirFor, modsDirFor, walksDirFor } from "./services.js";
 
 async function yes(question: string): Promise<boolean> {
   if (!process.stdin.isTTY) return false;
@@ -36,7 +39,7 @@ async function yes(question: string): Promise<boolean> {
 export function registerModsCommands(program: Command, settings: Settings): void {
   const mods = program
     .command("mods")
-    .description("Share what autobrowse learned about a site: pack, add, list, remove");
+    .description("Share what autobrowse learned about a site: pack, search, add, list, remove");
 
   mods
     .command("pack <site>")
@@ -46,13 +49,24 @@ export function registerModsCommands(program: Command, settings: Settings): void
     .option("--walk <name...>", "walks to include (default: every walk of your own on the site)")
     .option("--screens", "include the site's learned screens")
     .option("--fixes", "include the site's kept fixes")
+    .option("--login", "include your sign-in as data (logins/<site>.json)")
     .option("--name <npm-name>", "the package name (default autobrowse-mod-<site>)")
     .option("--out <dir>", "where to write it (default ./autobrowse-mod-<site>)")
     .action(
       async (
         site: string,
-        o: { walk?: string[]; screens?: boolean; fixes?: boolean; name?: string; out?: string },
+        o: {
+          walk?: string[];
+          screens?: boolean;
+          fixes?: boolean;
+          login?: boolean;
+          name?: string;
+          out?: string;
+        },
       ) => {
+        const loginFile = join(loginsDirFor(settings), `${site}.json`);
+        if (o.login && !existsSync(loginFile))
+          throw new Error(`no login of your own at ${loginFile}`);
         const walksDir = walksDirFor(settings);
         const walks =
           o.walk ??
@@ -67,6 +81,9 @@ export function registerModsCommands(program: Command, settings: Settings): void
           walks,
           ...(o.screens ? { screens: fileScreens(expandHome(settings.screensFile)).list() } : {}),
           ...(o.fixes ? { fixes: fileFixes(expandHome(settings.fixesFile)).list() } : {}),
+          ...(o.login
+            ? { login: dataLoginSchema.parse(JSON.parse(readFileSync(loginFile, "utf8"))) }
+            : {}),
           scrub,
           out: o.out ?? join(process.cwd(), o.name ?? `autobrowse-mod-${site}`),
           version: autobrowseVersion(),
@@ -81,22 +98,41 @@ export function registerModsCommands(program: Command, settings: Settings): void
     );
 
   mods
+    .command("search [words...]")
+    .description(
+      "Mods on npm (keyword autobrowse-mod): what each opens, gates, and whether it ships code",
+    )
+    .action(async (words: string[] = []) => {
+      const found = await searchMods(words.join(" "));
+      if (!found.length) console.log("no mods found");
+      for (const f of found)
+        console.log(
+          `${f.name}@${f.version}  ${f.code ? "CODE" : "data"}  sites ${f.sites.join(",") || "?"}  opens ${f.domains.join(",") || "?"}  gates ${f.gates.join(",") || "none"}\n  ${f.description}`,
+        );
+    });
+
+  mods
     .command("add <source>")
     .description(
       "Add a mod (an npm name, a folder, or a .tgz): checks its hashes and that every file stays inside the domains, gates and credentials it lists, shows them, and asks yes",
     )
     .option("--yes", "add without asking (after the checks)")
-    .action(async (source: string, o: { yes?: boolean }) => {
+    .option(
+      "--trust",
+      "allow code (a workflow): it runs with your access, so only from an author you trust; it must pass tsc and its tests first",
+    )
+    .action(async (source: string, o: { yes?: boolean; trust?: boolean }) => {
       const { dir, cleanup } = await fetchMod(source);
       try {
-        const mod = checkMod(dir, { version: autobrowseVersion() });
+        const trust = o.trust === true;
+        const mod = checkMod(dir, { version: autobrowseVersion(), trust });
         for (const l of permissionLines(mod)) console.log(l);
         if (!o.yes && !(await yes("add it?"))) {
           console.log("not added");
           process.exitCode = 1;
           return;
         }
-        console.log(`added ${installMod(dir, mod, modsDirFor(settings), source)}`);
+        console.log(`added ${await installMod(dir, mod, modsDirFor(settings), source, { trust })}`);
       } finally {
         cleanup();
       }
@@ -110,7 +146,9 @@ export function registerModsCommands(program: Command, settings: Settings): void
       if (!all.length) console.log("no mods; see: autobrowse mods add <npm-name|dir>");
       for (const m of all) {
         for (const l of permissionLines(m.mod)) console.log(l);
-        console.log(`from         ${m.source} (${m.at.slice(0, 10)})\n`);
+        console.log(
+          `from         ${m.source} (${m.at.slice(0, 10)})${m.trusted ? ", trusted" : ""}\n`,
+        );
       }
     });
 

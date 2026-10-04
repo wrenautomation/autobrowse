@@ -132,7 +132,14 @@ import { type Llm, makeLlm } from "../llm/index.js";
 import { countedLlm, fileLlmCalls } from "../llm/ledger.js";
 import { otlpSink, type TraceSink, tracedLlm, withTrace } from "../llm/trace.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
-import { modFixes, modScreens, withModFixes, withModScreens } from "../mods/mod.js";
+import { registerDataLogins } from "../mods/login.js";
+import {
+  modFixes,
+  modScreens,
+  modWorkflowRoots,
+  withModFixes,
+  withModScreens,
+} from "../mods/mod.js";
 import { type Charge, type ChargeRow, reportCharge } from "../money/charges.js";
 import { isDefaultOwner, named, ownerKeys } from "../owner.js";
 import { fileSpent } from "../reach/key-ring.js";
@@ -574,6 +581,13 @@ export const walksDirFor = (settings: Settings): string => join(stateDir(setting
 
 /** Installed mods (src/mods): `mods/<dir>/`, beside the owner's own walks. */
 export const modsDirFor = (settings: Settings): string => join(stateDir(settings), "mods");
+
+/** The owner's own sign-ins as data (src/mods/login.ts): `logins/<site>.json`. */
+export const loginsDirFor = (settings: Settings): string => join(stateDir(settings), "logins");
+
+/** Add the owner's data logins, then installed mods', to `SITE_LOGINS`; every entry point, after `boot()`. */
+export const loadDataLogins = (settings: Settings): void =>
+  registerDataLogins(loginsDirFor(settings), modsDirFor(settings));
 
 /** The owner's learned screens, then installed mods' (src/mods). */
 export const screensFor = (settings: Settings): LearnedScreens =>
@@ -1344,6 +1358,7 @@ export function domainDepsFor(
 }
 
 export async function buildApp(settings: Settings, log: Logger): Promise<App> {
+  loadDataLogins(settings);
   const http = httpClient();
   const llm = llmFor(settings, http);
   const memory = memoryFor(settings, http);
@@ -1402,12 +1417,16 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   };
   /** The catalog is read on every listing; a broken flow is said once per distinct error, not per request. */
   const warned = new Set<string>();
-  const catalog = compiledCatalog(COMPILED_DIR, (dir, err) => {
-    const message = err instanceof Error ? err.message : String(err);
-    if (warned.has(`${dir}\n${message}`)) return;
-    warned.add(`${dir}\n${message}`);
-    log.warn({ dir, err: message }, "compiled workflow not loaded");
-  });
+  const catalog = compiledCatalog(
+    COMPILED_DIR,
+    (dir, err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      if (warned.has(`${dir}\n${message}`)) return;
+      warned.add(`${dir}\n${message}`);
+      log.warn({ dir, err: message }, "compiled workflow not loaded");
+    },
+    () => modWorkflowRoots(modsDirFor(settings)),
+  );
   const taken = new Set(WORKFLOWS.map((w) => w.name));
   /** Compiled flows, minus any that clashes with a hand-written name (said once). */
   const compiledNow = async () =>

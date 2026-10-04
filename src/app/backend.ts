@@ -44,6 +44,7 @@ import {
 import type { Approver } from "../gates/payment.js";
 import { expandHome } from "../google-auth.js";
 import type { Llm } from "../llm/types.js";
+import { modWorkflowRoots } from "../mods/mod.js";
 import { fileSpent, type SpentKeys } from "../reach/key-ring.js";
 import { loadRecording } from "../recorder/store.js";
 import type { Recording } from "../recorder/types.js";
@@ -78,6 +79,7 @@ import {
   llmFor,
   loginFor,
   missingEntries,
+  modsDirFor,
   paceFor,
   profilesForPlace,
   runsDirFor,
@@ -336,7 +338,9 @@ export type BackendParts = Pick<
  * on these in-process.
  */
 export function localParts(settings: Settings, o: { headless?: boolean } = {}): BackendParts {
-  const catalog = compiledCatalog(COMPILED_DIR);
+  const catalog = compiledCatalog(COMPILED_DIR, undefined, () =>
+    modWorkflowRoots(modsDirFor(settings)),
+  );
   const gmail = gmailFor(settings);
   const screen = o.headless === undefined ? screenOf(settings) : { headless: o.headless };
   const browser = flowRunner(browserOptions(settings, screen), {

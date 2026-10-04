@@ -402,8 +402,9 @@ pnpm autobrowse runs --limit 20                # the registry, newest first (--b
 pnpm autobrowse explored google                # explore runs kept for good: driver, goal, outcome, answer tokens (show <run>: its shape, no values)
 pnpm autobrowse walks build google admin-sso --goal-like "sso"   # runs that reached a goal → a walk, run as google/walk-admin-sso
 pnpm autobrowse walks run google/admin-sso --plan domain=x.com   # no model in the loop; --yes when it has a final act
-pnpm autobrowse mods pack scratch --out ./mod   # your walks, screens, fixes for a site, scrubbed; you npm publish it
-pnpm autobrowse mods add <npm-name|dir|tgz>     # checks hashes, domains, gates, asks yes; mods list, mods remove
+pnpm autobrowse mods pack scratch --out ./mod   # your walks, screens, fixes, --login for a site, scrubbed; you npm publish it
+pnpm autobrowse mods search [words]             # npm mods: sites, domains, gates, code or data
+pnpm autobrowse mods add <npm-name|dir|tgz>     # checks hashes, domains, gates, asks yes; code needs --trust; mods list, mods remove
 pnpm autobrowse tokens --days 30               # model calls by purpose, explore answers vs whole-page reads, the verdict
 pnpm autobrowse status domain wren-six.com     # every run is <workflow> <key>
 pnpm autobrowse approve domain wren-six.com purchase
@@ -480,7 +481,7 @@ src/devices/    what a person owns and a second step leans on: the paired phone 
 src/explore/    explore mode: one open browser, a loopback command API, pause/resume with hand acts journaled
 src/runs/       run history (one chained file per explore session) and the token report
 src/walks/      walks: built from runs that reached a goal, run as `<site>/walk-<name>`
-src/mods/       mods: walks, screens, fixes packed to share; installed under `mods/`, the owner's own win
+src/mods/       mods: walks, screens, fixes, logins (code with --trust) packed to share; installed under `mods/`, the owner's own win
 src/agent/      the exploration agent (digest, one act a step), sessions (play/pause, persisted), repair, evaluator
 src/workflows/  one dir per workflow; domain + bootstrap hand-written, compiled ones are served as they appear (one `Compiled` object)
 src/ui/         Hono API (+ SSE bus, bearer, rate limit) and the static SPA
