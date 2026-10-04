@@ -78,6 +78,8 @@ export interface LearnedScreen {
   found: string;
   used: number;
   lastUsed?: string;
+  /** The mod it came from (src/mods), when it was not learned here. */
+  from?: string;
 }
 
 export interface LearnedScreens {
@@ -213,8 +215,11 @@ export function fileScreens(path: string, now: () => Date = () => new Date()): L
   );
 }
 
-export function memoryScreens(now: () => Date = () => new Date()): LearnedScreens {
-  let kept: LearnedScreen[] = [];
+export function memoryScreens(
+  now: () => Date = () => new Date(),
+  seed: LearnedScreen[] = [],
+): LearnedScreens {
+  let kept: LearnedScreen[] = seed;
   return table(
     () => kept,
     (rows) => {

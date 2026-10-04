@@ -19,20 +19,20 @@ Data run by one interpreter, not rendered TypeScript: a walk is rebuilt from new
 
 - `walkOpSchema`: the outline's ops plus `open`, `captcha`, `walk` (nest another walk, `MAX_DEPTH` 4) — `src/walks/spec.ts:33`, `:25`
 - `screenSpecSchema` (url, up to 12 landmarks, ops, `goal`, `after`, `once`, `seen`) — `:46`; `walkSpecSchema` (fields, secrets by key, `from` runs, `irreversible`) with its checks — `:65-124`
-- Store: `saveWalk` (0600), `loadWalk`, `listWalks` — `:136-185`
+- Store: `saveWalk` (0600) — `:136`; `loadWalk`, `listWalks` read the owner's own, then installed [[mod]]s' (`modWalkDirs`; the owner's wins, a listing carries `mod`) — `:162-201`
 - Build: `visitsOf` cuts a run into visits — `src/walks/build.ts:103`; `walkFromRuns` clusters visits into screens, newest run's ops win — `:190`; `buildWalk` picks ended runs (`USABLE`) — `:487-493`
-- Run: `walkFlow` — `src/walks/flow.ts:195`; `walkFor` resolves secrets through stored logins (`walkSecrets`) — `src/app/services.ts:568`, `:562`; the Restate `flow` handler falls back to it — `src/engine/browser-service.ts:155`
+- Run: `walkFlow` — `src/walks/flow.ts:195`; `walkFor` resolves secrets through stored logins (`walkSecrets`) — `src/app/services.ts:621`, `:590`; the Restate `flow` handler falls back to it — `src/engine/browser-service.ts:155`
 
 ## Connected to
 
-- **owns:** `walks/<site>/<name>.json`
+- **owns:** `walks/<site>/<name>.json`; a [[mod]] may carry one under `mods/<dir>/walks/`
 - **owned-by:** the owner's state dir ([[state-files]])
 - **joins:** [[explore-run]] (input), [[screen]] (`walk()`, `PageLook`), [[outline]] (op and field schemas), [[flow]] (`FlowPage`), [[browser-service]] (catalog), [[sign-in-context]] (`loginSecrets`)
 - **looks-like-but-is-not:** a hand-written sign-in walk (`Walk` in `src/browser/screens.ts`, code); a [[compiled-workflow]] (TypeScript, from one recording)
 
 ## If you change this
 
-- **Hits:** `src/walks/build.ts`, `src/walks/flow.ts`, `src/app/cli-runs.ts` (`walks show` prints op shapes), walk files already on disk (`WALK_VERSION`).
+- **Hits:** [[mod]] (`checkMod`, the scrubber), `src/walks/build.ts`, `src/walks/flow.ts`, `src/app/cli-runs.ts` (`walks show` prints op shapes), walk files already on disk (`WALK_VERSION`).
 - **Does not hit:** compiled workflows; hand-written walks in `src/auth/`.
 
 ## Surfaces

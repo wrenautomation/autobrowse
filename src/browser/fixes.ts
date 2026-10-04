@@ -28,6 +28,8 @@ export interface Fix {
   /** Runs that went through on the fix since. */
   used: number;
   lastUsed?: string;
+  /** The mod it came from (src/mods), when it was not learned here. */
+  from?: string;
 }
 
 export interface Fixes {
@@ -35,6 +37,8 @@ export interface Fixes {
   find(flow: string, goal: string, failed: Hints): { hints: Hints; detours: Hints[] } | null;
   /** A repair that worked: kept. One that did not: ignored. */
   learn(report: RepairReport): void;
+  /** A fix from elsewhere (a mod's that worked here), kept as it is. */
+  keep(fix: Fix): void;
   /** The fix went through again: counted in memory, written at the next `flush` (one write per run, not per act). */
   used(flow: string, goal: string, failed: Hints): void;
   /** Write counts `used` kept in memory. */
@@ -96,6 +100,12 @@ function table(load: () => Fix[], save: (fixes: Fix[]) => void, now: () => Date)
       });
       write();
     },
+    keep(f) {
+      const k = key(f.flow, f.goal, f.failed);
+      all().delete(k);
+      all().set(k, f);
+      write();
+    },
     used(flow, goal, failed) {
       const f = all().get(key(flow, goal, failed));
       if (!f) return;
@@ -142,8 +152,8 @@ export function fileFixes(path: string, now: () => Date = () => new Date()): Fix
   );
 }
 
-export function memoryFixes(now: () => Date = () => new Date()): Fixes {
-  let kept: Fix[] = [];
+export function memoryFixes(now: () => Date = () => new Date(), seed: Fix[] = []): Fixes {
+  let kept: Fix[] = seed;
   return table(
     () => kept,
     (f) => {

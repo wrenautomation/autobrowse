@@ -28,7 +28,6 @@ import {
 import { CRED_ENV } from "../auth/keep.js";
 import { dropRole, giveRole } from "../auth/roles.js";
 import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
-import { fileScreens } from "../browser/screens.js";
 import { expandHome } from "../google-auth.js";
 
 /** A copied secret lives on the clipboard for a minute, then is emptied if untouched. */
@@ -46,6 +45,7 @@ import {
   devicesFor,
   gmailFor,
   loginFor,
+  screensFor,
 } from "./services.js";
 
 /** `william@wrenautomation.com` → `w***@wrenautomation.com`: whose, without the address in a log. */
@@ -719,7 +719,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     const runner = flowRunner(opts, {
       login: loginFor(settings, gmailFor(settings)),
       captcha: captchaFor(settings),
-      learnedScreens: fileScreens(expandHome(settings.screensFile)),
+      learnedScreens: screensFor(settings),
     });
     const check = defineFlow<undefined, string>({
       site,

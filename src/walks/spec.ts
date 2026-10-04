@@ -15,7 +15,7 @@ import {
   renameSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 import { fieldSchema, opSchema } from "../compiler/outline.js";
 import { baseSite } from "../runs/log.js";
@@ -143,15 +143,46 @@ export function saveWalk(dir: string, spec: WalkSpec): string {
   return file;
 }
 
-/** A walk by `name` on `site`, or `site/name`; null when there is none. A hand edit that breaks the schema throws. */
-export function loadWalk(dir: string, site: string, name: string): WalkSpec | null {
-  const [s, n] = name.includes("/") ? (name.split("/") as [string, string]) : [site, name];
-  const file = walkFile(dir, s, n);
+/** One dir's walk, or null; a hand edit that breaks the schema throws. */
+function loadFrom(dir: string, site: string, name: string): WalkSpec | null {
+  const file = walkFile(dir, site, name);
   if (!existsSync(file)) return null;
   const parsed = walkSpecSchema.safeParse(JSON.parse(readFileSync(file, "utf8")));
   if (!parsed.success)
-    throw new Error(`walk ${baseSite(s)}/${n}: ${parsed.error.issues[0]?.message ?? "invalid"}`);
+    throw new Error(
+      `walk ${baseSite(site)}/${name}: ${parsed.error.issues[0]?.message ?? "invalid"}`,
+    );
   return parsed.data;
+}
+
+/**
+ * Installed mods' walk dirs (src/mods), by mod name: `<state>/mods/<mod>/walks`
+ * beside the owner's own `<state>/walks`.
+ */
+export function modWalkDirs(dir: string): { mod: string; dir: string }[] {
+  const mods = join(dirname(dir), "mods");
+  if (!existsSync(mods)) return [];
+  const nameOf = (d: string) => {
+    try {
+      return String(JSON.parse(readFileSync(join(d, "mod.json"), "utf8")).name);
+    } catch {
+      return basename(d);
+    }
+  };
+  return readdirSync(mods, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && existsSync(join(mods, d.name, "walks")))
+    .map((d) => ({ mod: nameOf(join(mods, d.name)), dir: join(mods, d.name, "walks") }))
+    .sort((a, b) => a.mod.localeCompare(b.mod));
+}
+
+/** A walk by `name` on `site`, or `site/name`: the owner's own, else an installed mod's; null when there is none. A hand edit that breaks the schema throws. */
+export function loadWalk(dir: string, site: string, name: string): WalkSpec | null {
+  const [s, n] = name.includes("/") ? (name.split("/") as [string, string]) : [site, name];
+  for (const d of [dir, ...modWalkDirs(dir).map((m) => m.dir)]) {
+    const w = loadFrom(d, s, n);
+    if (w) return w;
+  }
+  return null;
 }
 
 export interface WalkListing {
@@ -162,12 +193,28 @@ export interface WalkListing {
   runs: number;
   irreversible: boolean;
   built: string;
+  /** The mod it came from; absent for the owner's own. */
+  mod?: string;
 }
 
-/** Every walk, by site then name; a file that does not parse is listed with its error as the goal. */
+/** Every walk, by site then name: the owner's, then mods' it does not shadow; a file that does not parse is listed with its error as the goal. */
 export function listWalks(dir: string): WalkListing[] {
+  const own = listIn(dir);
+  const taken = new Set(own.map((w) => `${w.site}/${w.name}`));
+  const out = [...own];
+  for (const m of modWalkDirs(dir))
+    for (const w of listIn(m.dir, m.mod)) {
+      if (taken.has(`${w.site}/${w.name}`)) continue;
+      taken.add(`${w.site}/${w.name}`);
+      out.push(w);
+    }
+  return out;
+}
+
+function listIn(dir: string, mod?: string): WalkListing[] {
   if (!existsSync(dir)) return [];
   const out: WalkListing[] = [];
+  const from = mod ? { mod } : {};
   for (const site of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
     a.name.localeCompare(b.name),
   )) {
@@ -176,7 +223,7 @@ export function listWalks(dir: string): WalkListing[] {
       if (!f.endsWith(".json")) continue;
       const name = f.slice(0, -5);
       try {
-        const w = loadWalk(dir, site.name, name);
+        const w = loadFrom(dir, site.name, name);
         if (w)
           out.push({
             site: w.site,
@@ -186,6 +233,7 @@ export function listWalks(dir: string): WalkListing[] {
             runs: w.from.length,
             irreversible: w.irreversible,
             built: w.built,
+            ...from,
           });
       } catch (err) {
         out.push({
@@ -196,6 +244,7 @@ export function listWalks(dir: string): WalkListing[] {
           runs: 0,
           irreversible: true,
           built: "",
+          ...from,
         });
       }
     }

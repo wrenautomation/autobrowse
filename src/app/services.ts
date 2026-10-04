@@ -56,7 +56,7 @@ import { fileDoneActs } from "../browser/attempt.js";
 import type { Eyes } from "../browser/captcha/index.js";
 import { eyesOf } from "../browser/captcha/llm-eyes.js";
 import { egressOf } from "../browser/egress.js";
-import { fileFixes } from "../browser/fixes.js";
+import { type Fixes, fileFixes } from "../browser/fixes.js";
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import { flowRunner } from "../browser/flow.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
@@ -69,7 +69,7 @@ import {
   noRepairer,
   rememberingRepairer,
 } from "../browser/repair.js";
-import { fileScreens } from "../browser/screens.js";
+import { fileScreens, type LearnedScreens } from "../browser/screens.js";
 import type { BrowserOptions, FailureRecord } from "../browser/session.js";
 import {
   type Channel,
@@ -132,6 +132,7 @@ import { type Llm, makeLlm } from "../llm/index.js";
 import { countedLlm, fileLlmCalls } from "../llm/ledger.js";
 import { otlpSink, type TraceSink, tracedLlm, withTrace } from "../llm/trace.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
+import { modFixes, modScreens, withModFixes, withModScreens } from "../mods/mod.js";
 import { type Charge, type ChargeRow, reportCharge } from "../money/charges.js";
 import { isDefaultOwner, named, ownerKeys } from "../owner.js";
 import { fileSpent } from "../reach/key-ring.js";
@@ -570,6 +571,17 @@ export const runsDirFor = (settings: Settings): string => join(stateDir(settings
 
 /** Walks built from runs (src/walks): `walks/<site>/<name>.json`. */
 export const walksDirFor = (settings: Settings): string => join(stateDir(settings), "walks");
+
+/** Installed mods (src/mods): `mods/<dir>/`, beside the owner's own walks. */
+export const modsDirFor = (settings: Settings): string => join(stateDir(settings), "mods");
+
+/** The owner's learned screens, then installed mods' (src/mods). */
+export const screensFor = (settings: Settings): LearnedScreens =>
+  withModScreens(fileScreens(expandHome(settings.screensFile)), modScreens(modsDirFor(settings)));
+
+/** The owner's fixes, then installed mods' (src/mods). */
+export const fixesFor = (settings: Settings): Fixes =>
+  withModFixes(fileFixes(expandHome(settings.fixesFile)), modFixes(modsDirFor(settings)));
 
 /** Every model call, one file per month (src/llm/ledger.ts). */
 export const llmCallsDirFor = (settings: Settings): string => join(stateDir(settings), "llm");
@@ -1365,8 +1377,8 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       login: loginFor(settings, gmail),
       captcha: captchaFor(settings, http),
       repairIrreversible: !guards.has("irreversible"),
-      fixes: fileFixes(expandHome(settings.fixesFile)),
-      learnedScreens: fileScreens(expandHome(settings.screensFile)),
+      fixes: fixesFor(settings),
+      learnedScreens: screensFor(settings),
       screenReader: llm ? llmScreenReader(llm) : null,
       done: fileDoneActs(join(expandHome(settings.artifactsDir), "done-acts")),
       onRepair: (r) =>

@@ -17,7 +17,7 @@ The runner repairs one act at a time through a model (`llmRepairer`). Keeping wh
 
 ## Shape
 
-- `Fix { flow, goal, failed, hints, detours?, reason, url, found, used }` — `src/browser/fixes.ts:15-31`; `Fixes` store `find/learn/used/flush/drop/list/forget` — `:33-50`; `FIXES_FILE` = `~/.config/autobrowse/fixes.json` (`src/app/config.ts:112`)
+- `Fix { flow, goal, failed, hints, detours?, reason, url, found, used, from? }` — `src/browser/fixes.ts:15-33`; `Fixes` store `find/learn/keep/used/flush/drop/list/forget` — `:35-51`; the runner's store is the owner's then installed [[mod]]s' (`fixesFor`, `src/app/services.ts:583`); `FIXES_FILE` = `~/.config/autobrowse/fixes.json` (`src/app/config.ts:112`)
 - `RepairRequest`, `RepairProposal { hints, reason, detour? }`, `Repairer`, `RepairReport` — `src/browser/repair.ts:19-50`; `rememberingRepairer(memory, next)` — `:207`
 - Irreversible acts are never repaired unless `repairIrreversible` — `src/browser/flow.ts:235`
 - Patch into source: `swapHints`, `replaceOp` — `src/compiler/patch.ts:63-90`; `applyFixes` — `src/agent/heal.ts:253`
@@ -25,7 +25,7 @@ The runner repairs one act at a time through a model (`llmRepairer`). Keeping wh
 ## Connected to
 
 - **owned-by:** the runner (`RunnerOptions.fixes`, `src/browser/flow.ts:239`)
-- **joins:** [[hints]], [[flow]], [[compiled-workflow]] (patched), [[state-files]]
+- **joins:** [[hints]], [[flow]], [[compiled-workflow]] (patched), [[state-files]], [[mod]] (a mod's fix that works is kept here with `from`)
 - **looks-like-but-is-not:** [[screen]] (a page a walk knows); heal (rewrites a step)
 
 ## If you change this

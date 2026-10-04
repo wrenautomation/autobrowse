@@ -150,7 +150,7 @@ export function registerRunsCommands(
         `${w.irreversible ? warn("!") : " "} ${accent(`${w.site}/walk-${w.name}`)}`,
         `${String(w.screens).padStart(3)} screens`,
         `${String(w.runs).padStart(3)} runs`,
-        dim(masked(w.goal).slice(0, 50)),
+        dim(`${masked(w.goal).slice(0, 50)}${w.mod ? `  (mod ${w.mod})` : ""}`),
       ]);
       for (const line of columns(rows)) console.log(line);
       if (!all.length)

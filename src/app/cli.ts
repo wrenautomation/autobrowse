@@ -27,6 +27,7 @@ import { registerDoCommands } from "./cli-do.js";
 import { registerEnvCommands } from "./cli-env.js";
 import { readJson } from "./cli-json.js";
 import { registerLangfuseCommands } from "./cli-langfuse.js";
+import { registerModsCommands } from "./cli-mods.js";
 import { registerNeedsCommands } from "./cli-needs.js";
 import { registerReachCommands } from "./cli-reach.js";
 import { registerRecordCommands } from "./cli-record.js";
@@ -222,7 +223,9 @@ program
       walks.map((w) => [
         ` ${bang(w.irreversible)} ${w.site}/walk-${w.name}`,
         `${w.screens} screens from ${w.runs} runs`,
-        dim(w.goal.replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "<email>").slice(0, 60)),
+        dim(
+          `${w.goal.replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "<email>").slice(0, 60)}${w.mod ? `  (mod ${w.mod})` : ""}`,
+        ),
       ]),
     ))
       console.log(line);
@@ -609,6 +612,7 @@ registerLangfuseCommands(program, () => envStoreFor(settings));
 registerReachCommands(program, () => envStoreFor(settings), local, spentKeysFor(settings));
 registerShotsCommands(program, settings);
 registerWatchedCommands(program, settings);
+registerModsCommands(program, settings);
 registerRunsCommands(program, settings, local);
 registerRepairsCommands(program, settings);
 registerScreensCommands(program, settings);
