@@ -54,7 +54,9 @@ export function registerReachCommands(
   };
   program
     .command("doctor")
-    .description("What answers now: search keys, the Maps scraper, browser exits, and one live call per site")
+    .description(
+      "What answers now: search keys, the Maps scraper, browser exits, and one live call per site",
+    )
     .action(async () => {
       const has = async (n: string) => ((await env(n)) ? good("ready") : dim(`no ${n}`));
       // Live keys of those held: `exa 2/3` has one out of credit until the 1st.
