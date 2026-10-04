@@ -405,6 +405,7 @@ pnpm autobrowse walks run google/admin-sso --plan domain=x.com   # no model in t
 pnpm autobrowse mods pack scratch --out ./mod   # your walks, screens, fixes, --login for a site, scrubbed; you npm publish it
 pnpm autobrowse mods search [words]             # npm mods: sites, domains, gates, code or data
 pnpm autobrowse mods add <npm-name|dir|tgz>     # checks hashes, domains, gates, asks yes; code needs --trust; mods list, mods remove
+                                                  # (the UI Mods page lists, searches, adds data mods, removes; sample: walkthrough/mods/)
 pnpm autobrowse tokens --days 30               # model calls by purpose, explore answers vs whole-page reads, the verdict
 pnpm autobrowse status domain wren-six.com     # every run is <workflow> <key>
 pnpm autobrowse approve domain wren-six.com purchase

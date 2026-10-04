@@ -280,6 +280,47 @@ describe("api", () => {
     expect((await bare.app.request("/api/ledger")).status).toBe(501);
   });
 
+  it("mods: search, check then add, a refusal is a 400, remove by a scoped name", async () => {
+    const added: string[] = [];
+    const removed: string[] = [];
+    const { app } = await setup(undefined, {
+      mods: {
+        list: () => [],
+        search: async (q) => [{ name: `autobrowse-mod-${q}` } as never],
+        check: async (source) => {
+          if (source === "code") throw new Error("code: refused\n  ships code: --trust");
+          return { name: source, permissions: ["a@1.0.0: d"], source: `${source}@1.0.0` };
+        },
+        add: async (source) => {
+          added.push(source);
+          return "/dir";
+        },
+        remove: (name) => {
+          removed.push(name);
+          return name === "@a/b";
+        },
+      },
+    });
+    expect(await (await app.request("/api/mods/search?q=scratch")).json()).toEqual([
+      { name: "autobrowse-mod-scratch" },
+    ]);
+    expect(
+      (await (await app.request(post("/api/mods/check", { source: "a" }))).json()).source,
+    ).toBe("a@1.0.0");
+    expect((await app.request(post("/api/mods/check", { source: "code" }))).status).toBe(400);
+    expect((await app.request(post("/api/mods", { source: "a@1.0.0" }))).status).toBe(200);
+    expect(added).toEqual(["a@1.0.0"]);
+    const del = (name: string) =>
+      app.request(
+        new Request(`http://x/api/mods/${encodeURIComponent(name)}`, { method: "DELETE" }),
+      );
+    expect((await del("@a/b")).status).toBe(200);
+    expect((await del("gone")).status).toBe(404);
+    expect(removed).toEqual(["@a/b", "gone"]);
+    const bare = await setup();
+    expect((await bare.app.request("/api/mods")).status).toBe(501);
+  });
+
   it("lists live workflows with proofs, and proves a compiled one on request", async () => {
     const proof = { at: "2026-09-20T05:00:00Z", status: "done", steps: [], output: null };
     const proved: string[] = [];

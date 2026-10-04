@@ -20,10 +20,12 @@ Data kinds first: their interpreters exist and can't run new code. The owner's o
 - `KIND_DIRS`, `CODE_KINDS` (workflow) — `src/mods/mod.ts:20`, `:30`; `modSchema` (name, version, `autobrowse` `>=x.y.z`, sites, domains, gates, `site:role` credentials, irreversible, files with sha256) — `:40`; `modScreenSchema`, `modFixSchema` — `:92`, `:101`
 - Load: `installedMods` (`trusted` from `installed.json`) — `:140`; `modScreens`, `modFixes` — `:174`, `:185`; `modWorkflowRoots` (trusted only) — `:196`; `withModScreens`, `withModFixes` (owner first, copy on use) — `:205`, `:225`; walks: `modWalkDirs`, `loadWalk`, `listWalks` (`mod` on a listing) — `src/walks/spec.ts:162-201`
 - Logins as data: `dataLoginSchema` (formLogin or oauthLogin inputs, regexes as strings) — `src/mods/login.ts:48`; `loginOf` — `:86`; `loginProblems` (no built-in, in domains, carries the site's name) — `:113`; `dataLogins`, `registerDataLogins` (owner's `logins/*.json`, then mods') — `:133`, `:157`; `addSiteLogins`, `builtInLogin` — `src/auth/sites.ts:888-896`
-- Wiring: `modsDirFor`, `loginsDirFor`, `loadDataLogins` (cli.ts and `buildApp`, after `boot()`), `screensFor`, `fixesFor` — `src/app/services.ts:583-597`; mod workflow roots into `compiledCatalog` — `:1428`, `src/app/backend.ts:340`
-- Add: `checkMod` (schema, version, hashes, hosts in domains, irreversible needs send or purchase, secrets only on a named page their site's password may go, logins via `loginProblems`, code needs `trust`) — `src/mods/install.ts:91`; `searchMods` (registry search, `autobrowseMod` per hit) — `:231`; `fetchMod` (dir, tgz, `npm pack --ignore-scripts`) — `:262`; `installMod` copies listed files only, a code mod passes `checkCompiled` first (shim `index.ts`, node_modules link, tsconfig) — `:324`; `removeMod` — `:359`
+- Wiring: `modsDirFor`, `loginsDirFor`, `loadDataLogins` (cli.ts and `buildApp`, after `boot()`), `screensFor`, `fixesFor` — `src/app/services.ts:583-597`; mod workflow roots into `compiledCatalog` — `:1428`, `src/app/backend.ts:346`
+- Add: `checkMod` (schema, version, hashes, hosts in domains, irreversible needs send or purchase, secrets only on a named page their site's password may go, logins via `loginProblems`, code needs `trust`) — `src/mods/install.ts:93`; `searchMods` (registry search, `autobrowseMod` per hit) — `:233`; `fetchMod` (dir, tgz, `npm pack --ignore-scripts`) — `:264`; `installMod` copies listed files only, a code mod passes `checkCompiled` first (shim `index.ts`, node_modules link, tsconfig) — `:326`; `removeMod` — `:361`
 - Pack: `Scrubber` (masks addresses and stored usernames, drops query, fragment, examples, run ids, dirty landmarks and hints; a dirty literal becomes a plan field) — `src/mods/pack.ts:49`; final refusal on any stored value or address — `:110`; `scrubLogin` — `:184`; `packMod` — `:205`; `scrubFrom` reads the store unarmed — `:366`
 - CLI: `autobrowse mods pack|search|add|list|remove` — `src/app/cli-mods.ts`
+- Mods page: `modsPort` (list with permission lines, walks' flow names and kept screens and fixes; search; check then add, data only; remove) — `src/mods/install.ts:401`; `Backend.mods` — `src/app/backend.ts:149`, `:460`; `/api/mods` routes — `src/ui/api.ts:401-451`; `ui/src/pages/Mods.tsx`
+- Sample: `walkthrough/mods/autobrowse-mod-scratch` (packed from the desk's `scratch/join-list`, not published; biome skips it so its hashes hold)
 
 ## Connected to
 
@@ -44,6 +46,7 @@ Data kinds first: their interpreters exist and can't run new code. The owner's o
 | `autobrowse mods pack` | writes a mod folder |
 | `autobrowse mods search` | reads the npm registry |
 | `autobrowse mods add/remove` | writes `<state>/mods/` |
+| UI Mods page (`/api/mods`) | reads; adds data mods, removes |
 | runner, `walks run`, `walks list`, `catalog`, `SITE_LOGINS`, `Compiled` | read |
 
 ## See

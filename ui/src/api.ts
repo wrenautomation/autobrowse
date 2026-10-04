@@ -16,6 +16,7 @@ import type { Outline } from "../../src/compiler/outline.js";
 import type { RunEvent } from "../../src/engine/events.js";
 import type { RunStatusView } from "../../src/engine/object.js";
 import type { ListQuery, RunRow } from "../../src/engine/registry.js";
+import type { ModCheck, Found as ModFound, ModView } from "../../src/mods/install.js";
 import type { Recording, RecordingSummary } from "../../src/recorder/types.js";
 import type { SiteRow } from "../../src/sites/facade.js";
 import type { LiveSettings } from "../../src/ui/api.js";
@@ -26,6 +27,9 @@ export type {
   Compiled,
   JobView,
   LiveSettings,
+  ModCheck,
+  ModFound,
+  ModView,
   NeedView,
   PolicyView,
   Proposal,
@@ -135,6 +139,13 @@ export const api = {
   needDone: (id: string, note?: string) =>
     call<{ ok: true }>(`/api/needs/${id}/done`, { method: "POST", body: JSON.stringify({ note }) }),
   needUndo: (id: string) => call<{ ok: true }>(`/api/needs/${id}/done`, { method: "DELETE" }),
+  /** Installed mods; npm search; check shows what one asks for, add takes it after a yes (data only). */
+  mods: () => call<ModView[]>("/api/mods"),
+  searchMods: (q: string) => call<ModFound[]>(`/api/mods/search${query({ q })}`),
+  checkMod: (source: string) => post("/api/mods/check", { source }) as Promise<ModCheck>,
+  addMod: (source: string) => post("/api/mods", { source }),
+  removeMod: (name: string) =>
+    call<{ ok: true }>(`/api/mods/${encodeURIComponent(name)}`, { method: "DELETE" }),
   /** Which account is for what, and how ready each is; `use` moves a purpose. */
   policy: () => call<PolicyView>("/api/policy"),
   assignPolicy: (purpose: string, address: string) =>

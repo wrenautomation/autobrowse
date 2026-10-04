@@ -6,7 +6,14 @@ import { describe, expect, it } from "vitest";
 import { SITE_LOGINS } from "../src/auth/sites.js";
 import { memoryFixes } from "../src/browser/fixes.js";
 import { memoryScreens } from "../src/browser/screens.js";
-import { checkMod, installMod, removeMod, searchMods, sha256 } from "../src/mods/install.js";
+import {
+  checkMod,
+  installMod,
+  modsPort,
+  removeMod,
+  searchMods,
+  sha256,
+} from "../src/mods/install.js";
 import {
   type DataLogin,
   dataLoginSchema,
@@ -415,6 +422,28 @@ describe("code mods", () => {
       JSON.stringify({ source: src, at: "2026-10-04", trusted: true }),
     );
     expect(modWorkflowRoots(o.mods)).toEqual([join(dest, "workflows")]);
+  });
+
+  it("the Mods page adds data only: check shows the asks, add, list says what it did, remove", async () => {
+    const o = await owner();
+    saveWalk(o.walks, walk());
+    const p = pack(o);
+    const kept = [{ from: "autobrowse-mod-scratch" }, {}];
+    const port = modsPort(o.mods, { screens: () => kept, fixes: () => [] });
+    const seen = await port.check(p.dir);
+    expect(seen).toMatchObject({ name: "autobrowse-mod-scratch", source: p.dir });
+    expect(seen.permissions.join("\n")).toMatch(/data only/);
+    expect(port.list()).toEqual([]);
+    await port.add(seen.source);
+    expect(port.list()).toMatchObject([
+      { trusted: false, walks: ["walk-join-list"], kept: { screens: 1, fixes: 0 } },
+    ]);
+    const code = join(o.dir, "code");
+    codeMod(code);
+    await expect(port.check(code)).rejects.toThrow(/--trust/);
+    await expect(port.add(code)).rejects.toThrow(/--trust/);
+    expect(port.remove("autobrowse-mod-scratch")).toBe(true);
+    expect(port.list()).toEqual([]);
   });
 });
 

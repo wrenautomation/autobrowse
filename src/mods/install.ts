@@ -19,7 +19,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { z } from "zod";
@@ -27,12 +27,14 @@ import { siteAllowsHost } from "../auth/login.js";
 import { SITE_LOGINS } from "../auth/sites.js";
 import { checkCompiled } from "../compiler/check.js";
 import { baseSite } from "../runs/log.js";
+import { walkFlowName } from "../walks/flow.js";
 import { walkSpecSchema } from "../walks/spec.js";
 import { dataLoginSchema, loginProblems } from "./login.js";
 import {
   CODE_KINDS,
   hostOf,
   inDomains,
+  installedMods,
   KIND_DIRS,
   MOD_KEYWORD,
   MOD_NAME,
@@ -362,4 +364,75 @@ export function removeMod(modsDir: string, name: string): boolean {
   if (!existsSync(dir)) return false;
   rmSync(dir, { recursive: true, force: true });
   return true;
+}
+
+/** One installed mod as the Mods page shows it. */
+export interface ModView {
+  name: string;
+  version: string;
+  source: string;
+  at: string;
+  trusted: boolean;
+  permissions: string[];
+  /** Its walks' workflow names (`walk-<name>`): the runs that used them. */
+  walks: string[];
+  /** Its screens and fixes that worked and were kept in the owner's files. */
+  kept: { screens: number; fixes: number };
+}
+
+export interface ModCheck {
+  name: string;
+  permissions: string[];
+  /** What to add: a registry name pinned to the version checked. */
+  source: string;
+}
+
+/** The Mods page's port: data mods only; code is added from the CLI, with `--trust`. */
+export interface ModsPort {
+  list(): ModView[];
+  search(words: string): Promise<Found[]>;
+  check(source: string): Promise<ModCheck>;
+  add(source: string): Promise<string>;
+  remove(name: string): boolean;
+}
+
+type Kept = () => readonly { from?: string }[];
+
+export function modsPort(modsDir: string, own: { screens: Kept; fixes: Kept }): ModsPort {
+  const checked = async <T>(source: string, then: (dir: string, mod: Mod) => Promise<T>) => {
+    const { dir, cleanup } = await fetchMod(source);
+    try {
+      return await then(dir, checkMod(dir, { version: autobrowseVersion() }));
+    } finally {
+      cleanup();
+    }
+  };
+  return {
+    list() {
+      const from = (rows: readonly { from?: string }[], name: string) =>
+        rows.filter((r) => r.from === name).length;
+      const [screens, fixes] = [own.screens(), own.fixes()];
+      return installedMods(modsDir).map((m) => ({
+        name: m.mod.name,
+        version: m.mod.version,
+        source: m.source,
+        at: m.at,
+        trusted: m.trusted,
+        permissions: permissionLines(m.mod),
+        walks: m.mod.files
+          .filter((f) => f.kind === "walk")
+          .map((f) => walkFlowName({ name: basename(f.path, ".json") })),
+        kept: { screens: from(screens, m.mod.name), fixes: from(fixes, m.mod.name) },
+      }));
+    },
+    search: (words) => searchMods(words),
+    check: (source) =>
+      checked(source, async (_dir, mod) => ({
+        name: mod.name,
+        permissions: permissionLines(mod),
+        source: existsSync(source) ? source : `${mod.name}@${mod.version}`,
+      })),
+    add: (source) => checked(source, (dir, mod) => installMod(dir, mod, modsDir, source)),
+    remove: (name) => removeMod(modsDir, name),
+  };
 }

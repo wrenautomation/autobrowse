@@ -3,6 +3,7 @@ import { api, getToken, type RunEvent, setToken } from "./api.js";
 import { href, useEvents, useLoad, useRoute } from "./hooks.js";
 import { AccountsPage } from "./pages/Accounts.js";
 import { AgentPage, ExplorePage } from "./pages/Explore.js";
+import { ModsPage } from "./pages/Mods.js";
 import { NeedsPage } from "./pages/Needs.js";
 import { RecordingPage, RecordingsPage } from "./pages/Recordings.js";
 import { RunPage } from "./pages/Run.js";
@@ -33,6 +34,7 @@ export function App() {
           {nav("sites", "Sites")}
           {nav("accounts", "Accounts")}
           {nav("needs", "Needs")}
+          {nav("mods", "Mods")}
           {nav("status", "Status")}
         </nav>
         <span className="spacer" />
@@ -58,6 +60,8 @@ export function App() {
           <AccountsPage />
         ) : page === "needs" ? (
           <NeedsPage />
+        ) : page === "mods" ? (
+          <ModsPage />
         ) : page === "status" ? (
           <StatusPage />
         ) : (

@@ -15,7 +15,9 @@ import { type AgentSessions, agentSessions } from "../agent/sessions.js";
 import { type Accounts, accountsOf } from "../auth/accounts.js";
 import { type LedgerWindow, ledgerSince } from "../auth/ledger.js";
 import { SITE_LOGINS } from "../auth/sites.js";
+import { fileFixes } from "../browser/fixes.js";
 import { type FlowRunner, flowRunner } from "../browser/flow.js";
+import { fileScreens } from "../browser/screens.js";
 import type { FailureRecord } from "../browser/session.js";
 import type { Compiled, FinishOutcome, Outline } from "../compiler/index.js";
 import {
@@ -44,6 +46,7 @@ import {
 import type { Approver } from "../gates/payment.js";
 import { expandHome } from "../google-auth.js";
 import type { Llm } from "../llm/types.js";
+import { type ModsPort, modsPort } from "../mods/install.js";
 import { modWorkflowRoots } from "../mods/mod.js";
 import { fileSpent, type SpentKeys } from "../reach/key-ring.js";
 import { loadRecording } from "../recorder/store.js";
@@ -142,6 +145,8 @@ export interface Backend {
   owed?: Owed;
   /** Which account is for what, and how ready each is. */
   policy?: Policy;
+  /** Installed mods, npm search, add a data mod, remove one. */
+  mods?: ModsPort;
 }
 
 /** The port allows a value or a loader for these; every face reads them the same way. */
@@ -452,6 +457,10 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
     ledger: (since) => ledgerSince(auditFor(settings), spendLedgerFor(settings), since),
     owed: owedOf(needsContextFor(settings), fileDone(settings.needsDoneFile)),
     policy: policyOf(settings),
+    mods: modsPort(modsDirFor(settings), {
+      screens: () => fileScreens(expandHome(settings.screensFile)).list(),
+      fixes: () => fileFixes(expandHome(settings.fixesFile)).list(),
+    }),
   };
 }
 

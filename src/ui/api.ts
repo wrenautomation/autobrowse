@@ -398,6 +398,57 @@ export function api(deps: ApiDeps): Hono<Env> {
     }
   });
 
+  // Mods: the page adds data mods only; a code mod is refused here and added from the CLI with --trust.
+  const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+  app.get("/api/mods", (c) =>
+    deps.mods ? c.json(deps.mods.list()) : fail(c, 501, "no mods here"),
+  );
+  const searchQuery = z.object({ q: z.string().max(200).default("") });
+  app.get("/api/mods/search", async (c) => {
+    if (!deps.mods) return fail(c, 501, "no mods here");
+    const q = readQuery(c, searchQuery);
+    if (!q.ok) return q.res;
+    try {
+      return c.json(await deps.mods.search(q.data.q));
+    } catch (err) {
+      return fail(c, 502, message(err));
+    }
+  });
+  const sourceBody = z.object({ source: z.string().min(1).max(500) });
+  app.post("/api/mods/check", async (c) => {
+    if (!deps.mods) return fail(c, 501, "no mods here");
+    const body = await readJson(c, sourceBody);
+    if (!body.ok) return body.res;
+    try {
+      return c.json(await deps.mods.check(body.data.source));
+    } catch (err) {
+      return fail(c, 400, message(err));
+    }
+  });
+  app.post("/api/mods", async (c) => {
+    if (!deps.mods) return fail(c, 501, "no mods here");
+    const body = await readJson(c, sourceBody);
+    if (!body.ok) return body.res;
+    deps.touch?.();
+    try {
+      await deps.mods.add(body.data.source);
+      return c.json({ ok: true });
+    } catch (err) {
+      return fail(c, 400, message(err));
+    }
+  });
+  app.delete("/api/mods/:name{.+}", (c) => {
+    if (!deps.mods) return fail(c, 501, "no mods here");
+    deps.touch?.();
+    try {
+      return deps.mods.remove(c.req.param("name"))
+        ? c.json({ ok: true })
+        : fail(c, 404, "no such mod");
+    } catch (err) {
+      return fail(c, 400, message(err));
+    }
+  });
+
   /** One verb: a goal in, what ran (or what the agent built) out. A dry run answers at once; the rest is a job. */
   const doBody = z.object({
     goal: z.string().min(1).max(2000),

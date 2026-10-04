@@ -1,0 +1,25 @@
+{
+  "name": "autobrowse-mod-scratch",
+  "version": "0.1.0",
+  "description": "scratch: join the test list",
+  "keywords": [
+    "autobrowse-mod",
+    "scratch"
+  ],
+  "files": [
+    "mod.json",
+    "walks"
+  ],
+  "autobrowseMod": {
+    "sites": [
+      "scratch"
+    ],
+    "domains": [
+      "127.0.0.1:8765"
+    ],
+    "gates": [
+      "send"
+    ],
+    "code": false
+  }
+}

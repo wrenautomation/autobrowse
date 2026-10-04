@@ -23,7 +23,7 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | the explore command set | [[explore-session]] | `.claude/skills/autobrowse/`, [[agent-session]], `src/mcp/server.ts` |
 | a run row, the `goal`/`done` commands | [[explore-run]] | [[walk-spec]] (build reads acts and looks), [[llm-call]] (`tokens` reads `cmd` rows), `.claude/skills/autobrowse/explore.md` |
 | a walk's spec or how one is built or run | [[walk-spec]] | [[screen]] (`walk()`), [[outline]] (op schemas), walk files on disk (`WALK_VERSION`) |
-| a mod's format, pack scrubber, or how installed mods load | [[mod]] | [[walk-spec]] (`loadWalk`, `listWalks`), [[screen]], [[fix]] (`from`, `keep`), [[site-login]] (`siteAllowsHost`, data logins in `SITE_LOGINS`), [[compiled-workflow]] (trusted roots in `compiledCatalog`), mods already installed (`modSchema`) |
+| a mod's format, pack scrubber, or how installed mods load | [[mod]] | [[walk-spec]] (`loadWalk`, `listWalks`), [[screen]], [[fix]] (`from`, `keep`), [[site-login]] (`siteAllowsHost`, data logins in `SITE_LOGINS`), [[compiled-workflow]] (trusted roots in `compiledCatalog`), the UI Mods page (`ModView`), mods already installed (`modSchema`) |
 | what is counted per model call | [[llm-call]] | every `purpose` caller, `src/runs/tokens.ts` |
 | what spends and who says yes | [[approval]] | [[spend-policy]], [[card]], [[site-api]] `spends` |
 | a state file's path or format | [[state-files]] | the owning card |
