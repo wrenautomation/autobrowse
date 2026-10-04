@@ -617,6 +617,9 @@ pnpm autobrowse site check                    # one who-am-I call per site: is e
 pnpm autobrowse read https://firm.test --max 4000   # a page as plain text, no browser
 pnpm autobrowse search fee-only RIA Austin -n 5     # web search: exa, brave, then duckduckgo
 pnpm autobrowse maps "ria in austin tx" --max-minutes 10   # Google Maps listings as a CSV (Docker); wren --format google-maps
+pnpm autobrowse site call web GET "/linkedin/profile?url=linkedin.com/in/<vanity>"   # from Exa's cache; LinkedIn sees nothing
+pnpm autobrowse site call web GET "/linkedin/company?url=linkedin.com/company/<handle>"
+pnpm autobrowse site call web GET "/companies?domain=acme.com"   # Exa's company search: LinkedIn page, homepage match
 pnpm autobrowse doctor                        # which read/search/maps backends and site tokens work now
 pnpm autobrowse site call linkedin GET "/search/results/people?keywords=ria%20founder%20austin&pages=2"   # as Wren's LinkedIn
 pnpm autobrowse site call linkedin GET "/in/<vanity>?company=true"   # one profile, every role, current employer's page

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   GOOGLE,
+  LANDED_SCRIPT,
+  noMatch,
   type RawSerp,
   redirectTarget,
   SERP_SCRIPT,
@@ -258,6 +260,40 @@ describe("google serp from raw pages", () => {
     );
     expect(serp.query).toBe("Best Cold Email Tool");
     expect(serp.questions).toEqual(["What is cold email?", "Is it legal?", "How much?"]);
+  });
+});
+
+describe("google no-match page", () => {
+  const miss = [
+    "Search Results",
+    "Your search - site:linkedin.com/in Zzqxvw Qqvbrtx - did not match any documents.",
+    "",
+    "Suggestions:",
+  ].join("\n");
+  const relaxed = [
+    'No results found for site:linkedin.com/in "Zzqxv Qqvbrt" Nonexistcorpzz.',
+    "Results for site:linkedin.com/in Zzqxv Qqvbrt Nonexistcorpzz (without quotes):",
+  ].join("\n");
+  /** The script against a stand-in document. */
+  const landing = (text: string, column: boolean) =>
+    new Function("document", `return ${LANDED_SCRIPT}`)({
+      body: { innerText: text },
+      querySelector: () => (column ? {} : null),
+    });
+
+  it("knows Google's two no-match lines, whole lines only", () => {
+    expect(noMatch(miss)).toBe(true);
+    expect(noMatch(relaxed)).toBe(true);
+    expect(noMatch("Acme Recruiting - Toronto\nWhy your search did not match any documents.")).toBe(
+      false,
+    );
+  });
+
+  it("no match wins over an empty results column; a real page is results; nothing yet is null", () => {
+    expect(landing(miss, true)).toBe("none");
+    expect(landing(miss, false)).toBe("none");
+    expect(landing("Acme Recruiting - Toronto", true)).toBe("results");
+    expect(landing("Our systems have detected unusual traffic", false)).toBeNull();
   });
 });
 

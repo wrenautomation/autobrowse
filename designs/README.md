@@ -24,7 +24,7 @@ decided. Each ends with a ranked "where to attack"; ✅ marks what landed.
 | [self-finishing-compile](2026-09-22-self-finishing-compile.md) | a model does the last mile on a compiled workflow under tsc + its test; heal uses it |
 | [secrets-and-money-sandbox](2026-09-22-secrets-and-money-sandbox.md) | credentials, spend policy, virtual cards |
 | [vault-split](2026-09-22-vault-split.md) | vault moves to credvault; every credential mirrored to SSM; autobrowse owns a route only if part of it needs a browser; client shape |
-| [web-search](2026-09-29-web-search.md) | Google's page by browser (Overview, results, ads), Exa, Perplexity; `signedOut`, `via` |
+| [web-search](2026-09-29-web-search.md) | Google's page by browser (Overview, results, ads), Exa, Perplexity; `signedOut`, `via`; LinkedIn pages from Exa's cache under one `exa` budget |
 | [owner-keys](2026-09-30-owner-keys.md) | one autobrowse, many owners: paths, env, SSM, IAM role, Restate names per owner |
 | [desk-deploy](2026-10-03-desk-deploy.md) | a commit on main restarts the desk worker within a minute; holds, alerts |
 | [runs-and-walks](2026-09-30-runs-and-walks.md) | every explore session kept as a run; walks built from runs that reached a goal; the token ledger and verdict |

@@ -35,12 +35,17 @@ result and the AI Overview, behind an API. Add Exa and Perplexity as sources.
 | 7 | OAuth sign-in names the site's own account | A spec with no account fell back to the `google` credential (his personal) and typed its password once, rejected. Now `ctx.cred.via` → its username, and `credFor` also finds `google-admin` |
 | 8 | Perplexity API stays off | Paid; his spend. The key name is ready |
 | 9 | Titles lose Perplexity's breadcrumb | It glues "host › path" onto the title; stripped using the URL's own segments |
+| 10 | Google's zero-result page is `results: []` (2026-10-03) | 7 of 12 `site:` lookups landed there and threw. Read by its text ("did not match any documents", "No results found for"), since `#search` may be absent. A quotes-relaxed page answers another query, so it also counts as none. English pages only |
+| 11 | LinkedIn pages from Exa's cache, never live (2026-10-03) | `GET /linkedin/profile` and `/linkedin/company` post `livecrawl: "never"` to Exa `/contents`: LinkedIn sees no request, no account is used. Parsed to the `linkedin` site's shapes so wren swaps legs without new types; raw `text` kept. Wren's design: `wren/designs/2026-10-03-lead-sheet.md` |
+| 12 | One `exa` budget in mills (2026-10-03) | Exa bills in dollars: `/people` and `/companies` 7, a cache read 1, cap 330 a day (about $10 a month, the free credit). Raising it is William's call. A 404 still spends its mill here; Exa charges nothing for it. `/search`'s Exa leg stays unmetered |
+| 13 | A page Exa lacks is 404 (2026-10-03) | Exa answers 200 with `ENTITY_NOT_FOUND` in `statuses`. 404 lets wren count it as one refusal; the URL stays out of the message |
 
 ## Proven
 
 - `web GET /google` "…", n=12: Overview + sources, 12 results with real URLs, 11-26 s.
 - `perplexity POST /chat/completions`: answer + 10 sources, 24 s.
 - `web GET /search` through Exa.
+- `web GET /linkedin/company` and `/linkedin/profile` on real cached pages (2026-10-03): every field parsed, `source: cached`.
 
 ## Open
 

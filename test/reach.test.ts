@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  cachedLinkedinCompany,
+  cachedLinkedinProfile,
+  cachedProfile,
+  companies,
   duckduckgoHits,
+  exaCompany,
   exaProfile,
   htmlText,
+  linkedinSlug,
   people,
   readPage,
   search,
@@ -156,6 +162,8 @@ describe("people", () => {
       name: "Dana Ruiz",
       headline: "Head of Talent at Northwind",
       location: "Denver, Colorado, United States (US)",
+      connections: "500",
+      about: "Head of Talent at Northwind",
       roles: [
         {
           title: "Head of Talent",
@@ -179,6 +187,7 @@ describe("people", () => {
           dates: "2018 - 2021 (3 years)",
         },
       ],
+      education: [{ school: "University of Colorado", schoolUrl: null, degree: null, dates: null }],
     });
   });
 
@@ -233,5 +242,193 @@ describe("people", () => {
     await expect(people("q", { env: async () => undefined, fetch: f })).rejects.toMatchObject({
       status: 501,
     });
+  });
+});
+
+describe("linkedin pages from exa's cache", () => {
+  const PROFILE = [
+    "# Avery Quinlan",
+    "",
+    "Founder at Northwind Talent",
+    "",
+    "Austin, Texas, United States (US)",
+    "",
+    "312 connections • 400 followers",
+    "",
+    "## About",
+    "",
+    "I place engineers at startups.",
+    "",
+    "| Fact | Value |",
+    "| --- | --- |",
+    "| Born | 1990 |",
+    "",
+    "## Experience",
+    "",
+    "### Founder - [Northwind Talent](https://www.linkedin.com/company/northwind-talent) (Current)",
+    "",
+    "Mar 2022 - Present (3 years and 7 months) in Austin, Texas",
+    "",
+    "### Recruiter - Contoso Staffing",
+    "",
+    "2018 - 2022 (4 years)",
+    "",
+    "## Education",
+    "",
+    "### BSc, Computer Science - [Example State University](https://www.linkedin.com/school/example-state)",
+    "",
+    "2010 - 2014 (4 years) in Springfield",
+    "",
+    "### Lakeview High",
+    "",
+    "Springfield, United States",
+  ].join("\n");
+
+  const COMPANY = [
+    "# Northwind Talent",
+    "",
+    "Northwind Talent is a Staffing and Recruiting company. Northwind Talent employs 14 people, founded in 2019.",
+    "",
+    "## About",
+    "",
+    "We find engineers for seed-stage startups.",
+    "",
+    "## Company Details",
+    "- Industry: Staffing and Recruiting",
+    "- Type: Privately held",
+    "- Headquarters: Austin, United States",
+    "- Founded Year: 2019",
+    "- Homepage: northwind-talent.example",
+    "- LinkedIn: linkedin.com/company/northwind-talent",
+    "- Phone: +1 555 0100",
+    "",
+    "## Workforce",
+    "- Company Size: 11-50 employees",
+  ].join("\n");
+
+  it("a profile in the linkedin site's shape: dates as LinkedIn prints them, places apart, schools", () => {
+    expect(cachedProfile(PROFILE, "avery-q", "cached")).toEqual({
+      name: "Avery Quinlan",
+      vanity: "avery-q",
+      url: "https://www.linkedin.com/in/avery-q/",
+      headline: "Founder at Northwind Talent",
+      location: "Austin, Texas, United States",
+      connections: "312",
+      about: "I place engineers at startups.",
+      roles: [
+        {
+          title: "Founder",
+          company: "Northwind Talent",
+          companyUrl: "https://www.linkedin.com/company/northwind-talent",
+          dates: "Mar 2022 - Present",
+          location: "Austin, Texas",
+          current: true,
+        },
+        { title: "Recruiter", company: "Contoso Staffing", dates: "2018 - 2022", current: false },
+      ],
+      education: [
+        {
+          school: "Example State University",
+          schoolUrl: "https://www.linkedin.com/school/example-state",
+          degree: "BSc, Computer Science",
+          dates: "2010 - 2014",
+          location: "Springfield",
+        },
+        { school: "Lakeview High" },
+      ],
+      text: PROFILE,
+      source: "cached",
+    });
+  });
+
+  it("a company: details, size, employees off the intro, homepage with a scheme, its handle", () => {
+    expect(exaCompany(COMPANY)).toEqual({
+      name: "Northwind Talent",
+      website: "https://northwind-talent.example",
+      phone: "+1 555 0100",
+      industry: "Staffing and Recruiting",
+      size: "11-50 employees",
+      headquarters: "Austin, United States",
+      founded: "2019",
+      type: "Privately held",
+      employees: 14,
+      about: "We find engineers for seed-stage startups.",
+      handle: "northwind-talent",
+    });
+    expect(exaCompany("no heading")).toBeNull();
+  });
+
+  it("takes any LinkedIn host and form; anything else is a 400", () => {
+    expect(linkedinSlug("https://ca.linkedin.com/in/avery-q/?trk=x", "in")).toBe("avery-q");
+    expect(linkedinSlug("linkedin.com/company/northwind-talent/about", "company")).toBe(
+      "northwind-talent",
+    );
+    for (const bad of ["https://acme.com/in/avery", "linkedin.com/company/x", "nonsense url"])
+      expect(() => linkedinSlug(bad, "in")).toThrow(WebMiss);
+  });
+
+  const exa = (answer: unknown) => {
+    const sent: unknown[] = [];
+    const f = (async (_url: string, init: RequestInit) => {
+      sent.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify(answer));
+    }) as unknown as typeof fetch;
+    return { deps: { env: async () => "k", fetch: f }, sent };
+  };
+
+  it("asks for the canonical page, never live; a page Exa lacks is a 404", async () => {
+    const hit = exa({
+      results: [{ text: PROFILE }],
+      statuses: [{ status: "success", source: "cached" }],
+    });
+    const p = await cachedLinkedinProfile("uk.linkedin.com/in/avery-q?trk=a", hit.deps);
+    expect(p.roles).toHaveLength(2);
+    expect(hit.sent[0]).toMatchObject({
+      urls: ["https://www.linkedin.com/in/avery-q"],
+      livecrawl: "never",
+    });
+    const miss = exa({
+      results: [],
+      statuses: [{ status: "error", error: { httpStatusCode: 404, tag: "ENTITY_NOT_FOUND" } }],
+    });
+    await expect(
+      cachedLinkedinCompany("linkedin.com/company/nobody-here", miss.deps),
+    ).rejects.toMatchObject({ status: 404 });
+    const other = exa({ results: [], statuses: [{ status: "error", error: { tag: "TIMEOUT" } }] });
+    await expect(
+      cachedLinkedinCompany("linkedin.com/company/nobody-here", other.deps),
+    ).rejects.toMatchObject({ status: 502 });
+  });
+
+  it("a company page keeps the handle Exa names, and the linkedin shape's url", async () => {
+    const { deps } = exa({
+      results: [{ text: COMPANY }],
+      statuses: [{ status: "success", source: "cached" }],
+    });
+    const c = await cachedLinkedinCompany("https://www.linkedin.com/company/12345", deps);
+    expect(c).toMatchObject({
+      handle: "northwind-talent",
+      url: "https://www.linkedin.com/company/northwind-talent/",
+      text: COMPANY,
+    });
+  });
+
+  it("company search by domain: its LinkedIn page, and whether the homepage is that domain", async () => {
+    const { deps, sent } = exa({
+      results: [
+        { url: "https://northwind-talent.example/", text: COMPANY },
+        {
+          url: "https://www.linkedin.com/company/northwind-labs",
+          text: "# Northwind Labs\n\n## Company Details\n- Homepage: northwind-labs.example",
+        },
+      ],
+    });
+    const out = await companies("https://www.Northwind-Talent.example/team", deps);
+    expect(out.domain).toBe("northwind-talent.example");
+    expect(out.companies.map((c) => [c.name, c.linkedin, c.homepageMatches])).toEqual([
+      ["Northwind Talent", "https://www.linkedin.com/company/northwind-talent/", true],
+      ["Northwind Labs", null, false],
+    ]);
+    expect(sent[0]).toMatchObject({ query: "northwind-talent.example", category: "company" });
   });
 });

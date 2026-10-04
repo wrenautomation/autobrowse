@@ -9,7 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Credential, CredentialStore } from "credvault";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { linkedinCompanyJobs } from "../src/browser/flows/linkedin-reach.js";
 import { xProfile, xSearch } from "../src/browser/flows/x-read.js";
 import { httpClient } from "../src/clients/http.js";
@@ -129,6 +129,58 @@ describe("a named account", () => {
   });
 });
 
+describe("the exa budget on web", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const PAGE =
+    "# Avery Quinlan\n\nRecruiter at Northwind\n\n## Experience\n\n### Recruiter - Northwind (Current)";
+  const facade = (caps: ReturnType<typeof memoryCaps>) => {
+    vi.stubGlobal(
+      "fetch",
+      async (url: string) =>
+        new Response(
+          JSON.stringify(
+            url.endsWith("/contents")
+              ? { results: [{ text: PAGE }], statuses: [{ status: "success", source: "cached" }] }
+              : { results: [{ url: "https://www.linkedin.com/in/avery", text: PAGE }] },
+          ),
+        ),
+    );
+    return siteFacade([web], {
+      http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+      env: (n) => (n === "EXA_API_KEY" ? "k" : undefined),
+      sink: memorySink(),
+      runner: fakeBrowser([]),
+      flow: () => null,
+      caps,
+    });
+  };
+
+  it("meters mills: a cache read 1, a people or company search 7; a bad URL spends none", async () => {
+    const caps = memoryCaps(() => noon);
+    const sites = facade(caps);
+    const url = "https://www.linkedin.com/in/avery";
+    expect(await sites.call("web", "GET", "/linkedin/profile", { url })).toMatchObject({
+      name: "Avery Quinlan",
+      vanity: "avery",
+    });
+    await sites.call("web", "GET", "/people", { q: "recruiters at Northwind" });
+    await expect(
+      sites.call("web", "GET", "/linkedin/company", { url: "https://acme.com/about" }),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(caps.today()["web|web|exa"]).toBe(8);
+  });
+
+  it("past 330 mills a day the call is refused, never sent", async () => {
+    const caps = memoryCaps(() => noon);
+    caps.take("web", "web", { exa: 325 }, { exa: 330 });
+    const sites = facade(caps);
+    await expect(sites.call("web", "GET", "/people", { q: "q" })).rejects.toMatchObject({
+      status: 429,
+    });
+    expect(caps.today()["web|web|exa"]).toBe(325);
+  });
+});
+
 describe("web and x reads", () => {
   it("web needs no key: authed, its api routes on the api leg, input checked", async () => {
     const sites = siteFacade([web], {
@@ -143,6 +195,9 @@ describe("web and x reads", () => {
     expect(row.routes.map((r) => [r.path, r.via])).toEqual([
       ["/search", "api"],
       ["/people", "api"],
+      ["/companies", "api"],
+      ["/linkedin/profile", "api"],
+      ["/linkedin/company", "api"],
       ["/read", "api"],
       ["/google", "none"], // a browser leg; this fake runner has no flows
     ]);

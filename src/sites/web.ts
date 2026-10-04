@@ -8,15 +8,46 @@
  * page read in a browser (`browser/flows/google-search.ts`): the AI Overview,
  * every result, the ads. Google bot-checks the box's IP, so callers send it
  * to the Mac's desk (`desk/call`), paced like a person searching.
+ *
+ * LinkedIn without LinkedIn: `GET /linkedin/profile?url=` and
+ * `/linkedin/company?url=` read Exa's cached copy (never live, so neither
+ * LinkedIn nor Exa's crawler visits), in the `linkedin` site's shapes;
+ * `GET /companies?domain=` finds a firm's company page. Exa bills in dollars,
+ * so its routes share one daily budget in mills ($0.001): `exa`, 330 a day
+ * (about $10 a month, its free credit). Raising it is a spend decision.
  */
 import { z } from "zod";
-import { people, readPage, search, WebMiss } from "../reach/web.js";
+import {
+  cachedLinkedinCompany,
+  cachedLinkedinProfile,
+  companies,
+  hostOf,
+  linkedinSlug,
+  people,
+  readPage,
+  search,
+  WebMiss,
+} from "../reach/web.js";
 import { route, type SiteApi, SiteError } from "./types.js";
 
 /** No backend answering is the caller's to read, not a retry: Restate would replay it forever. */
 const final = (e: unknown): never => {
   throw e instanceof WebMiss ? new SiteError(e.status, e.message) : e;
 };
+
+/** Checked before the meter, so a bad URL spends none of the budget. */
+const pageOf = (kind: "in" | "company") =>
+  z.string().refine(
+    (v) => {
+      try {
+        linkedinSlug(v, kind);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: `url: want a linkedin.com/${kind}/ page` },
+  );
 
 const order = z
   .string()
@@ -34,8 +65,8 @@ export const web: SiteApi = {
   origin: "https://web",
   auth: { open: true },
   signedOut: true,
-  // Only the browser leg is paced and capped: the API backends meter themselves.
-  caps: { google: 300 },
+  // Google's page is capped in searches; Exa in mills of a dollar. /search's backends meter themselves.
+  caps: { google: 300, exa: 330 },
   pace: { gapMs: 5_000, jitterMs: 10_000 },
   routes: [
     route({
@@ -62,7 +93,43 @@ export const web: SiteApi = {
         q: z.string().min(1),
         n: z.coerce.number().int().min(1).max(25).default(10),
       }),
+      meter: () => ({ exa: 7 }),
       api: ({ q, n }, leg) => people(q, { env: async (k) => leg.env(k) }, { n }).catch(final),
+    }),
+    route({
+      method: "GET",
+      path: "/companies",
+      summary:
+        "Companies Exa holds for a domain (`domain`, `n` up to 10, default 3): name, website, industry, size, headquarters, founded, phone, LinkedIn page when linked, `homepageMatches`; exa, 7 of the `exa` budget",
+      request: z.object({
+        domain: z
+          .string()
+          .refine((v) => hostOf(v).includes("."), { message: "domain: want one like acme.com" }),
+        n: z.coerce.number().int().min(1).max(10).default(3),
+      }),
+      meter: () => ({ exa: 7 }),
+      api: ({ domain, n }, leg) =>
+        companies(domain, { env: async (k) => leg.env(k) }, { n }).catch(final),
+    }),
+    route({
+      method: "GET",
+      path: "/linkedin/profile",
+      summary:
+        "A LinkedIn profile from Exa's cache, never fetched live (`url`): `linkedin GET /in/{vanity}`'s shape with roles, plus education and the raw `text`; 404 when Exa holds no copy. 1 of the `exa` budget",
+      request: z.object({ url: pageOf("in") }),
+      meter: () => ({ exa: 1 }),
+      api: ({ url }, leg) =>
+        cachedLinkedinProfile(url, { env: async (k) => leg.env(k) }).catch(final),
+    }),
+    route({
+      method: "GET",
+      path: "/linkedin/company",
+      summary:
+        "A LinkedIn company page from Exa's cache, never fetched live (`url`): `linkedin GET /company/{company}`'s shape plus type, employees, about and the raw `text`; 404 when Exa holds no copy. 1 of the `exa` budget",
+      request: z.object({ url: pageOf("company") }),
+      meter: () => ({ exa: 1 }),
+      api: ({ url }, leg) =>
+        cachedLinkedinCompany(url, { env: async (k) => leg.env(k) }).catch(final),
     }),
     route({
       method: "GET",

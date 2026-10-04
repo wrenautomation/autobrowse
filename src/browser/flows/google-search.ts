@@ -260,6 +260,35 @@ export async function serpOf(
   };
 }
 
+/**
+ * Google's own words for a query with no match (asked in English, the default
+ * `hl`). "No results found for" is the quoted query's miss: what follows is a
+ * looser query's results (quotes dropped), not answers to the one asked.
+ * Whole lines only, so a snippet quoting the phrase does not count.
+ */
+const NO_MATCH = /^(Your search - .+ - did not match any documents\.|No results found for .+\.)$/m;
+
+export const noMatch = (pageText: string): boolean => NO_MATCH.test(pageText);
+
+/** In the page: "none" for Google's no-match page, "results" once the results column is in, else null. */
+export const LANDED_SCRIPT = `(() => {
+  const text = document.body ? document.body.innerText : "";
+  if (${NO_MATCH}.test(text)) return "none";
+  return document.querySelector("#search, #rso") ? "results" : null;
+})()`;
+
+/** What the page settled into within `RESULTS_MS`: null when neither (a block, a wall, a slow load). */
+async function landed(fp: FlowPage): Promise<"results" | "none" | null> {
+  for (let t = 0; t < RESULTS_MS; t += SETTLE_MS) {
+    const got = await fp.page.evaluate<"results" | "none" | null>(LANDED_SCRIPT);
+    if (got) return got;
+    await fp.wait(SETTLE_MS);
+  }
+  return null;
+}
+
+const NOTHING: RawSerp = { overview: null, results: [], ads: [], questions: [] };
+
 /** Past Google's /sorry check (a reCAPTCHA), or a person's. */
 async function pastSorry(fp: FlowPage): Promise<void> {
   if (!/\/sorry\//.test(fp.url())) return;
@@ -293,8 +322,10 @@ async function readPage(fp: FlowPage, url: string, overview: boolean): Promise<R
       { role: "button", name: "/^accept all$/i" },
       { goal: "cookies" },
     );
-  if (!(await fp.has({ css: "#search, #rso" }, RESULTS_MS)))
-    throw new Error(`google: no results page at ${fp.url()}`);
+  // A query nothing matches is an answer (no results), not a failure: 7 of 12 site: lookups were (2026-10-03).
+  const got = await landed(fp);
+  if (got === "none") return NOTHING;
+  if (got === null) throw new Error(`google: no results page at ${fp.url()}`);
   if (!overview || !(await fp.has({ text: "AI Overview" }, OVERVIEW_MS)))
     return fp.page.evaluate<RawSerp>(SERP_SCRIPT);
   await unfoldOverview(fp);

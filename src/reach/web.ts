@@ -52,11 +52,12 @@ class Skip extends Error {}
 /**
  * No backend could answer, or the caller named one that does not exist: a final
  * answer, not a blip to retry. 501 when every backend was skipped (no key set),
- * 502 when they ran and failed, 400 for an unknown `via`.
+ * 502 when they ran and failed, 400 for an unknown `via` or a bad URL, 404 when
+ * Exa's cache has no such page.
  */
 export class WebMiss extends Error {
-  readonly status: 400 | 501 | 502;
-  constructor(message: string, status: 400 | 501 | 502) {
+  readonly status: 400 | 404 | 501 | 502;
+  constructor(message: string, status: 400 | 404 | 501 | 502) {
     super(message);
     this.name = "WebMiss";
     this.status = status;
@@ -279,13 +280,27 @@ export interface Role {
   dates: string | null;
 }
 
+export interface School {
+  school: string;
+  /** The school's LinkedIn page, when the profile links it. */
+  schoolUrl: string | null;
+  /** "BSc, Computer Science", when the entry names one. */
+  degree: string | null;
+  /** "2014 - 2018 (4 years) in Boulder", as the profile says it. */
+  dates: string | null;
+}
+
 export interface Person {
   name: string;
   url: string;
   headline: string | null;
   location: string | null;
+  /** "500", off "500 connections • 1,200 followers". */
+  connections: string | null;
+  about: string | null;
   /** Newest first, as the profile lists them. */
   roles: Role[];
+  education: School[];
 }
 
 export interface People {
@@ -295,6 +310,7 @@ export interface People {
 }
 
 const LINK = /^\[([^\]]+)\]\(([^)]+)\)$/;
+const RANGE_LINE = /^(?:[A-Z][a-z]{2} )?\d{4}( - |\b)/;
 const CURRENT = /\s*\(Current\)\s*$/;
 const DATES = /^(?:[A-Z][a-z]{2} )?\d{4} - /;
 
@@ -359,7 +375,54 @@ export function exaProfile(text: string): Omit<Person, "url"> | null {
       }
     }
   }
-  return { name, headline: body(0), location: body(1), roles };
+  const conns = /^([\d,]+\+?) connections/m.exec(text);
+  return {
+    name,
+    headline: body(0),
+    location: body(1),
+    connections: conns?.[1] ?? null,
+    about: prose(section(lines, "About")),
+    roles,
+    education: schoolsOf(section(lines, "Education")),
+  };
+}
+
+/** The lines under `## <name>`, up to the next `## `; empty when there is none. */
+function section(lines: string[], name: string): string[] {
+  const start = lines.indexOf(`## ${name}`);
+  if (start < 0) return [];
+  const end = lines.findIndex((l, i) => i > start && l.startsWith("## "));
+  return lines.slice(start + 1, end < 0 ? undefined : end);
+}
+
+/** A section's paragraphs, Exa's fact tables left out; null when nothing is left. */
+function prose(lines: string[]): string | null {
+  const text = lines
+    .filter((l) => !l.startsWith("|"))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return text || null;
+}
+
+/** `### [School](url)` or `### Degree - [School](url)`, then a dates line when there is one. */
+function schoolsOf(lines: string[]): School[] {
+  const out: School[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i] ?? "";
+    if (!l.startsWith("### ")) continue;
+    const entry = l.slice(4).trim();
+    const at = entry.lastIndexOf(" - ");
+    const { company, companyUrl } = companyOf(at > 0 ? entry.slice(at + 3) : entry);
+    const next = lines.slice(i + 1).find(Boolean) ?? "";
+    out.push({
+      school: company,
+      schoolUrl: companyUrl,
+      degree: at > 0 ? entry.slice(0, at).trim() : null,
+      dates: RANGE_LINE.test(next) ? next : null,
+    });
+  }
+  return out;
 }
 
 /**
@@ -393,4 +456,313 @@ export async function people(query: string, deps: Deps, o: { n?: number } = {}):
     if (p) out.push({ ...p, url: r.url });
   }
   return { query, people: out, via: "exa" };
+}
+
+/* ---------------- LinkedIn pages, from Exa's cache ---------------- */
+
+const LI = "https://www.linkedin.com";
+
+/** A role as the `linkedin` site's profile route returns it; `companyUrl` absent when the profile links none. */
+export interface CachedRole {
+  title: string;
+  company: string;
+  companyUrl?: string;
+  /** "Jan 2025 - Present", as LinkedIn writes it. */
+  dates?: string;
+  location?: string;
+  current: boolean;
+}
+
+export interface CachedSchool {
+  school: string;
+  schoolUrl?: string;
+  degree?: string;
+  dates?: string;
+  location?: string;
+}
+
+/** `linkedin GET /in/{vanity}`'s shape, read from Exa's copy of the page. */
+export interface CachedProfile {
+  name: string;
+  vanity: string;
+  url: string;
+  headline?: string;
+  location?: string;
+  connections?: string;
+  about?: string;
+  roles: CachedRole[];
+  education: CachedSchool[];
+  /** Exa's whole page, as it wrote it. */
+  text: string;
+  source: string;
+}
+
+/** A company as Exa writes it: `linkedin GET /company/{company}`'s fields, and the rest Exa adds. */
+export interface CompanyFacts {
+  name: string;
+  /** `https://acme.com`: Exa's Homepage, with a scheme. */
+  website?: string;
+  phone?: string;
+  industry?: string;
+  /** "11-50 employees". */
+  size?: string;
+  headquarters?: string;
+  founded?: string;
+  /** Privately held, Public company, …. */
+  type?: string;
+  employees?: number;
+  about?: string;
+  /** The company's LinkedIn handle, when Exa links it. */
+  handle?: string;
+}
+
+/** `linkedin GET /company/{company}`'s shape, read from Exa's copy of the page. */
+export interface CachedCompany extends CompanyFacts {
+  handle: string;
+  url: string;
+  text: string;
+  source: string;
+}
+
+/** A page's first segment after `/in/` or `/company/`, any LinkedIn host, query and slashes dropped. */
+export function linkedinSlug(raw: string, kind: "in" | "company"): string {
+  let u: URL;
+  try {
+    u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    throw new WebMiss(`not a URL: want a linkedin.com/${kind}/ page`, 400);
+  }
+  const host = u.hostname.toLowerCase();
+  const [first, slug] = u.pathname.split("/").filter(Boolean);
+  if (!(host === "linkedin.com" || host.endsWith(".linkedin.com")) || first !== kind || !slug)
+    throw new WebMiss(`not a linkedin.com/${kind}/ page`, 400);
+  return decodeURIComponent(slug);
+}
+
+/** "Jan 2025 - Present (1 year) in Denver": the range LinkedIn would print, and the place. */
+function rangeOf(line: string | null): { dates?: string; location?: string } {
+  if (!line) return {};
+  const range = /^((?:[A-Z][a-z]{2} )?\d{4}(?: - (?:Present|(?:[A-Z][a-z]{2} )?\d{4}))?)/.exec(
+    line,
+  );
+  const place = / in (.+)$/.exec(line);
+  return {
+    ...(range?.[1] ? { dates: range[1] } : {}),
+    ...(place?.[1] ? { location: place[1].trim() } : {}),
+  };
+}
+
+const some = <T>(v: T | null | undefined): v is T => v !== null && v !== undefined && v !== "";
+
+/** Exa's profile text as the `linkedin` site's profile; null when it is not a profile. */
+export function cachedProfile(text: string, vanity: string, source: string): CachedProfile | null {
+  const p = exaProfile(text);
+  if (!p) return null;
+  return {
+    name: p.name,
+    vanity,
+    url: `${LI}/in/${vanity}/`,
+    ...(some(p.headline) ? { headline: p.headline } : {}),
+    // "Denver, Colorado, United States (US)": LinkedIn prints no country code.
+    ...(some(p.location) ? { location: p.location.replace(/\s*\([A-Z]{2}\)$/, "") } : {}),
+    ...(some(p.connections) ? { connections: p.connections } : {}),
+    ...(some(p.about) ? { about: p.about } : {}),
+    roles: p.roles.map((r) => ({
+      title: r.title,
+      company: r.company,
+      ...(r.companyUrl ? { companyUrl: r.companyUrl } : {}),
+      ...rangeOf(r.dates),
+      current: r.current,
+    })),
+    education: p.education.map((e) => ({
+      school: e.school,
+      ...(e.schoolUrl ? { schoolUrl: e.schoolUrl } : {}),
+      ...(e.degree ? { degree: e.degree } : {}),
+      ...rangeOf(e.dates),
+    })),
+    text,
+    source,
+  };
+}
+
+const COUNT = (s: string | undefined) => {
+  const n = s ? Number(s.replace(/,/g, "")) : Number.NaN;
+  return Number.isFinite(n) ? n : undefined;
+};
+
+/**
+ * A company page as Exa writes it: `# Name`, an intro ("… employs 12 people …"),
+ * `## About`, `## Company Details` as `- Key: Value` lines (Industry, Type,
+ * Headquarters, Founded Year, Homepage, LinkedIn, Phone) and `## Workforce`
+ * (Employees, Company Size). Null when there is no name.
+ */
+export function exaCompany(text: string): CompanyFacts | null {
+  const lines = text.split("\n").map((l) => l.trim());
+  const name = lines
+    .find((l) => l.startsWith("# "))
+    ?.slice(2)
+    .trim();
+  if (!name) return null;
+  const facts = new Map<string, string>();
+  for (const l of [...section(lines, "Company Details"), ...section(lines, "Workforce")]) {
+    const m = /^- ([A-Za-z ]+): (.+)$/.exec(l);
+    if (m?.[1] && m[2] && !facts.has(m[1])) facts.set(m[1], m[2].trim());
+  }
+  const homepage = facts.get("Homepage");
+  const li = facts.get("LinkedIn");
+  const employees =
+    COUNT(facts.get("Employees")) ?? COUNT(/ employs ([\d,]+) people/.exec(text)?.[1]);
+  const about = prose(section(lines, "About"));
+  const out: CompanyFacts = { name };
+  const set = <K extends keyof CompanyFacts>(k: K, v: CompanyFacts[K] | undefined) => {
+    if (some(v)) out[k] = v;
+  };
+  set(
+    "website",
+    homepage ? (/^https?:\/\//i.test(homepage) ? homepage : `https://${homepage}`) : undefined,
+  );
+  set("phone", facts.get("Phone"));
+  set("industry", facts.get("Industry"));
+  set("size", facts.get("Company Size"));
+  set("headquarters", facts.get("Headquarters"));
+  set("founded", facts.get("Founded Year"));
+  set("type", facts.get("Type"));
+  set("employees", employees);
+  set("about", about ?? undefined);
+  if (li) {
+    try {
+      set("handle", linkedinSlug(li, "company"));
+    } catch {
+      // A LinkedIn line that is not a company page names no handle.
+    }
+  }
+  return out;
+}
+
+const exaKey = async (deps: Deps): Promise<string> => {
+  const key = await deps.env("EXA_API_KEY");
+  if (!key) throw new WebMiss("nothing answered: exa (skipped: no EXA_API_KEY)", 501);
+  return key;
+};
+
+async function exaPost(deps: Deps, path: string, body: unknown): Promise<unknown> {
+  const key = await exaKey(deps);
+  try {
+    const res = await get(deps.fetch ?? fetch, `https://api.exa.ai${path}`, {
+      method: "POST",
+      headers: { "x-api-key": key, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return await res.json();
+  } catch (e) {
+    throw new WebMiss(`nothing answered: exa (${String(e)})`, 502);
+  }
+}
+
+/** Characters of a cached page kept: a big company's page runs past 20k, every field sits in the first part. */
+const PAGE_CHARS = 20_000;
+
+/**
+ * One LinkedIn page from Exa's cache, never fetched live (`livecrawl: never`):
+ * neither LinkedIn nor Exa's crawler visits it for this call. A page Exa does
+ * not hold is a 404 (Exa charges nothing for it). The URL stays out of every
+ * message: it names a person.
+ */
+async function cachedPage(url: string, deps: Deps): Promise<{ text: string; source: string }> {
+  const body = (await exaPost(deps, "/contents", {
+    urls: [url],
+    livecrawl: "never",
+    text: { maxCharacters: PAGE_CHARS },
+  })) as {
+    results?: Array<{ text?: string }>;
+    statuses?: Array<{
+      status?: string;
+      source?: string;
+      error?: { httpStatusCode?: number; tag?: string };
+    }>;
+  };
+  const status = body.statuses?.[0];
+  if (status?.status === "error") {
+    if (status.error?.httpStatusCode === 404)
+      throw new WebMiss("exa holds no copy of that page (ENTITY_NOT_FOUND)", 404);
+    throw new WebMiss(`exa could not give that page: ${status.error?.tag ?? "error"}`, 502);
+  }
+  const text = body.results?.[0]?.text?.trim();
+  if (!text) throw new WebMiss("exa gave that page with no text", 502);
+  return { text, source: status?.source ?? "cached" };
+}
+
+/** A LinkedIn profile from Exa's cache, in the `linkedin` site's profile shape plus `education` and `text`. */
+export async function cachedLinkedinProfile(url: string, deps: Deps): Promise<CachedProfile> {
+  const vanity = linkedinSlug(url, "in");
+  const { text, source } = await cachedPage(`${LI}/in/${vanity}`, deps);
+  const p = cachedProfile(text, vanity, source);
+  if (!p) throw new WebMiss("exa's copy of that page is not a profile", 502);
+  return p;
+}
+
+/** A LinkedIn company page from Exa's cache, in the `linkedin` site's company shape plus `type`, `employees`, `about` and `text`. */
+export async function cachedLinkedinCompany(url: string, deps: Deps): Promise<CachedCompany> {
+  const slug = linkedinSlug(url, "company");
+  const { text, source } = await cachedPage(`${LI}/company/${slug}`, deps);
+  const c = exaCompany(text);
+  if (!c) throw new WebMiss("exa's copy of that page is not a company", 502);
+  const handle = c.handle ?? slug;
+  return { ...c, handle, url: `${LI}/company/${handle}/`, text, source };
+}
+
+/** One company Exa's company search found. */
+export interface FoundCompany extends CompanyFacts {
+  /** `https://www.linkedin.com/company/<handle>/`, when Exa links one. */
+  linkedin: string | null;
+  /** The page Exa found it at (its homepage, or a LinkedIn page). */
+  url: string;
+  /** Its homepage is the domain asked about (`www.` aside). Look-alike firms share names. */
+  homepageMatches: boolean;
+}
+
+export interface Companies {
+  domain: string;
+  companies: FoundCompany[];
+  via: string;
+}
+
+/** `https://www.Acme.com/about` → `acme.com`. */
+export const hostOf = (raw: string): string => {
+  try {
+    return new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`).hostname
+      .toLowerCase()
+      .replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+};
+
+/** Companies Exa's company index has for `domain`, each with its LinkedIn page when Exa links one. */
+export async function companies(
+  domain: string,
+  deps: Deps,
+  o: { n?: number } = {},
+): Promise<Companies> {
+  const want = hostOf(domain);
+  if (!want.includes(".")) throw new WebMiss("domain: want a bare domain like acme.com", 400);
+  const body = (await exaPost(deps, "/search", {
+    query: want,
+    category: "company",
+    numResults: o.n ?? 3,
+    type: "auto",
+    contents: { text: { maxCharacters: 8000 } },
+  })) as { results?: Array<{ url: string; text?: string }> };
+  const out: FoundCompany[] = [];
+  for (const r of body.results ?? []) {
+    const c = r.text ? exaCompany(r.text) : null;
+    if (!c) continue;
+    out.push({
+      ...c,
+      linkedin: c.handle ? `${LI}/company/${c.handle}/` : null,
+      url: r.url,
+      homepageMatches: c.website ? hostOf(c.website) === want : false,
+    });
+  }
+  return { domain: want, companies: out, via: "exa" };
 }
