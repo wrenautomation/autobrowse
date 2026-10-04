@@ -1,5 +1,6 @@
 /** Composition root: settings → clients → workflow deps → Restate services. Secrets stay inside the clients. */
 
+import { Resolver } from "node:dns/promises";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -80,10 +81,13 @@ import {
   phoneChannel,
   webhookChannel,
 } from "../channels/index.js";
+import { awsDomain } from "../clients/aws-domain.js";
 import { cloudflare, verifyCloudflareToken } from "../clients/cloudflare.js";
+import { dynadot } from "../clients/dynadot.js";
 import { type GmailUserClient, gmailClient } from "../clients/gmail.js";
 import { type GoogleAdminClient, googleAdmin } from "../clients/google-admin.js";
 import { type HttpClient, httpClient, safeUrl } from "../clients/http.js";
+import { inboxInsiders } from "../clients/inbox-insiders.js";
 import { type InstantlyClient, instantly } from "../clients/instantly.js";
 import { type LinqClient, linqClient } from "../clients/linq.js";
 import { ssmRosterStore } from "../clients/roster.js";
@@ -159,6 +163,8 @@ import {
   type InboxActivityDeps,
   inboxActivityWorkflow,
 } from "../workflows/inbox-activity/index.js";
+import { type FleetDeps, inboxFleetWorkflow } from "../workflows/inbox-fleet/index.js";
+import type { Probe } from "../workflows/inbox-fleet/steps.js";
 import type { Proof } from "../workflows/proof.js";
 import { redirectWorkflow } from "../workflows/redirect/index.js";
 import { senderDomainWorkflow } from "../workflows/sender-domain/index.js";
@@ -394,6 +400,7 @@ export const WORKFLOWS: readonly AnyWorkflow[] = [
   inboxActivityWorkflow,
   workspaceInboxWorkflow,
   bootstrapWorkflow,
+  inboxFleetWorkflow,
 ];
 
 /** Hand-written workflows whose deps this machine builds (`autobrowse try`): the domain family. */
@@ -403,6 +410,7 @@ export const LOCAL_WORKFLOWS: readonly AnyWorkflow[] = [
   senderDomainWorkflow,
   inboxActivityWorkflow,
   workspaceInboxWorkflow,
+  inboxFleetWorkflow,
 ];
 
 /** Where compiled workflows live and where the compiler writes; relative imports resolve to the library from there. */
@@ -1173,6 +1181,51 @@ export async function instantlyFor(
   return apiKey ? instantly({ apiKey, http }) : null;
 }
 
+/** What the inbox fleet calls: registrar, mailbox vendor, Instantly, AWS, public DNS. Keys from the environment or the env store. */
+export function inboxFleetDepsFor(
+  settings: Settings,
+  http = httpClient(),
+  ssm = ssmFor(settings),
+): FleetDeps {
+  const key = async (name: string) =>
+    process.env[name] ||
+    (await envStoreFor(settings, ssm)
+      .get(name)
+      .catch(() => null)) ||
+    null;
+  const keyed =
+    <T>(name: string, make: (apiKey: string) => T) =>
+    async () => {
+      const k = await key(name);
+      return k ? make(k) : null;
+    };
+  return {
+    dynadot: keyed("DYNADOT_API_KEY", (apiKey) => dynadot({ apiKey, http })),
+    inboxInsiders: keyed("INBOX_INSIDERS_API_KEY", (apiKey) => inboxInsiders({ apiKey, http })),
+    instantly: () => instantlyFor(settings, http, ssm),
+    orderKeys: async () => ({
+      dynadot: required((await key("DYNADOT_API_KEY")) ?? undefined, "DYNADOT_API_KEY"),
+      instantly: required((await key("INSTANTLY_API_KEY")) ?? undefined, "INSTANTLY_API_KEY"),
+    }),
+    aws: lazy(() => awsDomain(awsFor(settings))),
+    credentials: credentialsFor(settings),
+    probe: publicProbe(),
+  };
+}
+
+/** DNS from public resolvers (not this machine's cache) and a page's status with redirects not followed. */
+export function publicProbe(servers = ["1.1.1.1", "8.8.8.8"]): Probe {
+  const dns = new Resolver();
+  dns.setServers(servers);
+  const none = () => [] as never[];
+  return {
+    ns: (d) => dns.resolveNs(d).catch(none),
+    mx: async (d) => (await dns.resolveMx(d).catch(none)).map((r) => r.exchange.toLowerCase()),
+    txt: async (n) => (await dns.resolveTxt(n).catch(none)).map((r) => r.join("")),
+    page: async (url) => (await fetch(url, { redirect: "manual" })).status,
+  };
+}
+
 /** What inbox-activity calls: the browser, the inbox's Gmail and plain HTTP. */
 export function inboxActivityDepsFor(
   settings: Settings,
@@ -1388,6 +1441,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
         { guards },
       ),
       makeRunObject(bootstrapWorkflow, bootstrapDeps, host, { guards }),
+      makeRunObject(inboxFleetWorkflow, inboxFleetDepsFor(settings, http, ssm), host, { guards }),
       // Every compiled flow, present and future, runs under this one object.
       makeCompiledRunObject({
         catalog,

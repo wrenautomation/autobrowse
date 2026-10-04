@@ -319,6 +319,11 @@ a row; it is work.
   a domain already in Workspace. User, password and authenticator stored,
   signature, photo, Gmail consent token, accounts row. Warmup, roster and
   newsletters are opt-in. Reuses the domain and inbox-activity steps.
+- **Inbox fleet** (`designs/2026-10-03-inbox-fleet.md`): cold-email domains
+  bought at Dynadot, three mailboxes each from Inbox Insiders (full control,
+  sent to Instantly), each domain on its own Route 53 name servers, its site
+  masked by CloudFront, then warming. One purchase yes covers domains and
+  mailboxes.
 - **Hand-written legs** (`src/browser/flows/`, callable as the Restate
   `browser` service's `flow`): `google-admin/dkim-*`,
   `google-admin/workspace-logo`, `google/profile-photo`, `google/oauth-consent`,

@@ -72,6 +72,7 @@ describe("explore mode", () => {
       desktop,
       sink,
       tokenFile: join(dir, "explore.token"),
+      yesFile: join(dir, "payment-flows.json"),
       secrets: async (name) => (name === "minted" ? "Placed-Value-77" : null),
       secretHosts: (host) => allowHost(host),
       audit,

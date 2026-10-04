@@ -32,6 +32,7 @@ export const HAND_WRITTEN = new Set([
   "inbox-activity",
   "workspace-inbox",
   "bootstrap",
+  "inbox-fleet",
 ]);
 
 export interface CompiledWorkflow {

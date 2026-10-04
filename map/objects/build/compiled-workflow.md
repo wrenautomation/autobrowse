@@ -28,12 +28,12 @@ Rendered source is the truth from then on (the header in each module says so). O
 - **owns:** its dir and proof
 - **owned-by:** [[app]] (`App.catalog`, `App.workflows()`)
 - **joins:** [[workflow]], [[outline]], [[proof]], [[run-object]] (`Compiled`), [[site-api]] (`{ workflow }` legs), [[ability]], [[fix]] (patched), [[guard]]
-- **looks-like-but-is-not:** a hand-written workflow (`domain`, `redirect`, `sender-domain`, `inbox-activity`, `workspace-inbox`, `bootstrap`); a [[flow]]
+- **looks-like-but-is-not:** a hand-written workflow (`domain`, `redirect`, `sender-domain`, `inbox-activity`, `workspace-inbox`, `inbox-fleet`, `bootstrap`); a [[flow]]
 
 ## If you change this
 
 - **Hits:** `src/compiler/render.ts` (what future modules look like), `src/index.ts` (what rendered modules import; an export removed there breaks every module), `src/workflows/compiled-deps.ts`, `src/workflows/proof.ts`, `src/agent/heal.ts`, `src/do/catalog.ts`, `src/sites/facade.ts` (`compiled.run`), `src/app/services.ts:409`.
-- **Does not hit:** `src/workflows/domain`, `redirect`, `sender-domain`, `inbox-activity`, `workspace-inbox`, `bootstrap`; the browser service.
+- **Does not hit:** `src/workflows/domain`, `redirect`, `sender-domain`, `inbox-activity`, `workspace-inbox`, `inbox-fleet`, `bootstrap`; the browser service.
 
 ## Surfaces
 

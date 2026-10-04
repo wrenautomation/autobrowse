@@ -1,7 +1,7 @@
 /** What one domain provision is asked to produce. Validated once, stored on the run as given. */
 import { z } from "zod";
 
-const DOMAIN = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.[a-z0-9-]{1,63})+$/;
+export const DOMAIN = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.[a-z0-9-]{1,63})+$/;
 const LOCAL = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
 export const inboxSchema = z.object({

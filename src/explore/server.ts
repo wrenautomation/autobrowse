@@ -393,6 +393,8 @@ export interface ExploreOptions {
    * such acts are refused: money is never a session's own call.
    */
   approve?: Approver;
+  /** Where payment-flow yeses are kept across restarts; tests pass their own. */
+  yesFile?: string;
   /**
    * Where the bearer token is written (owner-only) for the session's life, so a
    * shell beside the process reads it instead of a log: see `tokenFileFor`.
@@ -759,7 +761,9 @@ async function serve(
    * questions"): a yes on a site (www. and my. alike) covers every money act there (billing
    * fields, the card, checkout, pay) for FLOW_MS, across session restarts. A no is asked again.
    */
-  const flowYes = new PaymentFlowYes(join(tmpdir(), "autobrowse", "payment-flows.json"));
+  const flowYes = new PaymentFlowYes(
+    opts.yesFile ?? join(tmpdir(), "autobrowse", "payment-flows.json"),
+  );
   const decide = async (
     _key: string,
     what: string,

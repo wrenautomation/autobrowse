@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cloudflare } from "../src/clients/cloudflare.js";
 import { httpClient } from "../src/clients/http.js";
-import { domainIdeas } from "../src/workflows/domain/ideas.js";
+import { digitSwaps, domainIdeas } from "../src/workflows/domain/ideas.js";
 
 /** A tiny Cloudflare: one zone, records in memory, the envelope shape of the real API. */
 function fakeApi() {
@@ -181,5 +181,10 @@ describe("domainIdeas", () => {
       "acmeteam.io",
     ]);
     expect(domainIdeas([])).toEqual([]);
+  });
+
+  it("adds one look-alike digit per place when asked", () => {
+    expect(domainIdeas(["wren"], ["com"], { digits: true }).slice(4)).toEqual(["wr3n.com"]);
+    expect(digitSwaps("solo")).toEqual(["5olo", "s0lo", "so1o", "sol0"]);
   });
 });

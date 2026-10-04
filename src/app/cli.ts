@@ -51,6 +51,7 @@ import {
   envStoreFor,
   identitiesFor,
   inboxActivityDepsFor,
+  inboxFleetDepsFor,
   LOCAL_WORKFLOWS,
   sinkFor,
   WORKFLOWS,
@@ -293,11 +294,13 @@ program
         workflow as never,
         (workflow.name === "inbox-activity"
           ? inboxActivityDepsFor(settings, parts.browser)
-          : workflow.name === "workspace-inbox"
-            ? workspaceInboxDepsFor(settings, parts.browser, parts.sites, sinkFor(settings))
-            : handWritten
-              ? domainDepsFor(settings, parts.browser)
-              : compiledDeps(parts.browser)) as never,
+          : workflow.name === "inbox-fleet"
+            ? inboxFleetDepsFor(settings)
+            : workflow.name === "workspace-inbox"
+              ? workspaceInboxDepsFor(settings, parts.browser, parts.sites, sinkFor(settings))
+              : handWritten
+                ? domainDepsFor(settings, parts.browser)
+                : compiledDeps(parts.browser)) as never,
         plan,
         () =>
           o.ask ? null : { approved: true, note: "autobrowse try", at: new Date().toISOString() },
@@ -444,25 +447,30 @@ program
   .option("--tld <list>", "extensions, comma list", DEFAULT_TLDS.join(","))
   .option("--max <usd>", "hide free ones that cost more than this a year")
   .option("--all", "also list the ones someone else holds or Cloudflare cannot sell")
-  .action(async (words: string[], o: { tld: string; max?: string; all?: boolean }) => {
-    if (!settings.cloudflareApiToken || !settings.cloudflareAccountId)
-      throw new Error("CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID: autobrowse env pull");
-    const cf = cloudflare({
-      apiToken: settings.cloudflareApiToken,
-      accountId: settings.cloudflareAccountId,
-      http: httpClient(),
-    });
-    const max = o.max ? Number(o.max) : Number.POSITIVE_INFINITY;
-    const quotes = await cf.check(domainIdeas(words, o.tld.split(",")));
-    for (const q of quotes) {
-      if (q.registrable) {
-        if (Number(q.price) <= max)
-          console.log(`free   $${q.price?.padEnd(6)} renews $${q.renewal?.padEnd(6)} ${q.name}`);
-      } else if (q.reason === "domain_unavailable" && (await cf.registered(q.name)))
-        console.log(`ours                               ${q.name}`);
-      else if (o.all) console.log(`${(q.reason ?? "no").padEnd(34)} ${q.name}`);
-    }
-  });
+  .option("--digits", "also one letter swapped for a look-alike digit (wrenautomati0n)")
+  .action(
+    async (words: string[], o: { tld: string; max?: string; all?: boolean; digits?: boolean }) => {
+      if (!settings.cloudflareApiToken || !settings.cloudflareAccountId)
+        throw new Error("CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID: autobrowse env pull");
+      const cf = cloudflare({
+        apiToken: settings.cloudflareApiToken,
+        accountId: settings.cloudflareAccountId,
+        http: httpClient(),
+      });
+      const max = o.max ? Number(o.max) : Number.POSITIVE_INFINITY;
+      const quotes = await cf.check(
+        domainIdeas(words, o.tld.split(","), { digits: o.digits === true }),
+      );
+      for (const q of quotes) {
+        if (q.registrable) {
+          if (Number(q.price) <= max)
+            console.log(`free   $${q.price?.padEnd(6)} renews $${q.renewal?.padEnd(6)} ${q.name}`);
+        } else if (q.reason === "domain_unavailable" && (await cf.registered(q.name)))
+          console.log(`ours                               ${q.name}`);
+        else if (o.all) console.log(`${(q.reason ?? "no").padEnd(34)} ${q.name}`);
+      }
+    },
+  );
 
 program
   .command("inbox-name <address> <first> <last>")
