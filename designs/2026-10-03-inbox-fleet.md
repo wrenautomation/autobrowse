@@ -14,7 +14,7 @@ Give it domains, a mailbox kind for each (`private_smtp` or `google_workspace`),
 6. masks the site: an ACM certificate, a CloudFront distribution showing the main site under the domain's own name (no redirect), apex and www aliases;
 7. checks from public DNS: Route 53 name servers, MX, SPF, DMARC, the site answering 200;
 8. puts every inbox on the fleet warmup preset and turns warmup on;
-9. stores SMTP and IMAP logins as `smtp@<email>` and `imap@<email>`.
+9. stores SMTP and IMAP logins as `smtp@<email>` and `imap@<email>`, and merges them into wren's `/wren/prod/mailboxes` (wren design 2026-10-04-mailbox-fleet).
 
 ```
 autobrowse try inbox-fleet --plan plan.json --dry-run    # prices, buys nothing
@@ -52,3 +52,4 @@ Warmup preset (`WARMUP`): +1 a day to 30 (about 21 a day after three weeks), eve
 - 2026-10-03: Google orders have no run id; Inbox Insiders' team builds them. `ready` waits for a person to approve once they show in Instantly. Their logins come as a CSV on the orders page.
 - 2026-10-03: `domains --digits` suggests one letter swapped for a look-alike digit. Cheaper names, but filters may read them as spoofs.
 - 2026-10-03: Not yet run live. Dynadot's DNS reply shape, the export's field names and the run status values are unconfirmed; `isolate`'s check and `loginOf`'s error (field names only) catch a wrong guess before harm.
+- 2026-10-04: `credentials` also writes wren's `/wren/prod/mailboxes` (one SecureString, merged by address). wren sends without calling the desk. Only a missing parameter starts empty; any other failed read stops the step, so a bad read never drops logins already there.

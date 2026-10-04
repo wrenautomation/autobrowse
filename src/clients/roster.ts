@@ -18,7 +18,8 @@ export interface RosterStore {
   write(text: string): Promise<void>;
 }
 
-export function ssmRosterStore(opts: { param: string; aws: AwsConfig }): RosterStore {
+/** One SecureString parameter read and written whole: the roster, the mailbox logins. */
+export function ssmTextStore(opts: { param: string; aws: AwsConfig }): RosterStore {
   const ssm = new SSMClient(opts.aws);
   return {
     async read() {

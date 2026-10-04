@@ -5,7 +5,7 @@ import type { DnsRecord, DynadotClient } from "../src/clients/dynadot.js";
 import type { InboxInsidersClient, OrderRequest } from "../src/clients/inbox-insiders.js";
 import { runFlow } from "../src/engine/run.js";
 import { inboxFleetWorkflow, WARMUP } from "../src/workflows/inbox-fleet/index.js";
-import { loginOf, type Probe } from "../src/workflows/inbox-fleet/steps.js";
+import { loginOf, type MailboxLogins, type Probe } from "../src/workflows/inbox-fleet/steps.js";
 import { fakeEffects, fakeInstantly, scriptedAnswers } from "./fakes.js";
 
 const SMTP = "wren-a.test";
@@ -130,7 +130,13 @@ function world(o: { balance?: number; drop?: string } = {}) {
     },
     list: async () => [...kept.keys()],
   };
+  const mailboxes: Record<string, MailboxLogins> = {};
   const deps = {
+    mailboxes: {
+      merge: async (rows: Record<string, MailboxLogins>) => {
+        Object.assign(mailboxes, rows);
+      },
+    },
     dynadot: async () => dynadot,
     inboxInsiders: async () => ii,
     instantly: async () => instantly,
@@ -139,7 +145,7 @@ function world(o: { balance?: number; drop?: string } = {}) {
     credentials,
     probe,
   };
-  return { deps, calls, orders, kept, instantly };
+  return { deps, calls, orders, kept, instantly, mailboxes };
 }
 
 const plan = {
@@ -176,6 +182,12 @@ describe("inbox fleet", () => {
       url: "smtp://smtp.ii.test:587",
     });
     expect(w.kept.get(`imap@c@${SMTP}`)?.url).toBe("imap://imap.ii.test:993");
+    expect(w.mailboxes[`a@${SMTP}`]?.smtp).toMatchObject({
+      host: "smtp.ii.test",
+      port: 587,
+      user: `a@${SMTP}`,
+    });
+    expect(Object.keys(w.mailboxes)).toHaveLength(3);
     expect(out.results.credentials?.detail).not.toContain("pw");
   });
 

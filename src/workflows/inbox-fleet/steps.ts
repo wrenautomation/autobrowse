@@ -413,7 +413,13 @@ export const warmup: Step<"warmup"> = {
   },
 };
 
-/** SMTP and IMAP logins into the credential store as `smtp@<email>` and `imap@<email>`. Google logins come as a CSV on their orders page. */
+/** One mailbox's logins the way wren reads them (`WREN_MAILBOXES_FILE`). */
+export interface MailboxLogins {
+  smtp: { host: string; port: number; user: string; pass: string };
+  imap: { host: string; port: number; user: string; pass: string };
+}
+
+/** SMTP and IMAP logins into the credential store as `smtp@<email>` and `imap@<email>`, and into wren's `/wren/prod/mailboxes`. Google logins come as a CSV on their orders page. */
 export const credentials: Step<"credentials"> = {
   name: "credentials",
   async run({ fx, deps, memo }) {
@@ -430,11 +436,22 @@ export const credentials: Step<"credentials"> = {
     for (const runId of runs)
       stored += await fx.run(`store ${runId}`, async () => {
         let n = 0;
-        for (const m of await ii.export(runId))
-          for (const proto of ["smtp", "imap"] as const) {
+        const rows: Record<string, MailboxLogins> = {};
+        for (const m of await ii.export(runId)) {
+          const [smtp, imap] = [loginOf(m, "smtp"), loginOf(m, "imap")];
+          const wire = (l: typeof smtp) => ({
+            host: l.host,
+            port: l.port,
+            user: l.username,
+            pass: l.password,
+          });
+          rows[String(m.email).toLowerCase()] = { smtp: wire(smtp), imap: wire(imap) };
+          for (const [proto, login] of [
+            ["smtp", smtp],
+            ["imap", imap],
+          ] as const) {
             const site = `${proto}@${m.email}`;
             if (await deps.credentials.get(site)) continue;
-            const login = loginOf(m, proto);
             await deps.credentials.put(site, {
               username: login.username,
               password: login.password,
@@ -442,6 +459,9 @@ export const credentials: Step<"credentials"> = {
             });
             n++;
           }
+        }
+        // wren sends and reads over these; it never calls the desk to send.
+        await deps.mailboxes.merge(rows);
         return n;
       });
     return done(`${stored} logins stored${tail}`);

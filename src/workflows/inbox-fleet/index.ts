@@ -53,6 +53,8 @@ export interface FleetDeps {
   orderKeys: () => Promise<{ dynadot: string; instantly: string }>;
   aws: AwsDomainClient;
   credentials: CredentialStore;
+  /** wren's copy of the SMTP and IMAP logins (`/wren/prod/mailboxes`): merges rows by address. */
+  mailboxes: { merge(rows: Record<string, s.MailboxLogins>): Promise<void> };
   /** Public DNS and the web, as a stranger sees them. */
   probe: s.Probe;
 }
