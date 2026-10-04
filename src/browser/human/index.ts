@@ -387,7 +387,7 @@ async function chosen(
       if (/^(INPUT|TEXTAREA|LABEL)$/.test(el.tagName)) return null;
       if (el.getAttribute("role") === "combobox") return "list";
       const takesKeys =
-        (el as HTMLElement).isContentEditable ||
+        (el as { isContentEditable?: boolean }).isContentEditable ||
         el.querySelector("input, textarea, select, [contenteditable]");
       return takesKeys ? null : "list";
     })
@@ -404,7 +404,9 @@ async function chosen(
       .catch(() => false);
     // A list with no roles: the first visible element whose whole text is the value.
     await tap(
-      shown ? option.first() : page.getByText(text, { exact: true }).locator("visible=true").first(),
+      shown
+        ? option.first()
+        : page.getByText(text, { exact: true }).locator("visible=true").first(),
     );
   }
   return kind !== null;
