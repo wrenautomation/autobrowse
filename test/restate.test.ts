@@ -6,7 +6,7 @@
  * Needs Docker.
  */
 import * as clients from "@restatedev/restate-sdk-clients";
-import { RestateTestEnvironment } from "@restatedev/restate-sdk-testcontainers";
+import { RestateContainer, RestateTestEnvironment } from "@restatedev/restate-sdk-testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { NeedsHuman } from "../src/browser/session.js";
 import { Unrecoverable } from "../src/engine/effects.js";
@@ -37,6 +37,17 @@ const catalog: CompiledCatalog = {
 const browserCalls: string[] = [];
 const browser = fakeBrowser(browserCalls);
 let env: RestateTestEnvironment;
+/** A Restate that cannot be left behind: Ryuk dies when the Docker VM is starved or restarted, so
+ *  Docker deletes the container when it exits, and it kills itself after 30 minutes. */
+const container = () => {
+  const c = new RestateContainer();
+  (c as unknown as { hostConfig: { AutoRemove?: boolean } }).hostConfig.AutoRemove = true;
+  return c
+    .withAutoRemove(false) // Docker removes it; a second remove from testcontainers would throw
+    .withEntrypoint(["timeout", "-s", "KILL", "30m", "/usr/local/bin/restate-server"])
+    .withCommand([])
+    .alwaysReplay();
+};
 beforeAll(async () => {
   const start = () =>
     RestateTestEnvironment.start({
@@ -47,7 +58,8 @@ beforeAll(async () => {
         runsRegistryFor("acme"),
         makeRunObject(domainWorkflow, acmeDeps, acmeHost),
       ],
-      alwaysReplay: true,
+      container,
+      serviceEndpointAccess: "docker-host", // no sshd port-forwarding container
     });
   // The container start is the one flaky thing in the suite (port or pull timing): one more try.
   env = await start().catch(start);
