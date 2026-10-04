@@ -40,7 +40,7 @@ Gate answers are run-wide by name. `buy`'s purchase prompt names both the domain
 
 `isolate` refuses to move name servers when the copy from Dynadot misses an MX, apex TXT or DMARC record that public DNS serves, or has no DKIM. A missed record there would drop mail.
 
-Warmup preset (`WARMUP`): +1 a day to 21, every warmup mail answered, every spam landing pulled out, 30% marked important, weekends included. It stays on.
+Warmup preset (`WARMUP`): +1 a day to 30 (about 21 a day after three weeks), every warmup mail opened and answered, every spam landing pulled out, 30% marked important, weekends included. It stays on.
 
 ## Decision log
 

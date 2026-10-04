@@ -22,16 +22,17 @@ const MAILBOX_USD = 3.5;
 
 /**
  * Instantly warmup on every fleet inbox, in whole percents: +1 a day from
- * 0 to 21 (three weeks), every warmup mail answered, every one that lands
- * in spam pulled out, a third marked important. It never turns off.
+ * 0 to 30 (about 21 a day after three weeks), every warmup mail opened and
+ * answered, every one that lands in spam pulled out, 30% marked important.
+ * It never turns off.
  */
 export const WARMUP: WarmupSettings = {
   warmup: {
-    limit: 21,
+    limit: 30,
     increment: "1",
     reply_rate: 100,
     advanced: {
-      open_rate: 85,
+      open_rate: 100,
       important_rate: 30,
       spam_save_rate: 100,
       read_emulation: true,
