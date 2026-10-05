@@ -131,11 +131,11 @@ export function registerAwsCommands(
         bootstrapWorkflow,
         bootstrapDepsFor(settings, runner, sinkFor(settings)),
         plan,
-        () => ({
-          approved: true,
-          note: "autobrowse cloudflare-token",
-          at: new Date().toISOString(),
-        }),
+        // A human gate waits: approving it would rerun the mint and leave another token.
+        (g) =>
+          g.name === "human"
+            ? null
+            : { approved: true, note: "autobrowse cloudflare-token", at: new Date().toISOString() },
       );
       for (const [step, r] of Object.entries(out.results))
         if (r) console.log(`${step.padEnd(12)} ${r.status}  ${r.detail}`);

@@ -40,6 +40,7 @@ export interface DiscordBotInput {
 }
 
 export const discordBotToken = defineFlow<DiscordBotInput, { appId: string; kept: string }>({
+  secret: true,
   site: "discord",
   name: "bot-token",
   async run(fp, input) {

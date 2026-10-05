@@ -3,41 +3,65 @@
  * Some sites refuse the box's datacenter IP (Reddit bot-checks it); their
  * browser legs run here, on a home IP, with the Mac's signed-in profiles.
  * Lean on purpose: no UI, no idle stop, no evaluator; the box stays the worker.
- * It shares the box's Restate environment under its own tunnel name, so the
- * two never take each other's calls. launchd keeps it up: `deploy/desk/`.
+ * Two doors, so Restate can move without touching the Mac:
+ * - Restate Cloud's tunnel, under its own name, while the Cloud settings are set.
+ * - A loopback listener (DESK_PORT) that wren's self-hosted server reaches through the
+ *   Cloudflare Tunnel `desk.wrenautomation.com`; it serves only calls that server signs.
+ * With no Cloud settings, the desk registers itself on the box's server instead.
+ * launchd keeps it (and the tunnel) up: `deploy/desk/`.
  */
+import http2 from "node:http2";
+import { createEndpointHandler } from "@restatedev/restate-sdk";
 import pino from "pino";
 import { httpClient } from "../clients/http.js";
 import { named } from "../owner.js";
 import { DESK_SERVICE, sitesService } from "../sites/index.js";
+import { registerOnBox } from "./box-register.js";
 import { cloudAdminUrl, planEndpoint } from "./endpoint.js";
-import { boot } from "./owner.js";
+import { awsFor, boot } from "./owner.js";
 import { registerDeployment } from "./register.js";
 import { buildApp } from "./services.js";
+
+/** The port deploy/desk/install.sh points the Cloudflare Tunnel at. */
+const DESK_PORT = 9083;
 
 const { settings } = boot();
 const log = pino({ level: settings.logLevel });
 const app = await buildApp(settings, log);
-// The .env is the box's twin: the tunnel name is overridden, never shared.
+const desk = sitesService(app.sites, named(DESK_SERVICE, settings.owner));
+await new Promise<void>((ok) =>
+  http2
+    .createServer(
+      createEndpointHandler({ services: [desk], identityKeys: [settings.restateBoxIdentityKey] }),
+    )
+    .listen(DESK_PORT, "127.0.0.1", ok),
+);
+// The settings are the box's twin: the tunnel name is overridden, never shared.
 const plan = planEndpoint({ ...settings, restateTunnelName: DESK_SERVICE });
-if (plan.mode !== "tunnel")
-  throw new Error("the desk needs the Restate Cloud tunnel settings (RESTATE_ENVIRONMENT_ID …)");
-const { connectTunnel } = await import("@restatedev/restate-sdk-tunnel");
-const tunnel = connectTunnel({
-  services: [sitesService(app.sites, named(DESK_SERVICE, settings.owner))],
-  tunnelName: plan.tunnelName,
-  environmentId: plan.environmentId,
-  region: plan.region,
-  signingPublicKey: plan.signingPublicKey,
-  authToken: settings.restateAuthToken as string,
-});
-await tunnel.ready;
-if (!tunnel.deploymentUrl) throw new Error("restate tunnel handshake gave no deployment URL");
-const reg = await registerDeployment({
-  adminUrl: cloudAdminUrl(plan.environmentId, plan.region),
-  endpointUrl: tunnel.deploymentUrl,
-  http: httpClient(),
-  authToken: settings.restateAuthToken ?? null,
-});
+let reg: { id: string; services: string[] };
+if (plan.mode === "tunnel") {
+  const { connectTunnel } = await import("@restatedev/restate-sdk-tunnel");
+  const tunnel = connectTunnel({
+    services: [desk],
+    tunnelName: plan.tunnelName,
+    environmentId: plan.environmentId,
+    region: plan.region,
+    signingPublicKey: plan.signingPublicKey,
+    authToken: settings.restateAuthToken as string,
+  });
+  await tunnel.ready;
+  if (!tunnel.deploymentUrl) throw new Error("restate tunnel handshake gave no deployment URL");
+  reg = await registerDeployment({
+    adminUrl: cloudAdminUrl(plan.environmentId, plan.region),
+    endpointUrl: tunnel.deploymentUrl,
+    http: httpClient(),
+    authToken: settings.restateAuthToken ?? null,
+  });
+} else {
+  reg = await registerOnBox(awsFor(settings));
+}
 // deploy/desk/update.mjs waits for this exact message after a restart.
-log.info({ deployment: reg.id, services: reg.services, browser: settings.browser }, "desk up");
+log.info(
+  { deployment: reg.id, services: reg.services, browser: settings.browser, on: plan.mode },
+  "desk up",
+);

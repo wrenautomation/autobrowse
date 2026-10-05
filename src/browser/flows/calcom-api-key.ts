@@ -23,6 +23,7 @@ export interface CalcomKeyInput {
 const KEY = /^cal_[A-Za-z0-9_]{20,}$/;
 
 export const calcomApiKey = defineFlow<CalcomKeyInput, { kept: string }>({
+  secret: true,
   site: "calcom",
   name: "api-key",
   async run(fp, input) {

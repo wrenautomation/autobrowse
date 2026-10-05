@@ -293,6 +293,14 @@ const schema = z.object({
     .string()
     .regex(/^publickeyv1_[1-9A-HJ-NP-Za-km-z]+$/)
     .optional(),
+  /**
+   * The public half of the key wren's self-hosted Restate server (on the Postgres box) signs
+   * with; the desk serves that server only calls it signed. Public, so it lives here.
+   */
+  restateBoxIdentityKey: z
+    .string()
+    .regex(/^publickeyv1_[1-9A-HJ-NP-Za-km-z]+$/)
+    .default("publickeyv1_HcPGxeCdDAVdujTibFvhHboaqNsHrV5CBTSgZsquHjvj"),
 });
 
 export type Settings = z.infer<typeof schema>;
@@ -406,6 +414,7 @@ export const ENV_KEYS = {
   restateEnvironmentId: "RESTATE_ENVIRONMENT_ID",
   restateCloudRegion: "RESTATE_CLOUD_REGION",
   restateIdentityKey: "RESTATE_IDENTITY_KEY",
+  restateBoxIdentityKey: "RESTATE_BOX_IDENTITY_KEY",
 } as const satisfies Record<keyof Settings, string>;
 
 export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {

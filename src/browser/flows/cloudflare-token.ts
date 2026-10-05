@@ -69,6 +69,7 @@ export interface TokenResult {
 const TOKEN = /Bearer ([A-Za-z0-9_-]{32,})/;
 
 export const cloudflareApiToken = defineFlow<TokenInput, TokenResult>({
+  secret: true,
   site: "cloudflare",
   name: "api-token",
   async run(fp, { name, permissions }) {
@@ -114,9 +115,10 @@ export const cloudflareApiToken = defineFlow<TokenInput, TokenResult>({
       .getByRole("heading", { name: /successfully created/i })
       .waitFor({ timeout: 20_000 })
       .catch(() => undefined);
+    // The reveal has no main landmark (2026-10-05) and the token shows twice: read the body.
     const token = (
       await fp.page
-        .locator("main code")
+        .locator("body")
         .innerText()
         .catch(() => "")
     ).match(TOKEN)?.[1];

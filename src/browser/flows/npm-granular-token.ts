@@ -77,6 +77,7 @@ export function tokenName(name: string, now: Date): string {
 }
 
 export const npmGranularToken = defineFlow<GranularTokenInput, GranularTokenResult>({
+  secret: true,
   site: "npm",
   name: "granular-token",
   async run(fp, input) {

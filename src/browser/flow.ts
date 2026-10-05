@@ -163,6 +163,8 @@ export interface BrowserFlow<I, O> {
   site: Site;
   /** Unique per site; names the trace files and the fake in tests. */
   name: string;
+  /** The flow puts a secret on screen (a minted token): no screenshot, trace or step watch keeps it. */
+  secret?: boolean;
   run(fp: FlowPage, input: I): Promise<O>;
 }
 
@@ -421,6 +423,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         // Tracing is best effort: a CDP-attached context may refuse it. Never
         // in the person's own browser: it would film their other tabs.
         const tracing =
+          !flow.secret &&
           !session.shared &&
           (await session.context.tracing
             .start({ screenshots: true, snapshots: true })
@@ -438,9 +441,10 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         };
         // The URL whose overlays were last looked for: once per page, not per act.
         let overlaysAt: string | null = null;
-        const watch: Watch | null = watches(runner.watch ?? opts.watchFlows, flow.site, flow.name)
-          ? watchSteps(join(artifactsDir, stamp))
-          : null;
+        const watch: Watch | null =
+          !flow.secret && watches(runner.watch ?? opts.watchFlows, flow.site, flow.name)
+            ? watchSteps(join(artifactsDir, stamp))
+            : null;
         const stepped = <T>(
           s: Parameters<Watch["step"]>[0],
           run: () => Promise<T>,
@@ -788,10 +792,11 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           const artifacts: Artifacts = watch ? { steps: watch.dir } : {};
           const shot = join(artifactsDir, `${stamp}.png`);
           if (
-            await session.page.screenshot({ path: shot, fullPage: true }).then(
+            !flow.secret &&
+            (await session.page.screenshot({ path: shot, fullPage: true }).then(
               () => true,
               () => false,
-            )
+            ))
           )
             artifacts.screenshot = shot;
           // The accessibility tree next to the PNG: a reader (or a model)

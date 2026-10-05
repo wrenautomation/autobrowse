@@ -308,8 +308,11 @@ program
                 ? domainDepsFor(settings, parts.browser)
                 : compiledDeps(parts.browser)) as never,
         plan,
-        () =>
-          o.ask ? null : { approved: true, note: "autobrowse try", at: new Date().toISOString() },
+        // A human gate means a person must act first; approving it here reruns the step, forever.
+        (g) =>
+          o.ask || g.name === "human"
+            ? null
+            : { approved: true, note: "autobrowse try", at: new Date().toISOString() },
       );
       for (const [step, r] of Object.entries(out.results))
         if (r) console.log(`${step.padEnd(28)} ${r.status}  ${r.detail}`);

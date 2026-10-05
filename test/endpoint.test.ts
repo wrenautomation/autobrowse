@@ -65,3 +65,11 @@ describe("planEndpoint", () => {
     expect(cloudAdminUrl("env_abc123", "us")).toBe("https://abc123.env.us.restate.cloud:9070");
   });
 });
+
+describe("parseRegistered", () => {
+  it("reads the deployment id and service names the box's admin API answers", async () => {
+    const { parseRegistered } = await import("../src/app/box-register.js");
+    const out = JSON.stringify({ id: "dp_1", services: [{ name: "desk", revision: 3 }] });
+    expect(parseRegistered(out)).toEqual({ id: "dp_1", services: ["desk"] });
+  });
+});
