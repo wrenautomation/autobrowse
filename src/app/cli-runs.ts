@@ -143,7 +143,10 @@ export function registerRunsCommands(
       );
       for (const x of built.skipped) console.log(`  skipped ${x.run}: ${x.reason}`);
       for (const d of built.disagreements) console.log(`  differs: ${masked(d)}`);
-      if (s.fields.length) console.log(`  plan: ${s.fields.map((f) => f.key).join(", ")}`);
+      if (s.fields.length)
+        console.log(
+          `  plan: ${s.fields.map((f) => (f.default !== undefined ? `${f.key} (default ${masked(f.default)})` : f.key)).join(", ")}`,
+        );
       if (s.secrets.length) console.log(`  secrets: ${s.secrets.map((x) => x.key).join(", ")}`);
       if (s.irreversible) console.log("  irreversible: walks run needs --yes");
       console.log(`  ${walkFile(walksDir, s.site, s.name)}`);
