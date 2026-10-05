@@ -370,6 +370,8 @@ export interface OauthLoginSpec {
   start: string;
   /** Clicks on `start` that bring the provider's button up (a "Sign In" that opens a modal). */
   before?: Hints[];
+  /** A saved-account chooser's way out ("Sign in using another account"): pressed only when it shows. */
+  reveal?: Hints;
   /** The provider's button on the site's login page; the provider's own readings when absent. */
   button?: Hints;
   /** Which identity provider (and stored credential) signs in; `google` by default. */
@@ -410,6 +412,8 @@ export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signI
     // unclickable. A card that is already there is the sign-in (LinkedIn, 2026-09-22).
     let page = opened();
     if (!page) {
+      if (spec.reveal && (await fp.has(spec.reveal, 1_500)))
+        await fp.act({ kind: "click" }, spec.reveal, { goal: "past the saved-account chooser" });
       for (const h of spec.before ?? [])
         await fp.act({ kind: "click" }, h, { goal: `open ${site}'s sign-in` });
       const button = await providerButton(fp, provider, spec.button);

@@ -570,23 +570,35 @@ const sentry: SiteLogin = {
 
 /**
  * LinkedIn: the member's own login (`creds paste linkedin`: email, password,
- * optional authenticator key). `signInHere` covers the login page an OAuth
- * authorize URL shows a signed-out profile, keeping its session_redirect.
- * Unverified until a LinkedIn credential exists.
+ * optional authenticator key), or "Continue with Google" for an account made
+ * that way (William's own, `via google`). `signInHere` covers the login page an
+ * OAuth authorize URL shows a signed-out profile, keeping its session_redirect.
  */
 const LINKEDIN_FEED = "https://www.linkedin.com/feed/";
+const LINKEDIN_FEED_URL = /linkedin\.com\/feed/;
+const linkedinGoogle = oauthLogin("linkedin", {
+  start: "https://www.linkedin.com/login",
+  // A profile that once held an account opens on "Choose an account", no Google button.
+  reveal: { role: "link", name: "Sign in using another account" },
+  success: LINKEDIN_FEED_URL,
+});
 const linkedin: SiteLogin = {
   site: "linkedin",
   home: LINKEDIN_FEED,
   ask: "Your LinkedIn login (email, password, authenticator key if set)",
-  loggedIn: async (fp) => /linkedin\.com\/feed/.test(fp.url()),
+  via: ["google"],
+  loggedIn: async (fp) => LINKEDIN_FEED_URL.test(fp.url()),
   signIn: async (ctx) => {
+    if (ctx.cred.via === "google") return linkedinGoogle(ctx);
     await ctx.fp.open("https://www.linkedin.com/login", { allowWall: true });
     await signInToLinkedin(ctx);
-    if (!(await ctx.fp.waitForUrl(/linkedin\.com\/feed/, 30_000)))
+    if (!(await ctx.fp.waitForUrl(LINKEDIN_FEED_URL, 30_000)))
       throw new LoginFailed("linkedin", `still on ${ctx.fp.url()} after LinkedIn sign-in`);
   },
-  signInHere: { at: LINKEDIN_LOGIN_URL, run: signInToLinkedin },
+  signInHere: {
+    at: LINKEDIN_LOGIN_URL,
+    run: (ctx) => (ctx.cred.via === "google" ? linkedinGoogle(ctx) : signInToLinkedin(ctx)),
+  },
 };
 
 const GITHUB_LOGIN = /github\.com\/(login|session)/;
