@@ -1,6 +1,6 @@
 {
   "name": "@wrenautomation/autobrowse",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Browser and account automation: recorded flows where no API exists, official API shapes where one does, a person in the loop for money, accounts and consent.",
   "repository": {
     "type": "git",
