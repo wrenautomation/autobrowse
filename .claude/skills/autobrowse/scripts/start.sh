@@ -12,7 +12,8 @@ fi
 rm -f "$TOKEN"
 ARGS=(explore "$SITE" --port "$PORT"); [ -n "$URL" ] && ARGS+=(--url "$URL")
 [ $# -gt 3 ] && ARGS+=("${@:4}")  # --signup/--codes/--login/--headed: what place may type
-(cd "$ROOT" && nohup pnpm -s autobrowse "${ARGS[@]}" >"$LOG" 2>&1 &)
+# exec: the forked shell becomes pnpm, so nothing holds our stdout open (`start.sh | tail` returns)
+(cd "$ROOT" && exec nohup pnpm -s autobrowse "${ARGS[@]}" </dev/null >"$LOG" 2>&1 &)
 for _ in $(seq 1 120); do
   [ -f "$TOKEN" ] && { echo "port $PORT"; echo "log $LOG"; exit 0; }
   if ! pgrep -qf "explore $SITE --port $PORT"; then sleep 1; [ -f "$TOKEN" ] && { echo "port $PORT"; exit 0; }; echo "explore exited; log:"; sed 's/[A-Za-z0-9_-]\{30,\}/<tok>/g' "$LOG" | tail -20; exit 1; fi
