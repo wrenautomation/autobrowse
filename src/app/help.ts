@@ -74,6 +74,7 @@ const GROUPS: [string, [string, string][]][] = [
       ["recovery-codes", "Read and seal an account's recovery codes"],
       ["aws-login", "`aws login`, answered from the browser"],
       ["wrangler-login", "`wrangler login`, authorized from the browser"],
+      ["gcloud-login", "`gcloud auth login`, answered from the browser"],
       ["cloudflare-token", "Mint and store a Cloudflare API token"],
     ],
   ],

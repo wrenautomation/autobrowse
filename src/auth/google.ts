@@ -37,6 +37,7 @@ const NEXT = { role: "button", name: "/^next$/i" } as const;
 const CODE_BOX = { role: "textbox", name: "/code/i" } as const;
 const PHONE_BOX = { role: "textbox", name: "/^phone number$/i" } as const;
 const CONTINUE = { role: "button", name: "/^continue$/i" } as const;
+const ALLOW = { role: "button", name: "/^allow$/i" } as const;
 const SWITCH_ACCOUNT = { role: "link", name: "/switch account/i" } as const;
 /** "Try another way" on a sign-in, "More ways to verify" on a re-auth. */
 const OTHER_WAY = { text: "/try another way|more ways to verify/i" } as const;
@@ -161,6 +162,15 @@ export function googleWalk(ctx: SignInContext): Walk<SignInContext> {
       name: "done",
       looks: "a page off accounts.google.com: the site, or the Google Account page",
       is: async ({ fp }) => /^https?:/.test(fp.url()) && !GOOGLE_ACCOUNTS.test(fp.url()),
+      goal: true,
+    },
+    {
+      // Signed in mid-consent (a re-verify for sensitive scopes): "<app> wants access
+      // to your Google Account", with Allow. The consent's own flow grants it; a sign-in grants nothing.
+      name: "scope grant",
+      looks: "'<app> wants access to your Google Account', with Allow",
+      at: /accounts\.google\.com\/signin\/oauth/,
+      shows: [ALLOW],
       goal: true,
     },
     {

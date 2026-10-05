@@ -516,6 +516,28 @@ describe("loginProvider on the site's own sign-in page", () => {
     expect(await login(elsewhere.fp, "s")).toBe("signed-in");
     expect(calls).toEqual(["here", "signIn"]);
   });
+
+  it("a page past the sign-in on that surface counts as signed in", async () => {
+    const site: SiteLogin = {
+      site: "s",
+      home: "https://site.test/",
+      loggedIn: async () => true,
+      async signIn() {},
+      signInHere: {
+        at: /accounts\.site\.test/,
+        past: /accounts\.site\.test\/grant/,
+        async run() {},
+      },
+    };
+    const login = loginProvider([site], {
+      credentials: memoryCredentials({ s: { username: "u", password: "p" } }),
+      codes: totpSource(),
+    });
+    const url = "https://accounts.site.test/grant";
+    const grant = fakePage({ text: [], present: () => true, url });
+    grant.fp.waitForUrl = async (want) => (typeof want === "function" ? want(url) : false);
+    expect(await login(grant.fp, "s")).toBe("signed-in");
+  });
 });
 
 describe("landAfterOauth", () => {

@@ -686,6 +686,18 @@ signs in via Google) opens it and clicks Authorize; wrangler keeps its own
 token. Run it on the machine the browser runs on. `--scopes` narrows the
 grant. `src/chores/wrangler-login.ts`, flow `src/browser/flows/wrangler-login.ts`.
 
+```sh
+pnpm autobrowse gcloud-login                       # renew gcloud's credentials as its active account
+pnpm autobrowse gcloud-login william@wrenautomation.com
+```
+
+`gcloud auth login --no-launch-browser` prints a Google authorize URL and
+waits for a verification code. The Google profile consents as the account
+(chooser, re-verify, scopes); the code comes back in the redirect URL and
+goes straight into the CLI's stdin. Run it when gcloud says
+"Reauthentication failed". `src/chores/gcloud-login.ts`, flow
+`src/browser/flows/oauth-consent.ts`.
+
 ## Use as a library
 
 Every layer is a plain function over explicit parts; only the composers

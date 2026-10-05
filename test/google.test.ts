@@ -88,6 +88,23 @@ describe("Google sign-in walk", () => {
     expect(s.acts).toEqual(["click Continue", "click Continue"]);
   });
 
+  it("ends on a scope grant: signed in, the consent's flow clicks Allow", async () => {
+    const s = fakeSite(
+      {
+        pwd: pwd("grant"),
+        grant: {
+          url: "https://accounts.google.com/signin/oauth/v3/consent?x",
+          text: "Google Cloud SDK wants access to your Google Account",
+          has: ["button:Allow", "button:Cancel"],
+        },
+      },
+      "pwd",
+    );
+    await signInToGoogle(ctxOf(s.fp, ["totp"]));
+    expect(s.acts).toEqual(["fill Password=p", "click Next"]);
+    expect(s.at()).toBe("grant");
+  });
+
   it("switches account when the profile is signed in as someone else", async () => {
     const s = fakeSite(
       {

@@ -78,7 +78,12 @@ export interface SiteLogin {
    * answered where the page is: a security page asks for the password
    * again even though `home` is signed in, so `signIn` would find nothing to do.
    */
-  signInHere?: { at: RegExp; run(ctx: SignInContext): Promise<void> };
+  signInHere?: {
+    at: RegExp;
+    run(ctx: SignInContext): Promise<void>;
+    /** A page on that surface that is past the sign-in (Google's scope grant, mid-consent). */
+    past?: RegExp;
+  };
   /**
    * The password asked again in place, signed in (Discord's box before a
    * bot token reset): filled where it shows, no navigation, so the dialog
@@ -749,7 +754,7 @@ async function signInWith(name: string, login: SiteLogin, ctx: SignInContext): P
   const here = login.signInHere;
   if (here?.at.test(fp.url())) {
     await here.run(ctx);
-    if (!(await fp.waitForUrl((u) => !here.at.test(u), 30_000)))
+    if (!(await fp.waitForUrl((u) => !here.at.test(u) || !!here.past?.test(u), 30_000)))
       throw new LoginFailed(name, `not signed in 30s after the form: ${await pageState(fp)}`);
     return;
   }

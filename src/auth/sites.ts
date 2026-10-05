@@ -238,7 +238,12 @@ const GOOGLE_PASSKEY_SETUP: PasskeySetupSpec = {
 };
 
 /** Google re-asks for the password on security pages; answer on the spot. */
-const GOOGLE_SIGN_IN_HERE = { at: /^https:\/\/accounts\.google\.com\//, run: signInToGoogle };
+const GOOGLE_SIGN_IN_HERE = {
+  at: /^https:\/\/accounts\.google\.com\//,
+  run: signInToGoogle,
+  // A re-verify inside a consent ends on the scope grant, still on accounts.google.com.
+  past: /^https:\/\/accounts\.google\.com\/signin\/oauth\//,
+};
 
 /** A Google Account page, not its signed-out `/intro/` twin. */
 const GOOGLE_SIGNED_IN = /^https:\/\/myaccount\.google\.com\/(?!intro(\/|\?|$))/;

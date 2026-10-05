@@ -1,17 +1,22 @@
 /**
  * CLI logins renewed by a browser session: `autobrowse aws-login` (the
- * `aws` profile) and `autobrowse wrangler-login` (Cloudflare's session);
+ * `aws` profile), `autobrowse wrangler-login` (Cloudflare's session) and
+ * `autobrowse gcloud-login` (the Google session);
  * `autobrowse cloudflare-token` mints a scoped API token for unattended deploys.
  */
+import { execFileSync } from "node:child_process";
 import type { Command } from "commander";
 import { awsCliLoginChore } from "../chores/aws-login.js";
+import { gcloudLoginChore } from "../chores/gcloud-login.js";
 import { wranglerLoginChore } from "../chores/wrangler-login.js";
+import { profileOf } from "../sites/wire.js";
 import type { LocalBackend } from "./backend.js";
 import type { Settings } from "./config.js";
 import {
   bootstrapDepsFor,
   browserFor,
   captchaFor,
+  credentialsFor,
   gmailFor,
   loginFor,
   sinkFor,
@@ -62,6 +67,28 @@ export function registerAwsCommands(
         ...(o.scopes ? { scopes: o.scopes } : {}),
         ...(o.cwd ? { cwd: o.cwd } : {}),
       });
+      console.log(`${r.ok ? "signed in" : "not signed in"}\n${r.detail}`);
+      if (!r.ok) process.exitCode = 1;
+    });
+
+  program
+    .command("gcloud-login [account]")
+    .description(
+      "Run `gcloud auth login --no-launch-browser` and answer its code from the Google session (default: gcloud's active account)",
+    )
+    .action(async (account?: string) => {
+      const { flowRunner } = await import("../browser/flow.js");
+      const who =
+        account ??
+        execFileSync("gcloud", ["config", "get-value", "account"], { encoding: "utf8" }).trim();
+      if (!who) throw new Error("no account: pass one, or set gcloud's active account");
+      const runner = flowRunner(await browserFor(settings, "google"), {
+        login: loginFor(settings, gmailFor(settings)),
+        captcha: captchaFor(settings),
+      });
+      // The account's own profile (`google@wren`), where its session lives.
+      const site = (await profileOf(credentialsFor(settings), "google", who)) ?? "google";
+      const r = await gcloudLoginChore(runner, { account: who, site });
       console.log(`${r.ok ? "signed in" : "not signed in"}\n${r.detail}`);
       if (!r.ok) process.exitCode = 1;
     });
