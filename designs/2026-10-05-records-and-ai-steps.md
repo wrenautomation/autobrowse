@@ -52,7 +52,7 @@ Living doc. Started 2026-10-05. William: "letting ai write check and validate co
 2. ✅ Meta Ad Library logged out (`fb-public/ad-library`), proved live.
 3. ✅ Ad Library as a site route: `fb-public GET /ads?q=&country=` runs the walk, so wren calls it on the desk. Wren's `adLibrary` pool stage turns advertisers into firms.
 4. ✅ Facebook public groups: `fb-public GET /groups?q=` (Google), `/groups/{group}` (About), `/groups/{group}/posts/{post}` (a post and its top comments). Then directories.
-5. An explorer `records` command, so an explore run that ends on a list page builds a walk with the op.
+5. ✅ An explorer `records` command, so an explore run that ends on a list page builds a walk with the op.
 6. Compiler render, if a compiled workflow ever needs a list.
 
 ## Decision log
@@ -71,3 +71,4 @@ Living doc. Started 2026-10-05. William: "letting ai write check and validate co
 - 2026-10-05: The group walks' extractors are hand-written. `autobrowse records` writes code for a list; on a one-panel page (a group's About) the model found no rows in three tries. Both walks parse the page's text lines and two DOM markers (`story_message`, comment `aria-label`s), checked on three groups and three posts.
 - 2026-10-05: A records op with `min: 0` may come back empty without a heal: a post with no comments is a real answer.
 - 2026-10-05: The sandbox runs a whole `function (root) {...}` or an arrow when a model sends one in place of a body. A model did, and every round failed on the syntax.
+- 2026-10-05: Explore's `records` takes the driver's own `code` first. The driver is usually a model already looking at the page, and today's group walks showed a hand-written extractor beats the builder's one-shot model on odd pages. Without `code`, the session's model writes it as `autobrowse records` does.

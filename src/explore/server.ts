@@ -27,6 +27,7 @@ import { dirname, join, relative } from "node:path";
 import type { SecretAudit } from "credvault";
 import type { Page } from "playwright";
 import { z } from "zod";
+import { writeRecords } from "../agent/records.js";
 import { SecretLeak, urlWithoutQuery } from "../auth/guard.js";
 import type { SecretValues } from "../auth/signup.js";
 import {
@@ -41,6 +42,7 @@ import { handsFor } from "../browser/human/index.js";
 import { inPage } from "../browser/in-page.js";
 import { layoutText } from "../browser/layout.js";
 import { type Hints, locate, locateAll, textOf } from "../browser/locate.js";
+import { checkRows, type RecordsOp, type Row, readRecords } from "../browser/records.js";
 import { snapshotPage } from "../browser/repair.js";
 import { lookAt, type PageLook } from "../browser/screens.js";
 import { type BrowserOptions, bodyText, looksLikeWall, NeedsHuman } from "../browser/session.js";
@@ -65,6 +67,7 @@ import {
   paymentGate,
 } from "../gates/payment.js";
 import type { Amount } from "../gates/spend.js";
+import type { Llm } from "../llm/types.js";
 import { type Charge, type Receipt, receiptOutcome, stillAsking } from "../money/charges.js";
 import {
   ADDRESS_FIELDS,
@@ -210,6 +213,30 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   targetSchema.extend({ cmd: z.literal("count") }),
   /** Read an element's text and keep it under `as`; journaled, so the compiled flow reads it too. */
   targetSchema.extend({ cmd: z.literal("read"), as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/) }),
+  /**
+   * The page as rows: `code` is a function body over `root` (the document) returning plain
+   * objects, run in a sandbox and checked; without it the session's model writes one. Journaled
+   * as a records op, so a walk built from this run replays it. `min` 0: the list may be empty.
+   */
+  z.object({
+    cmd: z.literal("records"),
+    as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
+    goal: z.string().min(1),
+    fields: z
+      .array(
+        z.object({
+          key: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
+          says: z.string(),
+          optional: z.boolean().optional(),
+        }),
+      )
+      .min(1),
+    key: z.string().optional(),
+    code: z.string().min(10).optional(),
+    max: z.number().int().positive().optional(),
+    min: z.number().int().nonnegative().optional(),
+    raw: z.boolean().optional(),
+  }),
   /** Read a secret the site just minted straight into the secret sink under `env`; nothing shows it. */
   targetSchema.extend({ cmd: z.literal("keep"), env: z.string().regex(/^[A-Z][A-Z0-9_]*$/) }),
   z.object({ cmd: z.literal("note"), text: z.string() }),
@@ -374,6 +401,8 @@ export interface ExploreOptions {
   captcha?: RunnerOptions["captcha"];
   /** The desktop `os` acts run on; this Mac by default, none on a headless host. */
   desktop?: Desktop;
+  /** Writes `records` code when the command sends none; absent: `records` needs `code`. */
+  llm?: Llm | null;
   /** Where `keep` puts a secret read off the page (.env locally, SSM in prod). */
   sink?: SecretSink;
   /** What `place` may fill by name; without it `place` is refused. */
@@ -1335,6 +1364,41 @@ async function serve(
         const shown = out(text, false);
         journalAct(c, (target) => ({ kind: "read", target, as: c.as, value: shown }));
         return { as: c.as, text: shown };
+      }
+      case "records": {
+        const key = c.key ?? (c.fields[0] as { key: string }).key;
+        if (!c.fields.some((f) => f.key === key))
+          throw new Error(`records: key ${key} is not a field`);
+        const base = {
+          as: c.as,
+          goal: c.goal,
+          fields: c.fields,
+          key,
+          ...(c.max ? { max: c.max } : {}),
+        };
+        let op: RecordsOp;
+        let rows: Row[];
+        if (c.code) {
+          op = { kind: "records", ...base, code: c.code, min: 0, sample: [] };
+          ({ rows } = await readRecords(fp, op));
+          const problem = checkRows(rows, { fields: c.fields, min: c.min === 0 ? 0 : 1 });
+          if (problem) throw new Error(`records: ${problem}`);
+          op.sample = rows.slice(0, 3);
+        } else {
+          if (!opts.llm)
+            throw new Error("records: send `code`, or set LLM_PROVIDER for a model to write it");
+          const w = await writeRecords({ fp, llm: opts.llm, ...base });
+          if ("error" in w) throw new Error(`records: ${w.error}`);
+          ({ op, rows } = w);
+        }
+        op.min = c.min ?? Math.max(1, Math.floor(rows.length / 2));
+        journal({ kind: "records", op });
+        return {
+          as: c.as,
+          rows: rows.length,
+          min: op.min,
+          first: out(JSON.stringify(rows.slice(0, 5)), c.raw),
+        };
       }
       case "keep": {
         if (!opts.sink) throw new Error("keep needs a secret sink (SECRET_SINK / .env)");

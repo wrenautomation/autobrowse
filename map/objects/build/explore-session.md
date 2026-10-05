@@ -17,7 +17,7 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 
 ## Shape
 
-- `Command` (open, click, fill, place, keep, aria, read, note, save, os …) — `src/explore/server.ts:220`; `ExploreOptions` — `:338-420`; `Explorer` — `:447`
+- `Command` (open, click, fill, place, keep, aria, read, records, note, save, os …) — `src/explore/server.ts:220`; `records` journals a records op (the driver's code, else the session's model writes it via `writeRecords`), which a walk built from the run replays; `ExploreOptions` — `:338-420`; `Explorer` — `:447`
 - Journal: `journalFileFor(recordingsDir, site, id)` under `recordings/.explore-<site>/` — `:423`; `readJournal` — `:427`; `DEFAULT_IDLE_MINUTES` 30 — `:441`
 - Money and secrets on this path: `secrets`/`secretHosts` (place by name), `profiles` (a profile field, any host), `cards`, `cardsOnFile`, `charges`, `approve`, `audit` — `:353-393`; `placeHint` names the flag a missing secret needs — `:261-277`
 - Help by hand, no pause: acts a person does between two commands count (`byHand`, `HAND_GRACE_MS` — `:279`, `:595-602`); the next answer carries `helped {acts, url, changed, note}` — `helpedSince` `:1027`

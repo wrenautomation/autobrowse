@@ -287,6 +287,7 @@ export function explorerOpener(
       ...(cards ? { cards, cardsOnFile: cardsOnFileFor(settings) } : {}),
       ...(profiles ? { profiles } : {}),
       charges: chargesFor(settings, gmailFor(settings)),
+      llm: llmFor(settings), // writes `records` code when the driver sends none
       pace: paceFor(settings), // an agent browses at a person's pace: sites watch for the other kind
       sink,
       runs: runsDirFor(settings),

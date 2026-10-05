@@ -373,6 +373,39 @@ describe("explore mode", () => {
     const bad = await send({ cmd: "batch", cmds: [{ cmd: "url" }, { cmd: "close" }] });
     expect(bad.body.error).toMatch(/batch\[1\]: close cannot be batched/);
   }, 60_000);
+
+  it("reads a list as rows with the driver's code and journals the op a walk replays", async () => {
+    const list = `data:text/html,${encodeURIComponent(
+      "<ul><li><b>Acme</b> <a href='https://acme.test/'>site</a></li><li><b>Globex</b></li></ul>",
+    )}`;
+    await send({ cmd: "open", url: list });
+    const records = {
+      cmd: "records",
+      as: "firms",
+      goal: "firms on the list",
+      fields: [
+        { key: "name", says: "the firm" },
+        { key: "site", says: "its link", optional: true },
+      ],
+    };
+    const code = `return [...root.querySelectorAll("li")].map((li) => ({
+      name: li.querySelector("b").textContent, site: li.querySelector("a")?.href }));`;
+    const got = await send({ ...records, code });
+    expect(got.body).toMatchObject({ as: "firms", rows: 2, min: 1 });
+    expect(got.body.first).toContain('"site":"https://acme.test/"');
+    const { actions } = (await send({ cmd: "journal", last: 1 })).body as {
+      actions: Array<{ kind: string; op?: { kind: string; key: string; code: string } }>;
+    };
+    expect(actions[0]).toMatchObject({
+      kind: "records",
+      op: { kind: "records", key: "name", code },
+    });
+    // No code and no model: refused, nothing journaled.
+    expect((await send(records)).body.error).toMatch(/send `code`/);
+    expect((await send({ cmd: "records", ...records, code: "return [];" })).body.error).toMatch(
+      /no rows/,
+    );
+  }, 60_000);
 });
 
 describe("pause: a person's hand acts land in the journal", () => {

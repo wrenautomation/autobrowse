@@ -4,6 +4,7 @@
  * hints survive a redesign and CSS does not. Values are redacted at
  * capture time when the field or the value looks like a secret.
  */
+import type { RecordsOp } from "../browser/records.js";
 import type { DesktopOp } from "../desktop/types.js";
 
 export interface LocatorHints {
@@ -60,6 +61,8 @@ export type Action =
   | (Base & { kind: "submit"; target: LocatorHints })
   /** Text read off an element and kept under a name: the scraping half of a workflow. */
   | (Base & { kind: "read"; target: LocatorHints; as: string; value: string })
+  /** A list page read as rows by checked extractor code: a walk replays the op whole. */
+  | (Base & { kind: "records"; op: RecordsOp })
   /** A secret read off the page (a minted API key) and put in the secret sink as `env`; the value is never here. */
   | (Base & { kind: "keep"; target: LocatorHints; env: string })
   | (Base & { kind: "note"; text: string })

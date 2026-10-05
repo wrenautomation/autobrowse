@@ -48,6 +48,7 @@ Act (journaled):
 - `{"cmd":"type","text":"…"}`, `{"cmd":"key","key":"Escape"}` — into whatever is focused.
 - `{"cmd":"place","hints":{…},"secret":"code"}` — types a secret the session holds (signup.md); the value never reaches you. `"secret":"profile.taxId"` fills a field of the Mac's wallet profile (signup.md).
 - `{"cmd":"read","hints":{…},"as":"fieldName"}` — text off the page into the flow's output.
+- `{"cmd":"records","as":"ads","goal":"…","fields":[{"key":"name","says":"…"},{"key":"site","says":"…","optional":true}],"code":"return [...]"}` — a list page as rows. `code` is a function body over `root` (the document), run in a sandbox and checked; leave it out and the session's model writes one. `key` (default the first field) dedupes, `max` scrolls a feed, `min:0` lets the list be empty. A walk built from the run replays it, with no model.
 - `{"cmd":"keep","hints":{…},"env":"X_API_KEY"}` — a secret the site just showed goes straight to the store (`.env` locally, SSM in prod). The journal keeps the element and the name, never the value. This is how keys get set up.
 - `{"cmd":"captcha"}` — solves the page's captcha (a checkbox by a human click, a picture by a model, cropped in memory). Returns `{solved, kind, vendor, reason?}`. Never screenshot a captcha yourself.
 - `{"cmd":"note","text":"…"}` — a comment in the journal.

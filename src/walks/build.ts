@@ -447,6 +447,8 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
           ];
         case "keep":
           return [{ kind: "keep", goal: `keep ${a.env}`, hints: hintsOf(a.target), env: a.env }];
+        case "records":
+          return [a.op];
         default:
           return [];
       }

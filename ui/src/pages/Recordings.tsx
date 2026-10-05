@@ -155,6 +155,8 @@ function Actions({ rec }: { rec: Recording }) {
         return "submit";
       case "read":
         return `read ${a.target.name ?? a.target.text ?? a.target.tag} as ${a.as}: "${a.value.slice(0, 60)}"`;
+      case "records":
+        return `read ${a.op.goal} as ${a.op.as} (${a.op.fields.map((f) => f.key).join(", ")}; ${a.op.min}+ rows)`;
       case "note":
         return `note: ${a.text}`;
       case "pause":

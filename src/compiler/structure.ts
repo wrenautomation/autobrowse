@@ -388,6 +388,10 @@ export function structure(rec: Recording): Outline {
           as: a.as,
         });
         break;
+      case "records":
+        // Render refuses it by name: a list read replays in a walk, not compiled code.
+        add(a.op);
+        break;
       case "keep":
         add({
           kind: "keep",
