@@ -37,6 +37,7 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | From | Into | How it breaks |
 |---|---|---|
 | wren `packages/core/src/content/restate.ts` and its channel packages | Restate services `sites` (`call`, `status`, `setup`), `desk` (same handlers, the Mac), `do`, `browser` | a renamed service or handler, a changed route path or input shape |
+| wren `packages/core/src/ask.ts` (`Ask/answer`) | Restate service `claude` (`ask`: question, system, dir, also, commands, model) on the desk | a renamed handler or input field, the desk off (asks wait in Restate) |
 | wren `TokenRenewal`, credvault `syncedEnvStore` | SSM `/autobrowse/config` names (`accountEnv`) | a renamed token or account suffix |
 | `.claude/skills/autobrowse/scripts/*.sh` | `pnpm -s autobrowse explore` and the explore command set | a renamed CLI verb or command field |
 | `src/workflows/*/index.ts` (rendered) | `src/index.ts` exports (`COMPILED_LIB`) | an export removed or renamed |
