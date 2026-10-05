@@ -13,7 +13,7 @@ import {
   ringKeys,
   withKey,
 } from "../src/reach/key-ring.js";
-import { people, search, WebMiss } from "../src/reach/web.js";
+import { companySearch, people, search, WebMiss } from "../src/reach/web.js";
 
 const envOf = (vars: Record<string, string>) => async (n: string) => vars[n];
 const noon = Date.UTC(2026, 9, 3, 12);
@@ -107,6 +107,19 @@ describe("exa routes on the ring", () => {
     const spent = memorySpent();
     expect((await people("q", { env, fetch: exa("synthetic-a"), spent })).people).toEqual([]);
     const all = await people("q", {
+      env: envOf({ EXA_API_KEY: "synthetic-a" }),
+      fetch: exa("synthetic-a"),
+      spent: memorySpent(),
+    }).catch((e) => e);
+    expect(all).toBeInstanceOf(WebMiss);
+    expect(all.status).toBe(402);
+  });
+
+  it("firm search moves past a spent key; every key spent is a 402", async () => {
+    const env = envOf({ EXA_API_KEY: "synthetic-a", NUM_EXA: "1", EXA_API_KEY_1: "synthetic-b" });
+    const ok = await companySearch("q", { env, fetch: exa("synthetic-a"), spent: memorySpent() });
+    expect(ok.results).toEqual([]);
+    const all = await companySearch("q", {
       env: envOf({ EXA_API_KEY: "synthetic-a" }),
       fetch: exa("synthetic-a"),
       spent: memorySpent(),

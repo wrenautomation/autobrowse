@@ -12,7 +12,8 @@
  * LinkedIn without LinkedIn: `GET /linkedin/profile?url=` and
  * `/linkedin/company?url=` read Exa's cached copy (never live, so neither
  * LinkedIn nor Exa's crawler visits), in the `linkedin` site's shapes;
- * `GET /companies?domain=` finds a firm's company page. Exa bills in dollars,
+ * `GET /companies?domain=` finds a firm's company page; `GET /exa/companies?q=` lists the firms
+ * for a niche and city search. Exa bills in dollars,
  * so its routes share one daily budget in mills ($0.001): `exa`, 330 a day
  * (about $10 a month, its free credit). Raising it is a spend decision.
  */
@@ -21,6 +22,7 @@ import {
   cachedLinkedinCompany,
   cachedLinkedinProfile,
   companies,
+  companySearch,
   hostOf,
   linkedinSlug,
   people,
@@ -120,6 +122,23 @@ export const web: SiteApi = {
       api: ({ domain, n }, leg) =>
         companies(
           domain,
+          { env: async (k) => leg.env(k), ...(leg.spent ? { spent: leg.spent } : {}) },
+          { n },
+        ).catch(final),
+    }),
+    route({
+      method: "GET",
+      path: "/exa/companies",
+      summary:
+        "Firms Exa's company index lists for a search (`q` like \"staffing agency in Austin\", `n` up to 25, default 10): each result's url, title, domain and `raw` (every field Exa sent), no page text; exa, 7 of the `exa` budget a search whatever `n`",
+      request: z.object({
+        q: z.string().min(1),
+        n: z.coerce.number().int().min(1).max(25).default(10),
+      }),
+      meter: () => ({ exa: 7 }),
+      api: ({ q, n }, leg) =>
+        companySearch(
+          q,
           { env: async (k) => leg.env(k), ...(leg.spent ? { spent: leg.spent } : {}) },
           { n },
         ).catch(final),

@@ -171,6 +171,20 @@ describe("the exa budget on web", () => {
     expect(caps.today()["web|web|exa"]).toBe(8);
   });
 
+  it("a firm search is 7 mills whatever n, and n over 25 is refused unspent", async () => {
+    const caps = memoryCaps(() => noon);
+    const sites = facade(caps);
+    const out = await sites.call<{ results: unknown[] }>("web", "GET", "/exa/companies", {
+      q: "staffing agency in Austin",
+      n: 25,
+    });
+    expect(out.results).toHaveLength(1);
+    await expect(
+      sites.call("web", "GET", "/exa/companies", { q: "x", n: 26 }),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(caps.today()["web|web|exa"]).toBe(7);
+  });
+
   it("the cap is 330 per live key: a second key doubles it, a spent one does not count", async () => {
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ results: [] })));
     const caps = memoryCaps(() => noon);
@@ -224,6 +238,7 @@ describe("web and x reads", () => {
       ["/search", "api"],
       ["/people", "api"],
       ["/companies", "api"],
+      ["/exa/companies", "api"],
       ["/linkedin/profile", "api"],
       ["/linkedin/company", "api"],
       ["/read", "api"],

@@ -4,6 +4,7 @@ import {
   cachedLinkedinProfile,
   cachedProfile,
   companies,
+  companySearch,
   duckduckgoHits,
   exaCompany,
   exaProfile,
@@ -435,5 +436,37 @@ describe("linkedin pages from exa's cache", () => {
       ["Northwind Labs", null, false],
     ]);
     expect(sent[0]).toMatchObject({ query: "northwind-talent.example", category: "company" });
+  });
+
+  it("firm search: one company-category search, every result whole, no page text", async () => {
+    const hit = {
+      id: "r1",
+      title: "Northwind Talent",
+      url: "https://www.Northwind-Talent.example/about",
+      score: 0.9,
+    };
+    const { deps, sent } = exa({
+      requestId: "req-1",
+      costDollars: { total: 0.007 },
+      results: [
+        hit,
+        { id: "r2", title: null, url: "https://www.linkedin.com/company/acme-staffing" },
+        { id: "r3", title: "no url" },
+      ],
+    });
+    const out = await companySearch("staffing agency in Austin", deps, { n: 3 });
+    expect(sent).toEqual([
+      { query: "staffing agency in Austin", category: "company", numResults: 3, type: "auto" },
+    ]);
+    expect(out.results).toEqual([
+      { url: hit.url, title: "Northwind Talent", domain: "northwind-talent.example", raw: hit },
+      {
+        url: "https://www.linkedin.com/company/acme-staffing",
+        title: null,
+        domain: "linkedin.com",
+        raw: { id: "r2", title: null, url: "https://www.linkedin.com/company/acme-staffing" },
+      },
+    ]);
+    expect(out.meta).toEqual({ requestId: "req-1", costDollars: { total: 0.007 } });
   });
 });

@@ -775,3 +775,44 @@ export async function companies(
   }
   return { domain: want, companies: out, via: "exa", raw: body.results ?? [] };
 }
+
+/** One firm Exa's company search listed: the url and title it sent, the host, and the result whole. */
+export interface FoundFirm {
+  url: string;
+  title: string | null;
+  /** The url's host without `www.`: a firm's own site, or a LinkedIn or directory page Exa listed it at. */
+  domain: string;
+  /** The result as Exa sent it, every field. */
+  raw: unknown;
+}
+
+export interface FirmSearch {
+  query: string;
+  results: FoundFirm[];
+  via: string;
+  /** The answer without its results (request id, resolved type, what Exa says it cost). */
+  meta: Record<string, unknown>;
+}
+
+/**
+ * Firms Exa's company index lists for `query` ("staffing agency in Austin"). One search, no page
+ * text (a per-page charge), so a result holds its url, title and whatever else Exa adds.
+ */
+export async function companySearch(
+  query: string,
+  deps: Deps,
+  o: { n?: number } = {},
+): Promise<FirmSearch> {
+  const { results, ...meta } = (await exaJson(deps, "/search", {
+    query,
+    category: "company",
+    numResults: o.n ?? 10,
+    type: "auto",
+  })) as { results?: Array<{ url?: string; title?: string | null }> } & Record<string, unknown>;
+  const out: FoundFirm[] = [];
+  for (const r of results ?? []) {
+    if (typeof r.url !== "string") continue;
+    out.push({ url: r.url, title: r.title ?? null, domain: hostOf(r.url), raw: r });
+  }
+  return { query, results: out, via: "exa", meta };
+}

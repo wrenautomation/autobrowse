@@ -40,6 +40,7 @@ result and the AI Overview, behind an API. Add Exa and Perplexity as sources.
 | 12 | One `exa` budget in mills (2026-10-03) | Exa bills in dollars: `/people` and `/companies` 7, a cache read 1, cap 330 a day (about $10 a month, the free credit). Raising it is William's call. A 404 still spends its mill here; Exa charges nothing for it. `/search`'s Exa leg stays unmetered |
 | 13 | A page Exa lacks is 404 (2026-10-03) | Exa answers 200 with `ENTITY_NOT_FOUND` in `statuses`. 404 lets wren count it as one refusal; the URL stays out of the message |
 | 14 | Exa keys rotate, keycycle style (2026-10-04) | William holds several free Exa keys. `NUM_EXA` + `EXA_API_KEY_1..n` (llm.env's format), plain `EXA_API_KEY` first. A 402, or a 4xx naming credits, marks the key spent until the 1st (UTC) in `spent-keys.json` by fingerprint, and the call moves on; any other failure stays terminal. The `exa` cap is 330 per live key. Every key spent: 402, and `/search` skips to Brave |
+| 15 | `GET /exa/companies?q=&n=` lists firms by niche and city (2026-10-05) | Exa `/search` with `category: "company"`, no page text (that is $0.001 a result), so one search is 7 mills whatever `n` up to 25. Each result keeps url, title, host and `raw`. Wren's `exaSearch` stage calls it |
 
 ## Proven
 

@@ -636,6 +636,7 @@ pnpm autobrowse env set EXA_API_KEY_2 --clipboard   # more Exa keys: EXA_API_KEY
 pnpm autobrowse site call web GET "/linkedin/profile?url=linkedin.com/in/<vanity>"   # from Exa's cache; LinkedIn sees nothing
 pnpm autobrowse site call web GET "/linkedin/company?url=linkedin.com/company/<handle>"
 pnpm autobrowse site call web GET "/companies?domain=acme.com"   # Exa's company search: LinkedIn page, homepage match
+pnpm autobrowse site call web GET "/exa/companies?q=staffing%20agency%20in%20Austin&n=10"   # firms by niche and city: url, title, domain, raw; 7 mills a search
 pnpm autobrowse doctor                        # which read/search/maps backends and site tokens work now
 pnpm autobrowse site call linkedin GET "/search/results/people?keywords=ria%20founder%20austin&pages=2"   # as Wren's LinkedIn
 pnpm autobrowse site call linkedin GET "/in/<vanity>?company=true"   # one profile, every role, current employer's page
