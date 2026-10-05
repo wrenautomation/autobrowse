@@ -53,12 +53,20 @@ describe("the records sandbox", () => {
       /returned number/,
     );
   });
+
+  it("calls a whole function or arrow sent in place of a body", async () => {
+    const html = await snapshot(page);
+    const body = GOOD.replace(/^return /, "");
+    for (const code of [`function (root) { return ${body} }`, `(root) => ${body};`])
+      expect(await runExtractor(html, { code, fields })).toHaveLength(3);
+  });
 });
 
 describe("checkRows and missedSample", () => {
   it("wants rows, the floor, and required fields mostly filled", () => {
     const row = (advertiser: string | null) => ({ advertiser, text: "t", link: null });
     expect(checkRows([], { fields, min: 1 })).toBe("no rows");
+    expect(checkRows([], { fields, min: 0 })).toBeNull();
     expect(checkRows([row("a")], { fields, min: 3 })).toMatch(/1 rows, fewer than the 3/);
     expect(checkRows([row("a"), row(null)], { fields, min: 1 })).toMatch(
       /advertiser is empty on 1 of 2/,

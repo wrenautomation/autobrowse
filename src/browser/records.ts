@@ -50,11 +50,17 @@ export async function inSandbox<T>(html: string, expr: string): Promise<T> {
   }
 }
 
+/** The function body; a model that sends the whole `function (root) {...}` or arrow gets it called. */
+export const bodyOf = (code: string): string => {
+  const c = code.trim().replace(/;+$/, "");
+  return /^(async\s+)?(function\s*\(|\(?\s*\w*\s*\)?\s*=>)/.test(c) ? `return (${c})(root);` : code;
+};
+
 /** The code's rows, values as trimmed strings or null; only the declared fields. */
 export async function runExtractor(html: string, op: Pick<RecordsOp, "code" | "fields">) {
   // A string evaluate: a page's CSP that blocks eval does not apply to it.
   const expr = `(() => {
-    const rows = (function (root) {\n${op.code}\n})(document);
+    const rows = (function (root) {\n${bodyOf(op.code)}\n})(document);
     if (!Array.isArray(rows)) return { notRows: rows === null ? "null" : typeof rows };
     return rows.map((r) => Object.fromEntries(Object.entries(r && typeof r === "object" ? r : {})
       .map(([k, v]) => [k, v == null || typeof v === "object" ? null : String(v)])));
@@ -73,7 +79,7 @@ export async function runExtractor(html: string, op: Pick<RecordsOp, "code" | "f
 
 /** What is wrong with these rows, or null: none, fewer than the floor, required fields empty. */
 export function checkRows(rows: Row[], op: Pick<RecordsOp, "fields" | "min">): string | null {
-  if (!rows.length) return "no rows";
+  if (!rows.length) return op.min > 0 ? "no rows" : null;
   if (rows.length < op.min) return `${rows.length} rows, fewer than the ${op.min} it used to read`;
   for (const f of op.fields) {
     if (f.optional) continue;

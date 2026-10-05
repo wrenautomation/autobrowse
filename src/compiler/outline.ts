@@ -81,7 +81,7 @@ export const opSchema = z.discriminatedUnion("kind", [
     key: z.string(),
     /** A function body over `root` (the document) that returns an array of plain objects. */
     code: z.string(),
-    /** Fewest rows a working read gives (half of the first read's); fewer: the page changed. */
+    /** Fewest rows a working read gives (half of the first read's); fewer: the page changed. 0: the list may be empty (a post's comments). */
     min: z.number().int().nonnegative(),
     /** Scroll for more rows up to this many (a feed); absent: what the page shows. */
     max: z.number().int().positive().optional(),

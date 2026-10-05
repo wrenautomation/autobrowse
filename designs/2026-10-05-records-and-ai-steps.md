@@ -51,7 +51,7 @@ Living doc. Started 2026-10-05. William: "letting ai write check and validate co
 1. ✅ `records` and `ai` ops, sandbox, check, writer, walk runner, heal on drop, `autobrowse records`.
 2. ✅ Meta Ad Library logged out (`fb-public/ad-library`), proved live.
 3. ✅ Ad Library as a site route: `fb-public GET /ads?q=&country=` runs the walk, so wren calls it on the desk. Wren's `adLibrary` pool stage turns advertisers into firms.
-4. Facebook public groups, then directories.
+4. ✅ Facebook public groups: `fb-public GET /groups?q=` (Google), `/groups/{group}` (About), `/groups/{group}/posts/{post}` (a post and its top comments). Then directories.
 5. An explorer `records` command, so an explore run that ends on a list page builds a walk with the op.
 6. Compiler render, if a compiled workflow ever needs a list.
 
@@ -68,3 +68,6 @@ Living doc. Started 2026-10-05. William: "letting ai write check and validate co
   - An extractor broken on purpose was re-written on the next run ("dental office", 30 rows) and saved.
 - 2026-10-05: The Ad Library walk keeps the link each ad sends to. The first extractor kept the button's label ("Learn more") as `link`, which names no firm. The link sits in `l.facebook.com/l.php?u=`, so the code unwraps it into `url`, keeps every outbound link in `urls`, the shown domain in `caption`, the advertiser's page in `page`, and the card's whole text in `all`. Hand-edited and checked on the archived page: 30 ads, 23 with a link. Live on "roofing contractor": 29 ads, 25 with a link, in 9s.
 - 2026-10-05: A site route's browser leg can name a built walk, so a walk is reachable over Restate like any route. The walk file lives on the owner's Mac, which is where the desk runs.
+- 2026-10-05: The group walks' extractors are hand-written. `autobrowse records` writes code for a list; on a one-panel page (a group's About) the model found no rows in three tries. Both walks parse the page's text lines and two DOM markers (`story_message`, comment `aria-label`s), checked on three groups and three posts.
+- 2026-10-05: A records op with `min: 0` may come back empty without a heal: a post with no comments is a real answer.
+- 2026-10-05: The sandbox runs a whole `function (root) {...}` or an arrow when a model sends one in place of a body. A model did, and every round failed on the syntax.
