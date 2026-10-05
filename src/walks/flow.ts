@@ -10,10 +10,19 @@ import type { SecretValues } from "../auth/signup.js";
 import { type BrowserFlow, defineFlow, type FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
 import { lookAt, type PageLook, type Screen, walk } from "../browser/screens.js";
-import type { OpValue } from "../compiler/outline.js";
 import type { SecretSink } from "../deps/sink.js";
 import { samePage, shows } from "./build.js";
-import { MAX_DEPTH, type ScreenSpec, type WalkOp, type WalkSpec } from "./spec.js";
+import {
+  FIELD_REF,
+  MAX_DEPTH,
+  type ProfileFieldName,
+  RELATIVE_DAY,
+  type ScreenSpec,
+  type WalkField,
+  type WalkOp,
+  type WalkSpec,
+  type WalkValue,
+} from "./spec.js";
 
 export interface WalkDeps {
   /** Placed secrets by name (`google.password`, `code`); missing: a person types it. */
@@ -22,9 +31,25 @@ export interface WalkDeps {
   sink?: SecretSink;
   /** Another walk, for a `walk` op. */
   load?(site: string, name: string): WalkSpec | null;
+  /** The runner's profile field (`--profile`); missing or null: a person types it. */
+  profile?(field: ProfileFieldName): Promise<string | null>;
+  /** A field with no value and no default (a terminal asks); missing or null: a person types it. */
+  ask?(field: WalkField, goal: string): Promise<string | null>;
+  now?(): Date;
 }
 
-/** Plan values by field key; a field left out gets the example the run typed. */
+/** `today+3d` → that day, as `YYYY-MM-DD` or `MM/DD/YYYY`; any other default is the text. */
+export function resolveDefault(d: string, now: Date): string {
+  const m = RELATIVE_DAY.exec(d);
+  if (!m) return d;
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + Number(m[1]));
+  const yyyy = String(day.getFullYear());
+  const mm = String(day.getMonth() + 1).padStart(2, "0");
+  const dd = String(day.getDate()).padStart(2, "0");
+  return m[2] === "MM/DD/YYYY" ? `${mm}/${dd}/${yyyy}` : `${yyyy}-${mm}-${dd}`;
+}
+
+/** Plan values by field key; a field left out gets its default (v1: the example the run typed). */
 export type WalkInput = Record<string, string | undefined>;
 
 export interface WalkOutput {
@@ -71,20 +96,54 @@ async function walkSpec(
     return l;
   };
 
-  const textFor = async (v: OpValue, goal: string): Promise<string> => {
+  const now = deps.now?.() ?? new Date();
+  /** Asked once per run: a field filled twice (a fill, then a click on it) is one answer. */
+  const asked = new Map<string, string>();
+  const fieldValue = async (key: string, goal: string): Promise<string> => {
+    const f = fields.get(key);
+    const given =
+      input[key] ??
+      asked.get(key) ??
+      (f?.default !== undefined ? resolveDefault(f.default, now) : undefined) ??
+      // A v1 walk ran on the example; a v2 one asks.
+      (spec.version === 1 ? (f?.example ?? undefined) : undefined) ??
+      (f && deps.ask ? ((await deps.ask(f, goal)) ?? undefined) : undefined);
+    if (given === undefined) return fp.human(`${goal}: no ${key} given (--plan ${key}=…)`);
+    asked.set(key, given);
+    return given;
+  };
+  const textFor = async (v: WalkValue, goal: string): Promise<string> => {
     if (v.from === "literal") return v.text;
-    if (v.from === "plan") {
-      const given = input[v.field] ?? fields.get(v.field)?.example;
-      return given ?? fp.human(`${goal}: no ${v.field} given (--plan ${v.field}=…)`);
+    if (v.from === "plan") return fieldValue(v.field, goal);
+    if (v.from === "profile") {
+      const p = await deps.profile?.(v.field);
+      return p ?? fp.human(`${goal}: no profile ${v.field} here (--profile <id>)`);
     }
     const s = await deps.secrets?.(v.key);
     return s ?? fp.human(`${goal}: secret ${v.key} is not available here`);
+  };
+  /** `{key}` → that field's value; `url` encodes it as a path or query part. */
+  const fill = async (t: string, goal: string, url = false): Promise<string> => {
+    const raw = url ? t.replace(/%7B/gi, "{").replace(/%7D/gi, "}") : t;
+    if (!raw.match(FIELD_REF)) return t;
+    let out = raw;
+    for (const m of [...raw.matchAll(FIELD_REF)]) {
+      const v = await fieldValue(m[1] as string, goal);
+      out = out.split(m[0]).join(url ? encodeURIComponent(v) : v);
+    }
+    return out;
+  };
+  const hintsFor = async (h: WalkOp & { kind: "click" }): Promise<Hints> => {
+    const out = { ...h.hints } as Hints & { text?: string | null; name?: string | null };
+    if (out.text) out.text = await fill(out.text, h.goal);
+    if (out.name) out.name = await fill(out.name, h.goal);
+    return out;
   };
 
   const run = async (op: WalkOp): Promise<void> => {
     switch (op.kind) {
       case "click":
-        return fp.act({ kind: "click" }, op.hints as Hints, {
+        return fp.act({ kind: "click" }, await hintsFor(op), {
           goal: op.goal,
           irreversible: op.irreversible,
         });
@@ -97,7 +156,9 @@ async function walkSpec(
           },
         );
       case "select":
-        return fp.act({ kind: "select", value: op.value }, op.hints as Hints, { goal: op.goal });
+        return fp.act({ kind: "select", value: await fill(op.value, op.goal) }, op.hints as Hints, {
+          goal: op.goal,
+        });
       case "press":
         return fp.act({ kind: "press", key: op.key }, op.hints as Hints, { goal: op.goal });
       case "upload":
@@ -121,7 +182,7 @@ async function walkSpec(
         fp.human(op.reason);
         return;
       case "open":
-        return fp.open(op.url);
+        return fp.open(await fill(op.url, op.goal, true));
       case "captcha": {
         const c = await fp.captcha();
         if (!c.solved) fp.human(`${op.goal}: ${c.reason ?? "not solved"}`);

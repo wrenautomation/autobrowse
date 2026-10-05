@@ -11,16 +11,20 @@
  */
 import type { Hints } from "../browser/locate.js";
 import type { PageLook } from "../browser/screens.js";
-import type { OpValue, OutlineField } from "../compiler/outline.js";
 import { camel, describe, IRREVERSIBLE_CLICK, kebab, stripHints } from "../compiler/structure.js";
 import { paymentGate } from "../gates/payment.js";
+import { type Profile, profileField } from "../money/profile.js";
 import type { Action, LocatorHints } from "../recorder/types.js";
 import { baseSite, listRuns, type RunRow, type RunSummary, readRun, runFile } from "../runs/log.js";
 import {
+  PROFILE_FIELDS,
+  type ProfileFieldName,
   type ScreenSpec,
   WALK_VERSION,
+  type WalkField,
   type WalkOp,
   type WalkSpec,
+  type WalkValue,
   walkSpecSchema,
 } from "./spec.js";
 
@@ -35,6 +39,19 @@ export interface BuildOptions {
   /** The walk's goal in words; default: the newest run's. */
   goal?: string;
   now?: Date;
+  /** Whose run it was: a value typed straight from it becomes a profile value. */
+  profile?: Profile | null;
+}
+
+/** One value the build guessed a source for: what the review shows and changes. */
+export interface Guess {
+  screen: string;
+  /** The op's index in that screen. */
+  op: number;
+  label: string;
+  /** What was typed or chosen; null for a secret, never shown. */
+  typed: string | null;
+  why: string;
 }
 
 export interface BuiltWalk {
@@ -43,6 +60,8 @@ export interface BuiltWalk {
   skipped: { run: string; reason: string }[];
   /** Where the runs did different things on the same screen: the newest was kept. */
   disagreements: string[];
+  /** Every fill and select, with where its value now comes from and why. */
+  guesses: Guess[];
 }
 
 /** Two looks at least this alike (landmarks shared over all) on one URL are one page. */
@@ -99,6 +118,12 @@ interface Cut {
   refused: string | null;
 }
 
+/** Acts that load a page by themselves. */
+const LEADS = new Set(["click", "press", "submit", "select"]);
+/** A load this soon after one is a redirect; this soon after a click, the click's. */
+const REDIRECT_MS = 3_000;
+const LED_MS = 10_000;
+
 /** One run → its visits. Leading `open`s are where it starts; a pause is one human op. */
 export function visitsOf(run: string, rows: readonly RunRow[]): Cut {
   const acts = rows.filter((r): r is Extract<RunRow, { kind: "act" }> => r.kind === "act");
@@ -112,6 +137,10 @@ export function visitsOf(run: string, rows: readonly RunRow[]): Cut {
   let last: PageLook | null = null;
   let named: string | null = null;
   let paused: { notes: string[] } | null = null;
+  // Taught by hand: a load no act led to is the address bar, an op of its own.
+  const person = rows.some((r) => r.kind === "start" && r.driver === "person");
+  let prevAt = 0;
+  let prevKind = "";
   // Ops before any page was looked at (a person signed in by hand right after the start): the first visit does them first.
   const early: RawOp[] = [];
   const into = (op: RawOp) => {
@@ -151,9 +180,22 @@ export function visitsOf(run: string, rows: readonly RunRow[]): Cut {
       } else named = a.text.trim();
       continue;
     }
+    const at = Date.parse(r.at);
+    const since = at - prevAt;
+    const was = prevKind;
+    prevAt = at;
+    prevKind = a.kind;
     if (a.kind === "navigate") {
       // A person's click that loaded a page: the click is the op, not the load.
-      if (r.hand) continue;
+      // ponytail: by time alone; a click slower than LED_MS to load reads as the address bar.
+      if (r.hand) {
+        const led =
+          (was === "navigate" && since < REDIRECT_MS) || (LEADS.has(was) && since < LED_MS);
+        if (!person || led) continue;
+        if (!cur) start = a.url;
+        else into({ kind: "open", url: a.url });
+        continue;
+      }
       if (!cur) start = a.url;
       else into({ kind: "open", url: a.url });
       continue;
@@ -252,7 +294,7 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
   };
 
   const disagreements: string[] = [];
-  const fields: OutlineField[] = [];
+  const fields: WalkField[] = [];
   const secrets: { key: string; label: string }[] = [];
   const fieldKey = (() => {
     const seen = new Map<string, number>();
@@ -277,29 +319,62 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
     return name;
   };
 
-  /** A typed value, as the walk will get it: the same text in two runs is fixed, else a field. */
-  const sourceOf = (a: Extract<Action, { kind: "input" }>, others: readonly Action[]): OpValue => {
+  const built = o.now ?? new Date();
+  const mine = profileValues(o.profile ?? null);
+  /** Why each op's value is what it is, by the op: the guesses the review shows. */
+  const whys = new Map<object, { typed: string | null; why: string }>();
+  /**
+   * A typed value, as the walk will get it (designs/2026-10-05-teach-mode.md):
+   * a secret; else a profile value; else the same text in every run is fixed;
+   * else a field, a date relative to the day, or what was typed as its default.
+   */
+  const sourceOf = (
+    a: Extract<Action, { kind: "input" }>,
+    others: readonly Action[],
+  ): { value: WalkValue; typed: string | null; why: string } => {
     if (a.secret) {
       if (!secrets.some((s) => s.key === a.secret))
         secrets.push({ key: a.secret, label: describe(a.target) });
-      return { from: "secret", key: a.secret };
+      return { value: { from: "secret", key: a.secret }, typed: null, why: "a stored secret" };
     }
     if (a.redacted) {
       const key = camel(describe(a.target)) || "secret";
       if (!secrets.some((s) => s.key === key)) secrets.push({ key, label: describe(a.target) });
-      return { from: "secret", key };
+      return { value: { from: "secret", key }, typed: null, why: "hidden as typed" };
     }
-    const same = others.some(
+    const field = mine.find(([, v]) => same(v, a.value))?.[0];
+    if (field)
+      return {
+        value: { from: "profile", field },
+        typed: a.value,
+        why: `your profile's ${field}`,
+      };
+    const fixed = others.some(
       (x) =>
         x.kind === "input" &&
         !x.redacted &&
         describe(x.target) === describe(a.target) &&
         x.value === a.value,
     );
-    if (same) return { from: "literal", text: a.value };
+    if (fixed)
+      return {
+        value: { from: "literal", text: a.value },
+        typed: a.value,
+        why: "the same each run",
+      };
     const key = fieldKey(camel(describe(a.target)) || "value");
-    fields.push({ key, label: describe(a.target), example: a.value });
-    return { from: "plan", field: key };
+    const day = relativeDay(a.value, built);
+    fields.push({
+      key,
+      label: describe(a.target),
+      example: a.value,
+      default: day ?? a.value,
+    });
+    return {
+      value: { from: "plan", field: key },
+      typed: a.value,
+      why: day ? `a date: ${day}` : "asked each run, default as typed",
+    };
   };
 
   const hintsOf = (t: LocatorHints): Hints => stripHints(t);
@@ -323,14 +398,17 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
         case "input": {
           const hints = hintsOf(a.target);
           irreversible ||= paymentGate("fill", hints) !== null;
-          return [
-            { kind: "fill", goal: `fill ${describe(a.target)}`, hints, value: sourceOf(a, others) },
-          ];
+          const { value, typed, why } = sourceOf(a, others);
+          const op: WalkOp = { kind: "fill", goal: `fill ${describe(a.target)}`, hints, value };
+          whys.set(op, { typed, why });
+          return [op];
         }
         case "select": {
           const hints = hintsOf(a.target);
           irreversible ||= paymentGate("select", hints) !== null;
-          return [{ kind: "select", goal: `choose ${a.value}`, hints, value: a.value }];
+          const op: WalkOp = { kind: "select", goal: `choose ${a.value}`, hints, value: a.value };
+          whys.set(op, { typed: a.value, why: "a choice: fixed" });
+          return [op];
         }
         case "press":
           return [{ kind: "press", goal: `press ${a.key}`, hints: hintsOf(a.target), key: a.key }];
@@ -463,6 +541,39 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
       seen: 0,
     });
 
+  // A value that came back in a URL the walk opens, or as the text of what it clicked: it follows the field.
+  const byValue = fields.filter((f) => f.example && f.example.length >= 2);
+  const inUrls = new Set<string>();
+  for (const s of screens)
+    s.ops = s.ops.map((op) => {
+      if (op.kind === "open") {
+        let url = op.url;
+        for (const f of byValue) {
+          const was = url;
+          if (ID.test(f.example as string)) url = inUrl(url, f.example as string, f.key);
+          if (url !== was) inUrls.add(f.key);
+        }
+        return url === op.url ? op : { ...op, url };
+      }
+      if (op.kind !== "click") return op;
+      const f = byValue.find((x) => op.hints.text === x.example || op.hints.name === x.example);
+      if (!f) return op;
+      const hints = { ...op.hints };
+      if (hints.text === f.example) hints.text = `{${f.key}}`;
+      if (hints.name === f.example) hints.name = `{${f.key}}`;
+      return { ...op, hints, goal: `click {${f.key}}` };
+    });
+  const guesses: Guess[] = screens.flatMap((s) =>
+    s.ops.flatMap((op, i) => {
+      const w = whys.get(op);
+      if (!w || (op.kind !== "fill" && op.kind !== "select")) return [];
+      const key = op.kind === "fill" && op.value.from === "plan" ? op.value.field : null;
+      const why = key && inUrls.has(key) ? `an id in a URL it opens: ${w.why}` : w.why;
+      const label = (op.kind === "select" ? op.hints.name : null) ?? labelOf(op);
+      return [{ screen: s.name, op: i, label, typed: w.typed, why }];
+    }),
+  );
+
   const spec = walkSpecSchema.parse({
     version: WALK_VERSION,
     site: baseSite(o.site),
@@ -480,7 +591,47 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
     irreversible,
     screens,
   } satisfies WalkSpec);
-  return { spec, used: cuts.map((c) => c.input.summary.run), skipped, disagreements };
+  return { spec, used: cuts.map((c) => c.input.summary.run), skipped, disagreements, guesses };
+}
+
+/** A profile's values by field, the longest first: a full name before a first name. */
+function profileValues(p: Profile | null): [ProfileFieldName, string][] {
+  if (!p) return [];
+  return PROFILE_FIELDS.flatMap((f): [ProfileFieldName, string][] => {
+    const v = profileField(p, f);
+    return v && v.length >= 2 ? [[f, v]] : [];
+  });
+}
+
+const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** An id: one word with a digit in it. */
+const ID = /^(?=.*\d)[\w-]{1,64}$/;
+
+/** `value` as a whole path segment or query value of `url` becomes `{key}`. */
+function inUrl(url: string, value: string, key: string): string {
+  const v = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return url.replace(new RegExp(`([/=])${v}(?=[/?&#]|$)`, "g"), `$1%7B${key}%7D`);
+}
+
+/** What the review calls an op: the field it fills, or the choice it makes. */
+export const labelOf = (op: { goal: string }): string => op.goal.replace(/^(fill|choose) /, "");
+
+/** A typed date as a day relative to `now` (`today+3d`); null when it is no date. */
+export function relativeDay(typed: string, now: Date): string | null {
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typed.trim());
+  const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(typed.trim());
+  const [y, m, d] = iso
+    ? [iso[1], iso[2], iso[3]].map(Number)
+    : us
+      ? [us[3], us[1], us[2]].map(Number)
+      : [];
+  if (y === undefined || m === undefined || d === undefined || m < 1 || m > 12 || d < 1 || d > 31)
+    return null;
+  const day = Date.UTC(y, m - 1, d);
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const n = Math.round((day - today) / 86_400_000);
+  return `today${n < 0 ? "-" : "+"}${Math.abs(n)}d${us ? " MM/DD/YYYY" : ""}`;
 }
 
 /** Runs that can teach a walk: ended well, on this site. */

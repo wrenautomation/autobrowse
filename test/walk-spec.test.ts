@@ -144,7 +144,7 @@ describe("walkSpecSchema", () => {
   it("checks names, site and version", () => {
     expect(issues(spec({ name: "Join_List" })).length).toBeGreaterThan(0);
     expect(issues(spec({ site: "../x" })).length).toBeGreaterThan(0);
-    expect(issues({ ...spec(), version: 2 }).length).toBeGreaterThan(0);
+    expect(issues({ ...spec(), version: 3 }).length).toBeGreaterThan(0);
     expect(issues(spec({ start: "not a url" })).length).toBeGreaterThan(0);
     expect(issues(spec({ start: null }))).toEqual([]);
   });
@@ -255,5 +255,52 @@ describe("saveWalk / loadWalk / listWalks", () => {
 
   it("is empty for a missing folder", () => {
     expect(listWalks(join(tmp(), "none"))).toEqual([]);
+  });
+});
+
+describe("walk spec v2", () => {
+  it("still loads a v1 walk file as it was written", () => {
+    const dir = tmp();
+    mkdirSync(join(dir, "scratch"), { recursive: true });
+    writeFileSync(
+      join(dir, "scratch", "join-list.json"),
+      readFileSync(join(import.meta.dirname, "fixtures", "walk-v1.json"), "utf8"),
+    );
+    const w = loadWalk(dir, "scratch", "join-list");
+    expect(w?.version).toBe(1);
+    expect(w?.fields).toEqual([{ key: "who", label: "who", example: null }]);
+  });
+
+  it("takes profile values, defaults and {field} refs; refuses a ref to no field", () => {
+    const v2 = spec({
+      version: 2,
+      fields: [{ key: "project", label: "Project", example: null, default: "today+3d" }],
+      screens: [
+        ...spec().screens.slice(0, 1),
+        {
+          name: "sign-up",
+          looks: "sign up",
+          url: "site.test/signup",
+          landmarks: [],
+          ops: [
+            {
+              kind: "fill",
+              goal: "fill Email",
+              hints: { role: "textbox", name: "Email" },
+              value: { from: "profile", field: "email" },
+            },
+            { kind: "open", goal: "open project", url: "https://site.test/p/%7Bproject%7D" },
+          ],
+          seen: 1,
+        },
+      ],
+    });
+    expect(walkSpecSchema.safeParse(v2).success).toBe(true);
+    const bad = structuredClone(v2);
+    bad.fields = [];
+    expect(walkSpecSchema.safeParse(bad).success).toBe(false);
+    const noField = structuredClone(v2);
+    (noField.screens[1]?.ops[0] as { value: unknown }).value = { from: "profile", field: "ssn" };
+    expect(walkSpecSchema.safeParse(noField).success).toBe(false);
   });
 });

@@ -301,7 +301,7 @@ describe("walkFromRuns", () => {
     expect(built.skipped).toEqual([]);
     expect(built.disagreements).toEqual([]);
     expect(s).toMatchObject({
-      version: 1,
+      version: 2,
       site: "scratch",
       name: "join-list",
       goal: "join the list, newest",
@@ -731,5 +731,88 @@ describe("buildWalk", () => {
     expect(() => buildWalk(dir, { ...opts, goalLike: "join" })).toThrow(
       /no run can make join-list/,
     );
+  });
+});
+
+describe("taught by hand: where each value comes from", () => {
+  const t0 = Date.UTC(2026, 9, 5, 12, 0, 0);
+  const row = (s: number, a: Action, look: PageLook | null): RunRow => ({
+    kind: "act",
+    at: new Date(t0 + s * 1000).toISOString(),
+    act: a,
+    look,
+    hand: true,
+  });
+  const P_URL = "https://site.test/p/4471";
+  const PROJECT: PageLook = {
+    url: "site.test/p/4471",
+    landmarks: ["heading project", "link 4471"],
+  };
+  const rows: RunRow[] = [
+    {
+      kind: "start",
+      at: new Date(t0).toISOString(),
+      run: R1,
+      site: "scratch",
+      driver: "person",
+      goal: "join the list",
+      machine: "test",
+      resumed: false,
+      viewport: null,
+    } as RunRow,
+    row(1, A.navigate(), null),
+    row(5, A.input("Name", "Ada Lovelace"), SIGNUP),
+    row(6, A.input("Email", "ADA@site.test "), SIGNUP),
+    row(7, A.input("Start date", "2026-10-08"), SIGNUP),
+    row(8, A.input("Project", "4471"), SIGNUP),
+    row(9, A.select("Size", "11-50"), SIGNUP),
+    row(10, A.click("Continue"), SIGNUP),
+    // The click's own load: not an op.
+    row(11, A.navigate("https://site.test/details"), null),
+    // Typed in the address bar a while later: an op.
+    row(40, A.navigate(P_URL), DETAILS),
+    row(45, { ...A.click("", { text: "4471" }), url: P_URL }, PROJECT),
+    end(DONE),
+  ];
+  const built = walkFromRuns(
+    [{ summary: { ...summary(R1, "2026-10-05T12:01:00.000Z"), driver: "person" }, rows }],
+    {
+      ...opts,
+      now: new Date(t0),
+      profile: { id: "ada", name: "Ada Lovelace", email: "ada@site.test" },
+    },
+  );
+  const s = built.spec;
+  const ops = s.screens.flatMap((x) => x.ops);
+
+  it("takes profile values from the profile, dates as today+Nd, the rest as fields with a default", () => {
+    expect(s.version).toBe(2);
+    const fills = ops.flatMap((op) => (op.kind === "fill" ? [[op.goal, op.value]] : []));
+    expect(fills).toEqual([
+      ["fill Name", { from: "profile", field: "name" }],
+      ["fill Email", { from: "profile", field: "email" }],
+      ["fill Start date", { from: "plan", field: "startDate" }],
+      ["fill Project", { from: "plan", field: "project" }],
+    ]);
+    expect(s.fields.map((f) => [f.key, f.default])).toEqual([
+      ["startDate", "today+3d"],
+      ["project", "4471"],
+    ]);
+    expect(built.guesses.map((g) => [g.label, g.why])).toEqual([
+      ["Name", "your profile's name"],
+      ["Email", "your profile's email"],
+      ["Start date", "a date: today+3d"],
+      ["Project", "an id in a URL it opens: asked each run, default as typed"],
+      ["Size", "a choice: fixed"],
+    ]);
+  });
+
+  it("makes an address-bar load an open op with the id as {field}; a click on that id follows it", () => {
+    expect(ops.filter((op) => op.kind === "open")).toEqual([
+      { kind: "open", goal: "open site.test/p/4471", url: "https://site.test/p/%7Bproject%7D" },
+    ]);
+    const picked = ops.find((op) => op.kind === "click" && op.goal === "click {project}");
+    expect(picked?.kind === "click" && picked.hints.text).toBe("{project}");
+    expect(s.start).toBe(SIGNUP_URL);
   });
 });

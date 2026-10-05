@@ -9,6 +9,7 @@
  *   send the whole page (src/runs/tokens).
  */
 
+import { createInterface } from "node:readline/promises";
 import type { Command } from "commander";
 import { readLlmCalls } from "../llm/ledger.js";
 import { baseSite, listRuns, openRuns, readRun, runFile } from "../runs/log.js";
@@ -16,7 +17,14 @@ import { formatTokenReport, readCmds, tokenReport } from "../runs/tokens.js";
 import { accent, columns, dim, good, warn } from "../style.js";
 import { buildWalk } from "../walks/build.js";
 import { walkFlowName } from "../walks/flow.js";
-import { listWalks, loadWalk, saveWalk, walkFile } from "../walks/spec.js";
+import {
+  listWalks,
+  loadWalk,
+  saveWalk,
+  valueSource,
+  type WalkField,
+  walkFile,
+} from "../walks/spec.js";
 import type { LocalBackend } from "./backend.js";
 import type { Settings } from "./config.js";
 import { llmCallsDirFor, runsDirFor, stepLedgerFor, walkFor, walksDirFor } from "./services.js";
@@ -169,7 +177,10 @@ export function registerRunsCommands(
         `  built ${s.built} from ${s.from.map((f) => `${f.run} (${f.outcome})`).join(", ")}`,
       );
       console.log(`  start ${s.start ?? "(current page)"}`);
-      if (s.fields.length) console.log(`  plan: ${s.fields.map((f) => f.key).join(", ")}`);
+      if (s.fields.length)
+        console.log(
+          `  plan: ${s.fields.map((f) => (f.default !== undefined ? `${f.key} (default ${masked(f.default)})` : f.key)).join(", ")}`,
+        );
       if (s.secrets.length) console.log(`  secrets: ${s.secrets.map((x) => x.key).join(", ")}`);
       for (const sc of s.screens) {
         const after = sc.after?.length ? ` after ${sc.after.join(",")}` : "";
@@ -181,7 +192,7 @@ export function registerRunsCommands(
           const at = h ? ` ${h.role ?? h.tag ?? ""}${h.name ? ` "${masked(h.name)}"` : ""}` : "";
           const from =
             op.kind === "fill"
-              ? ` ← ${op.value.from === "literal" ? "literal" : op.value.from === "plan" ? `plan.${op.value.field}` : `secret ${op.value.key}`}`
+              ? ` ← ${valueSource(op.value)}`
               : op.kind === "walk"
                 ? ` → ${op.walk}`
                 : "";
@@ -198,26 +209,45 @@ export function registerRunsCommands(
     .option("--plan <kv...>", "plan fields, key=value")
     .option("--yes", "allow a walk with an irreversible act")
     .option("--headed", "show the browser")
-    .action(async (ref: string, o: { plan?: string[]; yes?: boolean; headed?: boolean }) => {
-      const [site, name] = walkRef(ref);
-      const s = site && name ? loadWalk(walksDir, site, name) : null;
-      if (!s) throw new Error(`no walk ${ref}; see: autobrowse walks list`);
-      if (s.irreversible && !o.yes)
-        throw new Error(`${ref} has an irreversible act; say --yes to run it`);
-      const input: Record<string, string> = {};
-      for (const kv of o.plan ?? []) {
-        const i = kv.indexOf("=");
-        if (i < 1) throw new Error(`--plan ${kv}: want key=value`);
-        input[kv.slice(0, i)] = kv.slice(i + 1);
-      }
-      const { parts } = local({ headless: o.headed ? false : settings.browserHeadless });
-      const flow = walkFor(settings, `${s.site}/${walkFlowName(s)}`, parts.sink);
-      if (!flow) throw new Error(`no walk ${ref}`);
-      const out = await parts.browser.run(flow, input);
-      console.log(`reached ${out.goal} via ${out.screens.join(" → ") || "(already there)"}`);
-      if (Object.keys(out.read).length) console.log(`read: ${Object.keys(out.read).join(", ")}`);
-      if (out.kept.length) console.log(`kept: ${out.kept.join(", ")}`);
-    });
+    .option("--profile <id>", "whose details fill profile values (default: the only profile)")
+    .action(
+      async (
+        ref: string,
+        o: { plan?: string[]; yes?: boolean; headed?: boolean; profile?: string },
+      ) => {
+        const [site, name] = walkRef(ref);
+        const s = site && name ? loadWalk(walksDir, site, name) : null;
+        if (!s) throw new Error(`no walk ${ref}; see: autobrowse walks list`);
+        if (s.irreversible && !o.yes)
+          throw new Error(`${ref} has an irreversible act; say --yes to run it`);
+        const input: Record<string, string> = {};
+        for (const kv of o.plan ?? []) {
+          const i = kv.indexOf("=");
+          if (i < 1) throw new Error(`--plan ${kv}: want key=value`);
+          input[kv.slice(0, i)] = kv.slice(i + 1);
+        }
+        const { parts } = local({ headless: o.headed ? false : settings.browserHeadless });
+        // A field with no value and no default is asked here, once per run.
+        const ask = async (f: WalkField) => {
+          if (!process.stdin.isTTY) return null;
+          const rl = createInterface({ input: process.stdin, output: process.stdout });
+          try {
+            return (await rl.question(`${f.label} (${f.key}): `)).trim() || null;
+          } finally {
+            rl.close();
+          }
+        };
+        const flow = walkFor(settings, `${s.site}/${walkFlowName(s)}`, parts.sink, {
+          ...(o.profile ? { profile: o.profile } : {}),
+          ask,
+        });
+        if (!flow) throw new Error(`no walk ${ref}`);
+        const out = await parts.browser.run(flow, input);
+        console.log(`reached ${out.goal} via ${out.screens.join(" → ") || "(already there)"}`);
+        if (Object.keys(out.read).length) console.log(`read: ${Object.keys(out.read).join(", ")}`);
+        if (out.kept.length) console.log(`kept: ${out.kept.join(", ")}`);
+      },
+    );
 
   program
     .command("tokens")

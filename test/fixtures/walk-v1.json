@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "site": "scratch",
+  "name": "join-list",
+  "goal": "join the test list",
+  "built": "2026-10-01T03:10:33.262Z",
+  "from": [],
+  "start": "http://127.0.0.1:8765/index.html",
+  "fields": [
+    {
+      "key": "who",
+      "label": "who",
+      "example": null
+    }
+  ],
+  "secrets": [],
+  "irreversible": true,
+  "screens": [
+    {
+      "name": "join-list-done",
+      "looks": "heading you are on the list on 127.0.0.1:8765/done.html",
+      "url": "127.0.0.1:8765/done.html",
+      "landmarks": ["heading you are on the list"],
+      "ops": [],
+      "goal": true,
+      "seen": 2
+    },
+    {
+      "name": "join-the-list",
+      "looks": "heading join the list on 127.0.0.1:8765/index.html",
+      "url": "127.0.0.1:8765/index.html",
+      "landmarks": ["heading join the list", "field your name", "button continue"],
+      "ops": [
+        {
+          "kind": "fill",
+          "goal": "fill who",
+          "hints": {
+            "tag": "",
+            "role": null,
+            "name": null,
+            "text": null,
+            "placeholder": null,
+            "id": "who",
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "who"
+          }
+        },
+        {
+          "kind": "select",
+          "goal": "choose 11-50",
+          "hints": {
+            "tag": "",
+            "role": "combobox",
+            "name": null,
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": "11-50"
+        },
+        {
+          "kind": "click",
+          "goal": "click Continue",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Continue",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        }
+      ],
+      "seen": 2
+    },
+    {
+      "name": "almost-there",
+      "looks": "heading almost there on 127.0.0.1:8765/step2.html",
+      "url": "127.0.0.1:8765/step2.html",
+      "landmarks": ["heading almost there", "field i agree to the terms", "button confirm"],
+      "ops": [
+        {
+          "kind": "click",
+          "goal": "click I agree to the terms",
+          "hints": {
+            "tag": "",
+            "role": "checkbox",
+            "name": "I agree to the terms",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click Confirm",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Confirm",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": true
+        }
+      ],
+      "seen": 2
+    }
+  ]
+}

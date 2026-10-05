@@ -516,6 +516,16 @@ async function settle(page: Page): Promise<void> {
   await page.waitForLoadState("networkidle", { timeout: 1_500 }).catch(() => undefined);
 }
 
+/** Resolves once the DOM has not changed for 300 ms, or after 3 s on a page that never stops. */
+const DOM_QUIET = `() => new Promise((done) => {
+  let t;
+  const end = () => { o.disconnect(); clearTimeout(cap); done(true); };
+  const o = new MutationObserver(() => { clearTimeout(t); t = setTimeout(end, 300); });
+  o.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+  t = setTimeout(end, 300);
+  const cap = setTimeout(end, 3000);
+})`;
+
 /**
  * Explore runs as one long flow: the runner owns the session, so a login
  * wall on `open` is signed through, popups are tracked, and the profile
@@ -648,6 +658,24 @@ async function serve(
   let closing = false;
   /** The page the command in flight acts on, as it was before the act. */
   let lookBefore: PageLook | null = null;
+  /**
+   * The page as it last went quiet: the look a person's next act is done on.
+   * Taken after every act, command and load; one that lands after the next
+   * act came in is dropped (a fill's change event fires as the next click lands).
+   */
+  let handLook: PageLook | null = null;
+  let lookGen = 0;
+  const lookWhenQuiet = () => {
+    if (!opts.runs) return;
+    const gen = ++lookGen;
+    const p = page;
+    void (async () => {
+      await p.waitForLoadState("domcontentloaded", { timeout: 8_000 }).catch(() => undefined);
+      await p.evaluate(`(${DOM_QUIET})()`).catch(() => undefined);
+      const look = p.isClosed() ? null : await lookAt(p).catch(() => null);
+      if (gen === lookGen && look) handLook = look;
+    })();
+  };
   /** The history never fails a command: a full disk loses rows, not acts. */
   const logged = (f: (h: RunLog) => void) => {
     const h = history;
@@ -688,7 +716,8 @@ async function serve(
   const endRun = async (outcome: RunOutcome, summary: string | null, resumable = false) => {
     const h = history;
     if (!h || h.ended()) return;
-    const look = page.isClosed() ? null : await lookAt(page).catch(() => null);
+    // A person who closed the browser ended on the page they last saw.
+    const look = page.isClosed() ? handLook : await lookAt(page).catch(() => null);
     logged((l) => l.end({ outcome, summary, look }));
     if (runSide && !resumable) rmSync(runSide, { force: true });
   };
@@ -739,10 +768,13 @@ async function serve(
     const act = { ...a, t: tBase + now() - t0, url: page.url() } as Action;
     actions.push(act);
     if (opts.journalFile) appendFileSync(opts.journalFile, `${JSON.stringify(act)}\n`);
-    // A person's act between commands has no look: the page was already changed when it was seen.
+    // A person's act between commands: the page as it last went quiet, before this act changed it.
     const hand = byHand();
-    logged((h) => h.act(act, hand ? null : lookBefore, hand));
+    if (hand) lookGen++;
+    const look = hand ? handLook : lookBefore;
+    logged((h) => h.act(act, look, hand));
     lookBefore = null;
+    if (hand) lookWhenQuiet();
   };
   // While paused, the page reports what a person does (the recorder's
   // observer), so hand-done steps sit in the same journal as the
@@ -762,8 +794,10 @@ async function serve(
     .catch(() => undefined);
   // A load between commands is a person's only when they also acted (a slow redirect is not).
   page.on("framenavigated", (frame) => {
-    if ((paused || (helpedActs && byHand())) && frame === page.mainFrame())
+    if (frame !== page.mainFrame()) return;
+    if (paused || ((helpedActs || opts.driver === "person") && byHand()))
       journal({ kind: "navigate" });
+    lookWhenQuiet();
   });
 
   type Target = z.infer<typeof targetSchema>;
@@ -1083,6 +1117,7 @@ async function serve(
       busy--;
       quietAt = now() + HAND_GRACE_MS;
       lookBefore = null;
+      lookWhenQuiet();
     }
   };
   const looked = async (c: Command, wait: boolean) => {
@@ -1481,7 +1516,9 @@ async function serve(
     server.close();
     if (opts.tokenFile) rmSync(opts.tokenFile, { force: true });
     // A recording saved and then closed is a run that did its job; an idle close or a lost browser resumes.
-    await endRun(endedBy ?? (saved ? "saved" : "closed"), null, !closing).catch(() => undefined);
+    // A person teaching ends by closing the browser: that run did its job too.
+    const closedAs = saved ? "saved" : opts.driver === "person" ? "achieved" : "closed";
+    await endRun(endedBy ?? closedAs, null, !closing).catch(() => undefined);
     finishFlow();
   });
   openRun();

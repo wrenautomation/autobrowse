@@ -79,6 +79,30 @@ pnpm autobrowse run example-more k1 --plan '{}' # durable, through Restate; appr
 Compiled workflows are served as they appear (one `Compiled` object keyed
 `<workflow>/<key>`, loaded per run): no restart.
 
+## Teach by hand
+
+Do a chore once yourself and keep it as a walk. Nothing is compiled and no
+model runs.
+
+```sh
+pnpm autobrowse teach scratch join-list --url http://127.0.0.1:8765/
+# do the chore in the browser, then type done
+```
+
+The build guesses where each value you typed comes from next time. Your
+name or email becomes a profile value, a date becomes "today plus N days",
+and anything else becomes a field with your text as its default. Each guess
+gets one key: Enter keeps it, `f` fixes the text, `a` asks every run, `p`
+picks a profile value, `s` makes it a secret.
+
+```sh
+pnpm autobrowse walks run scratch/join-list --plan note=hi --profile william --yes
+pnpm autobrowse teach scratch join-list --url ... --mod walkthrough/mods/autobrowse-mod-scratch
+```
+
+`--mod` packs the walk into a mod folder. It refuses values that look like
+an email, phone or street unless you pressed `f` on them.
+
 ## When a step breaks
 
 A stale locator: `fp.act` asks the repairer for new hints for the same goal,

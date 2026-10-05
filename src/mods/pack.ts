@@ -132,7 +132,10 @@ function scrubWalk(w: WalkSpec, x: Scrubber): WalkSpec {
   const at = `walk ${w.name}`;
   const fields = w.fields.map((f) => {
     if (f.example !== null) x.dropped.push(`${at}: example of ${f.key}`);
-    return { ...f, label: x.text(f.label, at), example: null };
+    const { default: d, ...rest } = f;
+    if (d !== undefined && x.dirty(d)) x.dropped.push(`${at}: default of ${f.key}, naming you`);
+    const keep = d !== undefined && !x.dirty(d) ? { default: d } : {};
+    return { ...rest, ...keep, label: x.text(f.label, at), example: null };
   });
   if (w.from.length) x.dropped.push(`${at}: ${w.from.length} run id(s)`);
   let n = 0;

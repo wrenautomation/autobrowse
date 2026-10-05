@@ -155,13 +155,19 @@ export function addressField(a: Address | undefined, field: string): string | nu
   }
 }
 
-/** A profile field by name after `profile.`: `taxId`, `name`, `email`, `phone`, or an address field; null when it has none. */
+/** A profile field by name after `profile.`: `taxId`, `name`, `firstName`, `lastName`, `email`, `phone`, `birthday`, or an address field; null when it has none. */
 export function profileField(p: Profile, field: string): string | null {
   switch (field) {
     case "taxId":
       return p.taxId ?? null;
     case "name":
       return p.name;
+    case "firstName":
+      return p.name.split(/\s+/)[0] ?? null;
+    case "lastName":
+      return p.name.split(/\s+/).slice(1).join(" ") || null;
+    case "birthday":
+      return p.birthday ?? null;
     case "email":
       return p.email ?? null;
     case "phone":

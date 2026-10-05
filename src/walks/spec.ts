@@ -17,10 +17,11 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { z } from "zod";
-import { fieldSchema, opSchema } from "../compiler/outline.js";
+import { fieldSchema, opSchema, valueSchema } from "../compiler/outline.js";
 import { baseSite } from "../runs/log.js";
 
-export const WALK_VERSION = 1;
+/** 2 adds profile values, field defaults and options, and `{field}` in URLs, hints and selects. 1 still loads. */
+export const WALK_VERSION = 2;
 /** How deep walks may nest: a walk op inside a walk inside a walk… */
 export const MAX_DEPTH = 4;
 
@@ -29,9 +30,55 @@ const SITE = /^[a-z0-9][a-z0-9._-]*$/i;
 /** A placed secret's name as the explore server takes it: `code`, `google.password`, `google-admin.code`. */
 const SECRET_KEY = /^[a-z][\w-]*(@[\w-]+)?(\.[a-zA-Z]\w*)*$/;
 
+/** Who runs it: the same walk fills in whoever's profile is loaded (`--profile`). */
+export const PROFILE_FIELDS = [
+  "name",
+  "firstName",
+  "lastName",
+  "email",
+  "phone",
+  "birthday",
+  "address1",
+  "address2",
+  "city",
+  "region",
+  "regionCode",
+  "postal",
+  "country",
+  "countryName",
+] as const;
+export type ProfileFieldName = (typeof PROFILE_FIELDS)[number];
+
+/** A typed value: plan field, secret, literal, or (v2) the runner's profile. */
+export const walkValueSchema = z.union([
+  ...valueSchema.options,
+  z.object({ from: z.literal("profile"), field: z.enum(PROFILE_FIELDS) }),
+]);
+export type WalkValue = z.infer<typeof walkValueSchema>;
+
+/** A field's default: the text, or a day relative to the run (`today+3d`, `today-1d MM/DD/YYYY`). */
+export const RELATIVE_DAY = /^today([+-]\d+)d(?: (YYYY-MM-DD|MM\/DD\/YYYY))?$/;
+export const walkFieldSchema = fieldSchema.extend({
+  /** Used when the run is given none; absent: the run asks for it. */
+  default: z.string().optional(),
+  /** The values it may take (a select's options). */
+  options: z.array(z.string()).optional(),
+});
+export type WalkField = z.infer<typeof walkFieldSchema>;
+
+/** `{key}` in an open URL, a click's hints or a select's value: that field's value. */
+export const FIELD_REF = /\{([a-z][a-zA-Z0-9]*)\}/g;
+
+const [clickOp, fillOp, selectOp, pressOp, uploadOp, ...restOps] = opSchema.options;
+
 /** The outline's ops, plus what a walk adds: a page to open, a captcha, another walk. */
 export const walkOpSchema = z.discriminatedUnion("kind", [
-  ...opSchema.options,
+  clickOp,
+  fillOp.extend({ value: walkValueSchema }),
+  selectOp,
+  pressOp,
+  uploadOp.extend({ file: walkValueSchema }),
+  ...restOps,
   z.object({ kind: z.literal("open"), goal: z.string(), url: z.string().url() }),
   z.object({ kind: z.literal("captcha"), goal: z.string() }),
   /** Another walk, by `name` on this site or `site/name`: a sign-in inside a setup. */
@@ -64,7 +111,7 @@ export type ScreenSpec = z.infer<typeof screenSpecSchema>;
 
 export const walkSpecSchema = z
   .object({
-    version: z.literal(WALK_VERSION),
+    version: z.union([z.literal(1), z.literal(WALK_VERSION)]),
     site: z.string().regex(SITE),
     name: z.string().regex(NAME),
     /** In words: what the walk ends with. */
@@ -75,7 +122,7 @@ export const walkSpecSchema = z
     /** Where it opens; null: it starts on whatever page it is handed (a walk inside a walk). */
     start: z.string().url().nullable(),
     /** Typed values: the run's value is the example, used when the input does not give one. */
-    fields: z.array(fieldSchema),
+    fields: z.array(walkFieldSchema),
     secrets: z.array(z.object({ key: z.string().regex(SECRET_KEY), label: z.string() })),
     /** A click on it creates, sends or pays: running it takes a yes. */
     irreversible: z.boolean(),
@@ -120,10 +167,39 @@ export const walkSpecSchema = z
             path: ["screens", i, "ops", j],
             message: `secret ${v.key} is not declared`,
           });
+        for (const k of fieldRefs(op))
+          if (!fields.has(k))
+            ctx.addIssue({
+              code: "custom",
+              path: ["screens", i, "ops", j],
+              message: `{${k}} is not a declared field`,
+            });
       });
     });
   });
 export type WalkSpec = z.infer<typeof walkSpecSchema>;
+
+/** Where a value comes from, in a word or two: `fixed`, `plan.note`, `profile.email`, `secret password`. */
+export const valueSource = (v: WalkValue): string =>
+  v.from === "literal"
+    ? "fixed"
+    : v.from === "plan"
+      ? `plan.${v.field}`
+      : v.from === "profile"
+        ? `profile.${v.field}`
+        : `secret ${v.key}`;
+
+/** The text of an op that may name `{field}`s: an open URL, a click's hints, a select's value. */
+function refText(op: WalkOp): string {
+  if (op.kind === "open") return op.url.replace(/%7B/gi, "{").replace(/%7D/gi, "}");
+  if (op.kind === "click") return [op.hints.text, op.hints.name].filter(Boolean).join("\n");
+  if (op.kind === "select") return op.value;
+  return "";
+}
+
+/** The fields an op names in braces. */
+export const fieldRefs = (op: WalkOp): string[] =>
+  [...refText(op).matchAll(FIELD_REF)].map((m) => m[1] as string);
 
 export const walkFile = (dir: string, site: string, name: string): string => {
   const s = baseSite(site);

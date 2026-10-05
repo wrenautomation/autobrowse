@@ -141,6 +141,7 @@ import {
   withModScreens,
 } from "../mods/mod.js";
 import { type Charge, type ChargeRow, reportCharge } from "../money/charges.js";
+import type { Profile } from "../money/profile.js";
 import { isDefaultOwner, named, ownerKeys } from "../owner.js";
 import { fileSpent } from "../reach/key-ring.js";
 import { s3BlobStore } from "../shots/s3.js";
@@ -158,7 +159,7 @@ import {
   sitesService,
 } from "../sites/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
-import { type WalkInput, type WalkOutput, walkFlow } from "../walks/flow.js";
+import { type WalkDeps, type WalkInput, type WalkOutput, walkFlow } from "../walks/flow.js";
 import { loadWalk, type WalkSpec } from "../walks/spec.js";
 import { type BootstrapDeps, bootstrapWorkflow } from "../workflows/bootstrap/index.js";
 import {
@@ -631,21 +632,42 @@ function walkSecrets(settings: Settings, spec: WalkSpec): SecretValues {
   };
 }
 
-/** A walk by its catalog name, `<site>/walk-<name>`, with the owner's logins and sink; null when there is none. */
+/**
+ * A walk by its catalog name, `<site>/walk-<name>`, with the owner's logins
+ * and sink; null when there is none. Profile values come from `o.profile`
+ * (else the only profile), on the Mac only; `o.ask` answers a field with no
+ * value and no default.
+ */
 export function walkFor(
   settings: Settings,
   flowName: string,
   sink: SecretSink = sinkFor(settings),
+  o: { profile?: string; ask?: WalkDeps["ask"] } = {},
 ): BrowserFlow<WalkInput, WalkOutput> | null {
   const m = /^([a-z0-9][a-z0-9._-]*)(?:@[\w-]+)?\/walk-([a-z][a-z0-9-]*)$/i.exec(flowName);
   if (!m) return null;
   const dir = walksDirFor(settings);
   const spec = loadWalk(dir, m[1] as string, m[2] as string);
   if (!spec) return null;
+  const profiles = profilesForPlace(settings);
+  let who: Promise<Profile | null> | null = null;
   return walkFlow(spec, {
     secrets: walkSecrets(settings, spec),
     sink,
     load: (site, name) => loadWalk(dir, site, name),
+    ...(profiles
+      ? {
+          profile: async (field) => {
+            who ??= profiles(o.profile ?? null);
+            const p = await who;
+            if (!p && o.profile)
+              throw new Error(`no profile ${o.profile}: autobrowse profile list`);
+            const { profileField } = await import("../money/profile.js");
+            return p ? profileField(p, field) : null;
+          },
+        }
+      : {}),
+    ...(o.ask ? { ask: o.ask } : {}),
   });
 }
 

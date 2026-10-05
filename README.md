@@ -141,6 +141,9 @@ a row; it is work.
   screenshot (`<stamp>.aria.txt`). Each session is also a run, kept for
   good: `goal` names it, `done` ends it, and runs that reached the same
   goal build a walk (`walks build`), a flow with no model in the loop.
+  `teach` makes one from a chore you do once by hand: what you typed
+  becomes a profile value, a secret, a date relative to the day, or a
+  field with your text as its default, and you confirm each guess.
 - **Minted secrets.** `{"cmd":"keep","hints":…,"env":"X_API_KEY"}` reads
   a key the site just showed straight into the secret sink (`.env` locally,
   SSM in prod) under that name. The journal keeps the element and the env
@@ -401,7 +404,8 @@ pnpm autobrowse workflows bootstrap --template > plan.json   # fill in, then: ru
 pnpm autobrowse runs --limit 20                # the registry, newest first (--before <cursor> pages)
 pnpm autobrowse explored google                # explore runs kept for good: driver, goal, outcome, answer tokens (show <run>: its shape, no values)
 pnpm autobrowse walks build google admin-sso --goal-like "sso"   # runs that reached a goal → a walk, run as google/walk-admin-sso
-pnpm autobrowse walks run google/admin-sso --plan domain=x.com   # no model in the loop; --yes when it has a final act
+pnpm autobrowse teach scratch join-list --url http://127.0.0.1:8765/   # do it by hand, type done; review the guesses (--yes takes them), --mod <dir> packs it
+pnpm autobrowse walks run google/admin-sso --plan domain=x.com   # no model in the loop; --yes when it has a final act, --profile <id> for whose details
 pnpm autobrowse mods pack scratch --out ./mod   # your walks, screens, fixes, --login for a site, scrubbed; you npm publish it
 pnpm autobrowse mods search [words]             # npm mods: sites, domains, gates, code or data
 pnpm autobrowse mods add <npm-name|dir|tgz>     # checks hashes, domains, gates, asks yes; code needs --trust; mods list, mods remove
@@ -481,7 +485,7 @@ src/deps/       SecretSink (env file), Shell: what workflows read and write
 src/devices/    what a person owns and a second step leans on: the paired phone (SMS in, iMessage out)
 src/explore/    explore mode: one open browser, a loopback command API, pause/resume with hand acts journaled
 src/runs/       run history (one chained file per explore session) and the token report
-src/walks/      walks: built from runs that reached a goal, run as `<site>/walk-<name>`
+src/walks/      walks: built from runs that reached a goal or taught by hand (teach.ts), run as `<site>/walk-<name>`
 src/mods/       mods: walks, screens, fixes, logins (code with --trust) packed to share; installed under `mods/`, the owner's own win
 src/agent/      the exploration agent (digest, one act a step), sessions (play/pause, persisted), repair, evaluator
 src/workflows/  one dir per workflow; domain + bootstrap hand-written, compiled ones are served as they appear (one `Compiled` object)

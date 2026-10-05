@@ -34,6 +34,7 @@ import { registerRecordCommands } from "./cli-record.js";
 import { registerRunsCommands } from "./cli-runs.js";
 import { registerShotsCommands } from "./cli-shots.js";
 import { registerSiteCommands } from "./cli-site.js";
+import { registerTeachCommand } from "./cli-teach.js";
 import { registerUnsubscribe } from "./cli-unsubscribe.js";
 import { registerWalletCommands } from "./cli-wallet.js";
 import {
@@ -616,6 +617,7 @@ registerShotsCommands(program, settings);
 registerWatchedCommands(program, settings);
 registerModsCommands(program, settings);
 registerRunsCommands(program, settings, local);
+registerTeachCommand(program, settings);
 registerRepairsCommands(program, settings);
 registerScreensCommands(program, settings);
 program

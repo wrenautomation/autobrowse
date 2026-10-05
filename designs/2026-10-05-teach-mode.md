@@ -95,3 +95,8 @@ A walk with fixed values that look personal won't pack until the review says so.
 ## Decision log
 
 - 2026-10-05: Written. Build on walks, not `record` plus `compile`: walks are data, so they pack, diff and run with no model, and compile writes code a buyer has to trust. One run is enough. Ask-each-run with a default is the safe guess, so nothing personal gets frozen in by accident. Profile is the "other users" seam: the same walk runs as whoever's profile is loaded.
+- 2026-10-05: Built. Teach runs explore unpaused with driver `person`. A pause would fold every act into one human op. A hand act is journaled with the last quiet look before it, and a person session that ends by closing the browser ends `achieved`. With no terminal (a script on the loopback), teach ends on `close` or the browser.
+- 2026-10-05: `default` is what was typed. `a` drops it so every run asks. v2 never falls back to `example`; v1 walks still do, and still load.
+- 2026-10-05: `{field}` works in open URLs, click hints and select values, not in `start`. Profile match is exact, case-insensitive; phones are not normalized. Click-by-field only covers plan fields.
+- 2026-10-05: Skipped select `options` capture: the observer never sees the option list. The schema has the slot, nothing fills it yet. Skipped `walks run --ask` for model runs and any MCP or sites change: both already pass plan input.
+- 2026-10-05: `walkFor` wires profile values on the Mac, so desk runs get them too. `packInto` keeps the mod's version; a person bumps it.

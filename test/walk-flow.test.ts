@@ -478,3 +478,89 @@ describe("walkFlow", () => {
     expect(out.screens).toEqual(["results", "results", "results"]);
   });
 });
+
+describe("walkFlow v2 values", () => {
+  const v2 = (): WalkSpec =>
+    spec({
+      version: 2,
+      fields: [
+        { key: "company", label: "Company", example: null, default: "Acme" },
+        { key: "start", label: "Start", example: null, default: "today+3d MM/DD/YYYY" },
+        { key: "size", label: "Size", example: "11-50" },
+      ],
+      screens: [
+        spec().screens[0] as WalkSpec["screens"][number],
+        {
+          name: "sign-up",
+          looks: "sign up",
+          url: "site.test/signup",
+          landmarks: ["heading join the list", "field email"],
+          ops: [
+            fill("Email", { from: "profile", field: "email" }),
+            fill("Password", { from: "secret", key: "scratch.password" }),
+            click("Continue"),
+          ],
+          seen: 1,
+        },
+        {
+          name: "your-details",
+          looks: "details",
+          url: "site.test/details",
+          landmarks: ["heading your details"],
+          ops: [
+            fill("Company", { from: "plan", field: "company" }),
+            fill("Start", { from: "plan", field: "start" }),
+            {
+              kind: "select",
+              goal: "choose {size}",
+              hints: hints("combobox", "Size"),
+              value: "{size}",
+            },
+            { ...click("Next", true), hints: hints("button", "Next") },
+          ],
+          seen: 1,
+        },
+      ],
+    });
+  const now = () => new Date(2026, 9, 5, 9, 0);
+
+  it("fills profile values, defaults, today+Nd and {field} refs; asks a field with no default", async () => {
+    const { fp, log } = fakeSite(SITE, "other");
+    const asked: string[] = [];
+    await walkFlow(v2(), {
+      secrets,
+      now,
+      profile: async (f) => (f === "email" ? "b@site.test" : null),
+      ask: async (f) => {
+        asked.push(f.key);
+        return "51-200";
+      },
+    }).run(fp, {});
+    expect(asked).toEqual(["size"]);
+    expect(log).toEqual([
+      "open https://site.test/signup?ref=ad",
+      "fill Email = b@site.test",
+      "fill Password = fake-pw-1",
+      "click Continue",
+      "fill Company = Acme",
+      "fill Start = 10/08/2026",
+      "select Size = 51-200",
+      "click Next (irreversible)",
+    ]);
+  });
+
+  it("takes --plan over a default; a v2 walk never runs on the example; v1 still does", async () => {
+    const run = async (w: WalkSpec, input: Record<string, string>) => {
+      const { fp, log } = fakeSite(SITE, "other");
+      await walkFlow(w, { secrets, now, profile: async () => "b@site.test" })
+        .run(fp, input)
+        .catch((e: Error) => log.push(`human: ${e.message}`));
+      return log;
+    };
+    const two = await run(v2(), { company: "Globex" });
+    expect(two).toContain("fill Company = Globex");
+    expect(two.at(-1)).toMatch(/^human: .*no size given/);
+    const one = await run({ ...v2(), version: 1 }, {});
+    expect(one).toContain("select Size = 11-50");
+  });
+});
