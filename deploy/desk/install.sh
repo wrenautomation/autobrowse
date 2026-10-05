@@ -34,6 +34,8 @@ fi
 # The real binary: macOS privacy grants follow it, not the Homebrew symlink.
 NODE="$(realpath "$(command -v node)")"
 NODE_DIR="$(dirname "$NODE")"
+# Claude Code, for `claude/ask` and the claude-code model; its native installer uses ~/.local/bin.
+CLAUDE_DIR="$(dirname "$(command -v claude || echo "$HOME/.local/bin/claude")")"
 mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
 cat > "$PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -45,7 +47,7 @@ cat > "$PLIST" <<PLIST
   <array><string>$NODE</string><string>$REPO/node_modules/tsx/dist/cli.mjs</string><string>src/app/desk.ts</string></array>
   <key>WorkingDirectory</key><string>$REPO</string>
   <key>EnvironmentVariables</key>
-  <dict><key>PATH</key><string>$NODE_DIR:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string></dict>
+  <dict><key>PATH</key><string>$NODE_DIR:$CLAUDE_DIR:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string></dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>30</integer>
