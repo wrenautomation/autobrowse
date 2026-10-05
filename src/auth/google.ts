@@ -61,6 +61,8 @@ export function googleWalk(ctx: SignInContext): Walk<SignInContext> {
   let passwordTyped = false;
   let passkeyTried = false;
   let refused: string | null = null;
+  /** Times on the list of second steps: a step that leads back to it would go round forever. */
+  let listed = 0;
   const only = (what: string) => (refused ? `${what}; ${refused}` : what);
   // Wrong codes lock the account's texts for hours: say so, never guess on.
   const lockedOut = () =>
@@ -283,6 +285,10 @@ export function googleWalk(ctx: SignInContext): Walk<SignInContext> {
         "'Choose how you want to sign in' / 'Choose a way to verify': the second steps as a list",
       at: SELECTION,
       async act({ fp }) {
+        // Twice is a real sign-in (before the password, then after it); a third is a loop:
+        // the step we pick leads to one we can't answer and back (LinkedIn, 2026-10-05).
+        if (++listed > 2)
+          fail(only("Google keeps asking for a second step this tool cannot answer"));
         // Before the password, the list offers it (an account with a passkey is asked for that first).
         const password = choice("Enter your password");
         if (!passwordTyped && (await fp.has(password, 3_000))) {

@@ -165,6 +165,12 @@ export interface BrowserFlow<I, O> {
   name: string;
   /** The flow puts a secret on screen (a minted token): no screenshot, trace or step watch keeps it. */
   secret?: boolean;
+  /**
+   * "provider": open the profile where the site's sign-in provider holds the
+   * session (William's LinkedIn signs in by Google, in the `google` profile),
+   * the one `autobrowse login` keeps warm. The site's own profile otherwise.
+   */
+  profile?: "provider";
   run(fp: FlowPage, input: I): Promise<O>;
 }
 
@@ -397,17 +403,22 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
   const repairer = runner.repairer ?? noRepairer;
   const hands = handsFor(runner.pace === undefined ? HUMAN_PACE : runner.pace);
   return {
-    run: (flow, input) =>
-      locks.withLock(flow.site, async () => {
+    run: async (flow, input) => {
+      const profile =
+        flow.profile === "provider" ? ((await opts.providerProfile?.(flow.site)) ?? null) : null;
+      // A profile opens once: two sites sharing one queue on it.
+      return locks.withLock(profile ?? flow.site, async () => {
         // Opening the browser is the first thing the network or the machine can break.
         const parked = (await runner.park?.take(flow.site)) ?? null;
         const session =
           parked ??
-          (await openSession(flow.site, opts).catch((err: unknown) => {
-            if (isTransientBrowserError(err))
-              throw new FlowInterrupted(`${flow.site}/${flow.name}`, err, {});
-            throw err;
-          }));
+          (await openSession(flow.site, profile ? { ...opts, profile } : opts).catch(
+            (err: unknown) => {
+              if (isTransientBrowserError(err))
+                throw new FlowInterrupted(`${flow.site}/${flow.name}`, err, {});
+              throw err;
+            },
+          ));
         // A kept browser already on the page the flow opens first stays put:
         // reloading would lose what the last run left there (a form, a list).
         let keepPage = parked !== null;
@@ -866,6 +877,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             await runner.park.put(flow.site, session);
           } else await session.close();
         }
-      }),
+      });
+    },
   };
 }

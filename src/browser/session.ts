@@ -12,6 +12,7 @@ import { type HttpClient, safeUrls } from "../clients/http.js";
 import { expandHome } from "../google-auth.js";
 import type { Egress, Exit } from "./egress.js";
 import { geometry, type Identity, learnIdentity, wearIdentity } from "./identity.js";
+import { keepSessionCookies, keptDomains } from "./keep-session.js";
 import type { Hints } from "./locate.js";
 import { notReachable, type OwnBrowser, ownEndpoint, runsInOwn } from "./own.js";
 import { reapOrphans, reapTempDirs } from "./reap.js";
@@ -103,6 +104,8 @@ export interface BrowserOptions {
   profile?: string;
   /** The profile directory a name opens: the stored account it names (`x@wren_automation` → `x@wren`). */
   profileName?: (name: string) => Promise<string>;
+  /** Where a site's sign-in provider holds its session (a flow's `profile: "provider"`); null = its own. */
+  providerProfile?: (site: string) => Promise<string | null>;
   /** The person's own browser, for the sites they opted in (`browser/own`). */
   own?: OwnBrowser | null;
   /** Where each local profile leaves from (`browser/egress`); none = the machine's own line. */
@@ -172,6 +175,9 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
         await browser?.close().catch(() => undefined);
         return;
       }
+      // By site: the profile can be another's (William's LinkedIn signs in through the `google` profile).
+      const keep = local ? keptDomains(site) : null;
+      if (keep) await keepSessionCookies(context, keep).catch(() => 0);
       await context.close().catch(() => undefined);
       await browser?.close().catch(() => undefined);
     },

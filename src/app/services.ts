@@ -297,6 +297,7 @@ export function browserOptions(
       const as = credentialFor(SITE_LOGINS, name);
       return (await store.keyOf(as.includes("@") ? as : name)) ?? name;
     },
+    providerProfile: (site) => profileForSite(settings, site),
     tier: settings.browser,
     cdpUrl: settings.browserCdpUrl ?? null,
     own: ownBrowserOf(settings.ownBrowser, settings.ownBrowserSites),
