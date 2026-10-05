@@ -40,7 +40,7 @@ Gate answers are run-wide by name. `buy`'s purchase prompt names both the domain
 
 `isolate` refuses to move name servers when the copy from Dynadot misses an MX, apex TXT or DMARC record that public DNS serves, or has no DKIM. A missed record there would drop mail.
 
-Warmup preset (`WARMUP`): +1 a day to 30 (about 21 a day after three weeks), every warmup mail opened and answered, every spam landing pulled out, 30% marked important, weekends included. It stays on.
+Warmup preset (`WARMUP`): +2 a day to 60, about 30 days (2026-10-05: warmup to cold is 2 to 1, and an inbox peaks at 30 cold), every warmup mail opened and answered, every spam landing pulled out, 30% marked important, weekends included. It stays on.
 
 ## Decision log
 
@@ -53,3 +53,4 @@ Warmup preset (`WARMUP`): +1 a day to 30 (about 21 a day after three weeks), eve
 - 2026-10-03: `domains --digits` suggests one letter swapped for a look-alike digit. Cheaper names, but filters may read them as spoofs.
 - 2026-10-03: Not yet run live. Dynadot's DNS reply shape, the export's field names and the run status values are unconfirmed; `isolate`'s check and `loginOf`'s error (field names only) catch a wrong guess before harm.
 - 2026-10-04: `credentials` also writes wren's `/wren/prod/mailboxes` (one SecureString, merged by address). wren sends without calling the desk. Only a missing parameter starts empty; any other failed read stops the step, so a bad read never drops logins already there.
+- 2026-10-05: Warmup to cold is 2 to 1 (William): 2 warmup emails for each cold one. 9 inboxes peak at 30 cold a day, so warmup climbs +2 a day to 60, about 30 days. wren holds each inbox's cold sends to half its warmup that day.

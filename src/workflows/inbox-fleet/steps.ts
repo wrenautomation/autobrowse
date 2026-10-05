@@ -21,15 +21,16 @@ const PER_DOMAIN = 3;
 const MAILBOX_USD = 3.5;
 
 /**
- * Instantly warmup on every fleet inbox, in whole percents: +1 a day from
- * 0 to 30 (about 21 a day after three weeks), every warmup mail opened and
- * answered, every one that lands in spam pulled out, 30% marked important.
- * It never turns off.
+ * Instantly warmup on every fleet inbox: +2 a day from 0 to 60, about 30 days.
+ * 60 is twice the 30 cold sends an inbox peaks at: warmup to cold is 2 to 1
+ * (email-infra SOP; wren holds cold to half the day's warmup). Every warmup
+ * mail opened and answered, every one that lands in spam pulled out, 30%
+ * marked important. It never turns off.
  */
 export const WARMUP: WarmupSettings = {
   warmup: {
-    limit: 30,
-    increment: "1",
+    limit: 60,
+    increment: "2",
     reply_rate: 100,
     advanced: {
       open_rate: 100,
@@ -408,7 +409,7 @@ export const warmup: Step<"warmup"> = {
       return state === "success";
     });
     return done(
-      `${emails.length} inboxes warming, +1/day to 21${on ? "" : " (Instantly's job still running)"}`,
+      `${emails.length} inboxes warming, +${WARMUP.warmup?.increment}/day to ${WARMUP.warmup?.limit}${on ? "" : " (Instantly's job still running)"}`,
     );
   },
 };
