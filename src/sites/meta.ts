@@ -293,12 +293,15 @@ async function igDiscover(leg: ApiLeg, username: string) {
   }
   const e = res.body?.error;
   const why = e?.error_user_msg ?? e?.message ?? "";
-  if (e?.code !== undefined && RATE_CODES.has(e.code))
+  if (e?.code !== undefined && RATE_CODES.has(e.code)) {
+    // The text ends as the caps' 429s do (`retry after Ns`): that is what a caller over HTTP parses.
+    const wait = Number(res.headers.get("retry-after")) || 3600;
     throw new SiteError(
       429,
-      `Instagram rate limit (${graphNote(res.body)}): ${why}`.slice(0, 300),
-      Number(res.headers.get("retry-after")) || 3600,
+      `meta Instagram rate limit (${graphNote(res.body)}): ${why.slice(0, 200)}; retry after ${wait}s`,
+      wait,
     );
+  }
   // 110 / 2207013: the username is unknown or not a business or creator account.
   if (e?.code === 110 || e?.error_subcode === 2207013)
     return { found: false, reason: `${why} (${graphNote(res.body)})`.trim() };

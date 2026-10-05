@@ -389,6 +389,7 @@ describe("meta GET /instagram/{username}", () => {
       await expect(sites.call("meta", "GET", "/instagram/acme", {})).rejects.toMatchObject({
         status: 429,
         retryAfter: 3600,
+        message: expect.stringMatching(/retry after 3600s$/),
       });
     }
   });
