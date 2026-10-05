@@ -13,7 +13,7 @@ How one site is signed into and where its password may be typed: `SiteLogin` in 
 
 ## Why this shape
 
-The runner meets a wall and calls one hook (`RunnerOptions.login`); the spec says which credential, which origins, whether a provider button will do, and how second steps, passkeys, rotation and recovery codes walk on that site. A simple form is `formLogin`; a branching sign-in is a walk (Google, Cloudflare).
+The runner meets a wall and calls one hook (`RunnerOptions.login`); the spec says which credential, which origins, whether a provider button will do, and how second steps, passkeys, rotation and recovery codes walk on that site. A form is `formLogin`, itself a walk built from the spec; a branching sign-in is a hand-written walk (Google, Cloudflare, Microsoft).
 
 ## Shape
 

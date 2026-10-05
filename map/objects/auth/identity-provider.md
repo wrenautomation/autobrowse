@@ -19,7 +19,7 @@ A sign-in reused by every site that shows its button: `IdentityProvider` in `src
 
 - `PROVIDERS`, `IdentityProvider { site, host, buttons, signIn }`, `registerProvider`, `providerOf` — `src/auth/providers.ts:11-37`
 - Google: `googleWalk(ctx)` (17 screens, second step by passkey → TOTP → SMS → Tap Yes) and `signInToGoogle` — `src/auth/google.ts`
-- GitHub, Microsoft: `src/auth/github.ts`, `src/auth/microsoft.ts` (Microsoft converts to a walk when it next breaks)
+- GitHub, Microsoft: `src/auth/github.ts` (linear), `src/auth/microsoft.ts` (a walk since 2026-10-05)
 
 ## Connected to
 
