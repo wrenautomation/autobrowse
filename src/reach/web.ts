@@ -31,6 +31,8 @@ export interface Hit {
   title: string;
   url: string;
   snippet: string | null;
+  /** The backend's result as it came, every field: what to use is the caller's call. */
+  raw?: unknown;
 }
 
 export interface Hits {
@@ -267,6 +269,7 @@ export async function search(
         title: r.title ?? r.url,
         url: r.url,
         snippet: null,
+        raw: r,
       }));
     },
     brave: async () => {
@@ -282,6 +285,7 @@ export async function search(
         title: plain(r.title),
         url: r.url,
         snippet: r.description ? plain(r.description) : null,
+        raw: r,
       }));
     },
     duckduckgo: async () => {
@@ -340,6 +344,8 @@ export interface People {
   query: string;
   people: Person[];
   via: string;
+  /** Every result Exa sent, text and all, the ones that didn't parse as a person too. */
+  raw: unknown[];
 }
 
 const LINK = /^\[([^\]]+)\]\(([^)]+)\)$/;
@@ -476,7 +482,7 @@ export async function people(query: string, deps: Deps, o: { n?: number } = {}):
     const p = r.text ? exaProfile(r.text) : null;
     if (p) out.push({ ...p, url: r.url });
   }
-  return { query, people: out, via: "exa" };
+  return { query, people: out, via: "exa", raw: body.results ?? [] };
 }
 
 /* ---------------- LinkedIn pages, from Exa's cache ---------------- */
@@ -726,6 +732,8 @@ export interface Companies {
   domain: string;
   companies: FoundCompany[];
   via: string;
+  /** Every result Exa sent, text and all, the ones that didn't parse as a company too. */
+  raw: unknown[];
 }
 
 /** `https://www.Acme.com/about` → `acme.com`. */
@@ -765,5 +773,5 @@ export async function companies(
       homepageMatches: c.website ? hostOf(c.website) === want : false,
     });
   }
-  return { domain: want, companies: out, via: "exa" };
+  return { domain: want, companies: out, via: "exa", raw: body.results ?? [] };
 }

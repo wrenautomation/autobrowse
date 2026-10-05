@@ -232,6 +232,11 @@ describe("people", () => {
     expect(out.people.map((p) => [p.name, p.url])).toEqual([
       ["Dana Ruiz", "https://www.linkedin.com/in/dana"],
     ]);
+    // What didn't parse is still kept, whole.
+    expect(out.raw).toEqual([
+      { url: "https://www.linkedin.com/in/dana", text: PROFILE },
+      { url: "https://x.example", text: "no heading" },
+    ]);
     const sent = JSON.parse(String(calls[0]?.init.body));
     expect(sent).toMatchObject({
       query: "recruiters at Northwind",

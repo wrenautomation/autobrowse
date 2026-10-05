@@ -75,7 +75,7 @@ export const web: SiteApi = {
       method: "GET",
       path: "/search",
       summary:
-        "Web search (`q`, `n` results, default 10): title, url, snippet; exa, then brave, then duckduckgo (`via` reorders)",
+        "Web search (`q`, `n` results, default 10): title, url, snippet and the backend's whole result as `raw`; exa, then brave, then duckduckgo (`via` reorders)",
       request: z.object({
         q: z.string().min(1),
         n: z.coerce.number().int().min(1).max(50).default(10),
@@ -92,7 +92,7 @@ export const web: SiteApi = {
       method: "GET",
       path: "/people",
       summary:
-        "People search (`q`, `n` people, default 10): public profiles with name, headline, location and every role (title, company, current, dates); exa",
+        "People search (`q`, `n` people, default 10): public profiles with name, headline, location and every role (title, company, current, dates), and every result Exa sent as `raw`; exa",
       request: z.object({
         q: z.string().min(1),
         n: z.coerce.number().int().min(1).max(25).default(10),
@@ -109,7 +109,7 @@ export const web: SiteApi = {
       method: "GET",
       path: "/companies",
       summary:
-        "Companies Exa holds for a domain (`domain`, `n` up to 10, default 3): name, website, industry, size, headquarters, founded, phone, LinkedIn page when linked, `homepageMatches`; exa, 7 of the `exa` budget",
+        "Companies Exa holds for a domain (`domain`, `n` up to 10, default 3): name, website, industry, size, headquarters, founded, phone, LinkedIn page when linked, `homepageMatches`, and every result Exa sent as `raw`; exa, 7 of the `exa` budget",
       request: z.object({
         domain: z
           .string()
