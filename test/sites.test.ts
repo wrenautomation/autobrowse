@@ -1,3 +1,5 @@
+import { once } from "node:events";
+import { createServer } from "node:http";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { defineFlow } from "../src/browser/flow.js";
@@ -327,6 +329,25 @@ describe("site facade", () => {
         port,
       }),
     ).rejects.toThrow(/refused: access_denied/);
+  });
+
+  it("a loopback port already taken fails at once, not after the wait", async () => {
+    const port = 9416;
+    const taken = createServer().listen(port, "127.0.0.1");
+    await once(taken, "listening");
+    const o = "oauth" in youtube.auth ? youtube.auth.oauth : (null as never);
+    try {
+      await expect(
+        runConsent(o, {
+          http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+          env: (n) => ({ GOOGLE_OAUTH_CLIENT_ID: "cid", GOOGLE_OAUTH_CLIENT_SECRET: "cs" })[n],
+          open: () => new Promise(() => {}),
+          port,
+        }),
+      ).rejects.toThrow(/EADDRINUSE/);
+    } finally {
+      taken.close();
+    }
   });
 
   it("a setup step runs a hand-written flow with the sink, or a compiled workflow with the plan", async () => {

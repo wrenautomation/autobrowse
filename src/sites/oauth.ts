@@ -196,6 +196,11 @@ function listen(redirect: string, state: string, timeoutMs: number) {
       clearTimeout(timer);
       server.close();
     };
+    // A port already taken fails now, not after the whole wait.
+    server.on("error", (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
     const at = new URL(redirect);
     server.listen(Number(at.port), at.hostname);
   });

@@ -65,7 +65,8 @@ describe("explore mode", () => {
 
   beforeAll(async () => {
     dir = await mkdtemp(join(tmpdir(), "explore-"));
-    port = 9300 + Math.floor(Math.random() * 500);
+    // Clear of the fixed 94xx loopback ports the oauth tests listen on.
+    port = 9500 + Math.floor(Math.random() * 200);
     ({ done, token } = await startExplore({
       site: "scratch",
       port,
