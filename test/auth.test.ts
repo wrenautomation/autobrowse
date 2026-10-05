@@ -26,6 +26,7 @@ import type { FlowPage } from "../src/browser/flow.js";
 import type { Hints } from "../src/browser/locate.js";
 import { NeedsHuman } from "../src/browser/session.js";
 import { fakePage } from "./auth-fakes.js";
+import { fakeSite } from "./site-fakes.js";
 
 // RFC 6238 test vector: secret "12345678901234567890" (base32 GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ).
 const RFC_SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
@@ -252,8 +253,33 @@ describe("formLogin", () => {
   it("fails loudly when the page is still not signed in", async () => {
     const { fp } = fakePage({ text: ["login", "something else"], present: () => true });
     await expect(formLogin("s", spec)({ fp, cred, code: async () => "1" })).rejects.toThrow(
-      /not signed in after the password: .* shows "something else"/,
+      /the form came back after the password/,
     );
+  });
+  it("answers the pages in the order the site shows them: a remembered user opens on the password", async () => {
+    const site = fakeSite(
+      {
+        password: {
+          has: ["textbox:Password", "button:Log in"],
+          text: "Welcome back, u",
+          on: { "click button:Log in": "code" },
+        },
+        code: {
+          has: ["textbox:Code", "button:Continue"],
+          text: "Enter the code from your authenticator",
+          on: { "click button:Continue": "home" },
+        },
+        home: { url: "https://site.test/home", has: [], text: "Dashboard" },
+      },
+      "password",
+    );
+    await formLogin("s", spec)({ fp: site.fp, cred, code: async () => "123456" });
+    expect(site.acts).toEqual([
+      "fill Password=p",
+      "click Log in",
+      "fill Code=123456",
+      "click Continue",
+    ]);
   });
 });
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { currentCall } from "../src/browser/attempt.js";
 import type { SiteFacade } from "../src/sites/facade.js";
 import { DESK_SERVICE, SITES_SERVICE, SiteError, sitesService } from "../src/sites/index.js";
 
@@ -27,7 +28,7 @@ const facade: SiteFacade = {
     return { site, origin: "o", authed: true, routes: [], setup: [] };
   },
   call: async (site, method, path, input, _account, from) => {
-    calls.push({ site, method, path, input, from });
+    calls.push({ site, method, path, input, from, call: currentCall() });
     if (path === "/rest/boom") throw new SiteError(502, "workflow failed");
     if (path === "/rest/flaky") throw new Error("socket hang up");
     return { id: "urn:li:share:1" };
@@ -124,5 +125,10 @@ describe("sites service", () => {
       id: "urn:li:share:1",
     });
     expect(steps).toEqual([{ name: "sites linkedin GET /rest/posts", attempts: 300 }]);
+  });
+
+  it("a call runs as the durable call, so a rerun never repeats a browser leg's post", async () => {
+    await h.call?.(ctxOf().ctx, { site: "linkedin", method: "POST", path: "/rest/posts" });
+    expect(calls.at(-1)).toMatchObject({ call: "inv_1 sites linkedin POST /rest/posts" });
   });
 });

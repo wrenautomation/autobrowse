@@ -10,6 +10,7 @@ import { SITES } from "../src/sites/index.js";
 import { runConsent } from "../src/sites/oauth.js";
 import { outlook, outlookOAuth } from "../src/sites/outlook.js";
 import { fakePage } from "./auth-fakes.js";
+import { fakeSite, type State } from "./site-fakes.js";
 
 const base = { username: "w@outlook.com", password: "p", recoveryCodes: [], passkeys: [] };
 const ctx = (fp: SignInContext["fp"], kinds: CodeKind[] = []): SignInContext => ({
@@ -36,30 +37,79 @@ describe("outlook sign-in", () => {
     expect(MICROSOFT_HOST.test("https://outlook.live.com/mail/0/")).toBe(false);
   });
 
-  it("opens the mailbox, signs in on the Microsoft wall, lands on mail", async () => {
-    let url = "https://login.live.com/login.srf?wa=wsignin1.0";
+  const MAIL = "https://outlook.live.com/mail/0/";
+  const wall = (states: Record<string, State>, start: string) => {
+    const site = fakeSite(states, start);
     const opened: string[] = [];
-    const { fp, acts } = fakePage({
-      text: ["Sign in Email, phone, or Skype", "Enter password", "Stay signed in?", "Inbox"],
-      present: (h) => /email|password|next|sign in|^yes$/i.test(String(h.name ?? h.text)),
-      url: () => url,
-      onAct: (n) => {
-        if (n >= 5) url = "https://outlook.live.com/mail/0/";
-      },
-    });
-    fp.open = async (u) => {
+    site.fp.open = async (u) => {
       opened.push(u);
     };
+    site.fp.waitForUrl = async (p) =>
+      p instanceof RegExp ? p.test(site.fp.url()) : p(site.fp.url());
+    return { ...site, opened };
+  };
+  const LIVE = "https://login.live.com/login.srf";
+  const tail: Record<string, State> = {
+    password: {
+      url: LIVE,
+      has: ["textbox:Password", "button:Sign in"],
+      text: "Enter password",
+      on: { "click button:Sign in": "kmsi" },
+    },
+    kmsi: {
+      url: `${LIVE}?kmsi`,
+      has: ["button:Yes", "button:No"],
+      text: "Stay signed in?",
+      on: { "click button:Yes": "mail" },
+    },
+    mail: { url: MAIL, has: [], text: "Inbox" },
+  };
+
+  it("opens the mailbox, signs in on the Microsoft wall, lands on mail", async () => {
+    const site = wall(
+      {
+        email: {
+          url: LIVE,
+          has: ["textbox:Email, phone, or Skype", "button:Next"],
+          on: { "click button:Next": "password" },
+        },
+        ...tail,
+      },
+      "email",
+    );
     const login = SITE_LOGINS.find((l) => l.site === "outlook");
-    await login?.signIn(ctx(fp));
-    expect(opened).toEqual(["https://outlook.live.com/mail/0/"]);
-    expect(acts.map(line).slice(0, 4)).toEqual([
-      "fill /email|phone|skype|sign in/i",
-      "click /^next$/i",
-      "fill /password/i",
-      "click /^sign in$/i",
+    await login?.signIn(ctx(site.fp));
+    expect(site.opened).toEqual([MAIL]);
+    expect(site.acts).toEqual([
+      "fill Email, phone, or Skype=w@outlook.com",
+      "click Next",
+      "fill Password=p",
+      "click Sign in",
+      "click Yes",
     ]);
-    expect(await login?.loggedIn(fp)).toBe(true);
+    expect(await login?.loggedIn(site.fp)).toBe(true);
+  });
+
+  it("a passwordless prompt takes the password instead, not a person's phone", async () => {
+    const site = wall(
+      {
+        approve: {
+          url: LIVE,
+          has: ["link:Use your password instead"],
+          text: "Approve sign in request. Open your Authenticator app and enter the number 42",
+          on: { "click link:Use your password instead": "password" },
+        },
+        ...tail,
+      },
+      "approve",
+    );
+    await signInToMicrosoft(ctx(site.fp));
+    expect(site.acts).toEqual([
+      "click Use your password instead",
+      "fill Password=p",
+      "click Sign in",
+      "click Yes",
+    ]);
   });
 });
 

@@ -46,9 +46,11 @@ export function consentFlow(w: ConsentWalk): BrowserFlow<OauthConsentInput, { la
       for (let round = 0; round < (w.rounds ?? 6); round++) {
         if (landed(fp.url())) return { landed: fp.url() };
         await fp.wait(SETTLE_MS);
+        // A wait, so it clears interrupts (a banner, a click learned on the site) off the button.
+        const allow = await fp.has(w.allow, SETTLE_MS);
         if (landed(fp.url())) return { landed: fp.url() };
         const text = await fp.text();
-        if (await fp.has(w.allow)) {
+        if (allow) {
           // A click before the page wakes up is lost (X, 2026-09-27): look again, press again.
           for (let n = 0; w.confirm && n < 3 && (await fp.has(w.confirm.unticked)); n++) {
             await fp.act({ kind: "click" }, w.confirm.tick, { goal: "tick the acknowledgement" });

@@ -10,6 +10,7 @@
  */
 import * as restate from "@restatedev/restate-sdk";
 import { z } from "zod";
+import { withCall } from "../browser/attempt.js";
 import type { SiteFacade } from "./facade.js";
 import { SiteError } from "./types.js";
 
@@ -46,10 +47,14 @@ function parse<T>(schema: z.ZodType<T>, raw: unknown): T {
   return r.data;
 }
 
-/** A SiteError is the caller's to read (404 route, 400 request, 501 no leg, 409 blocked, 502 failed); nothing else is. */
-async function terminalOnSiteError<T>(fn: () => Promise<T>): Promise<T> {
+/**
+ * A SiteError is the caller's to read (404 route, 400 request, 501 no leg, 409 blocked, 502 failed); nothing else is.
+ * Runs as the durable call `key`: a browser leg's irreversible act (a post) that went
+ * through before a crash or a lost connection is not done again when Restate reruns it.
+ */
+async function terminalOnSiteError<T>(key: string, fn: () => Promise<T>): Promise<T> {
   try {
-    return await fn();
+    return await withCall(key, fn);
   } catch (err) {
     if (err instanceof SiteError)
       throw new restate.TerminalError(err.message, { errorCode: err.status });
@@ -64,9 +69,10 @@ export function sitesService(facade: SiteFacade, name: string = SITES_SERVICE) {
     handlers: {
       status: async (ctx: restate.Context, raw: unknown) => {
         const { site: which } = parse(site, raw);
+        const step = `sites status ${which}`;
         return ctx.run(
-          `sites status ${which}`,
-          () => terminalOnSiteError(() => facade.status(which)),
+          step,
+          () => terminalOnSiteError(`${ctx.request().id} ${step}`, () => facade.status(which)),
           READ_RETRY,
         );
       },
@@ -77,10 +83,11 @@ export function sitesService(facade: SiteFacade, name: string = SITES_SERVICE) {
           caller: req.caller ?? ctx.request().headers.get("x-caller") ?? null,
           invocation: ctx.request().id,
         };
+        const step = `sites ${req.site} ${req.method} ${req.path}`;
         return ctx.run(
-          `sites ${req.site} ${req.method} ${req.path}`,
+          step,
           () =>
-            terminalOnSiteError(() =>
+            terminalOnSiteError(`${ctx.request().id} ${step}`, () =>
               facade.call(req.site, req.method, req.path, req.input, req.account, from),
             ),
           retry,
@@ -106,13 +113,22 @@ export function sitesService(facade: SiteFacade, name: string = SITES_SERVICE) {
         if (!facade.renew)
           throw new restate.TerminalError("nothing lists what is kept here", { errorCode: 501 });
         const renew = facade.renew.bind(facade);
-        return ctx.run(`sites renew${dry ? " (dry)" : ""}`, () => renew({ dry }), WRITE_RETRY);
+        const step = `sites renew${dry ? " (dry)" : ""}`;
+        return ctx.run(
+          step,
+          () => withCall(`${ctx.request().id} ${step}`, () => renew({ dry })),
+          WRITE_RETRY,
+        );
       },
       setup: async (ctx: restate.Context, raw: unknown) => {
         const req = parse(setup, raw);
+        const step = `sites setup ${req.site} ${req.step}`;
         return ctx.run(
-          `sites setup ${req.site} ${req.step}`,
-          () => terminalOnSiteError(() => facade.setup(req.site, req.step, req.account)),
+          step,
+          () =>
+            terminalOnSiteError(`${ctx.request().id} ${step}`, () =>
+              facade.setup(req.site, req.step, req.account),
+            ),
           WRITE_RETRY,
         );
       },

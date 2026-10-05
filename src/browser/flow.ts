@@ -105,8 +105,10 @@ export interface FlowPage {
   text(): Promise<string>;
   /** Raw markup, capped; for things the eye cannot see (an otpauth link behind a QR). */
   html(): Promise<string>;
-  /** Whether something matching `hints` is on the page right now. */
-  /** Visible now, or within `withinMs` when given (a page still rendering its next step). */
+  /**
+   * Visible now, or within `withinMs` when given (a page still rendering its
+   * next step); a wait handles interrupts on the way, as an act does.
+   */
   has(hints: Hints, withinMs?: number): Promise<boolean>;
   /** The element's text, trimmed and capped: what a scraping step keeps. */
   read(hints: Hints): Promise<string>;
@@ -453,19 +455,19 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           url: () => active.url(),
           text: () => bodyText(active, 20_000),
           html: () => pageHtml(active, 400_000),
-          has: (hints, withinMs = 0) =>
-            withinMs > 0
-              ? locate(active, hints)
-                  .first()
-                  .waitFor({ state: "visible", timeout: withinMs })
-                  .then(
-                    () => true,
-                    () => false,
-                  )
-              : locate(active, hints)
-                  .first()
-                  .isVisible()
-                  .catch(() => false),
+          has: async (hints, withinMs = 0) => {
+            // A wait handles what shows up in the way, as an act's does: a
+            // guard like "the dialog opened, else a person" never misses its
+            // control behind a banner or a screen learned on this site.
+            if (withinMs > 0)
+              await clearWay(hints, { kind: "click" }, lastGoal ?? "wait", withinMs).catch(
+                () => undefined,
+              );
+            return locate(active, hints)
+              .first()
+              .isVisible()
+              .catch(() => false);
+          },
           read: async (hints) => {
             lastHints = hints;
             actsBefore = acts++;

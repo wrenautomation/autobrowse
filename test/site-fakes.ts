@@ -12,6 +12,8 @@ export type State = { url?: string; has: string[]; text?: string; on?: Record<st
 export function fakeSite(states: Record<string, State>, start: string) {
   let state = start;
   const acts: string[] = [];
+  /** Goals of the acts marked irreversible: what a rerun must never redo. */
+  const marked: string[] = [];
   const current = () => states[state] as State;
   const url = () => current().url ?? "https://site.test/login";
   const control = (h: Hints): string | null => {
@@ -46,16 +48,20 @@ export function fakeSite(states: Record<string, State>, start: string) {
     text: async () => current().text ?? "",
     html: async () => "",
     has: async (h) => control(h) !== null,
-    read: async (h) => control(h)?.slice(control(h)?.indexOf(":") ?? 0) ?? "",
+    read: async (h) => {
+      const c = control(h);
+      return c ? c.slice(c.indexOf(":") + 1) : "";
+    },
     wait: async () => {},
     answer: async () => {},
     waitForUrl: async (p) => (p instanceof RegExp ? p.test(url()) : p(url())),
     nextPage: async () => null,
     pages: () => [],
     switchTo() {},
-    async act(op: Op, hints: Hints) {
+    async act(op: Op, hints: Hints, a) {
       const c = control(hints);
       if (!c) throw new Error(`nothing matches ${JSON.stringify(hints)} in ${state}`);
+      if (a.irreversible) marked.push(a.goal);
       acts.push(
         `${op.kind} ${c.slice(c.indexOf(":") + 1)}${op.kind === "fill" ? `=${op.value}` : ""}`,
       );
@@ -72,5 +78,5 @@ export function fakeSite(states: Record<string, State>, start: string) {
   const go = (s: string) => {
     state = s;
   };
-  return { fp, acts, at: () => state, go };
+  return { fp, acts, marked, at: () => state, go };
 }

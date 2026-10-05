@@ -13,6 +13,7 @@ import type { Credential, CredentialStore, SecretAudit } from "credvault";
 import type { FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
 import { pageState, untilLoaded } from "../browser/page-state.js";
+import { type Screen, type Walk, walk } from "../browser/screens.js";
 import { wallOf } from "../browser/session.js";
 import { safeUrls } from "../clients/http.js";
 import { type CodeKind, type CodeSource, inboxLock } from "./codes.js";
@@ -200,59 +201,159 @@ export function passwordOf(site: string, cred: Credential): string {
   return cred.password;
 }
 
+/**
+ * A form sign-in as a walk (designs/2026-09-27-screens.md): each page the
+ * form can show is a screen, so a saved-account chooser, a two-page form,
+ * a captcha or a code page is answered in whatever order the site shows
+ * it, and a page it does not know goes down the learned → reader ladder.
+ * A password is typed once (the previous one once more on a rejection):
+ * the form coming back without saying why is a failure, never a retype.
+ */
 export function formLogin(site: string, spec: FormLoginSpec): SiteLogin["signIn"] {
-  return async ({ fp, cred, code }) => {
+  return async (ctx) => {
+    const { cred } = ctx;
     const password = passwordOf(site, cred);
-    await fp.open(spec.start, { allowWall: true });
-    if (spec.reveal && (await fp.has(spec.reveal)))
-      await fp.act({ kind: "click" }, spec.reveal, { goal: "past the saved-account chooser" });
-    await fp.act({ kind: "fill", value: cred.username }, spec.username, { goal: "type username" });
-    if (spec.next) await fp.act({ kind: "click" }, spec.next, { goal: "continue past username" });
-    await fp.act({ kind: "fill", value: password }, spec.password, { goal: "type password" });
-    await fp.act({ kind: "click" }, spec.submit, { goal: "submit login form" });
-    await fp.wait(SETTLE_MS);
-    if (spec.captcha && (await fp.has(spec.captcha))) {
-      const got = await fp.captcha();
-      if (!got.solved) fp.human(`${site}: the sign-in captcha is a person's (${got.reason})`);
-      await fp.wait(SETTLE_MS);
-    }
-    let text = await fp.text();
-    if (spec.rejected?.test(text) && cred.previousPassword) {
-      // A rotation the site took without saying so: the one before still works once.
-      await fp.act({ kind: "fill", value: cred.previousPassword }, spec.password, {
-        goal: "type the previous password",
-      });
-      await fp.act({ kind: "click" }, spec.submit, { goal: "submit login form" });
-      await fp.wait(SETTLE_MS);
-      text = await fp.text();
-    }
-    if (spec.rejected?.test(text)) throw new LoginFailed(site, "password rejected");
-    const byKey = !!(spec.passkey && cred.passkeys.length && spec.passkey.asks.test(text));
-    if (spec.passkey && byKey) {
-      // Our authenticator holds the key: the ceremony completes on the click.
-      await fp.act({ kind: "click" }, spec.passkey.start, { goal: "verify with our passkey" });
-      await fp.wait(SETTLE_MS * 2);
-      text = await fp.text();
-    }
-    let step: CodeStep | null = null;
-    for (const s of spec.code && !byKey ? [spec.code].flat() : [])
-      if (s.asks ? s.asks.test(text) : await fp.has(s.field)) {
-        step = s;
-        break;
-      }
-    if (step) {
-      const c = await code(step.kind, step.hint);
-      await fp.act({ kind: "fill", value: c }, step.field, { goal: "type verification code" });
-      await fp.act({ kind: "click" }, step.submit, { goal: "submit verification code" });
-      await fp.wait(SETTLE_MS);
-      text = await fp.text();
-    }
-    const ok = spec.success
-      ? spec.success.test(text) || spec.success.test(fp.url())
-      : !(await fp.has(spec.password));
-    if (!ok)
-      throw new LoginFailed(site, `not signed in after the password: ${await pageState(fp)}`);
+    await ctx.fp.open(spec.start, { allowWall: true });
+    await walk(ctx, formWalk(site, spec, ctx, password));
   };
+}
+
+function formWalk(
+  site: string,
+  spec: FormLoginSpec,
+  { cred }: SignInContext,
+  password: string,
+): Walk<SignInContext> {
+  let submitted = false;
+  let typedPrevious = false;
+  const fail = (why: string): never => {
+    throw new LoginFailed(site, why);
+  };
+  const submit = async (fp: FlowPage, value: string, goal: string) => {
+    if (submitted && !typedPrevious && value === password)
+      fail(`the form came back after the password, saying nothing known: ${fp.url()}`);
+    await fp.act({ kind: "fill", value }, spec.password, { goal });
+    await fp.act({ kind: "click" }, spec.submit, { goal: "submit login form" });
+    submitted = true;
+  };
+  const codes = spec.code ? [spec.code].flat() : [];
+  const screens: Screen<SignInContext>[] = [
+    {
+      name: "signed in",
+      looks: "the site signed in, past the login form",
+      // Only after the password: a start page is never mistaken for the goal.
+      async is({ fp }) {
+        if (!submitted) return false;
+        if (spec.success) return spec.success.test(fp.url()) || spec.success.test(await fp.text());
+        for (const h of [spec.password, spec.username, ...codes.map((c) => c.field)])
+          if (await fp.has(h)) return false;
+        return true;
+      },
+      goal: true,
+    },
+    ...(spec.captcha
+      ? [
+          {
+            name: "captcha",
+            looks: "a captcha challenge on the login form",
+            shows: [spec.captcha],
+            async act({ fp }: SignInContext) {
+              const got = await fp.captcha();
+              if (!got.solved)
+                fp.human(`${site}: the sign-in captcha is a person's (${got.reason})`);
+            },
+          },
+        ]
+      : []),
+    ...(spec.rejected
+      ? [
+          {
+            name: "rejected",
+            looks: "the login form saying the username or password is wrong",
+            says: spec.rejected,
+            async act({ fp }: SignInContext) {
+              // A rotation the site took without saying so: the one before still works once.
+              if (!cred.previousPassword || typedPrevious) fail("password rejected");
+              typedPrevious = true;
+              await submit(fp, cred.previousPassword as string, "type the previous password");
+            },
+          },
+        ]
+      : []),
+    ...(spec.passkey && cred.passkeys.length
+      ? [
+          {
+            name: "passkey",
+            looks: "a prompt to verify with a security key or passkey",
+            says: spec.passkey.asks,
+            // Our authenticator holds the key: the ceremony completes on the click.
+            act: ({ fp }: SignInContext) =>
+              fp.act({ kind: "click" }, spec.passkey?.start as Hints, {
+                goal: "verify with our passkey",
+              }),
+          },
+        ]
+      : []),
+    ...codes.map(
+      (step): Screen<SignInContext> => ({
+        name: `${step.kind} code`,
+        looks: `a box asking for a ${step.kind} verification code`,
+        // Text that asks decides; else the field showing does.
+        ...(step.asks ? { says: step.asks } : { shows: [step.field] }),
+        async act({ fp, code }) {
+          const c = await code(step.kind, step.hint);
+          await fp.act({ kind: "fill", value: c }, step.field, { goal: "type verification code" });
+          await fp.act({ kind: "click" }, step.submit, { goal: "submit verification code" });
+        },
+      }),
+    ),
+    ...(spec.reveal
+      ? [
+          {
+            name: "saved accounts",
+            looks: "a saved-account chooser hiding the login form",
+            shows: [spec.reveal],
+            act: ({ fp }: SignInContext) =>
+              fp.act({ kind: "click" }, spec.reveal as Hints, {
+                goal: "past the saved-account chooser",
+              }),
+          },
+        ]
+      : []),
+    {
+      name: "login form",
+      looks: "the login form: username and password boxes",
+      shows: [spec.username, spec.password],
+      async act({ fp }) {
+        await fp.act({ kind: "fill", value: cred.username }, spec.username, {
+          goal: "type username",
+        });
+        await submit(fp, password, "type password");
+      },
+    },
+    {
+      name: "username page",
+      looks: "the first page of a two-page login: the username box alone",
+      shows: [spec.username],
+      hides: [spec.password],
+      async act({ fp }) {
+        await fp.act({ kind: "fill", value: cred.username }, spec.username, {
+          goal: "type username",
+        });
+        await fp.act({ kind: "click" }, spec.next ?? spec.submit, {
+          goal: "continue past username",
+        });
+      },
+    },
+    {
+      name: "password page",
+      looks: "the second page of a two-page login: the password box alone",
+      shows: [spec.password],
+      hides: [spec.username],
+      act: ({ fp }) => submit(fp, password, "type password"),
+    },
+  ];
+  return { site, name: "sign-in", goal: `signed in to ${site}`, fail, screens };
 }
 
 /** `fn` under the context's inbox lock when it has one. */

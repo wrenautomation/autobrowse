@@ -411,6 +411,29 @@ describe("screens", () => {
       expect(learned.list()[0]?.used).toBe(1);
     }, 60_000);
 
+    it("a wait for a control gets past a learned screen too, not only an act", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "autobrowse-has-"));
+      const learned = memoryScreens();
+      const url = `${await ready}screen`;
+      learned.keep({
+        site: "scratch",
+        url: urlShape(url),
+        landmarks: ["heading checkout", "button continue"],
+        click: { role: "button", name: "Continue" },
+        reason: "a screen before the form",
+      });
+      const guard = defineFlow<undefined, boolean>({
+        site: "scratch",
+        name: "guard",
+        async run(fp) {
+          await fp.open(url);
+          return fp.has({ role: "button", name: "Pay now" }, 3_000);
+        },
+      });
+      const runner = runnerIn(dir, { repairer: never, learnedScreens: learned });
+      expect(await runner.run(guard, undefined)).toBe(true);
+    }, 60_000);
+
     it("a repair's detour is kept for the whole site", async () => {
       const dir = mkdtempSync(join(tmpdir(), "autobrowse-detour-"));
       const learned = memoryScreens();

@@ -72,7 +72,7 @@ export const port25RequestFlow = defineFlow<FormInput, { confirmation: string | 
     await fp.act(
       { kind: "click" },
       { role: "button", name: "Submit" },
-      { goal: "submit the request" },
+      { goal: "submit the request", irreversible: true },
     );
     await fp.wait(3_000);
     const text = await fp.text();

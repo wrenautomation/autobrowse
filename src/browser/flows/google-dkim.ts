@@ -32,22 +32,24 @@ export const googleDkimGenerate = defineFlow<{ domain: string }, DkimRecord>({
   site: "google-admin",
   name: "dkim-generate",
   async run(fp, { domain }) {
-    const { page } = fp;
     await openDomain(fp, domain);
-    const shown = page.locator("text=/^v=DKIM1;/").first();
+    const shown = { text: "/^v=DKIM1;/" };
     // A key already shown is the live one (a domain getting more inboxes):
     // "Generate new record" stays on the page and would rotate it.
-    const had = await shown.waitFor({ timeout: 10_000 }).then(
-      () => true,
-      () => false,
-    );
-    if (!had) {
-      await page.getByRole("button", { name: /generate new record/i }).click({ timeout: 30_000 });
-      await page.getByRole("button", { name: /^generate$/i }).click();
+    if (!(await fp.has(shown, 10_000))) {
+      await fp.act(
+        { kind: "click" },
+        { role: "button", name: "/generate new record/i" },
+        { goal: "open the generate dialog", timeoutMs: 30_000 },
+      );
+      await fp.act(
+        { kind: "click" },
+        { role: "button", name: "/^generate$/i" },
+        { goal: "generate the DKIM key (a second one rotates it)", irreversible: true },
+      );
     }
-    const value = await shown.innerText({ timeout: 30_000 }).catch(() => null);
-    if (value === null) return fp.human(`no DKIM value shown for ${domain}`);
-    return { name: "google._domainkey", value: value.trim() };
+    if (!(await fp.has(shown, 30_000))) return fp.human(`no DKIM value shown for ${domain}`);
+    return { name: "google._domainkey", value: (await fp.read(shown)).trim() };
   },
 });
 
