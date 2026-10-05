@@ -19,7 +19,7 @@ One vocabulary is captured by the recorder, kept in outlines, typed in flows, pr
 
 - Fields: `tag, role, name, text, placeholder, id, testId, href, inputType`; last resorts `css`, `nth`; `frame` for a cross-origin iframe — `src/recorder/types.ts:9-41`; explore fills a missing `frame` from the visible iframes (`withFrame`, `src/browser/frames.ts`)
 - `planLocator(h) → LocatorPlan | null`; `locate`, `locateAll`, `renderLocator` — `src/browser/locate.ts:27-120`
-- Captured in the page by the observer script — `src/recorder/observer.ts:27-41`
+- Captured in the page by the observer script — `src/recorder/observer.ts:27-45`; an unlabeled radio or checkbox gets `nth` among its kind (teach, 2026-10-05)
 
 ## Connected to
 

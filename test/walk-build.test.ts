@@ -7,6 +7,7 @@ import type { Action, LocatorHints } from "../src/recorder/types.js";
 import { type RunOutcome, type RunRow, type RunSummary, runLog } from "../src/runs/log.js";
 import {
   buildWalk,
+  fieldName,
   type RunInput,
   samePage,
   shows,
@@ -735,6 +736,13 @@ describe("buildWalk", () => {
 });
 
 describe("taught by hand: where each value comes from", () => {
+  it("names a field by its input type when only a sample address names it", () => {
+    const h = { tag: "input", role: "textbox", text: null, id: null, testId: null, href: null };
+    const sample = { ...h, name: "you@example.com", placeholder: "you@example.com" };
+    expect(fieldName({ ...sample, inputType: "email" })).toBe("Email");
+    expect(fieldName({ ...sample, name: "Work email", inputType: "email" })).toBe("Work email");
+    expect(fieldName({ ...sample, inputType: "text" })).toBe("you@example.com");
+  });
   const t0 = Date.UTC(2026, 9, 5, 12, 0, 0);
   const row = (s: number, a: Action, look: PageLook | null): RunRow => ({
     kind: "act",
@@ -802,8 +810,8 @@ describe("taught by hand: where each value comes from", () => {
       ["Name", "your profile's name"],
       ["Email", "your profile's email"],
       ["Start date", "a date: today+3d"],
-      ["Project", "an id in a URL it opens: asked each run, default as typed"],
-      ["Size", "a choice: fixed"],
+      ["Project", "an id in a URL it opens: may differ each run"],
+      ["Size", "a choice"],
     ]);
   });
 

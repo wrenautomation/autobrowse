@@ -25,7 +25,7 @@ Data kinds first: their interpreters exist and can't run new code. The owner's o
 - Pack: `Scrubber` (masks addresses and stored usernames, drops query, fragment, examples, run ids, dirty landmarks and hints; a dirty literal becomes a plan field) — `src/mods/pack.ts:49`; final refusal on any stored value or address — `:110`; `scrubLogin` — `:184`; `packMod` — `:205`; `scrubFrom` reads the store unarmed — `:366`
 - CLI: `autobrowse mods pack|search|add|list|remove` — `src/app/cli-mods.ts`
 - Mods page: `modsPort` (list with permission lines, walks' flow names and kept screens and fixes; search; check then add, data only; remove) — `src/mods/install.ts:401`; `Backend.mods` — `src/app/backend.ts:149`, `:460`; `/api/mods` routes — `src/ui/api.ts:401-451`; `ui/src/pages/Mods.tsx`
-- Sample: `walkthrough/mods/autobrowse-mod-scratch` (packed from the desk's `scratch/join-list`, not published; biome skips it so its hashes hold)
+- Sample: `walkthrough/mods/autobrowse-mod-scratch` (0.2.0 on npm, taught by hand and packed by `teach --mod`; biome skips it so its hashes hold). `packInto` (`src/walks/teach.ts`) sets `autobrowse` to `>=` the packing version
 
 ## Connected to
 

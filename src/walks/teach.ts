@@ -266,7 +266,8 @@ export function packInto(
   const mod = modSchema.parse({
     name,
     version: was.version ?? "0.1.0",
-    autobrowse: was.autobrowse ?? `>=${o.version}`,
+    // The packing version reads this walk's format; an older one may not (v2 walks need 0.4.0).
+    autobrowse: `>=${o.version}`,
     description: was.description ?? `${site}: ${w.goal}`,
     sites: [...new Set([...(was.sites ?? []), site])],
     domains: [...hosts].filter(Boolean).sort(),

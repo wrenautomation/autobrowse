@@ -29,7 +29,11 @@ export const OBSERVER_SCRIPT = `
     const inputType = tag === 'input' ? (el.getAttribute('type') || 'text').toLowerCase() : null;
     const role = el.getAttribute('role') || (inputType ? (INPUT_ROLES[inputType] || 'textbox') : IMPLICIT[tag]) || null;
     const name = trim(el.getAttribute('aria-label')) || labelFor(el) || (tag === 'button' || role === 'button' || tag === 'a' ? trim(el.textContent) : null) || trim(el.getAttribute('alt')) || trim(el.getAttribute('title')) || trim(el.getAttribute('placeholder')) || (inputType === 'submit' ? trim(el.value) : null);
+    // An unlabeled radio or checkbox has nothing to find it by but its place among its kind.
+    const nth = !name && (inputType === 'radio' || inputType === 'checkbox')
+      ? [...document.querySelectorAll('input[type=' + inputType + ']')].indexOf(el) : -1;
     return {
+      ...(nth > 0 ? { nth } : {}),
       tag, role, name,
       text: trim(el.textContent),
       placeholder: trim(el.getAttribute('placeholder')),

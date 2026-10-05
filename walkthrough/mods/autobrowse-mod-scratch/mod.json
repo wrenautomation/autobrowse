@@ -1,7 +1,7 @@
 {
   "name": "autobrowse-mod-scratch",
-  "version": "0.1.0",
-  "autobrowse": ">=0.3.0",
+  "version": "0.2.0",
+  "autobrowse": ">=0.4.0",
   "description": "scratch: join the test list",
   "sites": [
     "scratch"
@@ -18,7 +18,7 @@
     {
       "kind": "walk",
       "path": "walks/scratch/join-list.json",
-      "sha256": "4f173d5e0ddcea79fa14391b3380f04f8942fa133345f9505f7a38ef1d3b2bb8"
+      "sha256": "fcba199320af6978a762e8e9c1ccda70476e5cee0b0bdfa30045bf512ad60c57"
     }
   ]
 }

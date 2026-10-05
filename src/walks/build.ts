@@ -70,6 +70,8 @@ const SAME_PAGE = 0.5;
 const PICK = 4;
 const MIN_PICK = 3;
 const CAPTCHA_NOTE = /^solved a captcha here/;
+/** explore's own note when a person acted unpaused (server.ts `helpedSince`): not a name. */
+const HELPED_NOTE = /^a person did \d+ act\(s\) by hand here/;
 /** A note this short names the screen that follows; a longer one describes it. */
 const NAME_NOTE = 60;
 
@@ -177,7 +179,7 @@ export function visitsOf(run: string, rows: readonly RunRow[]): Cut {
         if (r.look && (!cur || !last || !samePage(last, r.look))) visit(r.look);
         if (r.look) last = r.look;
         into({ kind: "captcha" });
-      } else named = a.text.trim();
+      } else if (!HELPED_NOTE.test(a.text)) named = a.text.trim();
       continue;
     }
     const at = Date.parse(r.at);
@@ -362,18 +364,18 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
         typed: a.value,
         why: "the same each run",
       };
-    const key = fieldKey(camel(describe(a.target)) || "value");
+    const key = fieldKey(camel(fieldName(a.target)) || "value");
     const day = relativeDay(a.value, built);
     fields.push({
       key,
-      label: describe(a.target),
+      label: fieldName(a.target),
       example: a.value,
       default: day ?? a.value,
     });
     return {
       value: { from: "plan", field: key },
       typed: a.value,
-      why: day ? `a date: ${day}` : "asked each run, default as typed",
+      why: day ? `a date: ${day}` : "may differ each run",
     };
   };
 
@@ -399,7 +401,7 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
           const hints = hintsOf(a.target);
           irreversible ||= paymentGate("fill", hints) !== null;
           const { value, typed, why } = sourceOf(a, others);
-          const op: WalkOp = { kind: "fill", goal: `fill ${describe(a.target)}`, hints, value };
+          const op: WalkOp = { kind: "fill", goal: `fill ${fieldName(a.target)}`, hints, value };
           whys.set(op, { typed, why });
           return [op];
         }
@@ -407,7 +409,7 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
           const hints = hintsOf(a.target);
           irreversible ||= paymentGate("select", hints) !== null;
           const op: WalkOp = { kind: "select", goal: `choose ${a.value}`, hints, value: a.value };
-          whys.set(op, { typed: a.value, why: "a choice: fixed" });
+          whys.set(op, { typed: a.value, why: "a choice" });
           return [op];
         }
         case "press":
@@ -615,6 +617,13 @@ function inUrl(url: string, value: string, key: string): string {
 }
 
 /** What the review calls an op: the field it fills, or the choice it makes. */
+const TYPE_NAMES: Record<string, string> = { email: "Email", tel: "Phone", url: "Website" };
+/** A field's name; a placeholder standing in for one ("you@example.com") gives way to the input's type. */
+export const fieldName = (t: LocatorHints): string => {
+  const byType = TYPE_NAMES[t.inputType ?? ""];
+  return byType && (!t.name || t.name === t.placeholder) ? byType : describe(t);
+};
+
 export const labelOf = (op: { goal: string }): string => op.goal.replace(/^(fill|choose) /, "");
 
 /** A typed date as a day relative to `now` (`today+3d`); null when it is no date. */

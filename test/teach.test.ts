@@ -166,7 +166,7 @@ describe("teach end to end", () => {
       return page("<h1>You are on the list</h1><p>Thanks.</p>");
     }
     return page(
-      `<h1>Join the list</h1><form action="/confirm"><label for="name">Name</label><input id="name" name="name"><label for="email">Email</label><input id="email" name="email" type="email"><label for="note">Note</label><input id="note" name="note"><label for="size">Size</label><select id="size" name="size"><option>1-10</option><option>11-50</option></select><button>Continue</button></form>`,
+      `<h1>Join the list</h1><form action="/confirm"><label for="name">Name</label><input id="name" name="name"><label for="email">Email</label><input id="email" name="email" type="email"><label for="note">Note</label><input id="note" name="note"><label for="size">Size</label><select id="size" name="size"><option>1-10</option><option>11-50</option></select><input type="radio" name="plan" value="paid" checked><span>Paid</span><input type="radio" name="plan" value="free"><span>Free</span><button>Continue</button></form>`,
     );
   });
   const browser = (dir: string) => ({
@@ -209,10 +209,11 @@ describe("teach end to end", () => {
             type("email", "ada@site.test"),
             type("note", "first"),
             "const s = document.getElementById('size'); s.value = '11-50'; s.dispatchEvent(new Event('change', {bubbles: true}));",
+            "document.querySelectorAll('input[type=radio]')[1].click();",
             "document.querySelector('button').click();",
           ]),
         });
-        await sleep(5_500);
+        await sleep(6_500);
         await ex.exec({ cmd: "eval", js: byHand(["document.querySelector('button').click();"]) });
         await sleep(2_500);
       } finally {
@@ -220,7 +221,13 @@ describe("teach end to end", () => {
         await ex.done;
       }
       expect(joined).toEqual([
-        { name: "Ada Lovelace", email: "ada@site.test", note: "first", size: "11-50" },
+        {
+          name: "Ada Lovelace",
+          email: "ada@site.test",
+          note: "first",
+          size: "11-50",
+          plan: "free",
+        },
       ]);
 
       const built = buildWalk(runs, {
@@ -253,6 +260,7 @@ describe("teach end to end", () => {
         email: "grace@site.test",
         note: "second",
         size: "11-50",
+        plan: "free",
       });
     } finally {
       server.close();
