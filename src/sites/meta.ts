@@ -13,7 +13,7 @@ import { z } from "zod";
 import { HttpError } from "../clients/http.js";
 import type { Amount } from "../gates/spend.js";
 import { WEB_REDIRECT } from "./oauth.js";
-import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import { type ApiLeg, type OAuthSpec, route, type SiteApi, SiteError } from "./types.js";
 
 export const META_ORIGIN = "https://graph.facebook.com";
 /** Graph API versions live about two years. */
@@ -200,10 +200,26 @@ const igComments = z.object({
   fields: z.string().default("id,text,username,timestamp,like_count"),
   ...page,
 });
+/** Instagram usernames: letters, digits, `.` and `_`, up to 30. */
+const igLookup = z.object({
+  username: z.string().regex(/^[A-Za-z0-9._]{1,30}$/, "an Instagram username"),
+});
 const igReply = z.object({ commentId: id, message: z.string().min(1).max(2200) });
 
+/** A Graph error body: the code and subcode say what failed (never the token). */
+type GraphFailure = {
+  error?: { code?: number; error_subcode?: number; message?: string; error_user_msg?: string };
+};
+const graphNote = (body: unknown) => {
+  const e = (body as GraphFailure | null)?.error;
+  return e?.code === undefined
+    ? ""
+    : `graph code ${e.code}${e.error_subcode ? `/${e.error_subcode}` : ""}`;
+};
+
 async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok) throw new HttpError("CALL", `${META_ORIGIN}/${what}`, res.status);
+  if (!res.ok)
+    throw new HttpError("CALL", `${META_ORIGIN}/${what}`, res.status, graphNote(res.body));
   return res.body as T;
 }
 const v = (path: string) => `${META_ORIGIN}/${META_VERSION}/${path}`;
@@ -229,6 +245,64 @@ async function pageLeg(leg: ApiLeg, pageId: string): Promise<ApiLeg> {
       "no page token: not an admin of this page",
     );
   return { ...leg, token: got.access_token };
+}
+
+const IG_PROFILE =
+  "id,ig_id,username,name,biography,website,profile_picture_url,followers_count,follows_count,media_count";
+const IG_MEDIA =
+  "id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count";
+/** Graph's own rate limits: app (4), user (17), call (32), custom (613), Instagram app (80002). */
+const RATE_CODES = new Set([4, 17, 32, 613, 80002]);
+/** One Instagram business account id per token, looked up once per process. */
+const igUsers = new Map<string, Promise<string>>();
+function igUserOf(leg: ApiLeg): Promise<string> {
+  let got = igUsers.get(leg.token);
+  if (!got) {
+    got = (async () => {
+      const r = (await get(leg, "me/accounts", {
+        fields: "instagram_business_account",
+        limit: 100,
+      })) as { data?: Array<{ instagram_business_account?: { id?: string } }> };
+      const hit = r.data?.map((p) => p.instagram_business_account?.id).find(Boolean);
+      if (!hit)
+        throw new SiteError(409, "no Page of this account has an Instagram business account");
+      return hit;
+    })();
+    igUsers.set(leg.token, got);
+    got.catch(() => igUsers.delete(leg.token));
+  }
+  return got;
+}
+
+/**
+ * `business_discovery`: a business or creator account's profile and newest 25 posts,
+ * read as our own Instagram business account. A name that does not exist, or a
+ * personal account, is an answer (`found: false`), not an error.
+ */
+async function igDiscover(leg: ApiLeg, username: string) {
+  const fields = `business_discovery.username(${username}){${IG_PROFILE},media.limit(25){${IG_MEDIA}}}`;
+  const res = await leg.http.json<
+    {
+      business_discovery?: { media?: { data?: unknown[] } } & Record<string, unknown>;
+    } & GraphFailure
+  >(withQuery(v(await igUserOf(leg)), { fields }), { headers: bearer(leg) });
+  const found = res.body?.business_discovery;
+  if (res.ok && found) {
+    const { media, ...profile } = found;
+    return { found: true, profile, media: media?.data ?? [] };
+  }
+  const e = res.body?.error;
+  const why = e?.error_user_msg ?? e?.message ?? "";
+  if (e?.code !== undefined && RATE_CODES.has(e.code))
+    throw new SiteError(
+      429,
+      `Instagram rate limit (${graphNote(res.body)}): ${why}`.slice(0, 300),
+      Number(res.headers.get("retry-after")) || 3600,
+    );
+  // 110 / 2207013: the username is unknown or not a business or creator account.
+  if (e?.code === 110 || e?.error_subcode === 2207013)
+    return { found: false, reason: `${why} (${graphNote(res.body)})`.trim() };
+  return must(res, "{igUserId}/business_discovery");
 }
 
 /** The budget on a request, as money, when its status starts delivery. */
@@ -283,6 +357,8 @@ export const meta: SiteApi = {
   origin: META_ORIGIN,
   probe: { path: "/me" },
   auth: { oauth: metaOAuth },
+  // Each Instagram read is one `business_discovery` call; Meta throttles by app usage.
+  caps: { reads: 300 },
   // The app, the Page and the ad account live on Wren's own Facebook (the default
   // account, william@): only the card on the ad account is the person's.
   routes: [
@@ -307,6 +383,15 @@ export const meta: SiteApi = {
       summary: "The Pages the person admins, each with its Instagram professional account id",
       request: pages,
       api: (q, leg) => get(leg, "me/accounts", q),
+    }),
+    route({
+      method: "GET",
+      path: "/instagram/{username}",
+      summary:
+        "Another business or creator Instagram account by username (`business_discovery`, read as ours): `{ found: true, profile, media }` with the bio, site, counts and the newest 25 posts, or `{ found: false, reason }` for an unknown name or a personal account. A Graph rate limit is a 429",
+      request: igLookup,
+      meter: () => ({ reads: 1 }),
+      api: ({ username }, leg) => igDiscover(leg, username),
     }),
     route({
       method: "GET",

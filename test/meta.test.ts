@@ -9,6 +9,7 @@ import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
 import type { Approval } from "../src/gates/payment.js";
+import { memoryCaps } from "../src/sites/caps.js";
 import { siteFacade } from "../src/sites/facade.js";
 import { meta, metaOAuth } from "../src/sites/meta.js";
 import { runConsent, WEB_REDIRECT } from "../src/sites/oauth.js";
@@ -281,5 +282,142 @@ describe("meta site", () => {
     const out = await facebookOauthConsent.run(fp, { url: authorize });
     expect(acts).toHaveLength(2);
     expect(out.landed).toMatch(/^http:\/\/127\.0\.0\.1:9876\/cb\?code=abc/);
+  });
+});
+
+describe("meta GET /instagram/{username}", () => {
+  const graphError = (code: number, error_subcode: number | undefined, message: string) => ({
+    error: { code, ...(error_subcode ? { error_subcode } : {}), message },
+  });
+  /** `answer` is what Graph says to the business_discovery call; the Page lookup is always the same. */
+  function setup(answer: (fields: string) => { status: number; body: unknown }, token = "ig-tok") {
+    const calls: URL[] = [];
+    const http = httpClient({
+      attempts: 1,
+      fetch: async (url: string) => {
+        const u = new URL(url);
+        calls.push(u);
+        const out =
+          u.pathname === "/v23.0/me/accounts"
+            ? {
+                status: 200,
+                body: {
+                  data: [{ id: "p1" }, { id: "p2", instagram_business_account: { id: "1784" } }],
+                },
+              }
+            : answer(u.searchParams.get("fields") ?? "");
+        return new Response(JSON.stringify(out.body), { status: out.status });
+      },
+    });
+    const caps = memoryCaps(() => new Date("2026-10-05T12:00:00Z").getTime());
+    const sites = siteFacade([meta], {
+      http,
+      env: (n) => (n === "META_ACCESS_TOKEN" ? token : undefined),
+      sink: memorySink(),
+      runner: { run: async () => ({}) as never },
+      flow: () => null,
+      caps,
+    });
+    return { sites, calls, caps };
+  }
+
+  it("asks one business_discovery call as our Instagram account and splits profile from media", async () => {
+    const { sites, calls } = setup(() => ({
+      status: 200,
+      body: {
+        business_discovery: {
+          id: "5",
+          username: "acme.recruit",
+          followers_count: 10,
+          media: {
+            data: [
+              { id: "m1", caption: "We are hiring", permalink: "https://www.instagram.com/p/x/" },
+            ],
+          },
+        },
+        id: "1784",
+      },
+    }));
+    const out = await sites.call("meta", "GET", "/instagram/acme.recruit", {});
+    expect(out).toEqual({
+      found: true,
+      profile: { id: "5", username: "acme.recruit", followers_count: 10 },
+      media: [{ id: "m1", caption: "We are hiring", permalink: "https://www.instagram.com/p/x/" }],
+    });
+    expect(calls.at(-1)?.pathname).toBe("/v23.0/1784");
+    const fields = calls.at(-1)?.searchParams.get("fields") ?? "";
+    expect(fields).toMatch(
+      /^business_discovery\.username\(acme\.recruit\)\{id,ig_id,username,name,biography,website,profile_picture_url,followers_count,follows_count,media_count,media\.limit\(25\)\{id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count\}\}$/,
+    );
+  });
+
+  it("looks the Instagram account up once per token, and counts every read", async () => {
+    const { sites, calls, caps } = setup(
+      () => ({ status: 200, body: { business_discovery: { id: "5" } } }),
+      "tok-cache",
+    );
+    expect(await sites.call("meta", "GET", "/instagram/a_b", {})).toMatchObject({
+      found: true,
+      media: [],
+    });
+    await sites.call("meta", "GET", "/instagram/c.d", {});
+    expect(calls.filter((u) => u.pathname === "/v23.0/me/accounts")).toHaveLength(1);
+    expect(caps.today()["meta|meta|reads"]).toBe(2);
+    expect(meta.caps).toEqual({ reads: 300 });
+  });
+
+  it("answers found: false for an unknown name or a personal account (Graph 110 / 2207013)", async () => {
+    const { sites } = setup(
+      () => ({
+        status: 400,
+        body: graphError(110, 2207013, "The user with username: nobody cannot be found."),
+      }),
+      "tok-missing",
+    );
+    expect(await sites.call("meta", "GET", "/instagram/nobody", {})).toEqual({
+      found: false,
+      reason: "The user with username: nobody cannot be found. (graph code 110/2207013)",
+    });
+  });
+
+  it("turns a Graph rate limit into a 429 with retryAfter, for each rate code", async () => {
+    for (const code of [4, 17, 32, 613, 80002]) {
+      const { sites } = setup(
+        () => ({ status: 400, body: graphError(code, undefined, "slow down") }),
+        `tok-rate-${code}`,
+      );
+      await expect(sites.call("meta", "GET", "/instagram/acme", {})).rejects.toMatchObject({
+        status: 429,
+        retryAfter: 3600,
+      });
+    }
+  });
+
+  it("keeps any other Graph error an error, with its code, and refuses a bad username before any call", async () => {
+    const { sites, calls } = setup(
+      () => ({ status: 400, body: graphError(190, 463, "expired") }),
+      "tok-other",
+    );
+    await expect(sites.call("meta", "GET", "/instagram/acme", {})).rejects.toThrow(
+      /HTTP 400 graph code 190\/463/,
+    );
+    const before = calls.length;
+    for (const bad of ["a b", "x".repeat(31), "a/b", "a;b"])
+      await expect(
+        sites.call("meta", "GET", `/instagram/${encodeURIComponent(bad)}`, {}),
+      ).rejects.toMatchObject({ status: 400 });
+    expect(calls).toHaveLength(before);
+  });
+
+  it("refuses the 301st read of the day with a 429 before any call", async () => {
+    const { sites, calls, caps } = setup(
+      () => ({ status: 200, body: { business_discovery: { id: "5" } } }),
+      "tok-cap",
+    );
+    for (let i = 0; i < 300; i += 1) caps.take("meta", "meta", { reads: 1 }, { reads: 300 });
+    await expect(sites.call("meta", "GET", "/instagram/acme", {})).rejects.toMatchObject({
+      status: 429,
+    });
+    expect(calls).toEqual([]);
   });
 });
