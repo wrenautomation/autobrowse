@@ -53,7 +53,8 @@ export type Action =
       /** The secret placed by name (`email`, `password`, `code`), when the value was one. */
       secret?: string;
     })
-  | (Base & { kind: "select"; target: LocatorHints; value: string })
+  /** `options`: the values the list offered (teach makes them a field's choices). */
+  | (Base & { kind: "select"; target: LocatorHints; value: string; options?: string[] })
   | (Base & { kind: "press"; target: LocatorHints; key: string })
   | (Base & { kind: "upload"; target: LocatorHints; files: string[] })
   | (Base & { kind: "submit"; target: LocatorHints })

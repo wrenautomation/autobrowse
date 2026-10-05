@@ -232,7 +232,8 @@ export function registerRunsCommands(
           if (!process.stdin.isTTY) return null;
           const rl = createInterface({ input: process.stdin, output: process.stdout });
           try {
-            return (await rl.question(`${f.label} (${f.key}): `)).trim() || null;
+            const choices = f.options?.length ? ` [${f.options.join(" | ")}]` : "";
+            return (await rl.question(`${f.label} (${f.key})${choices}: `)).trim() || null;
           } finally {
             rl.close();
           }

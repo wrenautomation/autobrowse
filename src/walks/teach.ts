@@ -74,7 +74,12 @@ export function choose(spec: WalkSpec, g: Guess, c: Choice): WalkSpec {
     if (c.to === "fixed") op.value = g.typed ?? op.value;
     else if (c.to === "ask") {
       const key = keyFor(g.label, w.fields);
-      w.fields.push({ key, label: g.label, example: g.typed });
+      w.fields.push({
+        key,
+        label: g.label,
+        example: g.typed,
+        ...(g.options ? { options: g.options } : {}),
+      });
       op.value = `{${key}}`;
     } else throw new Error(`${g.label} is a choice: fixed (f) or asked (a)`);
   } else if (c.to === "fixed") {

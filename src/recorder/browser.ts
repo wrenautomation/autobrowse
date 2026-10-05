@@ -53,7 +53,7 @@ export function recorderControl(): RecorderControl {
 export type RawAction =
   | { kind: "click"; target: LocatorHints }
   | { kind: "input"; target: LocatorHints; value: string }
-  | { kind: "select"; target: LocatorHints; value: string }
+  | { kind: "select"; target: LocatorHints; value: string; options?: string[] }
   | { kind: "press"; target: LocatorHints; key: string }
   | { kind: "submit"; target: LocatorHints };
 

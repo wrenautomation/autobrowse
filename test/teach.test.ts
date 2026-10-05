@@ -248,6 +248,12 @@ describe("teach end to end", () => {
         ["fill Note", { from: "plan", field: "note" }],
       ]);
       expect(w.fields).toMatchObject([{ key: "note", default: "first" }]);
+      const size = built.guesses.find((x) => x.label === "Size") as Guess;
+      expect(size.options).toEqual(["1-10", "11-50"]);
+      expect(choose(w, size, { to: "ask" }).fields.at(-1)).toMatchObject({
+        label: "Size",
+        options: ["1-10", "11-50"],
+      });
       expect(w.screens.find((s) => s.goal)?.landmarks).toContain("heading you are on the list");
 
       const out = await flowRunner(browser(dir), { pace: null }).run(

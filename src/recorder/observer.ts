@@ -58,7 +58,7 @@ export const OBSERVER_SCRIPT = `
     if (!(el instanceof Element)) return;
     const tag = el.tagName.toLowerCase();
     const shadowed = el.getRootNode() !== document;
-    if (tag === 'select') { if (shadowed) send({ kind: 'select', target: hints(el), value: el.value }); return; }
+    if (tag === 'select') { if (shadowed) send({ kind: 'select', target: hints(el), value: el.value, options: [...el.options].slice(0, 100).map((o) => o.value) }); return; }
     if (el.isContentEditable && tag !== 'input' && tag !== 'textarea') {
       typing = el.closest('[contenteditable]:not([contenteditable=false])') || el;
       return;
@@ -78,7 +78,7 @@ export const OBSERVER_SCRIPT = `
     const el = e.target;
     if (!(el instanceof Element)) return;
     const tag = el.tagName.toLowerCase();
-    if (tag === 'select') send({ kind: 'select', target: hints(el), value: el.value });
+    if (tag === 'select') send({ kind: 'select', target: hints(el), value: el.value, options: [...el.options].slice(0, 100).map((o) => o.value) });
     else if (tag === 'input' || tag === 'textarea') {
       const t = (el.getAttribute('type') || 'text').toLowerCase();
       if (t === 'checkbox' || t === 'radio') return;

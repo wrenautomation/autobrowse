@@ -52,6 +52,8 @@ export interface Guess {
   /** What was typed or chosen; null for a secret, never shown. */
   typed: string | null;
   why: string;
+  /** A select's values, when the page showed them: the choices if it's asked each run. */
+  options?: string[];
 }
 
 export interface BuiltWalk {
@@ -324,7 +326,7 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
   const built = o.now ?? new Date();
   const mine = profileValues(o.profile ?? null);
   /** Why each op's value is what it is, by the op: the guesses the review shows. */
-  const whys = new Map<object, { typed: string | null; why: string }>();
+  const whys = new Map<object, { typed: string | null; why: string; options?: string[] }>();
   /**
    * A typed value, as the walk will get it (designs/2026-10-05-teach-mode.md):
    * a secret; else a profile value; else the same text in every run is fixed;
@@ -409,7 +411,11 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
           const hints = hintsOf(a.target);
           irreversible ||= paymentGate("select", hints) !== null;
           const op: WalkOp = { kind: "select", goal: `choose ${a.value}`, hints, value: a.value };
-          whys.set(op, { typed: a.value, why: "a choice" });
+          whys.set(op, {
+            typed: a.value,
+            why: "a choice",
+            ...(a.options?.length ? { options: a.options } : {}),
+          });
           return [op];
         }
         case "press":
@@ -572,7 +578,16 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
       const key = op.kind === "fill" && op.value.from === "plan" ? op.value.field : null;
       const why = key && inUrls.has(key) ? `an id in a URL it opens: ${w.why}` : w.why;
       const label = (op.kind === "select" ? op.hints.name : null) ?? labelOf(op);
-      return [{ screen: s.name, op: i, label, typed: w.typed, why }];
+      return [
+        {
+          screen: s.name,
+          op: i,
+          label,
+          typed: w.typed,
+          why,
+          ...(w.options ? { options: w.options } : {}),
+        },
+      ];
     }),
   );
 
