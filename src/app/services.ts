@@ -1520,6 +1520,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       reload: (have) => missingEntries(sink, have),
       caps: fileCaps(expandHome(settings.capsFile)),
       spent: fileSpent(join(dirname(expandHome(settings.capsFile)), "spent-keys.json")),
+      walks: (name) => walkFor(settings, name, sink),
     }),
   );
   const late: { doer: Doer | null } = { doer: null };

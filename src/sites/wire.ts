@@ -39,6 +39,8 @@ export interface SiteParts {
   http?: HttpClient;
   /** Hand-written legs by `site/name`; the built-in catalog unless said. */
   flows?: Record<string, BrowserFlow<never, unknown>>;
+  /** Built walks by catalog name (`fb-public/walk-ad-library`), for a route whose leg is one. */
+  walks?: (name: string) => BrowserFlow<never, unknown> | null;
   /**
    * The stored credentials, so a consent for `--account will@x.dev` runs in
    * the `<site>@<label>` profile whose username that is; without them the
@@ -160,7 +162,7 @@ export function sitesFor(p: SiteParts): SiteFacade {
       },
     },
     runner: p.browser,
-    flow: (name) => flows[name] ?? null,
+    flow: (name) => flows[name] ?? p.walks?.(name) ?? null,
     compiled: {
       get: async (name) => (await p.catalog.get(name))?.workflow ?? null,
       run: (workflow, plan, as) =>

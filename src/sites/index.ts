@@ -12,6 +12,7 @@ export {
   type SiteRow,
   siteFacade,
 } from "./facade.js";
+export { fbPublic } from "./fb-public.js";
 export { gmail, gmailOAuth } from "./gmail.js";
 export { instagram } from "./instagram.js";
 export { langfuse } from "./langfuse.js";
@@ -34,6 +35,7 @@ export { youtube } from "./youtube.js";
 import { calcom } from "./calcom.js";
 import { discord } from "./discord.js";
 import { drive } from "./drive.js";
+import { fbPublic } from "./fb-public.js";
 import { gmail } from "./gmail.js";
 import { instagram } from "./instagram.js";
 import { langfuse } from "./langfuse.js";
@@ -69,4 +71,5 @@ export const SITES: readonly SiteApi[] = [
   web,
   perplexity,
   discord,
+  fbPublic,
 ];

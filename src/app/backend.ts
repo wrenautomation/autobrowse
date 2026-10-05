@@ -90,6 +90,7 @@ import {
   spendLedgerFor,
   stepLedgerFor,
   WORKFLOWS,
+  walkFor,
 } from "./services.js";
 import type { Status } from "./status.js";
 
@@ -371,6 +372,7 @@ export function localParts(settings: Settings, o: { headless?: boolean } = {}): 
       reload: (have) => missingEntries(sink, have),
       caps: fileCaps(expandHome(settings.capsFile)),
       spent: spentKeysFor(settings),
+      walks: (name) => walkFor(settings, name, sink),
     }),
     credentials: credentialsFor(settings),
     bus: eventBus(),

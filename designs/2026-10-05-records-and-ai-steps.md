@@ -50,9 +50,10 @@ Living doc. Started 2026-10-05. William: "letting ai write check and validate co
 
 1. ✅ `records` and `ai` ops, sandbox, check, writer, walk runner, heal on drop, `autobrowse records`.
 2. ✅ Meta Ad Library logged out (`fb-public/ad-library`), proved live.
-3. Facebook public groups, then directories.
-4. An explorer `records` command, so an explore run that ends on a list page builds a walk with the op.
-5. Compiler render, if a compiled workflow ever needs a list.
+3. ✅ Ad Library as a site route: `fb-public GET /ads?q=&country=` runs the walk, so wren calls it on the desk. Wren's `adLibrary` pool stage turns advertisers into firms.
+4. Facebook public groups, then directories.
+5. An explorer `records` command, so an explore run that ends on a list page builds a walk with the op.
+6. Compiler render, if a compiled workflow ever needs a list.
 
 ## Decision log
 
@@ -65,3 +66,5 @@ Living doc. Started 2026-10-05. William: "letting ai write check and validate co
   - "staffing agency": the first round passed, with 30 rows and 27k tokens in. The model anchored on the "Library ID:" text, not FB's generated classes.
   - The replay on "recruiting firm" took 8.7s with no model. It returned 25 rows, with every field filled on 24 or 25 of them.
   - An extractor broken on purpose was re-written on the next run ("dental office", 30 rows) and saved.
+- 2026-10-05: The Ad Library walk keeps the link each ad sends to. The first extractor kept the button's label ("Learn more") as `link`, which names no firm. The link sits in `l.facebook.com/l.php?u=`, so the code unwraps it into `url`, keeps every outbound link in `urls`, the shown domain in `caption`, the advertiser's page in `page`, and the card's whole text in `all`. Hand-edited and checked on the archived page: 30 ads, 23 with a link. Live on "roofing contractor": 29 ads, 25 with a link, in 9s.
+- 2026-10-05: A site route's browser leg can name a built walk, so a walk is reachable over Restate like any route. The walk file lives on the owner's Mac, which is where the desk runs.
