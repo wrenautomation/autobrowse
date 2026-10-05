@@ -5,12 +5,19 @@
  *   `explored show <run>`: its shape (commands, acts, pages, outcome), never a value.
  * - `walks build|list|show|run`: a deterministic flow built from the runs
  *   that reached a goal (src/walks), then run like any catalog flow.
+ * - `records`: a checked extractor for a list page, kept as a walk
+ *   (src/agent/records, designs/2026-10-05-records-and-ai-steps.md).
  * - `tokens`: what autobrowse spends, and the verdict against tools that
  *   send the whole page (src/runs/tokens).
  */
 
+import { writeFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import type { Command } from "commander";
+import { writeRecords } from "../agent/records.js";
+import { SITE_LOGINS } from "../auth/sites.js";
+import { defineFlow } from "../browser/flow.js";
+import type { RecordsOp, Row } from "../browser/records.js";
 import { readLlmCalls } from "../llm/ledger.js";
 import { baseSite, listRuns, openRuns, readRun, runFile } from "../runs/log.js";
 import { formatTokenReport, readCmds, tokenReport } from "../runs/tokens.js";
@@ -18,16 +25,26 @@ import { accent, columns, dim, good, warn } from "../style.js";
 import { buildWalk } from "../walks/build.js";
 import { walkFlowName } from "../walks/flow.js";
 import {
+  FIELD_REF,
   listWalks,
   loadWalk,
   saveWalk,
   valueSource,
+  WALK_VERSION,
   type WalkField,
   walkFile,
 } from "../walks/spec.js";
 import type { LocalBackend } from "./backend.js";
 import type { Settings } from "./config.js";
-import { llmCallsDirFor, runsDirFor, stepLedgerFor, walkFor, walksDirFor } from "./services.js";
+import {
+  llmCallsDirFor,
+  llmFor,
+  recordsFile,
+  runsDirFor,
+  stepLedgerFor,
+  walkFor,
+  walksDirFor,
+} from "./services.js";
 
 /** Page text can hold an address (an account chooser); structure output never shows one. */
 const masked = (s: string): string => s.replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "<email>");
@@ -42,6 +59,44 @@ const walkRefIn =
     if (slash < 0 || !name.startsWith("walk-") || loadWalk(dir, site, name)) return [site, name];
     return [site, name.slice(5)];
   };
+
+/** `--plan k=v k2=v2` as an object. */
+function planOf(kvs: string[] = []): Record<string, string> {
+  const input: Record<string, string> = {};
+  for (const kv of kvs) {
+    const i = kv.indexOf("=");
+    if (i < 1) throw new Error(`--plan ${kv}: want key=value`);
+    input[kv.slice(0, i)] = kv.slice(i + 1);
+  }
+  return input;
+}
+
+/** `advertiser:who runs it, link?:its page` → fields; `?` marks one often empty. */
+export function fieldsOf(spec: string): RecordsOp["fields"] {
+  return spec.split(",").map((part) => {
+    const m = /^\s*([a-z][a-zA-Z0-9]*)(\?)?\s*:\s*(.+?)\s*$/.exec(part);
+    if (!m) throw new Error(`--fields "${part.trim()}": want key:what it is (camelCase key)`);
+    return { key: m[1] as string, says: m[3] as string, ...(m[2] ? { optional: true } : {}) };
+  });
+}
+
+/** Meta signs in as Wren under a site with a login: public reads go logged out, under a site with none. */
+export function metaSignedIn(site: string, url: string, own: string | undefined): boolean {
+  const host = new URL(url.replace(FIELD_REF, "x")).hostname;
+  const base = site.replace(/@.*/, "");
+  const meta = /(^|\.)(facebook|instagram|threads)\.(com|net)$/.test(host);
+  const signsIn = SITE_LOGINS.some((l) => l.site === base) || (own ?? "").split(",").includes(base);
+  return meta && signsIn;
+}
+
+/** Rows to `<artifacts>/records/…jsonl`, one per line; the path back. */
+function keepRows(settings: Settings, site: string, walk: string, as: string, rows: Row[]) {
+  const file = recordsFile(settings, site, walk, as, "jsonl");
+  writeFileSync(file, rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : ""), {
+    mode: 0o600,
+  });
+  return file;
+}
 
 const k = (n: number): string =>
   n >= 10_000 ? `${Math.round(n / 1000)}k` : n.toLocaleString("en-US");
@@ -198,7 +253,9 @@ export function registerRunsCommands(
               ? ` ← ${valueSource(op.value)}`
               : op.kind === "walk"
                 ? ` → ${op.walk}`
-                : "";
+                : op.kind === "records" || op.kind === "ai"
+                  ? ` → ${op.as}`
+                  : "";
           console.log(`    ${op.kind}${at}${from}`);
         }
       }
@@ -223,12 +280,7 @@ export function registerRunsCommands(
         if (!s) throw new Error(`no walk ${ref}; see: autobrowse walks list`);
         if (s.irreversible && !o.yes)
           throw new Error(`${ref} has an irreversible act; say --yes to run it`);
-        const input: Record<string, string> = {};
-        for (const kv of o.plan ?? []) {
-          const i = kv.indexOf("=");
-          if (i < 1) throw new Error(`--plan ${kv}: want key=value`);
-          input[kv.slice(0, i)] = kv.slice(i + 1);
-        }
+        const input = planOf(o.plan);
         const { parts } = local({ headless: o.headed ? false : settings.browserHeadless });
         // A field with no value and no default is asked here, once per run.
         const ask = async (f: WalkField) => {
@@ -249,7 +301,124 @@ export function registerRunsCommands(
         const out = await parts.browser.run(flow, input);
         console.log(`reached ${out.goal} via ${out.screens.join(" → ") || "(already there)"}`);
         if (Object.keys(out.read).length) console.log(`read: ${Object.keys(out.read).join(", ")}`);
+        for (const [as, rows] of Object.entries(out.records))
+          console.log(
+            `${as}: ${rows.length} rows → ${keepRows(settings, s.site, s.name, as, rows)}`,
+          );
         if (out.kept.length) console.log(`kept: ${out.kept.join(", ")}`);
+      },
+    );
+
+  program
+    .command("records <site> <name>")
+    .description(
+      "A list page as rows: a model writes an extractor once, the checker passes it, and it is kept as a walk that replays with no model",
+    )
+    .requiredOption("--url <url>", "the list page; {key} in it is a plan field (--plan key=value)")
+    .requiredOption("--fields <list>", '"key:what it is, key2?:often empty one"')
+    .option("--key <field>", "the field unique per row (default: the first)")
+    .option("--as <name>", "what the rows are called in the walk's output", "rows")
+    .option("--goal <words>", "what the rows are (default: the walk name)")
+    .option("--max <n>", "scroll a feed for up to n rows")
+    .option("--plan <kv...>", "plan fields, key=value")
+    .option("--headed", "show the browser")
+    .action(
+      async (
+        site: string,
+        name: string,
+        o: {
+          url: string;
+          fields: string;
+          key?: string;
+          as: string;
+          goal?: string;
+          max?: string;
+          plan?: string[];
+          headed?: boolean;
+        },
+      ) => {
+        if (metaSignedIn(site, o.url, settings.ownBrowserSites))
+          throw new Error(
+            `${site} signs in to Meta as us: public Meta reads go logged out, under a site with no login (fb-public)`,
+          );
+        const fields = fieldsOf(o.fields);
+        const key = o.key ?? (fields[0] as { key: string }).key;
+        if (!fields.some((f) => f.key === key)) throw new Error(`--key ${key} is not a field`);
+        const plan = planOf(o.plan);
+        const refs = [...new Set([...o.url.matchAll(FIELD_REF)].map((m) => m[1] as string))];
+        for (const r of refs)
+          if (!(r in plan)) throw new Error(`--url names {${r}}: say --plan ${r}=…`);
+        const url = o.url.replace(FIELD_REF, (_m, f: string) => encodeURIComponent(plan[f] ?? ""));
+        const llm = llmFor(settings);
+        if (!llm) throw new Error("records needs a model: set LLM_PROVIDER (claude-code is free)");
+        const goal = o.goal ?? name.replace(/-/g, " ");
+        const { parts } = local({ headless: o.headed ? false : settings.browserHeadless });
+        const flow = defineFlow({
+          site,
+          name: `records-${name}`,
+          async run(fp) {
+            await fp.open(url);
+            await fp.wait(2_000);
+            return writeRecords({
+              fp,
+              llm,
+              goal,
+              as: o.as,
+              fields,
+              key,
+              max: o.max ? Number(o.max) : undefined,
+            });
+          },
+        });
+        const w = await parts.browser.run(flow, {});
+        const spent = `${k(w.usage.inputTokens)} in, ${k(w.usage.outputTokens)} out tokens`;
+        if ("error" in w) throw new Error(`${w.error} (${spent})`);
+        const file = saveWalk(walksDir, {
+          version: WALK_VERSION,
+          site,
+          name,
+          goal,
+          built: new Date().toISOString(),
+          from: [],
+          start: null,
+          fields: refs.map((r) => ({
+            key: r,
+            label: r,
+            example: plan[r] ?? null,
+            default: plan[r],
+          })),
+          secrets: [],
+          irreversible: false,
+          screens: [
+            {
+              name: "read",
+              looks: "any page",
+              url: null,
+              landmarks: [],
+              ops: [{ kind: "open", goal: `open ${new URL(url).hostname}`, url: o.url }, w.op],
+              seen: 1,
+            },
+            {
+              name: "done",
+              looks: "the rows are read",
+              url: null,
+              landmarks: [],
+              ops: [],
+              goal: true,
+              after: ["read"],
+              seen: 1,
+            },
+          ],
+        });
+        console.log(
+          `${good("checked")}: ${w.rows.length} rows (${spent}); replays need ${w.op.min}+`,
+        );
+        for (const r of w.rows.slice(0, 3))
+          console.log(dim(`  ${masked(JSON.stringify(r)).slice(0, 160)}`));
+        console.log(`rows → ${keepRows(settings, site, name, o.as, w.rows)}`);
+        console.log(`walk → ${file}`);
+        const flags = refs.map((r) => ` --plan ${r}=…`).join("");
+        console.log(`run: autobrowse walks run ${site}/${name}${flags}`);
       },
     );
 

@@ -34,7 +34,7 @@ export function brokenOp(
 ): number | null {
   if (!hints) return null;
   const found = step.ops.flatMap((op, i) =>
-    op.kind !== "human" && sameHints(op.hints, hints) ? [i] : [],
+    "hints" in op && sameHints(op.hints, hints) ? [i] : [],
   );
   const byGoal = found.filter((i) => {
     const op = step.ops[i];
@@ -68,7 +68,7 @@ export function swapHints(
   hints: Hints,
 ): Mended {
   const op = browserStep(outline, stepIndex).ops[opIndex];
-  if (!op || op.kind === "human") throw new Error(`step ${stepIndex} has no op ${opIndex}`);
+  if (!op || !("hints" in op)) throw new Error(`step ${stepIndex} has no op ${opIndex}`);
   return replaceOp(outline, source, stepIndex, opIndex, { ops: [{ ...op, hints }] });
 }
 

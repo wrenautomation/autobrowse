@@ -289,7 +289,7 @@ export async function applyFixes(compiledDir: string, fixes: Fixes, lib: string)
         .sort((a, b) => b.at - a.at);
       for (const { f, at } of pinned) {
         const op = step.ops[at];
-        if (!op || op.kind === "human") continue;
+        if (!op || !("hints" in op)) continue;
         const ops: OutlineOp[] = [
           ...(f.detours ?? []).map((hints) => ({
             kind: "click" as const,

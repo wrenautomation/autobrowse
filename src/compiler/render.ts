@@ -46,6 +46,8 @@ function renderValue(v: OpValue): string {
 /** One op as one statement, indented for a flow's body. */
 export function renderOp(op: OutlineOp): string {
   if (op.kind === "human") return `    fp.human(${q(op.reason)});`;
+  if (op.kind === "records" || op.kind === "ai")
+    throw new Error(`a ${op.kind} op runs in a walk; compile does not render it (${op.goal})`);
   const plan = planLocator(op.hints);
   const hints = `{ ${Object.entries(op.hints)
     .filter(([, v]) => v)

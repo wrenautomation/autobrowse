@@ -9,6 +9,7 @@
 import type { SecretValues } from "../auth/signup.js";
 import { type BrowserFlow, defineFlow, type FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
+import { checkRows, type RecordsOp, type Row, readRecords } from "../browser/records.js";
 import { lookAt, type PageLook, type Screen, walk } from "../browser/screens.js";
 import type { SecretSink } from "../deps/sink.js";
 import { samePage, shows } from "./build.js";
@@ -36,7 +37,20 @@ export interface WalkDeps {
   /** A field with no value and no default (a terminal asks); missing or null: a person types it. */
   ask?(field: WalkField, goal: string): Promise<string | null>;
   now?(): Date;
+  /** A records op whose rows fail the check, re-written on this page; missing or null: the run fails. */
+  rewrite?(fp: FlowPage, op: RecordsOp): Promise<{ op: RecordsOp; rows: Row[] } | null>;
+  /** The walk changed (a re-written records op): keep it. */
+  save?(spec: WalkSpec): void;
+  /** The page markup a records op read, kept beside its rows; never in the journal. */
+  archive?(as: string, html: string): void;
+  /** An `ai` op's model call: the prompt with its reads filled in, the answer back. */
+  ai?(op: Extract<WalkOp, { kind: "ai" }>, prompt: string): Promise<string>;
 }
+
+/** Model calls one run may make, nested walks included. */
+export const AI_CALLS = 20;
+/** Rows as JSON in an `ai` prompt, at most. */
+const AI_ROWS_CHARS = 20_000;
 
 /** `today+3d` → that day, as `YYYY-MM-DD` or `MM/DD/YYYY`; any other default is the text. */
 export function resolveDefault(d: string, now: Date): string {
@@ -55,8 +69,12 @@ export type WalkInput = Record<string, string | undefined>;
 export interface WalkOutput {
   /** The goal screen reached. */
   goal: string;
-  /** What `read` ops took off the page, by `as`. */
+  /** What `read` and `ai` ops took, by `as`. */
   read: Record<string, string>;
+  /** What `records` ops took, by `as`. */
+  records: Record<string, Row[]>;
+  /** `ai` calls made. */
+  aiCalls: number;
   /** Env names `keep` put in the sink; never the values. */
   kept: string[];
   /** Screens acted on, in order, nested walks included. */
@@ -181,6 +199,37 @@ async function walkSpec(
       case "human":
         fp.human(op.reason);
         return;
+      case "records": {
+        let { rows, html } = await readRecords(fp, op);
+        const problem = checkRows(rows, op);
+        if (problem) {
+          const fixed = await deps.rewrite?.(fp, op);
+          if (!fixed) throw new Error(`${op.goal}: ${problem}`);
+          Object.assign(op, fixed.op);
+          deps.save?.(spec);
+          rows = fixed.rows;
+        }
+        out.records[op.as] = rows;
+        deps.archive?.(op.as, html);
+        return;
+      }
+      case "ai": {
+        if (!deps.ai) throw new Error(`${op.goal}: no model here for an ai step`);
+        if (++out.aiCalls > AI_CALLS)
+          throw new Error(`${op.goal}: more than ${AI_CALLS} ai calls in one run`);
+        let prompt = op.prompt;
+        for (const m of [...op.prompt.matchAll(FIELD_REF)]) {
+          const k = m[1] as string;
+          const v =
+            out.read[k] ??
+            (out.records[k]
+              ? JSON.stringify(out.records[k]).slice(0, AI_ROWS_CHARS)
+              : await fieldValue(k, op.goal));
+          prompt = prompt.split(m[0]).join(v);
+        }
+        out.read[op.as] = await deps.ai(op, prompt);
+        return;
+      }
       case "open":
         return fp.open(await fill(op.url, op.goal, true));
       case "captcha": {
@@ -258,7 +307,14 @@ export function walkFlow(spec: WalkSpec, deps: WalkDeps = {}): BrowserFlow<WalkI
     site: spec.site,
     name: walkFlowName(spec),
     async run(fp, input) {
-      const out: WalkOutput = { goal: "", read: {}, kept: [], screens: [] };
+      const out: WalkOutput = {
+        goal: "",
+        read: {},
+        records: {},
+        aiCalls: 0,
+        kept: [],
+        screens: [],
+      };
       out.goal = await walkSpec(fp, spec, input ?? {}, deps, out, 0);
       return out;
     },

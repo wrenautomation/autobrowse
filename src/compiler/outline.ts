@@ -59,6 +59,46 @@ export const opSchema = z.discriminatedUnion("kind", [
   }),
   /** The recorder was paused here: a person did something private. */
   z.object({ kind: z.literal("human"), reason: z.string() }),
+  /**
+   * Rows of named fields off a list page, by code a model wrote once and the checker passed
+   * (src/browser/records.ts); a replay runs the code with no model. Kept under `as`.
+   */
+  z.object({
+    kind: z.literal("records"),
+    goal: z.string(),
+    as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
+    fields: z
+      .array(
+        z.object({
+          key: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
+          says: z.string(),
+          /** Often empty on a real row (a link not every ad has): not counted against the code. */
+          optional: z.boolean().optional(),
+        }),
+      )
+      .min(1),
+    /** The field one row is one of: rows are deduped by it, and a feed scrolls until it repeats. */
+    key: z.string(),
+    /** A function body over `root` (the document) that returns an array of plain objects. */
+    code: z.string(),
+    /** Fewest rows a working read gives (half of the first read's); fewer: the page changed. */
+    min: z.number().int().nonnegative(),
+    /** Scroll for more rows up to this many (a feed); absent: what the page shows. */
+    max: z.number().int().positive().optional(),
+    /** Rows a model read off the page by eye when the code was written: the code found them. */
+    sample: z.array(z.record(z.string(), z.string().nullable())).max(5),
+  }),
+  /** A model call at run time, in the open and capped: a prompt over earlier reads, kept under `as`. */
+  z.object({
+    kind: z.literal("ai"),
+    goal: z.string(),
+    as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
+    /** `{name}`: an earlier read's text, or an earlier records' rows as JSON. */
+    prompt: z.string(),
+    /** cheap: Cohere when keyed, else Claude Code ($0); smart: the configured model. */
+    model: z.enum(["cheap", "smart"]),
+    maxTokens: z.number().int().positive().max(4000),
+  }),
 ]);
 
 /**

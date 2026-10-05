@@ -20,7 +20,7 @@ interface FakePage {
 function fakeSite(
   pages: Record<string, FakePage>,
   first: string,
-  o: { captcha?: CaptchaOutcome; reads?: Record<string, string> } = {},
+  o: { captcha?: CaptchaOutcome; reads?: Record<string, string>; html?: string } = {},
 ) {
   const at = (key: string): FakePage => {
     const p = pages[key];
@@ -35,6 +35,7 @@ function fakeSite(
   const page = {
     url: () => cur.url,
     evaluate: async () => cur.landmarks,
+    content: async () => o.html ?? "<html><body></body></html>",
     isClosed: () => false,
   } as unknown as Page;
   const fp: FlowPage = {
@@ -192,6 +193,8 @@ describe("walkFlow", () => {
     expect(out).toEqual({
       goal: "join-list-done",
       read: { orderNumber: "A-17" },
+      records: {},
+      aiCalls: 0,
       kept: [],
       screens: ["sign-up", "your-details"],
     });
@@ -201,7 +204,14 @@ describe("walkFlow", () => {
     const { fp, log } = fakeSite(SITE, "welcome");
     const out = await walkFlow(spec({ start: null })).run(fp, {});
     expect(log).toEqual([]);
-    expect(out).toEqual({ goal: "join-list-done", read: {}, kept: [], screens: [] });
+    expect(out).toEqual({
+      goal: "join-list-done",
+      read: {},
+      records: {},
+      aiCalls: 0,
+      kept: [],
+      screens: [],
+    });
   });
 
   it("fills a plan field from the run's example when the input leaves it out", async () => {
@@ -562,5 +572,98 @@ describe("walkFlow v2 values", () => {
     expect(two.at(-1)).toMatch(/^human: .*no size given/);
     const one = await run({ ...v2(), version: 1 }, {});
     expect(one).toContain("select Size = 11-50");
+  });
+});
+
+describe("records and ai ops in a walk", () => {
+  const ADS = `<html><body><ul>
+    <li data-ad="1"><b>Acme Staffing</b><a href="/ad/1">See ad</a></li>
+    <li data-ad="2"><b>Globex Talent</b><a href="/ad/2">See ad</a></li>
+  </ul></body></html>`;
+  const fields = [
+    { key: "advertiser", says: "who runs it" },
+    { key: "link", says: "its page" },
+  ];
+  const records = (code: string): WalkOp => ({
+    kind: "records",
+    goal: "ads running now",
+    as: "ads",
+    fields,
+    key: "link",
+    code,
+    min: 2,
+    sample: [],
+  });
+  const GOOD = `return [...root.querySelectorAll("li[data-ad]")].map((li) => ({
+    advertiser: li.querySelector("b").textContent, link: li.querySelector("a").href }));`;
+  const listWalk = (ops: WalkOp[]): WalkSpec => ({
+    ...spec({ start: null, fields: [], secrets: [] }),
+    version: 2,
+    screens: [
+      { name: "read", looks: "any", url: null, landmarks: [], ops, once: true, seen: 1 },
+      {
+        name: "done",
+        looks: "read",
+        url: null,
+        landmarks: [],
+        ops: [],
+        goal: true,
+        after: ["read"],
+        seen: 1,
+      },
+    ],
+  });
+
+  it("reads rows in the sandbox, and an ai op gets them in its prompt", async () => {
+    const { fp } = fakeSite({ list: { url: "https://lib.test/ads", landmarks: [] } }, "list", {
+      html: ADS,
+    });
+    const prompts: string[] = [];
+    const w = listWalk([
+      records(GOOD),
+      {
+        kind: "ai",
+        goal: "hiring",
+        as: "hiring",
+        prompt: "Which hire? {ads}",
+        model: "cheap",
+        maxTokens: 50,
+      },
+    ]);
+    const out = await walkFlow(w, {
+      ai: async (_op, p) => {
+        prompts.push(p);
+        return "Acme Staffing";
+      },
+    }).run(fp, {});
+    expect(out.records.ads).toEqual([
+      { advertiser: "Acme Staffing", link: "https://lib.test/ad/1" },
+      { advertiser: "Globex Talent", link: "https://lib.test/ad/2" },
+    ]);
+    expect(prompts[0]).toContain('"advertiser":"Globex Talent"');
+    expect(out.read.hiring).toBe("Acme Staffing");
+    expect(out.aiCalls).toBe(1);
+  });
+
+  it("a stale extractor is re-written on the page and the walk saved; with no writer the run fails", async () => {
+    const page = { list: { url: "https://lib.test/ads", landmarks: [] } };
+    const stale = listWalk([
+      records(`return [...root.querySelectorAll(".ad-row")].map(() => ({}));`),
+    ]);
+    const { fp } = fakeSite(page, "list", { html: ADS });
+    await expect(walkFlow(structuredClone(stale)).run(fp, {})).rejects.toThrow(
+      /ads running now: no rows/,
+    );
+
+    const saved: WalkSpec[] = [];
+    const out = await walkFlow(stale, {
+      rewrite: async (_fp, op) => ({
+        op: { ...op, code: GOOD },
+        rows: [{ advertiser: "Acme Staffing", link: "x" }],
+      }),
+      save: (s) => saved.push(s),
+    }).run(fakeSite(page, "list", { html: ADS }).fp, {});
+    expect(out.records.ads).toHaveLength(1);
+    expect(saved[0]?.screens[0]?.ops[0]).toMatchObject({ kind: "records", code: GOOD });
   });
 });

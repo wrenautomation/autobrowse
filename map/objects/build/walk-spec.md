@@ -24,6 +24,7 @@ Data run by one interpreter, not rendered TypeScript: a walk is rebuilt from new
 - Store: `saveWalk` (0600) — `:212`; `loadWalk`, `listWalks` read the owner's own, then installed [[mod]]s' (`modWalkDirs`; the owner's wins, a listing carries `mod`) — `:238-277`
 - Build: `visitsOf` cuts a run into visits; on a run a person drove (`driver: person`) a load no act led to is an `open` op — `src/walks/build.ts:128`; `walkFromRuns` clusters visits into screens, newest run's ops win, and guesses each typed value's source (secret, profile, same each run = fixed, date = `today+Nd`, else a field defaulting to what was typed; an id seen in an opened URL or a clicked text becomes `{field}`) and returns those `guesses` — `:232`; `buildWalk` picks ended runs (`USABLE`) — `:638-644`
 - Teach: `review` walks the guesses one key each (Enter, f, a, p, s), `choose` moves one value, `packInto` writes a [[mod]] and refuses values that look personal (`personalValues`) — `src/walks/teach.ts:58-233`; the command is `src/app/cli-teach.ts`. Explore takes a look once the DOM goes quiet after a hand act (`lookWhenQuiet`) — `src/explore/server.ts:668`
+- Records and AI ops (from the outline's `opSchema`): `records` runs a model-written, checked extractor on a copy of the page in a sandbox with no network (`src/browser/records.ts`); fewer rows than its floor re-writes it on that page (`deps.rewrite`, `writeRecords` in `src/agent/records.ts`) and saves the walk (`deps.save`); the page HTML goes to `deps.archive`, the rows to `out.records`. `ai` is a capped model call (`AI_CALLS` a run, `cheap`/`smart`) over earlier reads (`deps.ai`). `autobrowse records` writes a one-screen walk around one — `src/app/cli-runs.ts`; design `designs/2026-10-05-records-and-ai-steps.md`
 - Run: `walkFlow` (input, then default, then v1 example, then `deps.ask`; profile values through `deps.profile`) — `src/walks/flow.ts:256`; `walkFor` resolves secrets through stored logins (`walkSecrets`) and profile values on the Mac — `src/app/services.ts:641`, `:605`; the Restate `flow` handler falls back to it — `src/engine/browser-service.ts:160`
 
 ## Connected to
@@ -42,7 +43,7 @@ Data run by one interpreter, not rendered TypeScript: a walk is rebuilt from new
 
 | Surface | Role |
 |---|---|
-| `autobrowse walks build`, `autobrowse teach` | write |
+| `autobrowse walks build`, `autobrowse teach`, `autobrowse records` | write |
 | `walks run`, Restate `browser/flow`, `walks list/show` | read |
 
 ## See

@@ -18,6 +18,7 @@ decided. Each ends with a ranked "where to attack"; ✅ marks what landed.
 | [payment-gate](2026-09-21-payment-gate.md) | every spend stops at a gate; policy, ledger, canaries |
 | [sdk-layers](2026-09-21-sdk-layers.md) | using autobrowse as a library, layer by layer |
 | [site-apis](2026-09-21-site-apis.md) | a site as a service under its official REST shape |
+| [records-and-ai-steps](2026-10-05-records-and-ai-steps.md) | list pages as rows by a model-written, checked extractor; explicit capped AI steps |
 | [accounts](2026-09-22-accounts.md) | accounts the agent makes; which account is for what |
 | [performance](2026-09-22-performance.md) | bounded stores, cached reads, what crosses a wire |
 | [observability](2026-09-22-observability.md) | chained ledgers, agent sessions as runs, step ledger, OTLP traces |

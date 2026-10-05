@@ -1,7 +1,7 @@
 /** Composition root: settings → clients → workflow deps → Restate services. Secrets stay inside the clients. */
 
 import { Resolver } from "node:dns/promises";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { SSMClient } from "@aws-sdk/client-ssm";
@@ -160,7 +160,7 @@ import {
 } from "../sites/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import { type WalkDeps, type WalkInput, type WalkOutput, walkFlow } from "../walks/flow.js";
-import { loadWalk, type WalkSpec } from "../walks/spec.js";
+import { loadWalk, saveWalk, type WalkSpec } from "../walks/spec.js";
 import { type BootstrapDeps, bootstrapWorkflow } from "../workflows/bootstrap/index.js";
 import {
   type CompiledCatalog,
@@ -668,7 +668,48 @@ export function walkFor(
         }
       : {}),
     ...(o.ask ? { ask: o.ask } : {}),
+    // A page that changed under a records op: the configured model re-writes it on that page.
+    rewrite: async (fp, op) => {
+      const llm = llmFor(settings);
+      if (!llm) return null;
+      const { writeRecords } = await import("../agent/records.js");
+      const w = await writeRecords({ fp, llm, ...op });
+      return "error" in w ? null : w;
+    },
+    save: (s) => saveWalk(dir, s),
+    archive: (as, html) =>
+      writeFileSync(recordsFile(settings, spec.site, spec.name, as, "html"), html, {
+        mode: 0o600,
+      }),
+    ai: async (op, prompt) => {
+      const cheap = settings.cohereApiKey ? "cohere" : "claude-code";
+      const llm = llmFor(
+        op.model === "cheap" ? { ...settings, llmProvider: cheap, llmModel: undefined } : settings,
+      );
+      if (!llm) throw new Error(`${op.goal}: no ${op.model} model is configured`);
+      const reply = await llm.complete({
+        system: "Do the instruction with the data given. Answer plainly and briefly; never invent.",
+        prompt,
+        maxTokens: op.maxTokens,
+        purpose: "walk-ai",
+      });
+      return reply.text.trim();
+    },
   });
+}
+
+/** Where a walk's records land: `<artifacts>/records/<site>-<walk>-<as>-<time>.<ext>`. */
+export function recordsFile(
+  settings: Settings,
+  site: string,
+  walk: string,
+  as: string,
+  ext: "jsonl" | "html",
+): string {
+  const dir = join(expandHome(settings.artifactsDir), "records");
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const at = new Date().toISOString().replace(/[:.]/g, "-");
+  return join(dir, `${site.replace(/@.*/, "")}-${walk}-${as}-${at}.${ext}`);
 }
 
 export function stepLedgerFor(settings: Settings): StepLedger {
