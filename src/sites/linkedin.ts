@@ -144,6 +144,8 @@ export const linkedin: SiteApi = {
   // Before: 40 profiles and 15 searches a day for client lookups (wren, 2026-09-29).
   accountCaps: {
     linkedin: { profile: 0, search: 0, company: 0, connect: 0, message: 0, inbox: 0 },
+    // The research alt (2026-10-05): reads only, at a new account's pace for its first weeks.
+    "linkedin@alt": { profile: 20, search: 5, company: 10, connect: 0, message: 0, inbox: 0 },
   },
   pace: { gapMs: 10_000, jitterMs: 20_000 },
   routes: [
