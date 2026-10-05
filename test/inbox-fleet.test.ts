@@ -2,6 +2,7 @@ import type { Credential, CredentialStore } from "credvault";
 import { describe, expect, it } from "vitest";
 import type { AwsDomainClient } from "../src/clients/aws-domain.js";
 import type { DnsRecord, DynadotClient } from "../src/clients/dynadot.js";
+import { HttpError } from "../src/clients/http.js";
 import type { InboxInsidersClient, OrderRequest } from "../src/clients/inbox-insiders.js";
 import { runFlow } from "../src/engine/run.js";
 import { inboxFleetWorkflow, WARMUP } from "../src/workflows/inbox-fleet/index.js";
@@ -19,7 +20,8 @@ const mail = (d: string): DnsRecord[] => [
   { name: "@", type: "A", value: "1.2.3.4" },
 ];
 
-function world(o: { balance?: number; drop?: string } = {}) {
+function world(o: { balance?: number; drop?: string; offline?: number } = {}) {
+  let offline = o.offline ?? 0;
   const calls: string[] = [];
   const owned = new Set<string>();
   const ns = new Map<string, string[]>();
@@ -67,6 +69,8 @@ function world(o: { balance?: number; drop?: string } = {}) {
         : { order_id: "o1", instant: false };
     },
     async run() {
+      if (offline-- > 0)
+        throw new HttpError("GET", "https://ii.test/instant-orders", 0, "TypeError");
       return { status: "completed" };
     },
     async export() {
@@ -189,6 +193,13 @@ describe("inbox fleet", () => {
     });
     expect(Object.keys(w.mailboxes)).toHaveLength(3);
     expect(out.results.credentials?.detail).not.toContain("pw");
+  });
+
+  it("waits out a dropped connection while an order builds", async () => {
+    const w = world({ offline: 2 });
+    const gates = scriptedAnswers({ purchase: [{}] });
+    const out = await runFlow(fakeEffects().fx, inboxFleetWorkflow, w.deps, parse(), gates.answer);
+    expect(out.status).toBe("done");
   });
 
   it("dry run prices the domains and stops before buying", async () => {

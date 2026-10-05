@@ -17,6 +17,7 @@ import { googleProfilePhoto } from "../../browser/flows/google-profile-photo.js"
 import { googleOauthConsent } from "../../browser/flows/oauth-consent.js";
 import { NeedsHuman } from "../../browser/session.js";
 import type { DnsRecord, DomainQuote } from "../../clients/cloudflare.js";
+import { HttpError } from "../../clients/http.js";
 import { appendEntries } from "../../clients/roster.js";
 import type { Effects } from "../../engine/effects.js";
 import { done, rejected, type StepDef, skipped } from "../../engine/workflow.js";
@@ -533,7 +534,11 @@ function need<T>(value: T | undefined, what: string): T {
   return value;
 }
 
-/** Ask every 30 s inside the budget, sleeping durably between asks. */
+/**
+ * Ask every 30 s inside the budget, sleeping durably between asks. A dropped
+ * connection or a 5xx is "not yet": the HTTP door's own retries last seconds,
+ * a Mac asleep or offline lasts minutes, and a long wait must outlive both.
+ */
 export async function pollUntil(
   fx: Effects,
   name: string,
@@ -542,7 +547,13 @@ export async function pollUntil(
 ): Promise<boolean> {
   const stepMs = 30_000;
   for (let waited = 0; ; waited += stepMs) {
-    if (await fx.run(`${name} ${waited}`, check)) return true;
+    const yes = await fx.run(`${name} ${waited}`, () =>
+      check().catch((err: unknown) => {
+        if (err instanceof HttpError && (err.status === 0 || err.status >= 500)) return false;
+        throw err;
+      }),
+    );
+    if (yes) return true;
     if (waited + stepMs > budgetMs) return false;
     await fx.sleep(stepMs);
   }
