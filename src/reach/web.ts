@@ -8,6 +8,7 @@
  * several keys (`NUM_EXA`, `EXA_API_KEY_1..n`) and moves past one out of
  * credit (`key-ring.ts`).
  */
+import { decodeHTML, decodeHTMLAttribute } from "entities";
 import { memorySpent, NoLiveKey, type SpentKeys, withKey } from "./key-ring.js";
 
 export type Env = (name: string) => Promise<string | undefined>;
@@ -142,21 +143,6 @@ export const READ_ORDER = ["jina", "fetch"] as const;
 /** A URL carrying what looks like a credential never goes to a third party. */
 const PRIVATE_QUERY = /[?&](token|key|sig|signature|code|auth|session|password)=/i;
 
-const ENTITIES: Record<string, string> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  "#39": "'",
-  apos: "'",
-  nbsp: " ",
-};
-const decode = (s: string) =>
-  s
-    .replace(/&(amp|lt|gt|quot|#39|apos|nbsp);/g, (_, e: string) => ENTITIES[e] ?? "")
-    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => String.fromCodePoint(Number.parseInt(n, 16)));
-
 /** HTML to plain text a person would read: no scripts, headings marked, blocks on their own lines, table rows across. */
 export function htmlText(html: string): { title: string | null; text: string } {
   const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
@@ -169,13 +155,13 @@ export function htmlText(html: string): { title: string | null; text: string } {
     .replace(/<\/t[dh]>\s*(?=<t[dh][\s>])/gi, " | ")
     .replace(/<(br|\/p|\/div|\/h[1-6]|\/tr|\/section|\/article|\/header|\/footer)[^>]*>/gi, "\n")
     .replace(/<[^>]+>/g, " ");
-  const text = decode(body)
+  const text = decodeHTML(body)
     .split("\n")
     .map((l) => l.replace(/[ \t ]+/g, " ").trim())
     .filter((l, i, all) => l || all[i - 1])
     .join("\n")
     .trim();
-  return { title: title ? decode(title).trim() : null, text };
+  return { title: title ? decodeHTML(title).replace(/\s+/g, " ").trim() : null, text };
 }
 
 export async function readPage(
@@ -221,7 +207,7 @@ export async function readPage(
 export const SEARCH_ORDER = ["exa", "brave", "duckduckgo"] as const;
 
 const plain = (s: string) =>
-  decode(s.replace(/<[^>]+>/g, ""))
+  decodeHTML(s.replace(/<[^>]+>/g, ""))
     .replace(/\s+/g, " ")
     .trim();
 
@@ -232,7 +218,7 @@ export function duckduckgoHits(html: string): Hit[] {
     if (/result--ad/.test(block.slice(0, 200))) continue;
     const a = block.match(/<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
     if (!a?.[1] || !a[2]) continue;
-    const href = decode(a[1]);
+    const href = decodeHTMLAttribute(a[1]);
     const target = href.includes("uddg=")
       ? decodeURIComponent(href.split("uddg=")[1]?.split("&")[0] ?? "")
       : href.startsWith("//")

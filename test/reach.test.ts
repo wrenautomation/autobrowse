@@ -60,6 +60,15 @@ describe("read", () => {
     ).toBe("## Team\n\n- Ann 'A'\n- Bo");
   });
 
+  it("html to text: every named entity, each decoded once, a bad code point survives", () => {
+    expect(htmlText("<p>Caf&eacute; &mdash; it&rsquo;s &euro;5 &copy;</p>").text).toBe(
+      "Café — it’s €5 ©",
+    );
+    // `&amp;lt;` is the text `&lt;`, not `<`.
+    expect(htmlText("<p>&amp;lt;b&amp;gt; &amp;#39;</p>").text).toBe("&lt;b&gt; &#39;");
+    expect(htmlText("<title>A &#99999999; B</title><p>x</p>").title).toBe("A \uFFFD B");
+  });
+
   it("html to text: a table row reads across", () => {
     expect(
       htmlText(

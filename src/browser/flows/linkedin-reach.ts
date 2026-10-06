@@ -19,6 +19,7 @@
  * accounts policy). Connect and message are irreversible: the routes say
  * so and the act is never repaired.
  */
+import { decodeHTML } from "entities";
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
 
@@ -541,24 +542,8 @@ export interface RawJob {
 
 const squash = (s: string) => s.replace(/\s+/g, " ").trim();
 
-const ENTITIES: Record<string, string> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  apos: "'",
-  nbsp: " ",
-};
-const decode = (s: string) =>
-  s
-    .replace(/<[^>]*>/g, "")
-    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) =>
-      e[0] === "#"
-        ? String.fromCodePoint(
-            e[1] === "x" || e[1] === "X" ? Number.parseInt(e.slice(2), 16) : Number(e.slice(1)),
-          )
-        : (ENTITIES[e.toLowerCase()] ?? m),
-    );
+/** An element's inner HTML as text: tags dropped, entities decoded. */
+const decode = (s: string) => decodeHTML(s.replace(/<[^>]*>/g, ""));
 
 /** The text inside the first element whose class list holds `cls`. */
 const inner = (html: string, cls: string) =>

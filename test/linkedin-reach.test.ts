@@ -436,6 +436,13 @@ describe("company jobs", () => {
     expect(jobCardsOf("")).toEqual([]);
   });
 
+  it("a card's text decodes every named entity and survives a bad code point", () => {
+    const card = (title: string) =>
+      `<li> <div data-entity-urn="urn:li:jobPosting:9"> <h3 class="base-search-card__title">${title}</h3> </div> </li>`;
+    expect(jobCardsOf(card("Caf&eacute; &mdash; Lead"))[0]?.title).toBe("Café — Lead");
+    expect(jobCardsOf(card("A &#99999999; B"))[0]?.title).toBe("A \uFFFD B");
+  });
+
   it("shapes cards once each, whitespace squashed, dates only when they are dates", () => {
     const card = {
       urn: "urn:li:jobPosting:4469959807",
