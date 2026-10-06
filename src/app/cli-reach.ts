@@ -39,6 +39,7 @@ export function registerReachCommands(
   store: () => EnvStore,
   local: LocalBackend,
   spent: SpentKeys,
+  profilesDir: string,
 ): void {
   const env = reachEnv(store);
   /** Which profiles leave through which exit (`browser/egress`), or the config error. */
@@ -55,7 +56,7 @@ export function registerReachCommands(
   program
     .command("doctor")
     .description(
-      "What answers now: search keys, the Maps scraper, browser exits, and one live call per site",
+      "What answers now: search keys, the Maps scraper, browser exits, one live call per site, and this machine's browsers",
     )
     .action(async () => {
       const has = async (n: string) => ((await env(n)) ? good("ready") : dim(`no ${n}`));
@@ -79,6 +80,13 @@ export function registerReachCommands(
       if (sites)
         for (const c of await Promise.all((await sites.list()).map((r) => checkSite(sites, r))))
           rows.push([bold("site"), ...checkRow(c)]);
+      const { browsersNow, warnings } = await import("../browser/browsers.js");
+      const v = await browsersNow(profilesDir);
+      rows.push([
+        bold("browsers"),
+        `${v.browsers.length} open, ${v.totalMb} MB · ${v.explorers.length} explore (${v.explorers.filter((e) => e.held).length} held)`,
+      ]);
+      for (const w of warnings(v)) rows.push([bold("browsers"), warn(w)]);
       for (const line of columns(rows)) console.log(line);
     });
   program

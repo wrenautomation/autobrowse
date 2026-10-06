@@ -14,6 +14,10 @@ export interface Proc {
   pid: number;
   ppid: number;
   command: string;
+  /** Resident memory, KB. */
+  rss?: number;
+  /** Seconds since it started. */
+  age?: number;
 }
 
 export interface Orphan {
@@ -21,30 +25,50 @@ export interface Orphan {
   profile: string;
 }
 
-/** Root browser processes (not helpers) on a profile under `profilesDir`, owned by init. */
-export function orphanBrowsers(procs: Proc[], profilesDir: string, self = process.pid): Orphan[] {
-  // In a container the worker can be init itself: ppid 1 is then our own live browser.
-  if (self === 1) return [];
+/** Root browser processes (not helpers) on a profile under `profilesDir`, whoever owns them. */
+export function browserRoots(procs: Proc[], profilesDir: string): Array<Proc & Orphan> {
   const prefix = `--user-data-dir=${profilesDir.replace(/\/$/, "")}/`;
-  const out: Orphan[] = [];
+  const out: Array<Proc & Orphan> = [];
   for (const p of procs) {
-    if (p.ppid !== 1 || p.command.includes("--type=")) continue;
+    if (p.command.includes("--type=")) continue;
     const at = p.command.indexOf(prefix);
     if (at < 0) continue;
     const dir = p.command.slice(at + "--user-data-dir=".length).split(" --")[0] ?? "";
-    out.push({ pid: p.pid, profile: basename(dir.trim()) });
+    out.push({ ...p, profile: basename(dir.trim()) });
   }
   return out;
 }
 
+/** Root browser processes (not helpers) on a profile under `profilesDir`, owned by init. */
+export function orphanBrowsers(procs: Proc[], profilesDir: string, self = process.pid): Orphan[] {
+  // In a container the worker can be init itself: ppid 1 is then our own live browser.
+  if (self === 1) return [];
+  return browserRoots(procs, profilesDir)
+    .filter((p) => p.ppid === 1)
+    .map((p) => ({ pid: p.pid, profile: p.profile }));
+}
+
+/** `ps` etime, `[[dd-]hh:]mm:ss`, in seconds. */
+export function etimeSeconds(etime: string): number {
+  const [days, clock = ""] = etime.includes("-") ? etime.split("-") : ["0", etime];
+  return clock.split(":").reduce((s, n) => s * 60 + Number(n), 0) + Number(days) * 86_400;
+}
+
 export async function listProcs(): Promise<Proc[]> {
-  const { stdout } = await promisify(execFile)("ps", ["-axo", "pid=,ppid=,command="], {
+  const { stdout } = await promisify(execFile)("ps", ["-axo", "pid=,ppid=,rss=,etime=,command="], {
     maxBuffer: 16 * 1024 * 1024,
   });
   const procs: Proc[] = [];
   for (const line of stdout.split("\n")) {
-    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
-    if (m) procs.push({ pid: Number(m[1]), ppid: Number(m[2]), command: m[3] ?? "" });
+    const m = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(line);
+    if (m)
+      procs.push({
+        pid: Number(m[1]),
+        ppid: Number(m[2]),
+        rss: Number(m[3]),
+        age: etimeSeconds(m[4] ?? "0"),
+        command: m[5] ?? "",
+      });
   }
   return procs;
 }

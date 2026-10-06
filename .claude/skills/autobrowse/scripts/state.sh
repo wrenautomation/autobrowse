@@ -7,9 +7,12 @@ DIR=${TMPDIR:-/tmp}/autobrowse
 open=""
 for t in "$DIR"/explore-*.token; do
   [ -f "$t" ] || continue
-  p=${t##*/explore-}; p=${p%.token}
-  site=$(pgrep -fl "explore .* --port $p" 2>/dev/null | sed -nE 's/.*explore ([^ ]+) --port.*/\1/p' | head -1)
-  open+="${p}${site:+ ($site)} "
+  p=${t##*/explore-}; p=${p%.token}; info="$DIR/explore-$p.json"
+  site=$(sed -nE 's/.*"site":"([^"]+)".*/\1/p' "$info" 2>/dev/null)
+  [ -n "$site" ] || site=$(pgrep -fl "explore .* --port $p" 2>/dev/null | sed -nE 's/.*explore ([^ ]+) --port.*/\1/p' | head -1)
+  # held = never idle-closes: say since when, so a forgotten one shows
+  held=$(grep -q '"held":true' "$info" 2>/dev/null && sed -nE 's/.*"startedAt":"([^".]+).*/, held since \1/p' "$info")
+  open+="${p}${site:+ ($site$held)} "
 done
 echo "- open sessions: ${open:-none}"
 j=$(ls "$ROOT"/recordings/.explore-*/journal-*.jsonl 2>/dev/null | head -8 |

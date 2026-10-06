@@ -19,6 +19,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { createServer, type Server } from "node:http";
@@ -256,7 +257,8 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("journal"), last: z.number().int().positive().optional() }),
   /** An act on the desktop, outside the browser: apps, menus, keys, a root command. */
   z.object({ cmd: z.literal("os"), act: desktopOpSchema }),
-  z.object({ cmd: z.literal("close") }),
+  /** End the session; `keep`: the journal stays, the next session on this port resumes it (`browsers stop`). */
+  z.object({ cmd: z.literal("close"), keep: z.boolean().optional() }),
   /**
    * Several commands in one call, in order, stopping at the first that fails.
    * All are validated before any runs. One page diff for the lot.
@@ -501,6 +503,19 @@ export const DEFAULT_IDLE_MINUTES = 30;
 export const tokenFileFor = (port: number): string =>
   join(tmpdir(), "autobrowse", `explore-${port}.token`);
 
+/** Beside a token file, `explore-<port>.json`: who serves the port. Its mtime is the last command. */
+export interface ExploreInfo {
+  port: number;
+  /** The process serving it (the browser is its child). */
+  pid: number;
+  site: string;
+  /** `console`, `person` (teach), `agent:<model>`. */
+  driver: string;
+  /** No idle close (`--hold`, teach): someone must stop it. */
+  held: boolean;
+  startedAt: string;
+}
+
 export interface Explorer {
   port: number;
   /** Every request carries this as `Authorization: Bearer …`; the socket drives a signed-in browser. */
@@ -632,6 +647,7 @@ async function serve(
   const now = opts.now ?? Date.now;
   const t0 = now();
   const startedAt = new Date(t0).toISOString();
+  const infoFile = opts.tokenFile ? `${opts.tokenFile.replace(/\.token$/, "")}.json` : null;
   const actions: Action[] = opts.journalFile ? readJournal(opts.journalFile) : [];
   const carried = actions.at(-1);
   const resumedFrom = carried ? { acts: actions.length, url: carried.url ?? null } : null;
@@ -1115,8 +1131,17 @@ async function serve(
   ]);
   let chain: Promise<unknown> = Promise.resolve();
   let lastTouch = now();
-  const run = (c: Command, wait = false): Promise<unknown> => {
+  /** The info file's mtime is the last touch: `browsers` reads idle time from it. */
+  const touch = () => {
     lastTouch = now();
+    try {
+      if (infoFile) utimesSync(infoFile, new Date(), new Date());
+    } catch {
+      // not written yet, or removed: idle shows from the start
+    }
+  };
+  const run = (c: Command, wait = false): Promise<unknown> => {
+    touch();
     // After a `done`, the next command that works the page (or names a goal) starts the next run.
     if (c.cmd === "goal" || !IMMEDIATE.has(c.cmd)) openRun();
     if (IMMEDIATE.has(c.cmd)) return runOne(c, wait);
@@ -1501,9 +1526,9 @@ async function serve(
         return answer({});
       }
       case "close":
-        // Closed on purpose: nothing left to resume.
-        closing = true;
-        if (opts.journalFile) rmSync(opts.journalFile, { force: true });
+        // Closed on purpose: nothing left to resume, unless asked to keep it.
+        closing = !c.keep;
+        if (opts.journalFile && closing) rmSync(opts.journalFile, { force: true });
         queueMicrotask(() => finish());
         return { ok: true };
     }
@@ -1557,11 +1582,23 @@ async function serve(
     mkdirSync(dirname(opts.tokenFile), { recursive: true, mode: 0o700 });
     writeFileSync(opts.tokenFile, token, { mode: 0o600 });
   }
+  const idleMs = (opts.idleMinutes ?? DEFAULT_IDLE_MINUTES) * 60_000;
+  if (infoFile) {
+    // No secret in it: who serves this port, for `autobrowse browsers`. Never idle-closed = held.
+    const info: ExploreInfo = {
+      port: opts.port,
+      pid: process.pid,
+      site: opts.site,
+      driver: opts.driver ?? "console",
+      held: idleMs === 0,
+      startedAt,
+    };
+    writeFileSync(infoFile, JSON.stringify(info), { mode: 0o600 });
+  }
   page.context().on("close", () => finish());
   // A page load is a person (or a popup) still at work.
-  page.context().on("page", (p) => p.on("framenavigated", () => (lastTouch = now())));
-  fp.page.on("framenavigated", () => (lastTouch = now()));
-  const idleMs = (opts.idleMinutes ?? DEFAULT_IDLE_MINUTES) * 60_000;
+  page.context().on("page", (p) => p.on("framenavigated", touch));
+  fp.page.on("framenavigated", touch);
   const idleCheck =
     idleMs > 0
       ? setInterval(
@@ -1579,6 +1616,7 @@ async function serve(
     if (idleCheck) clearInterval(idleCheck);
     server.close();
     if (opts.tokenFile) rmSync(opts.tokenFile, { force: true });
+    if (infoFile) rmSync(infoFile, { force: true });
     // A recording saved and then closed is a run that did its job; an idle close or a lost browser resumes.
     // A person teaching ends by closing the browser: that run did its job too.
     const closedAs = saved ? "saved" : opts.driver === "person" ? "achieved" : "closed";

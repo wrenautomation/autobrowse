@@ -111,6 +111,9 @@ describe("explore mode", () => {
     const file = join(dir, "explore.token");
     expect(await readFile(file, "utf8")).toBe(token);
     expect(statSync(file).mode & 0o777).toBe(0o600);
+    // Beside it, who serves the port (`autobrowse browsers`): idle-closes, so not held.
+    const info = JSON.parse(await readFile(join(dir, "explore.json"), "utf8"));
+    expect(info).toMatchObject({ port, pid: process.pid, site: "scratch", held: false });
   });
 
   it("runs page commands one after another, however they arrive", async () => {
@@ -501,6 +504,7 @@ describe("a session that dies", () => {
         recordingsDir: join(dir, "recordings"),
         journalFile,
         idleMinutes,
+        tokenFile: join(dir, "explore.token"),
         browser: {
           tier: "local",
           channel: "chromium",
@@ -519,11 +523,20 @@ describe("a session that dies", () => {
       expect(left.length).toBeGreaterThanOrEqual(2);
       const second = await start();
       expect(second.resumedFrom).toEqual({ acts: left.length, url: left.at(-1)?.url });
+      // Never idle-closes: held, and `browsers` says so.
+      const info = JSON.parse(await readFile(join(dir, "explore.json"), "utf8"));
+      expect(info.held).toBe(true);
       await second.exec({ cmd: "note", text: "after the crash" });
       const j = (await second.exec({ cmd: "journal" })) as { total: number };
       expect(j.total).toBe(left.length + 1);
-      await second.exec({ cmd: "close" });
+      // `browsers stop` closes and keeps the journal; a plain close drops it.
+      await second.exec({ cmd: "close", keep: true });
       await second.done;
+      expect(existsSync(join(dir, "explore.json"))).toBe(false);
+      expect(readJournal(journalFile)).toHaveLength(left.length + 1);
+      const third = await start();
+      await third.exec({ cmd: "close" });
+      await third.done;
       expect(readJournal(journalFile)).toEqual([]);
     } finally {
       await new Promise((r) => setTimeout(r, 500));

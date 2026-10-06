@@ -12,6 +12,7 @@ import { httpClient } from "../clients/http.js";
 import type { GateName } from "../engine/effects.js";
 import { cursorOf } from "../engine/rows.js";
 import { summarize } from "../engine/run.js";
+import { expandHome } from "../google-auth.js";
 import { ownerKeys } from "../owner.js";
 import { accent, bad, bold, columns, dim, good, warn } from "../style.js";
 import { DEFAULT_TLDS, domainIdeas } from "../workflows/domain/ideas.js";
@@ -615,7 +616,13 @@ registerSiteCommands(program, local, api);
 registerUnsubscribe(program, local);
 registerAwsCommands(program, local, settings);
 registerLangfuseCommands(program, () => envStoreFor(settings));
-registerReachCommands(program, () => envStoreFor(settings), local, spentKeysFor(settings));
+registerReachCommands(
+  program,
+  () => envStoreFor(settings),
+  local,
+  spentKeysFor(settings),
+  expandHome(settings.profilesDir),
+);
 registerShotsCommands(program, settings);
 registerWatchedCommands(program, settings);
 registerModsCommands(program, settings);
@@ -677,6 +684,83 @@ program
     if (!o.dry) console.log(`${await reapTempDirs()} stale temp folders removed`);
     for (const x of gone)
       console.log(`${o.dry ? "orphan" : "stopped"} ${x.profile} (pid ${x.pid})`);
+  });
+const browsers = program
+  .command("browsers")
+  .description(
+    "Every browser of ours on this machine (owner, age, memory) and every explore server (idle, held); warnings name their fix",
+  )
+  .option("--json", "as JSON, warnings included")
+  .action(async (o: { json?: boolean }) => {
+    const { browsersNow, warnings } = await import("../browser/browsers.js");
+    const { expandHome } = await import("../google-auth.js");
+    const v = await browsersNow(expandHome(settings.profilesDir));
+    if (o.json) return console.log(JSON.stringify({ ...v, warnings: warnings(v) }, null, 2));
+    const ago = (s: number) =>
+      s >= 86_400
+        ? `${Math.floor(s / 86_400)}d`
+        : s >= 3600
+          ? `${Math.floor(s / 3600)}h`
+          : `${Math.floor(s / 60)}m`;
+    const rows = [
+      ...v.browsers.map((b) => [String(b.pid), bold(b.owner), b.profile, ago(b.age), `${b.mb} MB`]),
+      ...v.explorers.map((e) => [
+        `:${e.port}`,
+        bold(e.site),
+        e.driver,
+        `up ${ago((Date.now() - Date.parse(e.startedAt)) / 1000)}`,
+        e.held ? warn("held") : `idle ${e.idleMinutes}m`,
+      ]),
+    ];
+    for (const line of columns(rows)) console.log(line);
+    console.log(
+      dim(
+        `${v.browsers.length} browsers, ${v.totalMb} MB (${Math.round((100 * v.totalMb) / (v.ramMb || 1))}% of RAM); ${v.explorers.length} explore servers`,
+      ),
+    );
+    for (const w of warnings(v)) console.log(warn(w));
+  });
+browsers
+  .command("stop <target>")
+  .description(
+    "Close one by port, pid or profile: an explore server (journal kept), an orphan, a live CLI's with --force; never the desk's, a worker's or a browser not ours",
+  )
+  .option("--forget", "an explore server: drop its journal too")
+  .option("--force", "a browser a live CLI owns")
+  .action(async (target: string, o: { forget?: boolean; force?: boolean }) => {
+    const { browsersNow } = await import("../browser/browsers.js");
+    const { expandHome } = await import("../google-auth.js");
+    const { tokenFileFor } = await import("../explore/server.js");
+    const v = await browsersNow(expandHome(settings.profilesDir));
+    const hits = v.browsers.filter((b) => String(b.pid) === target || b.profile === target);
+    if (hits.length > 1) throw new Error(`${target} is open ${hits.length} times: name a pid`);
+    const b = hits[0];
+    const port =
+      v.explorers.find((e) => String(e.port) === target)?.port ??
+      Number(/^(?:explore|agent|teach):(\d+)$/.exec(b?.owner ?? "")?.[1] ?? 0);
+    if (port) {
+      const token = (await readFile(tokenFileFor(port), "utf8")).trim();
+      const r = await fetch(`http://127.0.0.1:${port}/`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: JSON.stringify({ cmd: "close", keep: !o.forget }),
+      });
+      if (!r.ok) throw new Error(`explore ${port} did not close: ${r.status}`);
+      return console.log(
+        `closed explore ${port}${o.forget ? "" : " (journal kept: the next session on it resumes)"}`,
+      );
+    }
+    if (!b) throw new Error(`no browser or explore server matches ${target}`);
+    if (b.owner === "desk" || b.owner === "worker")
+      throw new Error(
+        `${b.profile} is the ${b.owner}'s: it may hold a gate's half-filled page; it closes itself`,
+      );
+    if (b.owner === "cli" && !o.force)
+      throw new Error(`a live autobrowse CLI owns ${b.profile}: --force to stop it anyway`);
+    if (b.owner !== "orphan" && b.owner !== "cli")
+      throw new Error(`${b.profile} (pid ${b.pid}) is not ours to stop (${b.owner})`);
+    process.kill(b.pid, "SIGTERM");
+    console.log(`stopped ${b.profile} (pid ${b.pid}, ${b.owner})`);
   });
 registerDoCommands(program, local);
 registerAuthCommands(program, settings);

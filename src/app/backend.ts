@@ -42,6 +42,7 @@ import {
   type Explorer,
   journalFileFor,
   startExplore,
+  tokenFileFor,
 } from "../explore/server.js";
 import type { Approver } from "../gates/payment.js";
 import { expandHome } from "../google-auth.js";
@@ -317,6 +318,8 @@ export function agentFor(
     // One journal per session: a pick-up after a crash saves the acts before it too.
     open: (site, port, session, run) =>
       open(site, port, {
+        // `autobrowse browsers` sees it as agent:<port> and can close it.
+        tokenFile: tokenFileFor(port),
         ...(session
           ? { journalFile: journalFileFor(expandHome(settings.recordingsDir), site, session) }
           : {}),

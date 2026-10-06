@@ -57,3 +57,10 @@ Thresholds are named constants at the top of the module.
 ## Decision log
 
 - 2026-10-06: Planned from William's ideas; built as above.
+- 2026-10-06 built (`src/browser/browsers.ts`, `browsers`/`browsers stop`, doctor section, `explore --hold`, park closed on signals, lock check). Deviations:
+  - Held flag and start time live in `explore-<port>.json` beside the token file, not in it: scripts `cat` the token. Its mtime is the last command, which is how `browsers` knows idle time. `held` = the session never idle-closes, so `--idle 0` and teach count as held too.
+  - Teach shows as `teach:<port>`, so `browsers stop` can reach it.
+  - Agent sessions now get a token file, so `browsers` sees them as `agent:<port>` and can close them.
+  - `browsers stop <port>` sends `close {keep:true}` (new) so the journal stays; `--forget` sends a plain close.
+  - Park close on SIGTERM/SIGINT is registered once in `buildApp` (only the two workers call it), not in `main.ts` and `desk.ts` separately.
+  - The lock check skips a lock from another host and a pid that is alive but not a Chrome (a reused pid). An orphan just reaped gets 5 s to let go.

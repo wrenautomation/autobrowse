@@ -20,8 +20,15 @@ pnpm -s autobrowse site status <site>          # the site's API and browser rout
 scripts/start.sh <site> [url] [port] [flags]   # default port 9090; prints "port N" when ready
 scripts/cmd.sh <port> '<json>'                 # one command, JSON back
 scripts/stop.sh <port>                         # close browser + socket
-scripts/state.sh                               # open sessions, resumable journals, profiles
+scripts/state.sh                               # open sessions (held ones marked), resumable journals, profiles
+pnpm -s autobrowse browsers [--json]           # every browser of ours: owner, age, MB; sessions: idle, held
+pnpm -s autobrowse browsers stop <port>        # close a session, journal kept (--forget drops it)
 ```
+
+A session closes itself after 30 minutes with no command. `--hold`
+(`start.sh <site> "" <port> --hold`) turns that off: only for multi-loop work
+or a long wait on a person. You stop a held session yourself (`stop.sh`);
+`doctor` flags one held over 12 hours.
 
 `<site>` is a profile name (`google`, `cloudflare`, `aws`, `scratch` = no login;
 `<site>@<label>` for a second account). One session per site; `start.sh` on an

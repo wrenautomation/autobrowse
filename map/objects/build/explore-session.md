@@ -18,6 +18,7 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 ## Shape
 
 - `Command` (open, click, fill, place, keep, aria, read, records, note, save, os …) — `src/explore/server.ts:220`; `records` journals a records op (the driver's code, else the session's model writes it via `writeRecords`), which a walk built from the run replays; `ExploreOptions` — `:338-420`; `Explorer` — `:447`
+- Info file: beside the token file, `explore-<port>.json` (`ExploreInfo`: pid, site, driver, `held`, startedAt; mtime = last command), read by `autobrowse browsers`; agent sessions get a token file too, so they show as `agent:<port>`. `held` = never idle-closes (`explore --hold`, teach). `close {keep:true}` (from `browsers stop`) keeps the journal
 - Journal: `journalFileFor(recordingsDir, site, id)` under `recordings/.explore-<site>/` — `:423`; `readJournal` — `:427`; `DEFAULT_IDLE_MINUTES` 30 — `:441`
 - Money and secrets on this path: `secrets`/`secretHosts` (place by name), `profiles` (a profile field, any host), `cards`, `cardsOnFile`, `charges`, `approve`, `audit` — `:353-393`; `placeHint` names the flag a missing secret needs — `:261-277`
 - Help by hand, no pause: acts a person does between two commands count (`byHand`, `HAND_GRACE_MS` — `:279`, `:595-602`); the next answer carries `helped {acts, url, changed, note}` — `helpedSince` `:1027`
@@ -35,7 +36,7 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 
 ## If you change this
 
-- **Hits:** `src/agent/explorer.ts`, `test/layout.test.ts` (the `text` layout), `src/agent/sessions.ts`, `src/app/cli-record.ts`, `src/app/backend.ts:252`, `.claude/skills/autobrowse/explore.md` and the skill's scripts (the command list is documented there), `src/mcp/server.ts`.
+- **Hits:** `src/browser/browsers.ts` (reads the info file), `.claude/skills/autobrowse/scripts/state.sh` (held sessions), `src/agent/explorer.ts`, `test/layout.test.ts` (the `text` layout), `src/agent/sessions.ts`, `src/app/cli-record.ts`, `src/app/backend.ts:252`, `.claude/skills/autobrowse/explore.md` and the skill's scripts (the command list is documented there), `src/mcp/server.ts`.
 - **Does not hit:** compiled workflows already rendered; the run object.
 
 ## Surfaces

@@ -112,6 +112,7 @@ const GROUPS: [string, [string, string][]][] = [
       ["tokens", "Token spend by purpose"],
       ["steps", "Every agent step, with its spend"],
       ["fingerprint", "How a browser looks to bot checks"],
+      ["browsers", "Our browsers and explore servers: owner, memory, stop one"],
       ["reap", "Stop browsers whose owner died"],
       ["shots", "Screenshots kept in the bucket"],
       ["desktop", "Apps, menus and dialogs outside the browser"],

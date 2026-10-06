@@ -10,6 +10,7 @@ import { join } from "node:path";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { type HttpClient, safeUrls } from "../clients/http.js";
 import { expandHome } from "../google-auth.js";
+import { assertProfileFree } from "./browsers.js";
 import type { Egress, Exit } from "./egress.js";
 import { geometry, type Identity, learnIdentity, wearIdentity } from "./identity.js";
 import { keepSessionCookies, keptDomains } from "./keep-session.js";
@@ -154,7 +155,12 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
   } else {
     const profileDir = join(expandHome(opts.profilesDir), profile);
     // A browser left by a dead owner would hold this profile; stop those first.
-    await reapOrphans(expandHome(opts.profilesDir));
+    const reaped = await reapOrphans(expandHome(opts.profilesDir));
+    await assertProfileFree(
+      profileDir,
+      profile,
+      reaped.map((o) => o.pid),
+    );
     void reapTempDirs(); // files a crashed upload left, in the background
     context = await launchLocal(profileDir, opts, opts.egress?.exitFor(profile) ?? null);
     if (opts.headless === false) keepOutOfTheWay();

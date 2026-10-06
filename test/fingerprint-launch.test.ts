@@ -27,7 +27,7 @@ vi.mock("patchright", () => {
   };
 });
 vi.mock("../src/browser/reap.js", () => ({
-  reapOrphans: async () => undefined,
+  reapOrphans: async () => [],
   reapTempDirs: async () => undefined,
 }));
 vi.mock("../src/browser/webauthn.js", () => ({

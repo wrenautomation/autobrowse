@@ -1446,6 +1446,13 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
           max: settings.browserKeepMax,
         })
       : undefined;
+  // Only the workers build an app: a parked browser must not outlive its worker.
+  if (park)
+    for (const [signal, code] of [
+      ["SIGTERM", 143],
+      ["SIGINT", 130],
+    ] as const)
+      process.once(signal, () => void park.closeAll().finally(() => process.exit(code)));
   const browser = holding(
     idle,
     flowRunner(browserOptions(settings, screen), {

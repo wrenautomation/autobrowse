@@ -33,6 +33,10 @@ export function registerRecordCommands(
     .option("--headed", "show the browser (default: BROWSER_HEADLESS)")
     .option("--idle <minutes>", "close after this long with no command; 0 = never", "30")
     .option(
+      "--hold",
+      "never idle-close (multi-loop or long human-in-the-loop work): you stop it; `doctor` flags one held over 12 h",
+    )
+    .option(
       "--fresh",
       "start over: drop the journal a session that died left (by default the new one resumes it, on its last page)",
     )
@@ -60,6 +64,7 @@ export function registerRecordCommands(
           port: string;
           headed?: boolean;
           idle: string;
+          hold?: boolean;
           codes?: string;
           newPassword?: string;
           signup?: string;
@@ -78,7 +83,7 @@ export function registerRecordCommands(
         const ex = await opener(o)(site, Number(o.port), {
           tokenFile,
           journalFile,
-          idleMinutes: Number(o.idle),
+          idleMinutes: o.hold ? 0 : Number(o.idle),
           signIn: !o.signup,
           ...(await withLogins(await exploreSecrets(site, o), o.login)),
         });
