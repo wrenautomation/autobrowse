@@ -43,9 +43,21 @@ import { handsFor } from "../browser/human/index.js";
 import { inPage } from "../browser/in-page.js";
 import { layoutText } from "../browser/layout.js";
 import { type Hints, locate, locateAll, textOf } from "../browser/locate.js";
+import {
+  diffHtml,
+  diffShapes,
+  htmlForFile,
+  MAX_BODY_BYTES,
+  MAX_ROWS,
+  type NetRow,
+  parseRows,
+  redactUrl,
+  rowLine,
+  shapes,
+} from "../browser/network.js";
 import { checkRows, type RecordsOp, type Row, readRecords } from "../browser/records.js";
 import { snapshotPage } from "../browser/repair.js";
-import { lookAt, type PageLook } from "../browser/screens.js";
+import { lookAt, type PageLook, urlShape } from "../browser/screens.js";
 import { type BrowserOptions, bodyText, looksLikeWall, NeedsHuman } from "../browser/session.js";
 import type { SecretSink } from "../deps/sink.js";
 import { macDesktop } from "../desktop/mac.js";
@@ -204,6 +216,21 @@ export const commandSchema = z.discriminatedUnion("cmd", [
     index: z.union([z.number().int().min(0), z.literal("main")]),
   }),
   z.object({ cmd: z.literal("screenshot") }),
+  /**
+   * The page calls (XHR, fetch, page loads), redacted: the newest `last` (40) as lines,
+   * `filter` on the URL; `id` = one call with its body; `diff` = call shapes and response
+   * keys against this site's last session. A personal profile's rows have no content.
+   */
+  z.object({
+    cmd: z.literal("network"),
+    id: z.number().int().positive().optional(),
+    filter: z.string().optional(),
+    last: z.number().int().positive().optional(),
+    diff: z.boolean().optional(),
+    limit: z.number().int().positive().optional(),
+  }),
+  /** Save the page's HTML (scripts emptied, redacted); `diff` = lines added and removed since the last save of this URL shape. */
+  z.object({ cmd: z.literal("html"), diff: z.boolean().optional() }),
   /** With `hints`, `js` is a function of that element, run in its frame (`el => el.className`). */
   z.object({
     cmd: z.literal("eval"),
@@ -587,6 +614,7 @@ export async function startExplore(opts: ExploreOptions): Promise<Explorer> {
     });
     const runner = flowRunner(opts.browser, {
       pace: opts.pace ?? null,
+      network: { maxRows: MAX_ROWS, maxBodyBytes: MAX_BODY_BYTES },
       ...(opts.login ? { login: opts.login } : {}),
       ...(opts.captcha ? { captcha: opts.captcha } : {}),
     });
@@ -803,6 +831,90 @@ async function serve(
       );
     if (error !== null || !WHOLE_PAGE.has(c.cmd)) return write(null);
     void wholePage().then(write);
+  };
+
+  // This session's page calls and saved pages, beside its shots; kept for good, shipped like them.
+  const netStamp = startedAt.replace(/[:.]/g, "-");
+  const netFile = join(shotsDir, `network-${netStamp}.jsonl`);
+  const htmlDir = join(shotsDir, "html");
+  const htmlIndex = join(htmlDir, "index.jsonl");
+  let htmlN = 0;
+  const writeNet = () => {
+    const text = fp.network?.jsonl();
+    if (text) writeFileSync(netFile, text);
+  };
+  /** The newest log an earlier session of this site wrote. */
+  const lastNet = (): NetRow[] | null => {
+    const prev = readdirSync(shotsDir)
+      .filter((f) => /^network-.*\.jsonl$/.test(f) && join(shotsDir, f) !== netFile)
+      .sort()
+      .at(-1);
+    return prev ? parseRows(readFileSync(join(shotsDir, prev), "utf8")) : null;
+  };
+  const network = (c: Extract<Command, { cmd: "network" }>) => {
+    const log = fp.network;
+    if (!log) throw new Error("no network log in this session");
+    writeNet();
+    const rows = log.rows();
+    if (c.id !== undefined) {
+      const r = log.row(c.id);
+      if (!r) throw new Error(`no call ${c.id} (the log keeps the newest ${MAX_ROWS})`);
+      const body = r.body === undefined ? undefined : JSON.stringify(r.body, null, 1);
+      const cap = c.limit ?? 20_000;
+      return {
+        ...r,
+        ...(body !== undefined ? { body: body.slice(0, cap) } : {}),
+        ...(body && body.length > cap ? { more: body.length - cap } : {}),
+      };
+    }
+    if (c.diff) {
+      const prev = lastNet();
+      if (!prev) return { diff: null, reason: "no earlier session of this site" };
+      return { diff: diffShapes(shapes(prev), shapes(rows)) };
+    }
+    const hits = c.filter ? rows.filter((r) => r.url.includes(c.filter ?? "")) : rows;
+    const shown = hits.slice(-(c.last ?? 40));
+    return {
+      calls: shown.map(rowLine),
+      ...(hits.length > shown.length ? { more: hits.length - shown.length } : {}),
+      ...(log.personal ? { personal: true } : {}),
+      file: netFile,
+    };
+  };
+  const html = async (c: Extract<Command, { cmd: "html" }>) => {
+    if (fp.network?.personal) throw new Error("a personal profile keeps no HTML");
+    const url = page.url();
+    const text = htmlForFile(await page.content());
+    mkdirSync(htmlDir, { recursive: true });
+    const name = `${netStamp}-${String(htmlN++).padStart(3, "0")}.html`;
+    const shape = urlShape(url);
+    const before = existsSync(htmlIndex)
+      ? readFileSync(htmlIndex, "utf8")
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => JSON.parse(l) as { file: string; shape: string })
+          .filter((e) => e.shape === shape && existsSync(join(htmlDir, e.file)))
+          .at(-1)
+      : undefined;
+    writeFileSync(join(htmlDir, name), text);
+    appendFileSync(
+      htmlIndex,
+      `${JSON.stringify({ file: name, url: redactUrl(url), shape, at: new Date(now()).toISOString() })}\n`,
+    );
+    const saved = { file: join(htmlDir, name), bytes: text.length };
+    if (!c.diff) return saved;
+    if (!before) return { ...saved, diff: null, reason: "no earlier save of this page" };
+    const d = diffHtml(readFileSync(join(htmlDir, before.file), "utf8"), text);
+    return {
+      ...saved,
+      diff: {
+        against: before.file,
+        added: d.added.slice(0, 40),
+        removed: d.removed.slice(0, 40),
+        addedCount: d.added.length,
+        removedCount: d.removed.length,
+      },
+    };
   };
 
   const shoot = async (): Promise<string> => {
@@ -1369,6 +1481,10 @@ async function serve(
       }
       case "screenshot":
         return { file: await shoot() };
+      case "network":
+        return network(c);
+      case "html":
+        return html(c);
       case "eval": {
         const result: unknown = c.hints
           ? await locate(page, c.hints as Hints)
@@ -1616,6 +1732,11 @@ async function serve(
   idleCheck?.unref();
   const ended = done.then(async () => {
     if (idleCheck) clearInterval(idleCheck);
+    try {
+      writeNet();
+    } catch {
+      // A full disk loses the log, never the close.
+    }
     server.close();
     if (opts.tokenFile) rmSync(opts.tokenFile, { force: true });
     if (infoFile) rmSync(infoFile, { force: true });

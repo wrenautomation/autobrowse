@@ -25,6 +25,7 @@ A profile per site name keeps sign-ins between runs. Three tiers say where the b
 - Kept warm between calls by `SessionPark` (`src/browser/park.ts:25`), closed on the worker's SIGTERM/SIGINT (`buildApp`, `src/app/services.ts`); orphans reaped (`src/browser/reap.ts`, `browserRoots` shared with `browsers`)
 - A local launch first checks the profile's `SingletonLock` (`assertProfileFree`, `src/browser/browsers.ts`): a live browser holding it fails with `profile <name> is open in pid <pid> (<owner>)`; a dead pid or another host's lock is left to Chrome
 - `autobrowse browsers [--json]` / `browsers stop <port|pid|profile>`: every root browser on our profiles with owner (`desk`, `worker`, `explore:<port>`, `agent:<port>`, `teach:<port>`, `cli`, `orphan`, `other`), age and tree RSS, plus explore servers; `warnings` (thresholds at the top of `src/browser/browsers.ts`) also feed `doctor` (designs/2026-10-06-browser-lifecycle.md)
+- Page calls: `NetLog.of(context)` (`src/browser/network.ts`) logs XHR, fetch and page loads per context, redacted before kept (secret headers dropped, secret keys and token shapes `<redacted>`); a personal profile (`x`, `linkedin`, `google` bare, `NETWORK_PERSONAL`) keeps method, path, status only. The runner exposes it as `FlowPage.network` (designs/2026-10-06-network-capture.md)
 - Fingerprint: `src/browser/identity.ts:16-136` (UA, geometry); virtual authenticator: `src/browser/webauthn.ts:32-57`
 - Own browser (opt-in, `OWN_BROWSER_SITES`): `src/browser/own.ts:24-94`
 

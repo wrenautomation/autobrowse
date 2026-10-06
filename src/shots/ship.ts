@@ -55,23 +55,28 @@ const TYPES: Record<string, string> = {
   ".json": "application/json",
   ".jsonl": "application/x-ndjson",
   ".txt": "text/plain; charset=utf-8",
+  // As text, so the bucket never serves a saved page as a page.
+  ".html": "text/plain; charset=utf-8",
 };
 
 /**
- * A flow's failure: the PNG, its aria tree and its failure JSON; a watched
+ * A flow's failure: the PNG, its aria tree, failure JSON, network log and HTML; a watched
  * run's steps.jsonl and masked shots. Never a trace: it holds field values.
  */
 export const keepArtifact = (rel: string): boolean =>
   IMAGES.has(extname(rel)) ||
   rel.endsWith(".aria.txt") ||
   rel.endsWith(".failure.json") ||
+  rel.endsWith(".network.jsonl") ||
+  rel.endsWith(".html") ||
   rel.endsWith("/steps.jsonl");
 
-/** A recording or explore: its screenshots, manifest, summary and journals. */
+/** A recording or explore: its screenshots, manifest, summary, journals, network logs and saved pages. */
 export const keepRecording = (rel: string): boolean =>
   IMAGES.has(extname(rel)) ||
   rel.endsWith("manifest.json") ||
   rel.endsWith("summary.json") ||
+  rel.endsWith(".html") ||
   rel.endsWith(".jsonl");
 
 async function* walk(dir: string): AsyncGenerator<string> {

@@ -631,3 +631,96 @@ describe("a session that cannot open", () => {
     await rm(dir, { recursive: true, force: true });
   });
 });
+
+describe("network and html", () => {
+  it("lists the page's calls redacted, shows one, saves and diffs pages, and diffs against the last session", async () => {
+    const { createServer } = await import("node:http");
+    let version = 1;
+    const server = createServer((req, res) => {
+      if (req.url?.startsWith("/api/ads")) {
+        res.setHeader("content-type", "application/json");
+        res.end(
+          JSON.stringify(
+            version === 1
+              ? { ads: [{ advertiser: "Acme" }], session: "s3cr3t" }
+              : { ads: [{ advertiser: "Acme", url: "https://acme.test" }] },
+          ),
+        );
+        return;
+      }
+      res.setHeader("content-type", "text/html");
+      res.end(
+        `<ul><li>ad ${version}</li></ul><script>fetch("/api/ads?q=roof&token=abc").then(r=>r.json())</script>`,
+      );
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
+    const dir = await mkdtemp(join(tmpdir(), "explore-net-"));
+    const session = () =>
+      startExplore({
+        site: "scratch",
+        port: 9600 + Math.floor(Math.random() * 150),
+        recordingsDir: join(dir, "recordings"),
+        browser: {
+          tier: "local",
+          channel: "chromium",
+          profilesDir: join(dir, "profiles"),
+          artifactsDir: join(dir, "artifacts"),
+          headless: true,
+        },
+      });
+    type Calls = { calls: string[]; file: string };
+    const callsOf = async (ex: Awaited<ReturnType<typeof session>>) => {
+      await expect
+        .poll(async () => ((await ex.exec({ cmd: "network" })) as Calls).calls.length)
+        .toBe(2);
+      return (await ex.exec({ cmd: "network" })) as Calls;
+    };
+    try {
+      const one = await session();
+      await one.exec({ cmd: "open", url });
+      const listed = await callsOf(one);
+      expect(listed.calls[0]).toMatch(/^\d+ GET 200 127\.0\.0\.1:\d+ \(page\)/);
+      expect(listed.calls[1]).toMatch(/GET 200 127\.0\.0\.1:\d+\/api\/ads .*\{ads,session\}$/);
+      const id = Number(listed.calls[1]?.split(" ")[0]);
+      const call = (await one.exec({ cmd: "network", id })) as { url: string; body: string };
+      expect(call.url).toContain("token=%3Credacted%3E");
+      expect(call.body).toContain('"<redacted>"');
+      expect(call.body).not.toContain("s3cr3t");
+      const first = (await one.exec({ cmd: "html", diff: true })) as {
+        file: string;
+        reason: string;
+      };
+      expect(first.reason).toBe("no earlier save of this page");
+      expect(await readFile(first.file, "utf8")).toContain("<script></script>");
+      version = 2;
+      await one.exec({ cmd: "open", url });
+      const second = (await one.exec({ cmd: "html", diff: true })) as {
+        diff: { added: string[]; removed: string[] };
+      };
+      expect(second.diff).toMatchObject({ added: ["<li>ad 2</li>"], removed: ["<li>ad 1</li>"] });
+      await one.exec({ cmd: "close" });
+      await one.done;
+      expect(existsSync(listed.file)).toBe(true);
+
+      const two = await session();
+      await two.exec({ cmd: "open", url });
+      await callsOf(two);
+      const d = (await two.exec({ cmd: "network", diff: true })) as {
+        diff: { added: string[]; gone: string[]; changed: { added: string[]; gone: string[] }[] };
+      };
+      expect(d.diff.added).toEqual([]);
+      expect(d.diff.gone).toEqual([]);
+      expect(d.diff.changed).toEqual([
+        // Session one saw both versions; this one only the second.
+        expect.objectContaining({ added: [], gone: ["session"] }),
+      ]);
+      await two.exec({ cmd: "close" });
+      await two.done;
+    } finally {
+      server.close();
+      await new Promise((r) => setTimeout(r, 500));
+      await rm(dir, { recursive: true, force: true, maxRetries: 5 });
+    }
+  }, 90_000);
+});

@@ -30,6 +30,7 @@ import {
 } from "./human/index.js";
 import { type Hints, locate, textOf } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
+import { htmlForFile, NetLog } from "./network.js";
 import { describePage } from "./page-state.js";
 import type { SessionPark } from "./park.js";
 import {
@@ -64,6 +65,10 @@ import {
 } from "./session.js";
 import { type Watch, watches, watchSteps } from "./watch.js";
 import type { Passkeys } from "./webauthn.js";
+
+/** Calls a flow's log keeps, and their body bytes. */
+const FLOW_NET_ROWS = 300;
+const FLOW_NET_BYTES = 8 * 1024 * 1024;
 
 /** A site names a persistent profile; any kebab-case string. Known ones have a home page for `login`. */
 export type Site = string;
@@ -164,6 +169,8 @@ export interface FlowPage {
   human(reason: string): never;
   /** What a screens walk asks of the runner: the page's shape, learned screens, a model (`browser/screens`). */
   screens?: ScreenHelp;
+  /** The session's page calls, redacted (`browser/network`); absent in fakes. */
+  network?: NetLog;
 }
 
 export interface BrowserFlow<I, O> {
@@ -231,6 +238,8 @@ export class FlowFailed extends Error {
 
 export interface RunnerOptions {
   repairer?: Repairer;
+  /** The page-call log's caps (`browser/network`); a flow's short log by default. An explore session keeps more. */
+  network?: { maxRows: number; maxBodyBytes: number };
   /**
    * How a person's hands would do each act (`browser/human`): a pause to
    * read, a curved reach, typing in runs. On by default; null is instant
@@ -414,6 +423,13 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         // A kept browser already on the page the flow opens first stays put:
         // reloading would lose what the last run left there (a form, a list).
         let keepPage = parked !== null;
+        // A flow keeps a short log: enough to see the call that broke, not a session's worth.
+        const network = NetLog.of(session.context, {
+          site: key,
+          maxRows: FLOW_NET_ROWS,
+          maxBodyBytes: FLOW_NET_BYTES,
+          ...runner.network,
+        });
         let broken = false;
         const stamp = `${flow.site}-${flow.name}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
         let lastGoal: string | null = null;
@@ -557,6 +573,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             throw new NeedsHuman(`${flow.site}: ${reason}`);
           },
           passkeys: session.passkeys,
+          network,
           screens: help,
         };
         /** An interrupt the page shows now: a coded one, else a click learned on this site. */
@@ -813,6 +830,20 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             writeFileSync(aria, redactAria(`${session.page.url()}\n\n${tree}`));
             artifacts.aria = aria;
           }
+          if (!flow.secret) {
+            const calls = join(artifactsDir, `${stamp}.network.jsonl`);
+            const text = network.jsonl();
+            if (text) {
+              writeFileSync(calls, text);
+              artifacts.network = calls;
+            }
+            const html = await session.page.content().catch(() => null);
+            if (html !== null && !network.personal) {
+              const file = join(artifactsDir, `${stamp}.html`);
+              writeFileSync(file, htmlForFile(html));
+              artifacts.html = file;
+            }
+          }
           if (tracing) {
             const trace = join(artifactsDir, `${stamp}.zip`);
             if (
@@ -841,6 +872,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             at: new Date().toISOString(),
             ...(artifacts.screenshot ? { screenshot: artifacts.screenshot } : {}),
             ...(artifacts.aria ? { aria: artifacts.aria } : {}),
+            ...(artifacts.network ? { network: artifacts.network } : {}),
+            ...(artifacts.html ? { html: artifacts.html } : {}),
             ...(watch ? { steps: watch.dir } : {}),
           };
           artifacts.failure = join(artifactsDir, `${stamp}.failure.json`);

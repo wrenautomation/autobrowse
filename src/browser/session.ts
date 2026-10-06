@@ -47,6 +47,10 @@ export interface Artifacts {
   failure?: string;
   /** A watched run's steps (`WATCH_FLOWS`): steps.jsonl, a masked shot and aria per step. */
   steps?: string;
+  /** The page calls before the failure, redacted (`browser/network`). */
+  network?: string;
+  /** The page's HTML at the failure, scripts emptied and redacted. */
+  html?: string;
 }
 
 /** What a flow left behind when it stopped: enough for an agent to pick up where it fell. */
@@ -67,6 +71,8 @@ export interface FailureRecord {
   aria?: string;
   /** Every step up to the failure, when the run was watched. */
   steps?: string;
+  network?: string;
+  html?: string;
 }
 
 /**

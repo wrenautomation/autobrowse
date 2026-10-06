@@ -13,7 +13,7 @@ What a flow left behind when it stopped, as data: `FailureRecord` in `src/browse
 
 ## Why this shape
 
-Heal, repair and the evaluator all start from the same file: site, flow, url, the goal and hints of the act that broke, how many acts came before, the kind (`failed | human | interrupted`), a screenshot and the aria tree.
+Heal, repair and the evaluator all start from the same file: site, flow, url, the goal and hints of the act that broke, how many acts came before, the kind (`failed | human | interrupted`), a screenshot, the aria tree, and (unless the flow is `secret`) the redacted page calls (`network`, `<stamp>.network.jsonl`, last 300 / 8 MB) and HTML (`html`, `<stamp>.html`, none on a personal profile).
 
 ## Shape
 
