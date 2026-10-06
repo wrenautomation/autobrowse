@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { memoryEffects, runFlow } from "../../index.js";
-import { imageInfo, imageProblem } from "./image.js";
+import { imageInfo, imageProblem } from "../image.js";
 import {
   type BrandPageInput,
   type BrandPageOutput,

@@ -34,7 +34,7 @@ import {
   type StepDef,
   skipped,
 } from "../../index.js";
-import { type ImageRule, imageProblem } from "./image.js";
+import { type ImageRule, imageProblem } from "../image.js";
 
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
