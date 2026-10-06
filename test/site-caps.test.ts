@@ -125,6 +125,8 @@ describe("a named account", () => {
       connect: 0,
       message: 0,
       inbox: 0,
+      network: 0,
+      withdraw: 0,
     });
     expect(linkedin.caps).toMatchObject({ company: 40 });
   });

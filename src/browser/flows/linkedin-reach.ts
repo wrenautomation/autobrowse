@@ -794,24 +794,122 @@ export const linkedinRelationship = defineFlow<
     if (!(await fp.has({ css: "main section" }, RENDER_MS)))
       return fp.human(`no profile at ${fp.url()}`);
     await fp.wait(SETTLE_MS);
-    const { buttons, degree } = await fp.page.evaluate(() => {
-      const card = document.querySelector("main section");
-      const labels = [...(card?.querySelectorAll("button, a[href]") ?? [])]
-        .map((b) => (b.getAttribute("aria-label") || b.textContent || "").trim())
-        .filter(Boolean);
-      const text = card?.textContent ?? "";
-      const d = /\b(1st|2nd|3rd\+?)\b/.exec(text)?.[1] ?? null;
-      return { buttons: labels, degree: d };
+    return { vanity: input.vanity, ...(await relationshipOnPage(fp)) };
+  },
+});
+
+/** The top card's buttons read as a relationship (the profile is open). */
+async function relationshipOnPage(
+  fp: FlowPage,
+): Promise<{ relationship: Relationship; degree?: string }> {
+  const { buttons, degree } = await fp.page.evaluate(() => {
+    const card = document.querySelector("main section");
+    const labels = [...(card?.querySelectorAll("button, a[href]") ?? [])]
+      .map((b) => (b.getAttribute("aria-label") || b.textContent || "").trim())
+      .filter(Boolean);
+    const text = card?.textContent ?? "";
+    const d = /\b(1st|2nd|3rd\+?)\b/.exec(text)?.[1] ?? null;
+    return { buttons: labels, degree: d };
+  });
+  // An aria label leads with the button's word: "Pending, click to withdraw invitation sent to …".
+  const has = (re: RegExp) =>
+    buttons.some((b) => re.test(b) || re.test(b.split(/[\s,]+/)[0] ?? ""));
+  const relationship: Relationship = has(PENDING)
+    ? "pending"
+    : has(CONNECT)
+      ? "none"
+      : has(MESSAGE) || degree === "1st"
+        ? "connected"
+        : "unknown";
+  return { relationship, ...(degree ? { degree } : {}) };
+}
+
+export interface WithdrawInput {
+  vanity: string;
+}
+
+const pendingButton: Hints = { role: "button", name: "/^pending/i" };
+const withdrawButton: Hints = { role: "button", name: "/^withdraw$/i" };
+
+/**
+ * Withdraw our pending invite from the profile's Pending button, then its
+ * "Withdraw" confirm. The button is read first: connected or no invite out
+ * withdraws nothing and says what it saw, so an accept the loop missed is
+ * caught here. LinkedIn blocks a new invite to the same member for three
+ * weeks after. Written from LinkedIn's aria labels; unproven until an
+ * account sends invites.
+ */
+export const linkedinWithdraw = defineFlow<
+  WithdrawInput,
+  { withdrawn: boolean; relationship: Relationship }
+>({
+  site: "linkedin",
+  name: "withdraw",
+  async run(fp, input) {
+    await go(fp, `${WEB}/in/${encodeURIComponent(input.vanity)}/`);
+    if (!(await fp.has({ css: "main section" }, RENDER_MS)))
+      return fp.human(`no profile at ${fp.url()}`);
+    await fp.wait(SETTLE_MS);
+    const before = await relationshipOnPage(fp);
+    if (before.relationship !== "pending")
+      return { withdrawn: false, relationship: before.relationship };
+    await fp.act({ kind: "click" }, pendingButton, { goal: "open the pending invite" });
+    if (!(await fp.has(withdrawButton, RENDER_MS)))
+      return fp.human(`no Withdraw confirm for ${input.vanity}`);
+    await fp.act({ kind: "click" }, withdrawButton, {
+      goal: `withdraw the invitation to ${input.vanity}`,
+      irreversible: true,
     });
-    const has = (re: RegExp) => buttons.some((b) => re.test(b) || re.test(b.split(/\s+/)[0] ?? ""));
-    const relationship: Relationship = has(PENDING)
-      ? "pending"
-      : has(CONNECT)
-        ? "none"
-        : has(MESSAGE) || degree === "1st"
-          ? "connected"
-          : "unknown";
-    return { vanity: input.vanity, relationship, ...(degree ? { degree } : {}) };
+    await fp.wait(SETTLE_MS * 2);
+    const after = await relationshipOnPage(fp);
+    if (after.relationship === "pending")
+      return fp.human(`the invite to ${input.vanity} still reads pending`);
+    return { withdrawn: true, relationship: after.relationship };
+  },
+});
+
+export interface ConnectionsInput {
+  /** How many from the top, newest first (default 40). */
+  max?: number;
+}
+
+export interface Connection extends Person {
+  /** The page's own label: "Connected on October 5, 2026" or "Connected 2 days ago". */
+  connected?: string;
+}
+
+const CONNECTED = /^connected\b.*$/im;
+
+/** One "recently added" card: the person, plus when they connected (kept off the headline). */
+export function connectionOf(row: RawRow): Connection | null {
+  const connected = CONNECTED.exec(row.text)?.[0]?.trim();
+  const p = personOf({ ...row, text: row.text.replace(CONNECTED, "") });
+  return p ? { ...p, ...(connected ? { connected } : {}) } : null;
+}
+
+/**
+ * Recently added connections, newest first. An accepted invite shows here,
+ * so one read finds every accept since the last one; the loop never reads a
+ * profile per pending invite.
+ */
+export const linkedinConnections = defineFlow<ConnectionsInput, { connections: Connection[] }>({
+  site: "linkedin",
+  name: "connections",
+  async run(fp, input) {
+    const max = input.max ?? 40;
+    await go(fp, `${WEB}/mynetwork/invite-connect/connections/`);
+    if (!(await fp.has({ css: "main a[href*='/in/']" }, RENDER_MS))) return { connections: [] };
+    await fp.wait(SETTLE_MS);
+    const seen = new Set<string>();
+    const connections: Connection[] = [];
+    for (const r of await rowsOnPage(fp)) {
+      const c = connectionOf(r);
+      if (!c || seen.has(c.vanity)) continue;
+      seen.add(c.vanity);
+      connections.push(c);
+      if (connections.length >= max) break;
+    }
+    return { connections };
   },
 });
 

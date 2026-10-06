@@ -34,11 +34,13 @@ export {
   linkedinCompanyJobs,
   linkedinCompanyPeople,
   linkedinConnect,
+  linkedinConnections,
   linkedinInbox,
   linkedinMessage,
   linkedinProfile,
   linkedinRelationship,
   linkedinSearchPeople,
+  linkedinWithdraw,
   type Person,
   type Profile as LinkedInProfile,
 } from "./linkedin-reach.js";

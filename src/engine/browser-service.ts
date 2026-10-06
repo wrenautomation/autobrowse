@@ -28,11 +28,13 @@ import {
   linkedinCompanyJobs,
   linkedinCompanyPeople,
   linkedinConnect,
+  linkedinConnections,
   linkedinInbox,
   linkedinMessage,
   linkedinProfile,
   linkedinRelationship,
   linkedinSearchPeople,
+  linkedinWithdraw,
 } from "../browser/flows/linkedin-reach.js";
 import { loomDelete, loomRename, loomUpload } from "../browser/flows/loom.js";
 import { npmCreateOrg } from "../browser/flows/npm-create-org.js";
@@ -97,6 +99,8 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinMessage,
     linkedinInbox,
     linkedinRelationship,
+    linkedinConnections,
+    linkedinWithdraw,
     resetMailProbe,
     npmCreateOrg,
     npmGranularToken,

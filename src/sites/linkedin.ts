@@ -113,6 +113,7 @@ const companyJobs = z.object({
 });
 const connect = z.object({ vanity, note: z.string().min(1).max(200).optional() });
 const message = z.object({ vanity, text: z.string().min(1).max(8000) });
+const connections = z.object({ max: z.coerce.number().int().min(1).max(200).default(40) });
 
 async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
   if (!res.ok) throw new HttpError("CALL", `${LINKEDIN_ORIGIN}/${what}`, res.status);
@@ -139,13 +140,40 @@ export const linkedin: SiteApi = {
   // Invites and messages at a person's pace: LinkedIn's own weekly invite limit is ~100, and an
   // account that sends more than a few dozen a day is the one it restricts. Outreach ramps
   // under these (wren's reach loop), never at them.
-  caps: { profile: 80, search: 25, company: 40, connect: 20, message: 25, inbox: 48 },
+  caps: {
+    profile: 80,
+    search: 25,
+    company: 40,
+    connect: 20,
+    message: 25,
+    inbox: 48,
+    network: 12,
+    withdraw: 20,
+  },
   // William's own profile reads and sends nothing until he lifts it (his call, 2026-10-01); a call is a 429.
   // Before: 40 profiles and 15 searches a day for client lookups (wren, 2026-09-29).
   accountCaps: {
-    linkedin: { profile: 0, search: 0, company: 0, connect: 0, message: 0, inbox: 0 },
+    linkedin: {
+      profile: 0,
+      search: 0,
+      company: 0,
+      connect: 0,
+      message: 0,
+      inbox: 0,
+      network: 0,
+      withdraw: 0,
+    },
     // The research alt (2026-10-05): reads only, at a new account's pace for its first weeks.
-    "linkedin@alt": { profile: 20, search: 5, company: 10, connect: 0, message: 0, inbox: 0 },
+    "linkedin@alt": {
+      profile: 20,
+      search: 5,
+      company: 10,
+      connect: 0,
+      message: 0,
+      inbox: 0,
+      network: 0,
+      withdraw: 0,
+    },
   },
   pace: { gapMs: 10_000, jitterMs: 20_000 },
   routes: [
@@ -350,6 +378,25 @@ export const linkedin: SiteApi = {
       request: z.object({ vanity }),
       meter: () => ({ profile: 1 }),
       browser: { flow: "linkedin/relationship" },
+    }),
+    route({
+      method: "POST",
+      path: "/in/{vanity}/withdraw",
+      summary:
+        "Withdraw our pending invite (reads the button first: connected or none withdraws nothing and says so)",
+      request: z.object({ vanity }),
+      irreversible: true,
+      meter: () => ({ withdraw: 1 }),
+      browser: { flow: "linkedin/withdraw" },
+    }),
+    route({
+      method: "GET",
+      path: "/connections",
+      summary:
+        "Recently added connections, newest first (`max`, default 40): name, handle, headline, when they connected",
+      request: connections,
+      meter: () => ({ network: 1 }),
+      browser: { flow: "linkedin/connections" },
     }),
     route({
       method: "GET",

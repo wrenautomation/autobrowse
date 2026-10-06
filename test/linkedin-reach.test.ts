@@ -4,9 +4,11 @@ import {
   aboutFieldsOf,
   companyIdOf,
   companyOf,
+  connectionOf,
   jobCardsOf,
   jobsOf,
   linkedinConnect,
+  linkedinWithdraw,
   type Person,
   type Profile,
   personOf,
@@ -116,6 +118,48 @@ describe("linkedin reach: connect", () => {
   });
 });
 
+describe("linkedin reach: connections and withdraw", () => {
+  it("a recently added card: the person, and when they connected kept off the headline", () => {
+    expect(
+      connectionOf({
+        text: "Dana Ruiz\nFounder, Ruiz Search Partners\nConnected on October 5, 2026\nMessage",
+        links: ["https://www.linkedin.com/in/dana-ruiz-4b1/"],
+      }),
+    ).toEqual({
+      name: "Dana Ruiz",
+      vanity: "dana-ruiz-4b1",
+      url: "https://www.linkedin.com/in/dana-ruiz-4b1/",
+      headline: "Founder, Ruiz Search Partners",
+      connected: "Connected on October 5, 2026",
+    });
+  });
+
+  const withButtons = (reads: string[][]) => {
+    const { fp, acts } = fakePage({ text: [""], present: (h) => h.name !== "/^don.t allow$/i" });
+    let n = 0;
+    fp.page = {
+      evaluate: async () => ({ buttons: reads[Math.min(n++, reads.length - 1)], degree: null }),
+    } as unknown as typeof fp.page;
+    return { fp, acts };
+  };
+
+  it("pending: Pending, then Withdraw (irreversible), then reads none", async () => {
+    const { fp, acts } = withButtons([["Pending, click to withdraw"], ["Connect"]]);
+    const out = await linkedinWithdraw.run(fp, { vanity: "dana-ruiz-4b1" });
+    expect(acts.map(line)).toEqual(["click /^pending/i", "click /^withdraw$/i"]);
+    expect(out).toEqual({ withdrawn: true, relationship: "none" });
+  });
+
+  it("already connected: withdraws nothing and says so", async () => {
+    const { fp, acts } = withButtons([["Message", "More"]]);
+    expect(await linkedinWithdraw.run(fp, { vanity: "dana-ruiz-4b1" })).toEqual({
+      withdrawn: false,
+      relationship: "connected",
+    });
+    expect(acts).toEqual([]);
+  });
+});
+
 describe("linkedin reach: routes", () => {
   const sites = (profile: string | null, seen: string[]) => {
     const runner: FlowRunner = {
@@ -141,7 +185,12 @@ describe("linkedin reach: routes", () => {
     for (const r of reach)
       expect(BROWSER_FLOWS[(r.browser as { flow: string }).flow], r.path).toBeDefined();
     const sends = reach.filter((r) => r.irreversible).map((r) => r.path);
-    expect(sends).toEqual(["/rest/posts", "/in/{vanity}/connect", "/in/{vanity}/message"]);
+    expect(sends).toEqual([
+      "/rest/posts",
+      "/in/{vanity}/connect",
+      "/in/{vanity}/withdraw",
+      "/in/{vanity}/message",
+    ]);
   });
 
   it("runs in the policy account's own profile, never the bare one", async () => {
