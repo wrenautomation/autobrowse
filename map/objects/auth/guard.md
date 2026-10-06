@@ -3,7 +3,7 @@ type: object
 cluster: auth
 universe: live
 status: verified
-verified: 2026-09-28 @ 70aefc3
+verified: 2026-10-06 @ b9fc8f3
 entity: src/auth/guard.ts
 ---
 
@@ -17,10 +17,10 @@ A fill whose value is a secret is checked against the page's host before anythin
 
 ## Shape
 
-- `SecretLeak`, `hostUnder`, `registrable`, `urlWithoutQuery` — `src/auth/guard.ts:12-44`
-- `GuardOptions { name, cred, domains, site, by, audit?, fallback? }` — `:45-57`; `BindOptions { secretOf, allow, site, by, audit }` — `:64-75`
-- `boundPage(fp, b)` — `:88`; `guardedPage(fp, g)` — `:127`; `boundRunner(runner, o)` — `:160`
-- Domains come from the login spec (`origins`, `home`) via `passwordDomains` — `src/auth/login.ts:423`
+- `SecretLeak`, `hostUnder`, `registrable`, `hostNamed`, `urlWithoutQuery` — `src/auth/guard.ts:13-57`. `registrable` is tldts `getDomain` with private suffixes (`evil.github.io` stays itself, `foo.co.uk` is not `co.uk`); `hostNamed` is the site-word check (registrable's first label), used by the no-domains fallback, `siteAllowsHost` and mod logins
+- `GuardOptions { name, cred, domains, site, by, audit?, fallback? }` — `:59-71`; `BindOptions { secretOf, allow, site, by, audit }` — `:78-86`
+- `boundPage(fp, b)` — `:102`; `guardedPage(fp, g)` — `:141`; `boundRunner(runner, o)` — `:174`
+- Domains come from the login spec (`origins`, `home`) via `passwordDomains` — `src/auth/login.ts:533`
 
 ## Connected to
 
@@ -30,7 +30,8 @@ A fill whose value is a secret is checked against the page's host before anythin
 ## If you change this
 
 - **Hits:** `src/auth/login.ts`, `src/workflows/compiled-deps.ts`, `src/explore/server.ts`, `src/app/cli-record.ts`, `src/app/services.ts`.
-- **Does not hit:** site API tokens (never typed), the wallet gate (`src/gates/payment.ts`).
+- **Hits too:** `src/mods/login.ts` (`hostNamed`), `src/gates/payment.ts` (`paymentFlowOf` is `registrable`).
+- **Does not hit:** site API tokens (never typed).
 
 ## Surfaces
 

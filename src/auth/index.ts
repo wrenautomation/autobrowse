@@ -18,6 +18,7 @@ export {
   boundPage,
   boundRunner,
   guardedPage,
+  hostNamed,
   hostUnder,
   registrable,
   SecretLeak,

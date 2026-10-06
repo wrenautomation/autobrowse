@@ -151,6 +151,44 @@ describe("passwords bound to their origins", () => {
     expect(siteAllowsHost(SITE_LOGINS, "nobody", "example.com")).toBe(false);
   });
 
+  it("registrable follows the public suffix list, private suffixes included", () => {
+    expect(registrable("www.foo.co.uk")).toBe("foo.co.uk");
+    expect(registrable("evil.github.io")).toBe("evil.github.io");
+    expect(registrable("mx-ha03.web.de")).toBe("web.de");
+    expect(registrable("app.scratch.test")).toBe("scratch.test");
+    expect(registrable("localhost")).toBe("localhost");
+    expect(registrable("127.0.0.1")).toBe("127.0.0.1");
+    expect(passwordDomains(SITE_LOGINS, "shop", { url: "https://www.foo.co.uk/login" })).toEqual([
+      "foo.co.uk",
+    ]);
+    // A user page on a shared host is not the site that owns the suffix.
+    expect(siteAllowsHost(SITE_LOGINS, "github", "evil.github.io")).toBe(false);
+    expect(siteAllowsHost(SITE_LOGINS, "github", "github.com")).toBe(true);
+  });
+
+  it("the no-domains fallback is the host's registrable name, not a substring", async () => {
+    let url = "https://instantly-help.evil.example/login";
+    const { fp, acts } = fakePage({ text: [""], present: () => true, url: () => url });
+    const page = guardedPage(fp, {
+      name: "instantly",
+      cred,
+      domains: [],
+      fallback: "instantly",
+      site: "instantly",
+      by: "login",
+    });
+    await expect(
+      page.act({ kind: "fill", value: "hunter2!" }, { role: "textbox" }, { goal: "pw" }),
+    ).rejects.toBeInstanceOf(SecretLeak);
+    url = "https://instantly.evil.example/login";
+    await expect(
+      page.act({ kind: "fill", value: "hunter2!" }, { role: "textbox" }, { goal: "pw" }),
+    ).rejects.toBeInstanceOf(SecretLeak);
+    url = "https://app.instantly.ai/login";
+    await page.act({ kind: "fill", value: "hunter2!" }, { role: "textbox" }, { goal: "pw" });
+    expect(acts.length).toBe(1);
+  });
+
   it("a canary: reading it is the alarm, and its password types nowhere", async () => {
     const audit = memoryAudit();
     const told: string[] = [];

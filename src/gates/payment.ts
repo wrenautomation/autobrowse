@@ -7,6 +7,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { registrable } from "../auth/guard.js";
 import type { Hints } from "../browser/locate.js";
 import type { Amount } from "./spend.js";
 import { amountIn } from "./spend.js";
@@ -179,23 +180,16 @@ export class PendingApprovals {
   }
 }
 
-/** Second-level labels that sit under a country code and are not a site (`shop.co.uk`). */
-const SHARED_SECOND_LEVEL = new Set(["co", "com", "net", "org", "gov", "ac", "edu"]);
-
 /**
  * The site a payment flow belongs to: the registrable domain, so `www.` and `my.`
- * on one company are one flow (a store and its billing portal). A data: page or a
- * desktop app is its own flow.
+ * on one company are one flow (a store and its billing portal), and two stores on
+ * a shared host (`alpha.myshopify.com`) are two. A data: page or a desktop app is
+ * its own flow.
  */
 export function paymentFlowOf(url: string): string {
   const host = URL.canParse(url) ? new URL(url).hostname : "";
   if (!host) return url;
-  if (/^[\d.]+$/.test(host) || !host.includes(".")) return host;
-  const labels = host.split(".");
-  const tld = labels.at(-1) ?? "";
-  const sld = labels.at(-2) ?? "";
-  const keep = tld.length === 2 && SHARED_SECOND_LEVEL.has(sld) ? 3 : 2;
-  return labels.slice(-keep).join(".");
+  return registrable(host);
 }
 
 /**

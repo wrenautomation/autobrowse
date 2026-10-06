@@ -351,6 +351,20 @@ describe("logins as data", () => {
     ]);
   });
 
+  it("a mod's origin on a shared host (user.herokuapp.com) does not carry the suffix owner's name", () => {
+    const mod = { sites: ["herokuapp"], domains: ["herokuapp.com", "scratch.test"] };
+    expect(
+      loginProblems(
+        login({
+          site: "herokuapp",
+          home: "https://herokuapp.com/",
+          origins: ["evil.herokuapp.com"],
+        }),
+        mod,
+      ),
+    ).toEqual(["origin evil.herokuapp.com does not carry the name herokuapp"]);
+  });
+
   it("an installed mod's login joins SITE_LOGINS after every built-in; a built-in of the same name wins", async () => {
     const o = await owner();
     const p = packMod({

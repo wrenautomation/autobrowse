@@ -7,6 +7,7 @@
  */
 
 import type { Credential, SecretAudit, SecretUse, TrackingSecrets } from "credvault";
+import { getDomain } from "tldts";
 import type { BrowserFlow, FlowPage, FlowRunner } from "../browser/flow.js";
 
 export class SecretLeak extends Error {
@@ -30,10 +31,20 @@ export function hostUnder(host: string, domain: string): boolean {
   return h === d || h.endsWith(`.${d}`);
 }
 
-/** The registrable part of a host, two labels (`www.instagram.com` → `instagram.com`); a naive cut, enough for the sites here. */
+/**
+ * The registrable part of a host by the public suffix list, private
+ * suffixes included: `www.instagram.com` → `instagram.com`, `www.foo.co.uk`
+ * → `foo.co.uk`, `evil.github.io` → `evil.github.io` (a user page, never
+ * github's). An IP, a bare name or a suffix itself is its own host.
+ */
 export function registrable(host: string): string {
-  const parts = host.toLowerCase().split(".");
-  return parts.slice(-2).join(".");
+  const h = host.toLowerCase().replace(/\.$/, "");
+  return getDomain(h, { allowPrivateDomains: true }) ?? h;
+}
+
+/** A host's registrable name is `word` (`instantly` → app.instantly.ai, never instantly-help.evil.example). */
+export function hostNamed(host: string, word: string): boolean {
+  return Boolean(word) && registrable(host).split(".")[0] === word.toLowerCase();
 }
 
 export function urlWithoutQuery(url: string): string {
@@ -54,7 +65,7 @@ export interface GuardOptions {
   site: string;
   by: string;
   audit?: SecretAudit;
-  /** With no domains known: a host that carries this word is allowed (`instantly` → app.instantly.ai). */
+  /** With no domains known: a host whose registrable name is this word is allowed (`instantly` → app.instantly.ai). */
   fallback?: string;
 }
 
@@ -141,7 +152,7 @@ export function guardedPage(fp: FlowPage, g: GuardOptions): FlowPage {
       g.cred.canary !== true &&
       (g.domains.length
         ? g.domains.some((d) => hostUnder(host, d))
-        : Boolean(g.fallback && host.toLowerCase().includes(g.fallback.toLowerCase()))),
+        : Boolean(g.fallback && hostNamed(host, g.fallback))),
     site: g.site,
     by: g.by,
     audit: g.audit,

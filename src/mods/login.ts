@@ -9,7 +9,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { registrable } from "../auth/guard.js";
+import { hostNamed } from "../auth/guard.js";
 import {
   type FormLoginSpec,
   formLogin,
@@ -115,7 +115,7 @@ export function loginProblems(l: DataLogin, mod: Pick<Mod, "sites" | "domains">)
   if (!mod.sites.includes(l.site)) bad.push(`site ${l.site} not in sites`);
   if (builtInLogin(l.site)) bad.push(`${l.site} has a built-in login; a mod can't replace it`);
   const word = l.site.split(".")[0] as string;
-  const own = (host: string) => registrable(host.replace(/:\d+$/, "")).split(".")[0] === word;
+  const own = (host: string) => hostNamed(host.replace(/:\d+$/, ""), word);
   const start = l.form?.start ?? l.oauth?.start ?? l.home;
   for (const [what, host] of [
     ["home", hostOf(l.home)],

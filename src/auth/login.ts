@@ -17,7 +17,7 @@ import { type Screen, type Walk, walk } from "../browser/screens.js";
 import { wallOf } from "../browser/session.js";
 import { safeUrls } from "../clients/http.js";
 import { type CodeKind, type CodeSource, inboxLock } from "./codes.js";
-import { guardedPage, hostUnder, registrable } from "./guard.js";
+import { guardedPage, hostNamed, hostUnder, registrable } from "./guard.js";
 import { type IdentityProvider, type Provider, providerOf } from "./providers.js";
 
 export interface SignInContext {
@@ -572,7 +572,7 @@ export function resolveLogin(sites: readonly SiteLogin[], name: string): SiteLog
 export function siteAllowsHost(sites: readonly SiteLogin[], site: string, host: string): boolean {
   const word = (site.split("@")[0] ?? site).toLowerCase();
   const h = host.toLowerCase();
-  if (word && registrable(h).split(".")[0] === word) return true;
+  if (hostNamed(h, word)) return true;
   const login = sites.find((s) => (s.credential ?? s.site) === word) ?? resolveLogin(sites, site);
   if (!login) return false;
   const origins = [registrable(new URL(login.home).host), ...(login.origins ?? [])];

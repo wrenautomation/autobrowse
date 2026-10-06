@@ -123,6 +123,12 @@ describe("one yes per payment flow", () => {
     expect(paymentFlowOf("data:text/html,x")).toBe("data:text/html,x");
   });
 
+  it("two stores on one shared host are two flows: a yes on one never covers the other", () => {
+    expect(paymentFlowOf("https://alpha.myshopify.com/checkout")).toBe("alpha.myshopify.com");
+    expect(paymentFlowOf("https://beta.myshopify.com/checkout")).toBe("beta.myshopify.com");
+    expect(paymentFlowOf("https://shop.example.com.au/pay")).toBe("example.com.au");
+  });
+
   it("a yes outlives the session that heard it, and runs out", () => {
     const file = join(mkdtempSync(join(tmpdir(), "flows-")), "payment-flows.json");
     let t = 1_000;
