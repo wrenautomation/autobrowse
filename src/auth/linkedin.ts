@@ -3,9 +3,10 @@
  * the /uas/login?session_redirect=… an OAuth authorize URL lands a signed-out
  * profile on (that redirect must not be lost, so this never re-opens
  * /login). Email + password, then a checkpoint that asks for a code: the
- * authenticator app when a seed is stored, else the email code. A checkpoint
- * that wants a puzzle or a phone tap is a person's. Unverified until a
- * LinkedIn credential exists (mapped from the public pages 2026-09-21).
+ * authenticator app when a seed is stored, else the email code. A security
+ * check (reCAPTCHA, on /login or a checkpoint) is the captcha solver's; only
+ * one it can't pass, or a phone tap, is a person's. A restricted account
+ * (LinkedIn wants an ID) stops the sign-in.
  */
 import { LoginFailed, passwordOf, type SignInContext } from "./login.js";
 
@@ -14,6 +15,7 @@ const RENDER_MS = 8_000;
 /** Login and its checkpoints; the URLs `signInHere` acts on. */
 export const LINKEDIN_LOGIN_URL = /linkedin\.com\/(uas\/)?login|linkedin\.com\/checkpoint\//;
 const CHECKPOINT_URL = /linkedin\.com\/checkpoint\//;
+const SECURITY_CHECK = /security check|puzzle|captcha|verify you.re a person/i;
 
 export async function signInToLinkedin(ctx: SignInContext): Promise<void> {
   const { fp, cred, code } = ctx;
@@ -34,6 +36,17 @@ export async function signInToLinkedin(ctx: SignInContext): Promise<void> {
     await fp.wait(SETTLE_MS);
   }
   let text = await fp.text();
+  if (SECURITY_CHECK.test(text)) {
+    const got = await fp.captcha();
+    if (!got.solved) return fp.human(`LinkedIn's security check: ${got.reason}`);
+    await fp.wait(SETTLE_MS);
+    text = await fp.text();
+  }
+  if (
+    /login-restriction/.test(fp.url()) ||
+    /account has been (temporarily )?restricted/i.test(text)
+  )
+    throw new LoginFailed(site, "account restricted: LinkedIn asks for a government ID");
   if (/wrong email or password|not the right password|couldn.t find a linkedin account/i.test(text))
     throw new LoginFailed(site, "password rejected");
 
@@ -41,8 +54,8 @@ export async function signInToLinkedin(ctx: SignInContext): Promise<void> {
   const otp = { role: "textbox", name: "/code/i" } as const;
   if (CHECKPOINT_URL.test(fp.url()) || /verification code|enter the code/i.test(text)) {
     if (!(await fp.has(otp, RENDER_MS))) {
-      if (/security check|puzzle|captcha|verify you.re a person/i.test(text))
-        return fp.human("LinkedIn wants a security check only a person can pass");
+      if (SECURITY_CHECK.test(text))
+        return fp.human("LinkedIn wants a security check the solver couldn't pass");
       throw new LoginFailed(site, `checkpoint without a code box: ${fp.url()}`);
     }
     // The page says where the code comes from; the credential says what we can read.

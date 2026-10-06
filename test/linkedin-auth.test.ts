@@ -92,8 +92,25 @@ describe("linkedin sign-in", () => {
       url: "https://www.linkedin.com/checkpoint/challenge/2",
     });
     await expect(signInToLinkedin(ctx(puzzle.fp, ["totp"]))).rejects.toThrow(
-      /security check only a person/,
+      /security check: fake/,
     );
+  });
+
+  it("solves the security check, then stops on a restricted account", async () => {
+    let url = "https://www.linkedin.com/login/";
+    const { fp } = fakePage({
+      text: ["Let's do a quick security check"],
+      present: () => false,
+      url: () => url,
+    });
+    let solved = 0;
+    fp.captcha = async () => {
+      solved++;
+      url = "https://www.linkedin.com/flagship-web/login/login-restriction/";
+      return { solved: true, kind: "checkbox", vendor: "recaptcha", rounds: 1 };
+    };
+    await expect(signInToLinkedin(ctx(fp, []))).rejects.toThrow(/account restricted/);
+    expect(solved).toBe(1);
   });
 });
 
