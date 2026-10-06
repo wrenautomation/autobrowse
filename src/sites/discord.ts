@@ -81,9 +81,15 @@ interface Webhook {
   guild_id?: string;
   token?: string;
   url?: string;
+  avatar?: string | null;
 }
 /** A webhook without its secret half. */
-const bare = (w: Webhook) => ({ id: w.id, name: w.name, channel_id: w.channel_id });
+const bare = (w: Webhook) => ({
+  id: w.id,
+  name: w.name,
+  channel_id: w.channel_id,
+  avatar: w.avatar ?? null,
+});
 /** The URL that posts through a webhook, from its id and token. */
 const webhookUrl = (w: Webhook) => w.url ?? `https://discord.com/api/webhooks/${w.id}/${w.token}`;
 
@@ -430,6 +436,24 @@ export const discord: SiteApi = {
       },
       summary:
         "Make a webhook on a channel and keep its URL as `keep` (an env name) in the sink; the URL is never returned",
+    }),
+    route({
+      method: "PATCH",
+      path: "/webhooks/{webhook}",
+      request: z.object({
+        webhook: id,
+        name: z.string().min(1).max(80).optional(),
+        avatar: z.string().min(1).optional(),
+      }),
+      api: async ({ webhook, name, avatar }, leg) =>
+        bare(
+          await call<Webhook>(leg, "PATCH", `/webhooks/${webhook}`, {
+            ...(name ? { name } : {}),
+            ...(avatar ? { avatar: await imageData(avatar) } : {}),
+          }),
+        ),
+      summary:
+        "Rename a webhook or set the picture its posts show (avatar = a local path or URL to a png/jpg/gif/webp)",
     }),
   ],
   setup: [

@@ -49,6 +49,7 @@ describe("discord site", () => {
       id: "111",
       name: "intake",
       channel_id: "22222",
+      avatar: null,
       kept: "LANDER_DISCORD_WEBHOOK",
     });
     expect(JSON.stringify(out)).not.toContain("secret-part");
