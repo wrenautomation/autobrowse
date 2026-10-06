@@ -124,19 +124,49 @@ describe("charges", () => {
     expect(rawHeader(raw, "subject")).toBe("Your receipt");
     expect(rawHeader(raw, "to")).toBe("");
   });
-  it("mail with a file is multipart/mixed; without, plain text", () => {
+  it("mail with a file is multipart/mixed; without, plain text", async () => {
     const base = { from: "a@x.co", to: "b@x.co", subject: "s", text: "hi" };
-    expect(mimeMessage(base)).toContain('Content-Type: text/plain; charset="UTF-8"\r\n\r\nhi');
-    const raw = mimeMessage({
+    const plain = await mimeMessage(base);
+    expect(plain).toContain("Content-Type: text/plain; charset=utf-8");
+    expect(plain).toContain("Subject: s\r\n");
+    expect(plain.endsWith("\r\n\r\nhi\r\n")).toBe(true);
+    const raw = await mimeMessage({
       ...base,
       attachments: [{ name: "r.png", type: "image/png", data: Buffer.alloc(100, 1) }],
     });
     const b = /boundary="([^"]+)"/.exec(raw)?.[1];
     expect(b).toBeTruthy();
     expect(raw.split(`--${b}`)).toHaveLength(4); // preamble, text, file, close
-    expect(raw).toContain('Content-Disposition: attachment; filename="r.png"');
+    expect(raw).toContain("Content-Disposition: attachment; filename=r.png");
     expect(raw).toContain(Buffer.alloc(100, 1).toString("base64").slice(0, 76));
-    expect(raw.endsWith(`--${b}--`)).toBe(true);
+    expect(raw.trimEnd().endsWith(`--${b}--`)).toBe(true);
+  });
+});
+
+describe("mimeMessage headers", () => {
+  const head = (raw: string) => raw.split("\r\n\r\n")[0]?.split("\r\n") ?? [];
+  it("a subject carrying CRLF never becomes a second header", async () => {
+    const raw = await mimeMessage({
+      from: "a@x.example",
+      to: "b@x.example",
+      subject: "Receipt\r\nBcc: evil@x.example",
+      text: "hi",
+    });
+    expect(head(raw).some((l) => /^bcc:/i.test(l))).toBe(false);
+  });
+  it("non-ASCII subjects and file names are encoded; headers stay ASCII", async () => {
+    const raw = await mimeMessage({
+      from: "a@x.example",
+      to: "b@x.example",
+      subject: "Reçu de paiement €5",
+      text: "hi",
+      attachments: [{ name: 'reçu "1".png', type: "image/png", data: Buffer.alloc(10, 1) }],
+    });
+    expect(head(raw).every((l) => /^[\x20-\x7e\t]*$/.test(l))).toBe(true);
+    const disposition = raw.split("\r\n").find((l) => /^content-disposition: attachment/i.test(l));
+    expect(disposition).toBeTruthy();
+    expect(disposition).not.toContain('"1"');
+    expect(raw.split("\r\n").every((l) => /^[\x20-\x7e\t]*$/.test(l))).toBe(true);
   });
 });
 

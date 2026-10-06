@@ -159,10 +159,30 @@ describe("unsubscribe", () => {
       detail: "open https://x.io/leave",
     });
     expect(await leave(base, deps)).toMatchObject({ how: "none", ok: false });
-    expect(rawMail("a@b", "c@d", "s")).toBe(
-      Buffer.from(
-        "From: a@b\r\nTo: c@d\r\nSubject: s\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nunsubscribe",
-      ).toString("base64url"),
-    );
+    const mail = Buffer.from(await rawMail("a@b.example", "c@d.example", "s"), "base64url");
+    expect(mail.toString()).toMatch(/^From: a@b\.example\r\nTo: c@d\.example\r\nSubject: s\r\n/);
+    expect(mail.toString().endsWith("\r\n\r\nunsubscribe\r\n")).toBe(true);
+  });
+});
+
+describe("the mailto leg's message", () => {
+  const headLines = (raw: string) =>
+    Buffer.from(raw, "base64url").toString("utf8").split("\r\n\r\n")[0]?.split("\r\n") ?? [];
+
+  it("a subject carrying CRLF never becomes a second header", async () => {
+    const raw = await rawMail("a@x.example", "leave@x.example", "unsub\r\nBcc: evil@x.example");
+    expect(headLines(raw).some((l) => /^bcc:/i.test(l))).toBe(false);
+  });
+
+  it("an address carrying CRLF never becomes a second header", async () => {
+    const raw = await rawMail("a@x.example", "leave@x.example\r\nBcc: evil@x.example", "u");
+    expect(headLines(raw).some((l) => /^bcc:/i.test(l))).toBe(false);
+  });
+
+  it("a non-ASCII subject is an encoded word; headers stay ASCII", async () => {
+    const raw = await rawMail("a@x.example", "leave@x.example", "Se désabonner ✓");
+    const lines = headLines(raw);
+    expect(lines.every((l) => /^[\x20-\x7e\t]*$/.test(l))).toBe(true);
+    expect(lines.find((l) => /^subject:/i.test(l))).toMatch(/=\?UTF-8\?/i);
   });
 });

@@ -9,6 +9,7 @@
 
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import { defineFlow } from "../browser/flow.js";
+import { mimeMessage } from "../clients/gmail.js";
 import type { HttpClient } from "../clients/http.js";
 
 /** The Gmail routes this reads through (`sites.call("gmail", …)`). */
@@ -160,16 +161,9 @@ export async function findSubscriptions(
   );
 }
 
-/** RFC 2822 for the mailto path, base64url as Gmail's send takes it. */
-export function rawMail(from: string, to: string, subject: string): string {
-  const text = [
-    `From: ${from}`,
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    "Content-Type: text/plain; charset=utf-8",
-    "",
-    "unsubscribe",
-  ].join("\r\n");
+/** The mailto path's message (`mimeMessage`), base64url as Gmail's send takes it. */
+export async function rawMail(from: string, to: string, subject: string): Promise<string> {
+  const text = await mimeMessage({ from, to, subject, text: "unsubscribe" });
   return Buffer.from(text, "utf8").toString("base64url");
 }
 
@@ -228,7 +222,7 @@ export async function leave(sub: Subscription, d: LeaveDeps): Promise<Left> {
     // A one-click that fails still leaves the mailto/link paths.
   }
   if (sub.mailto && d.send && d.from) {
-    await d.send(rawMail(d.from, sub.mailto.to, sub.mailto.subject));
+    await d.send(await rawMail(d.from, sub.mailto.to, sub.mailto.subject));
     return out("mailto", true, `mailed ${sub.mailto.to}`);
   }
   if (sub.link) {

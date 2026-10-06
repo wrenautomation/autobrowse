@@ -1,4 +1,5 @@
 /** Gmail as one user (domain-wide delegation): the send-as signature, and plain mail for notifications. */
+import MailComposer from "nodemailer/lib/mail-composer/index.js";
 import { authedJson, type TokenSupplier } from "../google-auth.js";
 import type { HttpClient } from "./http.js";
 
@@ -125,7 +126,7 @@ export function gmailClient(opts: {
     },
     async send(mail) {
       const token = opts.tokenFor(mail.from, [opts.scopes.send]);
-      const raw = mimeMessage(mail);
+      const raw = await mimeMessage(mail);
       const r = await authedJson(opts.http, token, `${GMAIL}/messages/send`, {
         method: "POST",
         body: { raw: Buffer.from(raw).toString("base64url") },
@@ -233,34 +234,25 @@ export function gmailClient(opts: {
   };
 }
 
-/** RFC 5322 text, or multipart/mixed when there are files; base64 lines of 76. */
-export function mimeMessage(mail: Parameters<GmailUserClient["send"]>[0]): string {
-  const head = [
-    `From: ${mail.from}`,
-    `To: ${mail.to}`,
-    `Subject: ${mail.subject}`,
-    "MIME-Version: 1.0",
-  ];
-  const text = ['Content-Type: text/plain; charset="UTF-8"', "", mail.text];
-  if (!mail.attachments?.length) return [...head, ...text].join("\r\n");
-  const b = `autobrowse-${Date.now().toString(36)}`;
-  const parts = mail.attachments.map((a) =>
-    [
-      `--${b}`,
-      `Content-Type: ${a.type}; name="${a.name}"`,
-      `Content-Disposition: attachment; filename="${a.name}"`,
-      "Content-Transfer-Encoding: base64",
-      "",
-      ...(a.data.toString("base64").match(/.{1,76}/g) ?? []),
-    ].join("\r\n"),
-  );
-  return [
-    ...head,
-    `Content-Type: multipart/mixed; boundary="${b}"`,
-    "",
-    `--${b}`,
-    ...text,
-    ...parts,
-    `--${b}--`,
-  ].join("\r\n");
+/**
+ * RFC 5322 text, or multipart/mixed when there are files, by nodemailer's
+ * composer: header values with CR/LF stay one header, non-ASCII subjects and
+ * file names are encoded words, and no file or URL is ever read.
+ */
+export async function mimeMessage(mail: Parameters<GmailUserClient["send"]>[0]): Promise<string> {
+  const composer = new MailComposer({
+    from: mail.from,
+    to: mail.to,
+    subject: mail.subject,
+    text: mail.text,
+    attachments: mail.attachments?.map((a) => ({
+      filename: a.name,
+      contentType: a.type,
+      content: a.data,
+    })),
+    disableFileAccess: true,
+    disableUrlAccess: true,
+  });
+  const built = await composer.compile().build();
+  return built.toString("utf8");
 }
