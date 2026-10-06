@@ -22,6 +22,7 @@ export {
 export { googleWorkspaceLogo } from "./google-workspace-logo.js";
 export { type CreatePostInput, instagramCreatePost } from "./instagram-create-post.js";
 export { instagramOauthConsent } from "./instagram-oauth-consent.js";
+export { type Audience as LinkedInAudience, linkedinAudience } from "./linkedin-audience.js";
 export {
   type CreatePostInput as LinkedInCreatePostInput,
   linkedinCreatePost,

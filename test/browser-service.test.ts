@@ -60,6 +60,7 @@ describe("browser service", () => {
       "instagram/create-post",
       "instagram/oauth-consent",
       "linkedin/activity",
+      "linkedin/audience",
       "linkedin/company",
       "linkedin/company-jobs",
       "linkedin/company-people",

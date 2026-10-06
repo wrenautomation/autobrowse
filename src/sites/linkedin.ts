@@ -157,6 +157,8 @@ export const linkedin: SiteApi = {
     notifications: 12,
     // A member's activity page: off (linkedin, linkedin@wren) unless an account's own caps open it.
     activity: 0,
+    // Our own audience (profile + Page, two page loads): on demand from wren, never on a timer.
+    audience: 4,
   },
   // William's own profile reads and sends nothing until he lifts it (his call, 2026-10-01); a call is a 429.
   // Before: 40 profiles and 15 searches a day for client lookups (wren, 2026-09-29).
@@ -171,6 +173,7 @@ export const linkedin: SiteApi = {
       network: 0,
       withdraw: 0,
       notifications: 0,
+      audience: 0,
     },
     // The research alt (2026-10-05): reads only, at a new account's pace for its first weeks.
     "linkedin@alt": {
@@ -183,6 +186,7 @@ export const linkedin: SiteApi = {
       network: 0,
       withdraw: 0,
       notifications: 0,
+      audience: 0,
       // wren's signals (designs 2026-10-06-signal-collectors, S5): 10 people a day.
       activity: 10,
     },
@@ -427,6 +431,15 @@ export const linkedin: SiteApi = {
       request: newest,
       meter: () => ({ notifications: 1 }),
       browser: { flow: "linkedin/notifications" },
+    }),
+    route({
+      method: "GET",
+      path: "/audience",
+      summary:
+        "The account's own followers and connections, and a Page's followers (`page`: handle or id, default Wren's; empty skips it), with the text each came from. Reads only",
+      request: z.object({ page: z.union([handle, z.literal("")]).optional() }),
+      meter: () => ({ audience: 1 }),
+      browser: { flow: "linkedin/audience" },
     }),
     route({
       method: "GET",

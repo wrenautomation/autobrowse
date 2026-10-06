@@ -646,6 +646,7 @@ pnpm autobrowse site call linkedin GET "/company/<handle>"   # website, size, in
 pnpm autobrowse people ria founder austin --pages 2 --enrich   # lead CSV, resumable; wren email import-people <file> --format linkedin --niche <niche>
 pnpm autobrowse site call linkedin GET "/company/<handle>/people?keywords=founder"
 pnpm autobrowse site call linkedin GET "/notifications?max=40" --account linkedin@wren   # the notifications page: kind, actor, text, url, approximate time; reads only, 12 a day
+pnpm autobrowse site call linkedin GET /audience --account linkedin@wren   # own followers and connections, and Wren's Page's followers; reads only, 4 a day
 pnpm autobrowse site setup youtube oauth-client   # a browser flow on Cloud Console keeps the client id/secret
 pnpm autobrowse site setup youtube consent        # OAuth consent in the logged-in profile; refresh token kept
 pnpm autobrowse site setup gmail consent --account will@x.dev   # another account's inbox: token under its own name

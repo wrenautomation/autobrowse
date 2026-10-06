@@ -22,6 +22,7 @@ import { googleWorkspaceLogo } from "../browser/flows/google-workspace-logo.js";
 import { instagramCreatePost } from "../browser/flows/instagram-create-post.js";
 import { instagramOauthConsent } from "../browser/flows/instagram-oauth-consent.js";
 import { linkedinActivity } from "../browser/flows/linkedin-activity.js";
+import { linkedinAudience } from "../browser/flows/linkedin-audience.js";
 import { linkedinCreatePost } from "../browser/flows/linkedin-create-post.js";
 import { linkedinNotifications } from "../browser/flows/linkedin-notifications.js";
 import { linkedinOauthConsent } from "../browser/flows/linkedin-oauth-consent.js";
@@ -104,6 +105,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinConnections,
     linkedinNotifications,
     linkedinActivity,
+    linkedinAudience,
     linkedinWithdraw,
     resetMailProbe,
     npmCreateOrg,
