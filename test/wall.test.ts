@@ -25,6 +25,14 @@ describe("looksLikeWall", () => {
       (await looksLikeWall(page("https://myaccount.google.com/intro/personal-info")))?.kind,
     ).toBe("login");
     expect(await looksLikeWall(page("https://myaccount.google.com/introspection"))).toBeNull();
+    // Signed out of LinkedIn on a member's guest page: the top bar offers Join now and Sign in.
+    const guest = "Top Content\nPeople\nLearning\nJobs\nGames\nJoin now\nSign in\nBill Gates";
+    expect((await looksLikeWall(page("https://www.linkedin.com/in/someone", guest)))?.kind).toBe(
+      "login",
+    );
+    expect(
+      await looksLikeWall(page("https://www.linkedin.com/feed/", "Home\nMy Network\nJobs\nMe")),
+    ).toBeNull();
   });
   it("reads captcha and challenge walls from the text", async () => {
     expect((await looksLikeWall(page("https://x.com/", "Verify you are human")))?.kind).toBe(

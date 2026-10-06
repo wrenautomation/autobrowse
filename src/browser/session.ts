@@ -402,6 +402,13 @@ export function wallOf(url: string, text: string): Wall | null {
   // LinkedIn signed out: every member page goes to /authwall ("Join LinkedIn", a Sign in link).
   if (/^https:\/\/www\.linkedin\.com\/authwall(\/|\?|$)/i.test(url))
     return { kind: "login", detail: `signed out: ${url}` };
+  // LinkedIn signed out on a guest page (a member's /in/ profile, no /authwall): the top bar says
+  // "Join now" and "Sign in"; the sign-in dialog sits past the text read here.
+  if (
+    /^https:\/\/www\.linkedin\.com\//i.test(url) &&
+    /\bjoin now\s+sign in\b/i.test(text.slice(0, 600))
+  )
+    return { kind: "login", detail: `signed out (guest page): ${url}` };
   // Google Account signed out: myaccount sends every page to its /intro/ twin with a "Sign in" button.
   if (/^https:\/\/myaccount\.google\.com\/intro(\/|\?|$)/i.test(url))
     return { kind: "login", detail: `signed out: ${url}` };
