@@ -8,7 +8,9 @@
  * - A loopback listener (DESK_PORT) that wren's self-hosted server reaches through the
  *   Cloudflare Tunnel `desk.wrenautomation.com`; it serves only calls that server signs.
  * With no Cloud settings, the desk registers itself on the box's server instead.
- * It also serves `claude`: questions to Claude Code on this Mac, read only (`src/claude/`).
+ * It also serves `claude`: questions to Claude Code on this Mac, read only (`src/claude/`),
+ * and for Wren `studio`: renders the Videos page asks for, and new recordings picked up every
+ * minute (`src/studio/`).
  * launchd keeps it (and the tunnel) up: `deploy/desk/`.
  */
 import http2 from "node:http2";
@@ -17,8 +19,9 @@ import { createEndpointHandler } from "@restatedev/restate-sdk";
 import pino from "pino";
 import { CLAUDE_SERVICE, claudeService } from "../claude/service.js";
 import { httpClient } from "../clients/http.js";
-import { named } from "../owner.js";
+import { isDefaultOwner, named } from "../owner.js";
 import { DESK_SERVICE, sitesService } from "../sites/index.js";
+import { studioService, watchRecordings, wrenIn } from "../studio/service.js";
 import { registerOnBox } from "./box-register.js";
 import { cloudAdminUrl, planEndpoint } from "./endpoint.js";
 import { awsFor, boot } from "./owner.js";
@@ -34,11 +37,14 @@ const app = await buildApp(settings, log);
 const desk = sitesService(app.sites, named(DESK_SERVICE, settings.owner));
 // Claude Code reads the workspace holding this checkout (wren's `Ask`).
 const claude = claudeService(resolve(".."), named(CLAUDE_SERVICE, settings.owner));
+// Wren's video editor: its prod, its recordings; never another owner's desk.
+const wren = isDefaultOwner(settings.owner) ? wrenIn(resolve("..")) : null;
+const services = wren ? [desk, claude, studioService(wren)] : [desk, claude];
 await new Promise<void>((ok) =>
   http2
     .createServer(
       createEndpointHandler({
-        services: [desk, claude],
+        services,
         identityKeys: [settings.restateBoxIdentityKey],
       }),
     )
@@ -54,7 +60,7 @@ let reg: { id: string; services: string[] };
 if (plan.mode === "tunnel") {
   const { connectTunnel } = await import("@restatedev/restate-sdk-tunnel");
   const tunnel = connectTunnel({
-    services: [desk, claude],
+    services,
     tunnelName: plan.tunnelName,
     environmentId: plan.environmentId,
     region: plan.region,
@@ -72,6 +78,7 @@ if (plan.mode === "tunnel") {
 } else {
   reg = await registerOnBox(awsFor(settings));
 }
+if (wren) watchRecordings(wren, (msg) => log.info({ watch: msg }, "recordings"));
 // deploy/desk/update.mjs waits for this exact message after a restart.
 log.info(
   { deployment: reg.id, services: reg.services, browser: settings.browser, on: plan.mode },
