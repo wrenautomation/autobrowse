@@ -46,6 +46,18 @@ Living doc. Started 2026-10-05. William: "letting ai write check and validate co
 - `{name}` is an earlier `read` (text) or `records` (JSON, capped at 20k characters).
 - **Cost.** A cheap call on 20k characters is about 5k tokens in and 400 out. On Cohere Command A that is about $0.017 of prepaid credits, so a 20-call run costs about $0.35. Claude Code runs on the subscription for $0, about 2s a call. Either way, a `smart` call follows `LLM_PROVIDER`. Every call counts against `LLM_DAILY_TOKENS`.
 
+## The each op
+
+```json
+{ "kind": "each", "goal": "read each ad", "over": "ads", "walk": "fb-public/ad", "as": "detail", "with": { "link": "{url}" }, "max": 50 }
+```
+
+- It runs another walk once per row, inside the walk. Rows come from an earlier `records` op or from a plan field. A plan field may hold a JSON array (objects kept as they are, anything else as `{ item }`) or one `{ item }` per line.
+- Each run gets the row's fields as its plan. `with` renames them, as in `{ link: "{url}" }`.
+- Each row starts on the nested walk's `start`. An `open` URL may be one whole field (`{link}`), so a row can open its own link.
+- What the run reads joins its row, under `as`. A failed row keeps its `error` and the loop goes on. If every row fails, the op fails, since the nested walk is broken. A row that needs a person stops the run, and so does the 21st model call.
+- `max` caps the rows at 500 or fewer.
+
 ## Where to attack
 
 1. ✅ `records` and `ai` ops, sandbox, check, writer, walk runner, heal on drop, `autobrowse records`.
@@ -54,6 +66,7 @@ Living doc. Started 2026-10-05. William: "letting ai write check and validate co
 4. ✅ Facebook public groups: `fb-public GET /groups?q=` (Google), `/groups/{group}` (About), `/groups/{group}/posts/{post}` (a post and its top comments). Then directories.
 5. ✅ An explorer `records` command, so an explore run that ends on a list page builds a walk with the op.
 6. Compiler render, if a compiled workflow ever needs a list.
+7. ✅ `each`: a walk loops over many inputs itself.
 
 ## Decision log
 
@@ -72,3 +85,4 @@ Living doc. Started 2026-10-05. William: "letting ai write check and validate co
 - 2026-10-05: A records op with `min: 0` may come back empty without a heal: a post with no comments is a real answer.
 - 2026-10-05: The sandbox runs a whole `function (root) {...}` or an arrow when a model sends one in place of a body. A model did, and every round failed on the syntax.
 - 2026-10-05: Explore's `records` takes the driver's own `code` first. The driver is usually a model already looking at the page, and today's group walks showed a hand-written extractor beats the builder's one-shot model on odd pages. Without `code`, the session's model writes it as `autobrowse records` does.
+- 2026-10-06: `each` is an op, so the caller no longer loops. William: "fix the gap". A list page and its detail pages are now one walk, which the desk runs as one route. Rows run in order on one page, with no parallel tabs, to keep one IP's pace.

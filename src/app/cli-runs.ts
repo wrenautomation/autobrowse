@@ -253,9 +253,11 @@ export function registerRunsCommands(
               ? ` ← ${valueSource(op.value)}`
               : op.kind === "walk"
                 ? ` → ${op.walk}`
-                : op.kind === "records" || op.kind === "ai"
-                  ? ` → ${op.as}`
-                  : "";
+                : op.kind === "each"
+                  ? ` → ${op.walk} per ${op.over} → ${op.as}`
+                  : op.kind === "records" || op.kind === "ai"
+                    ? ` → ${op.as}`
+                    : "";
           console.log(`    ${op.kind}${at}${from}`);
         }
       }

@@ -11,11 +11,13 @@ import { type BrowserFlow, defineFlow, type FlowPage } from "../browser/flow.js"
 import type { Hints } from "../browser/locate.js";
 import { checkRows, type RecordsOp, type Row, readRecords } from "../browser/records.js";
 import { lookAt, type PageLook, type Screen, walk } from "../browser/screens.js";
+import { NeedsHuman } from "../browser/session.js";
 import type { SecretSink } from "../deps/sink.js";
 import { samePage, shows } from "./build.js";
 import {
   FIELD_REF,
   MAX_DEPTH,
+  MAX_EACH,
   type ProfileFieldName,
   RELATIVE_DAY,
   type ScreenSpec,
@@ -51,6 +53,37 @@ export interface WalkDeps {
 export const AI_CALLS = 20;
 /** Rows as JSON in an `ai` prompt, at most. */
 const AI_ROWS_CHARS = 20_000;
+
+/** A plan value as rows: a JSON array (objects as they are, the rest as `{ item }`), else one `{ item }` per line. */
+export function listed(text: string): Row[] {
+  const t = text.trim();
+  if (t.startsWith("[")) {
+    try {
+      const a = JSON.parse(t) as unknown[];
+      return a.map((v) =>
+        v && typeof v === "object"
+          ? Object.fromEntries(
+              Object.entries(v).map(([k, x]) => [
+                k,
+                x == null ? null : typeof x === "string" ? x : JSON.stringify(x),
+              ]),
+            )
+          : { item: String(v) },
+      );
+    } catch {
+      // Not JSON after all: lines.
+    }
+  }
+  return t
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((item) => ({ item }));
+}
+
+/** A nested walk's rows, as JSON text in one field each. */
+const jsonOf = (records: Record<string, Row[]>): Row =>
+  Object.fromEntries(Object.entries(records).map(([k, v]) => [k, JSON.stringify(v)]));
 
 /** `today+3d` → that day, as `YYYY-MM-DD` or `MM/DD/YYYY`; any other default is the text. */
 export function resolveDefault(d: string, now: Date): string {
@@ -101,8 +134,9 @@ async function walkSpec(
   deps: WalkDeps,
   out: WalkOutput,
   depth: number,
+  fresh = depth === 0,
 ): Promise<string> {
-  if (depth === 0 && spec.start) await fp.open(spec.start);
+  if (fresh && spec.start) await fp.open(spec.start);
   const fields = new Map(spec.fields.map((f) => [f.key, f]));
   const handled = new Set<string>();
   let seen: { at: number; url: string; look: PageLook } | null = null;
@@ -156,6 +190,17 @@ async function walkSpec(
     if (out.text) out.text = await fill(out.text, h.goal);
     if (out.name) out.name = await fill(out.name, h.goal);
     return out;
+  };
+
+  /** The walk a `walk` or `each` op names: `name` on this site, or `site/name`. */
+  const nested = (op: { goal: string; walk: string }): WalkSpec => {
+    const [site, name] = op.walk.includes("/")
+      ? (op.walk.split("/") as [string, string])
+      : [spec.site, op.walk];
+    if (depth + 1 > MAX_DEPTH) fp.human(`${op.goal}: walks nest deeper than ${MAX_DEPTH}`);
+    const sub = deps.load?.(site, name);
+    if (!sub) fp.human(`${op.goal}: no walk ${site}/${name}`);
+    return sub;
   };
 
   const run = async (op: WalkOp): Promise<void> => {
@@ -230,21 +275,52 @@ async function walkSpec(
         out.read[op.as] = await deps.ai(op, prompt);
         return;
       }
-      case "open":
-        return fp.open(await fill(op.url, op.goal, true));
+      case "open": {
+        const whole = /^\{([a-z][a-zA-Z0-9]*)\}$/.exec(op.url);
+        if (!whole) return fp.open(await fill(op.url, op.goal, true));
+        const url = await fieldValue(whole[1] as string, op.goal);
+        if (!/^https?:\/\//.test(url)) throw new Error(`${op.goal}: ${whole[1]} is not a URL`);
+        return fp.open(url);
+      }
       case "captcha": {
         const c = await fp.captcha();
         if (!c.solved) fp.human(`${op.goal}: ${c.reason ?? "not solved"}`);
         return;
       }
-      case "walk": {
-        const [site, name] = op.walk.includes("/")
-          ? (op.walk.split("/") as [string, string])
-          : [spec.site, op.walk];
-        if (depth + 1 > MAX_DEPTH) fp.human(`${op.goal}: walks nest deeper than ${MAX_DEPTH}`);
-        const sub = deps.load?.(site, name);
-        if (!sub) fp.human(`${op.goal}: no walk ${site}/${name}`);
-        await walkSpec(fp, sub, input, deps, out, depth + 1);
+      case "walk":
+        await walkSpec(fp, nested(op), input, deps, out, depth + 1);
+        return;
+      case "each": {
+        const sub = nested(op);
+        const rows = (out.records[op.over] ?? listed(await fieldValue(op.over, op.goal))).slice(
+          0,
+          op.max ?? MAX_EACH,
+        );
+        const done: Row[] = [];
+        let failed = 0;
+        for (const row of rows) {
+          const plan: WalkInput = { ...input };
+          for (const [k, v] of Object.entries(row)) if (v !== null) plan[k] = v;
+          for (const [k, t] of Object.entries(op.with ?? {}))
+            plan[k] = t.replace(FIELD_REF, (_, key: string) => row[key] ?? "");
+          const one: WalkOutput = { ...out, goal: "", read: {}, records: {} };
+          try {
+            // Each row starts where the walk starts, not on the page the last row left.
+            await walkSpec(fp, sub, plan, deps, one, depth + 1, true);
+            done.push({ ...row, ...one.read, ...jsonOf(one.records) });
+          } catch (err) {
+            // A person needed, or the model cap hit: every next row would stop there too.
+            if (err instanceof NeedsHuman || one.aiCalls > AI_CALLS) throw err;
+            failed++;
+            done.push({ ...row, error: (err as Error).message });
+          } finally {
+            out.aiCalls = one.aiCalls;
+          }
+        }
+        // Every row failing is a broken walk, not bad rows.
+        if (rows.length && failed === rows.length)
+          throw new Error(`${op.goal}: every row failed; first: ${done[0]?.error}`);
+        out.records[op.as] = done;
         return;
       }
     }

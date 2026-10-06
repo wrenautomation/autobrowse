@@ -6,7 +6,7 @@ import type { Hints } from "../src/browser/locate.js";
 import { NeedsHuman } from "../src/browser/session.js";
 import type { Passkeys } from "../src/browser/webauthn.js";
 import type { SecretSink } from "../src/deps/sink.js";
-import { walkFlow } from "../src/walks/flow.js";
+import { listed, walkFlow } from "../src/walks/flow.js";
 import type { WalkOp, WalkSpec } from "../src/walks/spec.js";
 
 /** A page of the fake site: its address, what lookAt sees, and where an act goes. */
@@ -665,5 +665,104 @@ describe("records and ai ops in a walk", () => {
     }).run(fakeSite(page, "list", { html: ADS }).fp, {});
     expect(out.records.ads).toHaveLength(1);
     expect(saved[0]?.screens[0]?.ops[0]).toMatchObject({ kind: "records", code: GOOD });
+  });
+
+  describe("each: one walk per row", () => {
+    // Opens the row's link and reads its headline.
+    const ad: WalkSpec = {
+      ...listWalk([
+        { kind: "open", goal: "open the ad", url: "{link}" },
+        { kind: "read", goal: "headline", as: "headline", hints: hints("heading", "headline") },
+      ]),
+      name: "ad",
+      fields: [{ key: "link", label: "Link", example: "https://lib.test/ad/1" }],
+    };
+    const load = (_site: string, name: string) => (name === "ad" ? ad : null);
+    const each = (
+      over: string,
+      extra: Partial<Extract<WalkOp, { kind: "each" }>> = {},
+    ): WalkOp => ({
+      kind: "each",
+      goal: "read each ad",
+      over,
+      walk: "ad",
+      as: "detail",
+      ...extra,
+    });
+    /** The list page; an ad page whose URL is in `broken` has no headline. */
+    const site = (broken: string[] = []) => {
+      const s = fakeSite({ list: { url: "https://lib.test/ads", landmarks: [] } }, "list", {
+        html: ADS,
+      });
+      s.fp.read = async (h) => {
+        if (broken.includes(s.fp.url())) throw new Error("no headline");
+        return `${h.name} of ${s.fp.url()}`;
+      };
+      return s;
+    };
+
+    it("runs the walk on every records row and keeps what it read; a failed row keeps its error", async () => {
+      const { fp, log } = site(["https://lib.test/ad/2"]);
+      const out = await walkFlow(listWalk([records(GOOD), each("ads")]), { load }).run(fp, {});
+      expect(log.filter((l) => l.startsWith("open"))).toEqual([
+        "open https://lib.test/ad/1",
+        "open https://lib.test/ad/2",
+      ]);
+      expect(out.records.detail).toEqual([
+        {
+          advertiser: "Acme Staffing",
+          link: "https://lib.test/ad/1",
+          headline: "headline of https://lib.test/ad/1",
+        },
+        {
+          advertiser: "Globex Talent",
+          link: "https://lib.test/ad/2",
+          error: "no headline",
+        },
+      ]);
+      expect(out.screens).toEqual(["ad/read", "read"]);
+    });
+
+    it("takes a plan field's lines as rows, maps them with `with`, and stops at max", async () => {
+      const { fp, log } = site();
+      const w = {
+        ...listWalk([each("urls", { with: { link: "{item}" }, max: 2 })]),
+        fields: [{ key: "urls", label: "URLs", example: "" }],
+      };
+      const out = await walkFlow(w, { load }).run(fp, {
+        urls: "https://a.test/1\n\nhttps://a.test/2\nhttps://a.test/3",
+      });
+      expect(log.filter((l) => l.startsWith("open"))).toEqual([
+        "open https://a.test/1",
+        "open https://a.test/2",
+      ]);
+      expect(out.records.detail?.map((r) => r.headline)).toEqual([
+        "headline of https://a.test/1",
+        "headline of https://a.test/2",
+      ]);
+    });
+
+    it("fails when every row fails, and stops at the first row that needs a person", async () => {
+      const both = ["https://lib.test/ad/1", "https://lib.test/ad/2"];
+      await expect(
+        walkFlow(listWalk([records(GOOD), each("ads")]), { load }).run(site(both).fp, {}),
+      ).rejects.toThrow("read each ad: every row failed; first: no headline");
+
+      const s = site();
+      s.fp.read = async () => s.fp.human("a login wall");
+      await expect(
+        walkFlow(listWalk([records(GOOD), each("ads")]), { load }).run(s.fp, {}),
+      ).rejects.toThrow(NeedsHuman);
+      expect(s.log.filter((l) => l.startsWith("open"))).toHaveLength(1);
+    });
+
+    it("reads a plan value as rows: JSON objects, JSON scalars, or lines", () => {
+      expect(listed('[{"link":"x","n":2,"z":null}, 3]')).toEqual([
+        { link: "x", n: "2", z: null },
+        { item: "3" },
+      ]);
+      expect(listed(" a \n\n b ")).toEqual([{ item: "a" }, { item: "b" }]);
+      expect(listed("[not json")).toEqual([{ item: "[not json" }]);
+    });
   });
 });

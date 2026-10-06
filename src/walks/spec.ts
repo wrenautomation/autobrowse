@@ -24,6 +24,8 @@ import { baseSite } from "../runs/log.js";
 export const WALK_VERSION = 2;
 /** How deep walks may nest: a walk op inside a walk inside a walk… */
 export const MAX_DEPTH = 4;
+/** Rows one `each` op runs, at most. */
+export const MAX_EACH = 500;
 
 const NAME = /^[a-z][a-z0-9-]*$/;
 const SITE = /^[a-z0-9][a-z0-9._-]*$/i;
@@ -69,6 +71,9 @@ export type WalkField = z.infer<typeof walkFieldSchema>;
 /** `{key}` in an open URL, a click's hints or a select's value: that field's value. */
 export const FIELD_REF = /\{([a-z][a-zA-Z0-9]*)\}/g;
 
+/** `name` on this site, or `site/name`. */
+const WALK_REF = /^([a-z0-9][a-z0-9._-]*\/)?[a-z][a-z0-9-]*$/;
+
 const [clickOp, fillOp, selectOp, pressOp, uploadOp, ...restOps] = opSchema.options;
 
 /** The outline's ops, plus what a walk adds: a page to open, a captcha, another walk. */
@@ -79,13 +84,34 @@ export const walkOpSchema = z.discriminatedUnion("kind", [
   pressOp,
   uploadOp.extend({ file: walkValueSchema }),
   ...restOps,
-  z.object({ kind: z.literal("open"), goal: z.string(), url: z.string().url() }),
+  z.object({
+    kind: z.literal("open"),
+    goal: z.string(),
+    /** A URL, or one whole field (`{link}`) holding a URL: a row's link in an `each`. */
+    url: z.union([z.string().url(), z.string().regex(/^\{[a-z][a-zA-Z0-9]*\}$/)]),
+  }),
   z.object({ kind: z.literal("captcha"), goal: z.string() }),
   /** Another walk, by `name` on this site or `site/name`: a sign-in inside a setup. */
   z.object({
     kind: z.literal("walk"),
     goal: z.string(),
-    walk: z.string().regex(/^([a-z0-9][a-z0-9._-]*\/)?[a-z][a-z0-9-]*$/),
+    walk: z.string().regex(WALK_REF),
+  }),
+  /**
+   * Another walk once per row: the rows of an earlier `records` op, or one per
+   * line (or JSON array item) of a plan field. Each run gets the row's fields
+   * as its plan, `with` mapping them (`{ url: "{link}" }`); what it reads
+   * joins the row, kept under `as`. A row that fails keeps its `error`.
+   */
+  z.object({
+    kind: z.literal("each"),
+    goal: z.string(),
+    over: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
+    walk: z.string().regex(WALK_REF),
+    as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
+    with: z.record(z.string(), z.string()).optional(),
+    /** Rows run, at most; the rest are left out and counted. */
+    max: z.number().int().positive().max(MAX_EACH).optional(),
   }),
 ]);
 export type WalkOp = z.infer<typeof walkOpSchema>;
@@ -145,6 +171,11 @@ export const walkSpecSchema = z
       ctx.addIssue({ code: "custom", path: ["screens"], message: "no goal screen" });
     const fields = new Set(w.fields.map((f) => f.key));
     const secrets = new Set(w.secrets.map((s) => s.key));
+    const lists = new Set(
+      w.screens.flatMap((s) =>
+        s.ops.flatMap((op) => (op.kind === "records" || op.kind === "each" ? [op.as] : [])),
+      ),
+    );
     w.screens.forEach((s, i) => {
       for (const a of s.after ?? [])
         if (!names.has(a))
@@ -166,6 +197,12 @@ export const walkSpecSchema = z
             code: "custom",
             path: ["screens", i, "ops", j],
             message: `secret ${v.key} is not declared`,
+          });
+        if (op.kind === "each" && !lists.has(op.over) && !fields.has(op.over))
+          ctx.addIssue({
+            code: "custom",
+            path: ["screens", i, "ops", j],
+            message: `${op.over} is neither a records op's rows nor a declared field`,
           });
         for (const k of fieldRefs(op))
           if (!fields.has(k))

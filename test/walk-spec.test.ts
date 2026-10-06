@@ -160,6 +160,34 @@ describe("walkSpecSchema", () => {
     expect(ok("Sign-In")).toBe(false);
     expect(walkOpSchema.safeParse({ kind: "open", goal: "o", url: "nope" }).success).toBe(false);
     expect(walkOpSchema.safeParse({ kind: "captcha", goal: "c" }).success).toBe(true);
+    expect(walkOpSchema.safeParse({ kind: "open", goal: "o", url: "{link}" }).success).toBe(true);
+    expect(walkOpSchema.safeParse({ kind: "open", goal: "o", url: "x{link}" }).success).toBe(false);
+  });
+
+  it("wants an each over a records op's rows or a declared field", () => {
+    const withEach = (over: string, before: WalkSpec["screens"][number]["ops"] = []) => {
+      const w = spec();
+      screen(1, w).ops = [
+        ...before,
+        { kind: "each", goal: "each ad", over, walk: "ad", as: "detail" },
+      ];
+      return w;
+    };
+    expect(issues(withEach("email"))).toEqual([]);
+    expect(issues(withEach("ads"))).toEqual([
+      "ads is neither a records op's rows nor a declared field",
+    ]);
+    const rows = {
+      kind: "records" as const,
+      goal: "ads",
+      as: "ads",
+      fields: [{ key: "link", says: "its page" }],
+      key: "link",
+      code: "return []",
+      min: 0,
+      sample: [],
+    };
+    expect(issues(withEach("ads", [rows]))).toEqual([]);
   });
 });
 
