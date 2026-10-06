@@ -10,7 +10,14 @@ import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
 import { memoryCaps } from "../src/sites/caps.js";
-import { REDDIT_ORIGIN, reddit, SITES, SiteError, siteFacade } from "../src/sites/index.js";
+import {
+  REDDIT_ORIGIN,
+  reddit,
+  redditPublic,
+  SITES,
+  SiteError,
+  siteFacade,
+} from "../src/sites/index.js";
 import { fakeBrowser, fakeFetch } from "./fakes.js";
 
 const routeOf = (method: string, path: string) => {
@@ -48,6 +55,9 @@ describe("reddit site", () => {
       "GET /user/{username}/about",
       "GET /r/{subreddit}/new",
       "GET /r/{subreddit}/search",
+      "GET /r/{subreddit}/top",
+      "GET /r/{subreddit}/about",
+      "GET /subreddits/search",
       "GET /search",
       "GET /message/{where}",
       "GET /api/info",
@@ -224,6 +234,9 @@ describe("reddit browser leg inputs", () => {
       "/user/{username}/about": { username: "WrenAutomation" },
       "/r/{subreddit}/new": { subreddit: "startups" },
       "/r/{subreddit}/search": { subreddit: "startups", q: "hiring" },
+      "/r/{subreddit}/top": { subreddit: "startups" },
+      "/r/{subreddit}/about": { subreddit: "startups" },
+      "/subreddits/search": { q: "agency owners" },
       "/search": { q: "recruiting agency" },
       "/message/{where}": { where: "unread" },
       "/api/info": { id: "t3_a" },
@@ -362,5 +375,62 @@ describe("reddit through the facade", () => {
     expect(sleeps).toHaveLength(1);
     expect(sleeps[0]).toBeGreaterThanOrEqual(20_000);
     expect(sleeps[0]).toBeLessThanOrEqual(60_000);
+  });
+});
+
+describe("reddit-public", () => {
+  it("serves the public reads only, signed out in its own profile, on www", async () => {
+    expect(SITES).toContain(redditPublic);
+    expect(redditPublic.signedOut).toBe(true);
+    const paths = redditPublic.routes.map((r) => r.path);
+    expect(paths).not.toContain("/api/v1/me");
+    expect(paths).not.toContain("/message/{where}");
+    expect(redditPublic.routes.every((r) => r.method === "GET")).toBe(true);
+    const ran: { site: string; input: unknown }[] = [];
+    const sites = siteFacade([{ ...redditPublic, pace: { gapMs: 0 } }], {
+      http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+      env: () => undefined,
+      sink: memorySink(),
+      runner: {
+        run: async (flow, input) => {
+          ran.push({ site: flow.site, input });
+          return { kind: "Listing" } as never;
+        },
+      },
+      flow: (n) => BROWSER_FLOWS[n] ?? null,
+    });
+    await sites.call("reddit-public", "GET", "/subreddits/search?q=agency", {});
+    expect(ran).toEqual([
+      {
+        site: "reddit-public",
+        input: { path: "/subreddits/search", query: { q: "agency", limit: 25 }, signedOut: true },
+      },
+    ]);
+  });
+
+  it("the read flow fetches www when signed out, old Reddit otherwise, spaces as %20", async () => {
+    const urls: string[] = [];
+    const fp = (at: string) =>
+      ({
+        url: () => at,
+        open: async (u: string) => urls.push(`open ${u}`),
+        page: {
+          evaluate: async (_fn: unknown, url: string) => {
+            urls.push(url);
+            return { status: 200, body: { data: { children: [] } } };
+          },
+        },
+      }) as unknown as FlowPage;
+    await redditRead.run(fp("about:blank"), {
+      path: "/subreddits/search",
+      query: { q: "agency owners" },
+      signedOut: true,
+    });
+    await redditRead.run(fp("https://old.reddit.com/"), { path: "/r/agency/new" });
+    expect(urls).toEqual([
+      "open https://www.reddit.com/",
+      "https://www.reddit.com/subreddits/search.json?q=agency%20owners&raw_json=1",
+      "https://old.reddit.com/r/agency/new.json?raw_json=1",
+    ]);
   });
 });

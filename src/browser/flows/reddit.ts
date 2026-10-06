@@ -33,6 +33,8 @@ interface El {
 declare const document: El;
 
 export const OLD = "https://old.reddit.com";
+/** Old Reddit walls a signed-out visitor at /login (2026-10-06); www answers the same `.json` signed out. */
+export const WWW = "https://www.reddit.com";
 const RENDER_MS = 15_000;
 const LAND_MS = 30_000;
 
@@ -67,7 +69,34 @@ const THING_FIELDS = [
   "over_18",
   "locked",
   "stickied",
+  "archived",
   "removed_by_category",
+  "link_flair_text",
+  "domain",
+  "distinguished",
+] as const;
+/** A subreddit (t5) as `/r/{sr}/about` and `/subreddits/search` show it: who's there, what it allows, its posting notes. */
+const SUBREDDIT_FIELDS = [
+  "id",
+  "name",
+  "display_name",
+  "title",
+  "public_description",
+  "description",
+  "subscribers",
+  "accounts_active",
+  "active_user_count",
+  "created_utc",
+  "subreddit_type",
+  "over18",
+  "quarantine",
+  "submission_type",
+  "submit_text",
+  "link_flair_enabled",
+  "restrict_posting",
+  "restrict_commenting",
+  "lang",
+  "url",
 ] as const;
 /** The account as `/api/v1/me` answers it, minus the session's secrets. */
 const ME_FIELDS = [
@@ -133,9 +162,10 @@ export function slimListing(l: unknown): Obj {
     data: {
       after: data.after ?? null,
       before: data.before ?? null,
-      children: children
-        .filter(isObj)
-        .map((c) => ({ kind: c.kind, data: pick(c.data, THING_FIELDS) })),
+      children: children.filter(isObj).map((c) => ({
+        kind: c.kind,
+        data: pick(c.data, c.kind === "t5" ? SUBREDDIT_FIELDS : THING_FIELDS),
+      })),
     },
   };
 }
@@ -172,7 +202,12 @@ const READS: Array<{ path: RegExp; slim: (body: unknown) => unknown }> = [
     slim: (b) => pick(isObj(b) ? b.data : null, USER_FIELDS),
   },
   { path: new RegExp(`^/r/${SR}/(new|hot|top|search)$`), slim: slimListing },
+  {
+    path: new RegExp(`^/r/${SR}/about$`),
+    slim: (b) => pick(isObj(b) ? b.data : null, SUBREDDIT_FIELDS),
+  },
   { path: /^\/search$/, slim: slimListing },
+  { path: /^\/subreddits\/search$/, slim: slimListing },
   { path: /^\/message\/(inbox|unread|sent)$/, slim: slimMessages },
   {
     path: /^\/comments\/[a-z0-9]{1,12}$/,
@@ -186,33 +221,41 @@ const READS: Array<{ path: RegExp; slim: (body: unknown) => unknown }> = [
   },
 ];
 
-/** GET the page's `.json` twin from inside the signed-in page. */
-async function fetchJson(fp: FlowPage, path: string, query: Record<string, string> = {}) {
-  if (!fp.url().startsWith(OLD)) await fp.open(`${OLD}/`);
-  const q = new URLSearchParams({ ...query, raw_json: "1" }).toString();
+/** GET the page's `.json` twin from inside the page: signed in, or signed out under `reddit-public`. */
+async function fetchJson(
+  fp: FlowPage,
+  path: string,
+  query: Record<string, string> = {},
+  origin = OLD,
+) {
+  if (!fp.url().startsWith(origin)) await fp.open(`${origin}/`);
+  // %20, not +: Reddit's search reads a + as part of the word ("agency+owners" finds nothing).
+  const q = new URLSearchParams({ ...query, raw_json: "1" }).toString().replace(/\+/g, "%20");
   return fp.page.evaluate(async (url) => {
     const res = await fetch(url, {
       credentials: "include",
       headers: { accept: "application/json" },
     });
     return { status: res.status, body: res.ok ? ((await res.json()) as unknown) : null };
-  }, `${OLD}${path}.json?${q}`);
+  }, `${origin}${path}.json?${q}`);
 }
 
 export interface ReadInput {
   /** One of the READS paths, concrete: `/user/WrenAutomation/submitted`. */
   path: string;
   query?: Record<string, string | number>;
+  /** Read signed out (`reddit-public`): on www, since old Reddit sends a signed-out visitor to /login. */
+  signedOut?: boolean;
 }
 
 export const redditRead = defineFlow<ReadInput, unknown>({
   site: "reddit",
   name: "read",
-  async run(fp, { path, query = {} }) {
+  async run(fp, { path, query = {}, signedOut = false }) {
     const read = READS.find((r) => r.path.test(path));
     if (!read) throw new Error(`reddit read: ${path} is not a read this flow serves`);
     const q = Object.fromEntries(Object.entries(query).map(([k, v]) => [k, String(v)]));
-    const got = await fetchJson(fp, path, q);
+    const got = await fetchJson(fp, path, q, signedOut ? WWW : OLD);
     if (got.status === 404) return { error: 404, message: `no such thing: ${path}` };
     if (got.status !== 200) throw new Error(`reddit read ${path}: HTTP ${got.status}`);
     const out = read.slim(got.body);

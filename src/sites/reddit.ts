@@ -73,6 +73,11 @@ const srSearch = z.object({
   after: z.string().optional(),
   restrict_sr: z.literal("on").default("on"),
 });
+const sr = z.object({ subreddit: z.string().regex(/^[A-Za-z0-9_]{2,21}$/) });
+const top = listing.extend({
+  t: z.enum(["hour", "day", "week", "month", "year", "all"]).default("week"),
+});
+const srFind = z.object({ q: z.string().min(1).max(512), limit, after: z.string().optional() });
 const search = srSearch.omit({ subreddit: true, restrict_sr: true }).extend({
   type: z.enum(["link", "sr", "user"]).default("link"),
 });
@@ -164,6 +169,34 @@ export const reddit: SiteApi = {
     }),
     route({
       method: "GET",
+      path: "/r/{subreddit}/top",
+      request: top,
+      meter: () => ({ reads: 1 }),
+      browser: {
+        flow: read,
+        input: ({ subreddit, ...q }) => ({ path: `/r/${subreddit}/top`, query: query(q) }),
+      },
+      summary: "A subreddit's top posts over `t` (default week; `limit`, `after`)",
+    }),
+    route({
+      method: "GET",
+      path: "/r/{subreddit}/about",
+      request: sr,
+      meter: () => ({ reads: 1 }),
+      browser: { flow: read, input: ({ subreddit }) => ({ path: `/r/${subreddit}/about` }) },
+      summary:
+        "A subreddit's card: subscribers, active, description, type, over18, submission_type, submit_text",
+    }),
+    route({
+      method: "GET",
+      path: "/subreddits/search",
+      request: srFind,
+      meter: () => ({ reads: 1 }),
+      browser: { flow: read, input: (q) => ({ path: "/subreddits/search", query: query(q) }) },
+      summary: "Subreddits matching `q` (t5 cards, as `/r/{subreddit}/about` shows them)",
+    }),
+    route({
+      method: "GET",
       path: "/search",
       request: search,
       meter: () => ({ reads: 1 }),
@@ -248,5 +281,40 @@ export const reddit: SiteApi = {
         "! A private message to an account (not chat); answers {json:{errors,data:{delivered}}}; 5 a day",
     }),
   ],
+  setup: [],
+};
+
+/** The account's own reads: never under the signed-out site. */
+const OWN = new Set(["/api/v1/me", "/message/{where}"]);
+
+/**
+ * Reddit's public reads, signed out in a profile of their own: finding places, threads and
+ * people (designs/2026-10-06-reddit-discovery.md). Read volume on a signed-in account is what
+ * Reddit flags; signed out, the only cost is the rate limit. Same flow as `reddit`, never its profile.
+ */
+export const redditPublic: SiteApi = {
+  site: "reddit-public",
+  origin: REDDIT_ORIGIN,
+  auth: { open: true },
+  signedOut: true,
+  caps: { reads: 400 },
+  pace: { gapMs: 6_000, jitterMs: 3_000 },
+  routes: reddit.routes
+    .filter((r) => r.method === "GET" && !OWN.has(r.path))
+    .map((r) => {
+      const leg = r.browser;
+      if (!leg) return r;
+      const input = leg.input;
+      return {
+        ...r,
+        browser: {
+          ...leg,
+          input: (q: never, env: (name: string) => string | undefined) => ({
+            ...((input ? input(q, env) : q) as object),
+            signedOut: true,
+          }),
+        },
+      };
+    }),
   setup: [],
 };

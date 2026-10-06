@@ -184,6 +184,7 @@ describe("instagram and tiktok consents and OAuth shapes", () => {
       "meta",
       "x",
       "reddit",
+      "reddit-public",
       "loom",
       "npm",
       "calcom",
