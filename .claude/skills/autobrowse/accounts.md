@@ -19,6 +19,7 @@ through a provider (`creds via <site> google`) signs in as that provider account
 ```sh
 pnpm -s autobrowse creds list [platform]           # stored sites; reads SSM in prod, so not in a loop
 pnpm -s autobrowse creds copy <site> [account]     # one field on the clipboard for a minute; never printed
+pnpm -s autobrowse creds link <site> [account]     # one-time link for William's phone (10 min, one reveal); Wren's accounts only unless he names one; one per ask
 pnpm -s autobrowse creds paste <site>@<label>      # William's `email password [key]` from the clipboard
 pnpm -s autobrowse creds push <site> | --all       # to SSM, so the box signs in too; `pull` the other way
 pnpm -s autobrowse creds history <site>            # versions kept; `restore <site> <version>`

@@ -128,6 +128,10 @@ const schema = z.object({
   oauthPort: z.coerce.number().int().default(9400),
   /** Bearer the UI and inbound hooks need for anything that changes a run. Unset = local only, no auth. */
   uiToken: z.string().min(1).optional(),
+  /** wren's phone Worker, where `creds link` mints a one-time link to a login. */
+  credLinkUrl: z.string().url().default("https://phone.wrenautomation.com"),
+  /** The secret that Worker checks a mint's signature with (same value as wren's). Unset = `creds link` off. */
+  credLinkSecret: z.string().min(1).optional(),
   /** Agent keys (hashes and scopes, never a key): who may see and call what (`access/keys`). */
   accessFile: z.string().min(1).default("~/.config/autobrowse/access.json"),
   /** Bind address for the UI; see `startUiServer`. */
@@ -354,6 +358,8 @@ export const ENV_KEYS = {
   uiPort: "UI_PORT",
   oauthPort: "OAUTH_PORT",
   uiToken: "UI_TOKEN",
+  credLinkUrl: "CRED_LINK_URL",
+  credLinkSecret: "CRED_LINK_SECRET",
   accessFile: "ACCESS_FILE",
   uiHost: "UI_HOST",
   webhookUrl: "WEBHOOK_URL",

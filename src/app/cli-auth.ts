@@ -26,6 +26,7 @@ import {
   viaLogin,
 } from "../auth/index.js";
 import { CRED_ENV } from "../auth/keep.js";
+import { mintCredentialLink } from "../auth/link.js";
 import { dropRole, giveRole } from "../auth/roles.js";
 import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
 import { expandHome } from "../google-auth.js";
@@ -38,6 +39,7 @@ import type { Settings } from "./config.js";
 import { askSecretTwice } from "./prompt.js";
 import { headed } from "./screen.js";
 import {
+  auditFor,
   browserFor,
   browserOptions,
   captchaFor,
@@ -368,6 +370,33 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       console.log(
         `${site} (${cred.username}) ${o.field} is on the clipboard for ${CLIPBOARD_MS / 1000}s`,
       );
+    });
+  creds
+    .command("link <site> [account]")
+    .description(
+      "A one-time link to a stored login, for the phone: after Wren's sign-in it gives Copy username and Copy password; dead after one reveal or 10 min. Only the link is printed. Several accounts on the site: name one",
+    )
+    .action(async (given: string, account: string | undefined) => {
+      if (!settings.credLinkSecret)
+        throw new Error("no CRED_LINK_SECRET in the env (wren deploy/phone.md)");
+      const site = await pickAccount(credentialsFor(settings, { armed: false }), given, account);
+      const cred = await credentialsFor(settings).get(site);
+      if (!cred?.password) throw new Error(`${site} has no password stored`);
+      const link = await mintCredentialLink(settings.credLinkUrl, settings.credLinkSecret, {
+        site,
+        username: cred.username,
+        password: cred.password,
+      });
+      await auditFor(settings).record({
+        at: new Date().toISOString(),
+        credential: site,
+        field: "password",
+        site,
+        url: `${settings.credLinkUrl}/links`,
+        by: "creds link",
+        allowed: true,
+      });
+      console.log(link);
     });
   creds
     .command("paste <site>")
