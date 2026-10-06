@@ -44,8 +44,12 @@ await new Promise<void>((ok) =>
     )
     .listen(DESK_PORT, "127.0.0.1", ok),
 );
-// The settings are the box's twin: the tunnel name is overridden, never shared.
-const plan = planEndpoint({ ...settings, restateTunnelName: DESK_SERVICE });
+// On Cloud the settings are the box's twin: the tunnel name is overridden, never shared.
+// No Cloud settings: listen, registered on the box's server.
+const plan = planEndpoint({
+  ...settings,
+  restateTunnelName: settings.restateEnvironmentId ? DESK_SERVICE : undefined,
+});
 let reg: { id: string; services: string[] };
 if (plan.mode === "tunnel") {
   const { connectTunnel } = await import("@restatedev/restate-sdk-tunnel");
