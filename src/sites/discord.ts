@@ -336,6 +336,29 @@ export const discord: SiteApi = {
     }),
     route({
       method: "PATCH",
+      path: "/applications/@me",
+      request: z.object({
+        description: z.string().max(400).optional(),
+        /** A local path or URL to a png, jpg, gif or webp. */
+        icon: z.string().min(1).optional(),
+      }),
+      api: async ({ description, icon }, leg) => {
+        const a = await call<{ id: string; name: string; icon: string | null }>(
+          leg,
+          "PATCH",
+          "/applications/@me",
+          {
+            ...(description !== undefined ? { description } : {}),
+            ...(icon ? { icon: await imageData(icon) } : {}),
+          },
+        );
+        return { id: a.id, name: a.name, icon: a.icon };
+      },
+      summary:
+        "The bot's app: its description and icon (a local path or URL to a png/jpg/gif/webp)",
+    }),
+    route({
+      method: "PATCH",
       path: "/guilds/{guild}",
       request: z.object({
         guild: id,

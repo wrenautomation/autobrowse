@@ -91,6 +91,15 @@ describe("discord site", () => {
     expect(out).toMatchObject({ notifications: "mentions" });
   });
 
+  it("sets the app's description and nothing it was not given", async () => {
+    const t = leg(() => ({ body: { id: "5", name: "Wren", icon: null, secret: "x" } }));
+    const r = routeOf("PATCH", "/applications/@me");
+    const out = await r.api(r.request.parse({ description: "d" }), t.leg);
+    expect(t.calls[0]?.url.pathname).toContain("/applications/@me");
+    expect(JSON.parse(t.calls[0]?.body ?? "{}")).toEqual({ description: "d" });
+    expect(out).toEqual({ id: "5", name: "Wren", icon: null });
+  });
+
   it("invites with channels, roles and webhooks, never admin", () => {
     const p = BigInt(BOT_PERMISSIONS);
     expect(p & 8n).toBe(0n);
