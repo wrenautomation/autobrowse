@@ -113,7 +113,8 @@ const companyJobs = z.object({
 });
 const connect = z.object({ vanity, note: z.string().min(1).max(200).optional() });
 const message = z.object({ vanity, text: z.string().min(1).max(8000) });
-const connections = z.object({ max: z.coerce.number().int().min(1).max(200).default(40) });
+/** A list read from the top, newest first. */
+const newest = z.object({ max: z.coerce.number().int().min(1).max(200).default(40) });
 
 async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
   if (!res.ok) throw new HttpError("CALL", `${LINKEDIN_ORIGIN}/${what}`, res.status);
@@ -149,6 +150,7 @@ export const linkedin: SiteApi = {
     inbox: 48,
     network: 12,
     withdraw: 20,
+    notifications: 12,
   },
   // William's own profile reads and sends nothing until he lifts it (his call, 2026-10-01); a call is a 429.
   // Before: 40 profiles and 15 searches a day for client lookups (wren, 2026-09-29).
@@ -162,6 +164,7 @@ export const linkedin: SiteApi = {
       inbox: 0,
       network: 0,
       withdraw: 0,
+      notifications: 0,
     },
     // The research alt (2026-10-05): reads only, at a new account's pace for its first weeks.
     "linkedin@alt": {
@@ -173,6 +176,7 @@ export const linkedin: SiteApi = {
       inbox: 0,
       network: 0,
       withdraw: 0,
+      notifications: 0,
     },
   },
   pace: { gapMs: 10_000, jitterMs: 20_000 },
@@ -394,9 +398,18 @@ export const linkedin: SiteApi = {
       path: "/connections",
       summary:
         "Recently added connections, newest first (`max`, default 40): name, handle, headline, when they connected",
-      request: connections,
+      request: newest,
       meter: () => ({ network: 1 }),
       browser: { flow: "linkedin/connections" },
+    }),
+    route({
+      method: "GET",
+      path: "/notifications",
+      summary:
+        "The notifications page, newest first (`max`, default 40): id, kind, actor, text, url, approximate time, raw. Reads only",
+      request: newest,
+      meter: () => ({ notifications: 1 }),
+      browser: { flow: "linkedin/notifications" },
     }),
     route({
       method: "GET",

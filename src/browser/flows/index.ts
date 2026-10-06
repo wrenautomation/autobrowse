@@ -26,6 +26,10 @@ export {
   type CreatePostInput as LinkedInCreatePostInput,
   linkedinCreatePost,
 } from "./linkedin-create-post.js";
+export {
+  linkedinNotifications,
+  type Notification as LinkedInNotification,
+} from "./linkedin-notifications.js";
 export { linkedinOauthConsent } from "./linkedin-oauth-consent.js";
 export {
   type Company as LinkedInCompany,

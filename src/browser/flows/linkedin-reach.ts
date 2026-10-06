@@ -141,7 +141,7 @@ const rowsOnPage = (fp: FlowPage): Promise<RawRow[]> =>
  */
 const dontAllow: Hints = { role: "button", name: "/^don.t allow$/i" };
 
-async function go(fp: FlowPage, url: string): Promise<void> {
+export async function go(fp: FlowPage, url: string): Promise<void> {
   await fp.open(url);
   if (await fp.has(dontAllow, 2_000))
     await fp.act({ kind: "click" }, dontAllow, { goal: "keep page visits private" });
