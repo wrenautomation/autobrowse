@@ -50,6 +50,8 @@ export interface SolveOptions {
   rounds?: number;
   /** How long a tick or a new challenge takes to show. Default 8s. */
   settleMs?: number;
+  /** How long a vanished challenge must stay gone to count as solved. Default 3s. */
+  goneMs?: number;
 }
 
 const T = { timeout: 10_000 };
@@ -166,11 +168,14 @@ export async function solveCaptcha(page: Page, o: SolveOptions): Promise<Captcha
   const settle = o.settleMs ?? 8_000;
   let last: Captcha | null = null;
   for (let round = 1; round <= rounds; round++) {
-    const now = await findCaptcha(page);
+    let now = await findCaptcha(page);
     if (!now) {
       if (!last)
         return { solved: false, kind: null, vendor: null, reason: "no captcha on the page" };
-      return { solved: true, ...last, rounds: round - 1 };
+      // hCaptcha hides its frame between puzzles: gone counts only if it stays gone.
+      await page.waitForTimeout(o.goneMs ?? 3_000);
+      now = await findCaptcha(page);
+      if (!now) return { solved: true, ...last, rounds: round - 1 };
     }
     last = now;
     if (now.kind !== "checkbox" && now.kind !== "hold" && !o.eyes)

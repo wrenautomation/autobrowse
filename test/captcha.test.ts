@@ -76,6 +76,40 @@ describe("captcha", () => {
     });
   });
 
+  it("a challenge that vanishes between puzzles is not solved", async () => {
+    // Checkbox, then nothing for a moment, then hCaptcha's next puzzle.
+    let state: "checkbox" | "between" | "puzzle" = "checkbox";
+    const shows = { checkbox: "frame=checkbox", between: "none", puzzle: "frame=challenge" };
+    const unticked = { first: () => ({ isVisible: async () => false }) };
+    const page = {
+      ...pageShowing(),
+      locator: (sel: string) => ({
+        first: () => ({
+          isVisible: async () => sel.includes("hcaptcha") && sel.includes(shows[state]),
+          contentFrame: () => ({ locator: () => unticked }),
+        }),
+      }),
+      frames: () => [
+        { url: () => "https://example.com/", locator: (sel: string) => page.locator(sel) },
+      ],
+      // The next puzzle shows only while the solver checks that the challenge stayed gone.
+      waitForTimeout: async (ms: number) => {
+        if (ms === 7 && state === "between") state = "puzzle";
+      },
+    } as unknown as Page;
+    const clicky = {
+      think: async () => undefined,
+      click: async () => {
+        state = "between";
+      },
+    } as unknown as Hands;
+    expect(await solveCaptcha(page, { hands: clicky, settleMs: 1, goneMs: 7 })).toMatchObject({
+      solved: false,
+      kind: "grid",
+      vendor: "hcaptcha",
+    });
+  });
+
   it("a hand or eye that throws comes back as the reason, not a crash", async () => {
     const page = pageShowing("recaptcha/api2/anchor");
     const clumsy = {
