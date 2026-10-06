@@ -23,6 +23,7 @@ export const DISCORD_APP_ID = "DISCORD_APP_ID";
  * cannot ban or delete the server.
  */
 export const BOT_PERMISSIONS = (
+  (1n << 0n) | // create invites
   (1n << 10n) | // view channels
   (1n << 11n) | // send messages
   (1n << 5n) | // manage server (name, icon)
@@ -432,6 +433,32 @@ export const discord: SiteApi = {
       api: ({ channel }, leg) => call(leg, "DELETE", `/channels/${channel}`),
       irreversible: true,
       summary: "Delete a channel and its messages (irreversible)",
+    }),
+    route({
+      method: "POST",
+      path: "/channels/{channel}/invites",
+      request: z.object({
+        channel: id,
+        /** Seconds it lasts; 0 never expires. Discord's default is a day. */
+        max_age: z.number().int().min(0).max(604_800).default(86_400),
+        /** Joins it allows; 0 is unlimited. */
+        max_uses: z.number().int().min(0).max(100).default(1),
+      }),
+      api: async ({ channel, ...body }, leg) => {
+        const inv = await call<{ code: string; expires_at?: string | null; max_uses?: number }>(
+          leg,
+          "POST",
+          `/channels/${channel}/invites`,
+          { ...body, unique: true },
+        );
+        return {
+          code: inv.code,
+          url: `https://discord.gg/${inv.code}`,
+          expires_at: inv.expires_at ?? null,
+          max_uses: inv.max_uses ?? body.max_uses,
+        };
+      },
+      summary: "An invite to a channel's server: one use, a day, by default",
     }),
     route({
       method: "GET",

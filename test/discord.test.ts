@@ -100,6 +100,26 @@ describe("discord site", () => {
     expect(out).toEqual({ id: "5", name: "Wren", icon: null });
   });
 
+  it("makes a one-use, one-day invite by default", async () => {
+    const t = leg(() => ({
+      body: { code: "abc", expires_at: "2026-10-07T00:00:00Z", max_uses: 1 },
+    }));
+    const r = routeOf("POST", "/channels/{channel}/invites");
+    const out = await r.api(r.request.parse({ channel: "123456" }), t.leg);
+    expect(t.calls[0]?.url.pathname).toContain("/channels/123456/invites");
+    expect(JSON.parse(t.calls[0]?.body ?? "{}")).toEqual({
+      max_age: 86_400,
+      max_uses: 1,
+      unique: true,
+    });
+    expect(out).toEqual({
+      code: "abc",
+      url: "https://discord.gg/abc",
+      expires_at: "2026-10-07T00:00:00Z",
+      max_uses: 1,
+    });
+  });
+
   it("invites with channels, roles and webhooks, never admin", () => {
     const p = BigInt(BOT_PERMISSIONS);
     expect(p & 8n).toBe(0n);

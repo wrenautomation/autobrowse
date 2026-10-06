@@ -398,16 +398,12 @@ async function dropdownKind(target: Locator, o: ActTimeout): Promise<"select" | 
 export async function pressable(target: Locator, o: ActTimeout): Promise<Locator> {
   const up = await target
     .evaluate(
+      // No named helpers inside: tsx wraps them in `__name`, which the page does not have.
       (el) => {
-        const sized = (e: typeof el) => {
-          const r = e.getBoundingClientRect();
-          return r.width > 0 && r.height > 0;
-        };
-        if (sized(el)) return 0;
         let n = 0;
-        for (let e = el.parentElement; e && n < 6; e = e.parentElement) {
-          n++;
-          if (sized(e)) return n;
+        for (let e: typeof el | null = el; e && n <= 6; e = e.parentElement, n++) {
+          const r = e.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) return n;
         }
         return 0;
       },
