@@ -143,7 +143,7 @@ export const reddit: SiteApi = {
       meter: () => ({ reads: 1 }),
       browser: { flow: read, input: ({ username }) => ({ path: `/user/${username}/about` }) },
       summary:
-        "An account's public card: created_utc, link/comment/total karma, is_suspended, accept_pms",
+        "An account's public card: created_utc, link/comment/total karma, followers (its profile's subscribers), is_suspended, accept_pms",
     }),
     route({
       method: "GET",

@@ -199,7 +199,12 @@ const READS: Array<{ path: RegExp; slim: (body: unknown) => unknown }> = [
   { path: new RegExp(`^/user/${USER}/(submitted|comments)$`), slim: slimListing },
   {
     path: new RegExp(`^/user/${USER}/about$`),
-    slim: (b) => pick(isObj(b) ? b.data : null, USER_FIELDS),
+    // `followers`: the profile's subscriber count, which is how many follow the account.
+    slim: (b) => {
+      const d = isObj(b) ? b.data : null;
+      const sub = isObj(d) && isObj(d.subreddit) ? d.subreddit.subscribers : undefined;
+      return { ...pick(d, USER_FIELDS), ...(typeof sub === "number" ? { followers: sub } : {}) };
+    },
   },
   { path: new RegExp(`^/r/${SR}/(new|hot|top|search)$`), slim: slimListing },
   {
@@ -228,7 +233,10 @@ async function fetchJson(
   query: Record<string, string> = {},
   origin = OLD,
 ) {
-  if (!fp.url().startsWith(origin)) await fp.open(`${origin}/`);
+  // Signed out on www, the home page carries a "Continue with Google" sign-up rail that reads as a
+  // login wall; nobody signs in there, so only the fetch's own status says whether the read worked.
+  if (!fp.url().startsWith(origin))
+    await fp.open(`${origin}/`, origin === WWW ? { allowWall: true } : undefined);
   // %20, not +: Reddit's search reads a + as part of the word ("agency+owners" finds nothing).
   const q = new URLSearchParams({ ...query, raw_json: "1" }).toString().replace(/\+/g, "%20");
   return fp.page.evaluate(async (url) => {

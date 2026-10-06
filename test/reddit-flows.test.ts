@@ -95,8 +95,8 @@ function redditPage(o: {
         vendor: null,
         reason: o.captcha?.reason ?? "fake",
       }) as never,
-    async open(u) {
-      opens.push(u);
+    async open(u, opts) {
+      opens.push(opts?.allowWall ? `${u} (wall ok)` : u);
       url = u;
     },
     url: () => url,
@@ -325,6 +325,26 @@ describe("reddit/read", () => {
     });
     const q = redditPage({ fetch: () => ({ status: 200, body: {} }) });
     expect(await redditRead.run(q.fp, { path: "/r/startups/about/rules" })).toEqual({ rules: [] });
+  });
+
+  it("an account's card keeps its follower count; signed out it lands on www past the sign-up rail", async () => {
+    const p = redditPage({
+      fetch: () => ({
+        status: 200,
+        body: {
+          data: { name: "acme", total_karma: 3, subreddit: { subscribers: 12, title: "x" } },
+        },
+      }),
+    });
+    expect(await redditRead.run(p.fp, { path: "/user/acme/about", signedOut: true })).toEqual({
+      name: "acme",
+      total_karma: 3,
+      followers: 12,
+    });
+    expect(p.opens).toEqual(["https://www.reddit.com/ (wall ok)"]);
+    const q = redditPage({ fetch: () => ({ status: 200, body: { data: { name: "acme" } } }) });
+    expect(await redditRead.run(q.fp, { path: "/user/acme/about" })).toEqual({ name: "acme" });
+    expect(q.opens).toEqual(["https://old.reddit.com/"]);
   });
 
   it("404 is an answer; any other failure throws", async () => {
