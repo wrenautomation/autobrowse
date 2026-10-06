@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { FlowRunner } from "../src/browser/flow.js";
 import {
+  type Activity,
   activityOf,
   linkedinActivity,
+  newestFirst,
   type RawActivity,
+  readCards,
 } from "../src/browser/flows/linkedin-activity.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
@@ -14,46 +17,63 @@ import { linkedin } from "../src/sites/linkedin.js";
 import { fakePage } from "./auth-fakes.js";
 import { fakeFetch } from "./fakes.js";
 
-// Synthetic cards in the shape the page script returns; no real people or posts.
+// Synthetic cards in the shape the page script returns (SDUI layout, mapped
+// 2026-10-06); no real people, posts or ids.
 const FEED = "https://www.linkedin.com/feed/update/";
-const card = (urn: string, text: string, more: Partial<RawActivity> = {}): RawActivity => ({
-  urn,
+const ME = "test-person";
+const card = (key: string, text: string, more: Partial<RawActivity> = {}): RawActivity => ({
+  key,
   text,
-  links: [`https://www.linkedin.com/in/test-person/`],
+  links: [`https://www.linkedin.com/in/${ME}/`],
+  reactions: 0,
+  comments: 0,
   ...more,
 });
-const CARDS: RawActivity[] = [
-  card(
-    "urn:li:activity:2001",
-    "Test Person\nOwner at Example Staffing\n2w • Edited •\nHiring is slow in Q4. Here is what we changed.\n…more\n52\n12 comments\nLike\nComment\nRepost\nSend",
-    { body: "Hiring is slow in Q4. Here is what we changed." },
-  ),
-  card(
-    "urn:li:activity:2002",
-    "Test Person reposted this\nOther Author\nFounder at Sample Co\n3mo •\nA long post about placements and fees.\nOther Author and 7 others\n2 comments",
-  ),
-  card(
-    "urn:li:activity:2003",
-    "Test Person commented on this\nOther Author\n1d •\nA question about agency fees.\nTest Person\nWe charge a flat fee.\n1,204 reactions",
-    {
-      body: "A question about agency fees.",
-      comment: "We charge a flat fee.",
-      links: [
-        `${FEED}urn:li:activity:2003?commentUrn=urn%3Ali%3Acomment%3A(activity%3A2003%2C9001)`,
-      ],
+const POST = card(
+  "hashPost",
+  "Feed post\nTest Person\n • 3rd+\nOwner at Example Staffing\n2w • Edited •\nHiring is slow in Q4. Here is what we changed.\n… more\n52\n12\n3",
+  { body: "Hiring is slow in Q4. Here is what we changed.", reactions: 52, comments: 12 },
+);
+const REPOST = card(
+  "hashRepost",
+  "Feed post\nTest Person reposted this\nOther Author\n • 3rd+\nFounder at Sample Co\n3mo •\nA long post about placements and fees.\n8\n2",
+  {
+    body: "A long post about placements and fees.",
+    reactions: 8,
+    comments: 2,
+    links: [`${FEED}urn:li:activity:2002/`],
+  },
+);
+const COMMENT = card(
+  "hashComment",
+  "Feed post\nTest Person commented\nOther Author\n1d •\nA question about agency fees.\n1,204\n30\nTest Person\n • You\nWe charge a flat fee.\n5h",
+  {
+    body: "A question about agency fees.",
+    reactions: 1204,
+    comments: 30,
+    comment: {
+      urn: "urn:li:comment:(activity:2003,9001)",
+      age: "5h",
+      text: "We charge a flat fee.",
+      reactions: 2,
+      replies: 1,
     },
-  ),
-  card(
-    "urn:li:activity:2004",
-    "Test Person likes this\nOther Author\n4d •\nSomeone else's post.\n9",
-  ),
-];
+  },
+);
+const LIKE = card(
+  "hashLike",
+  "Feed post\nTest Person likes this\nOther Author\n4d •\nSomeone else's post.",
+  {
+    body: "Someone else's post.",
+  },
+);
 const NOW = new Date("2026-10-06T12:00:00.000Z");
+const of = (r: RawActivity) => activityOf(r, NOW, ME);
 
 describe("linkedin activity: a card", () => {
-  it("a post: urn, text, age and its instant, counts, url, raw", () => {
-    expect(activityOf(CARDS[0] as RawActivity, NOW)).toEqual({
-      urn: "urn:li:activity:2001",
+  it("a post: card-hash urn, body, age and its instant, button counts, activity-page url", () => {
+    expect(of(POST)).toEqual({
+      urn: "urn:li:card:hashPost",
       kind: "post",
       text: "Hiring is slow in Q4. Here is what we changed.",
       age: "2w",
@@ -61,53 +81,88 @@ describe("linkedin activity: a card", () => {
       approx: true,
       reactions: 52,
       comments: 12,
-      url: `${FEED}urn:li:activity:2001/`,
-      raw: CARDS[0],
+      url: `https://www.linkedin.com/in/${ME}/recent-activity/all/`,
+      raw: POST,
     });
   });
 
-  it("a repost and a comment by their headers; a comment keeps its own urn; a reaction is no item", () => {
-    const [, repost, comment, like] = CARDS.map((c) => activityOf(c, NOW));
-    expect(repost).toMatchObject({
+  it("a repost takes its linked urn; a comment its own urn, age and counts; a reaction is no item", () => {
+    expect(of(REPOST)).toMatchObject({
+      urn: "urn:li:activity:2002",
       kind: "repost",
       text: "A long post about placements and fees.",
       age: "3mo",
-      reactions: 8,
-      comments: 2,
+      url: `${FEED}urn:li:activity:2002/`,
     });
-    expect(comment).toMatchObject({
+    expect(of({ ...REPOST, links: [] })?.urn).toBe("urn:li:card:hashRepost");
+    expect(of(COMMENT)).toMatchObject({
       urn: "urn:li:comment:(activity:2003,9001)",
       kind: "comment",
       text: "We charge a flat fee.",
-      age: "1d",
-      reactions: 1204,
+      age: "5h",
+      at: "2026-10-06T07:00:00.000Z",
+      reactions: 2,
+      comments: 1,
       url: `${FEED}urn:li:activity:2003/`,
     });
-    expect(like).toBeNull();
+    expect(of(LIKE)).toBeNull();
   });
 
-  it("no urn or no age: no item, or an item with no time", () => {
-    expect(activityOf({ ...(CARDS[0] as RawActivity), urn: "" }, NOW)).toBeNull();
-    const undated = activityOf(card("urn:li:activity:5", "Just words here"), NOW);
-    expect(undated).toMatchObject({ kind: "post", text: "Just words here" });
-    expect(undated?.at).toBeUndefined();
+  it("no key, no text, or a comment card without theirs: no item", () => {
+    expect(of({ ...POST, key: "" })).toBeNull();
+    expect(of({ ...POST, body: undefined })).toBeNull();
+    const { comment: _, ...noComment } = COMMENT;
+    expect(of(noComment)).toBeNull();
+  });
+
+  it("both tabs merge newest first, max kept, undated last", () => {
+    const [post, repost, comment] = [POST, REPOST, COMMENT].map(of) as Activity[];
+    const undated = { ...(post as Activity), urn: "x", at: undefined };
+    expect(
+      newestFirst([[post, repost, undated] as Activity[], [comment as Activity]], 3).map(
+        (a) => a.kind,
+      ),
+    ).toEqual(["comment", "post", "repost"]);
+  });
+
+  it("the page script is plain JS that keys on componentkey, test ids and aria-labels", () => {
+    const js = readCards(ME);
+    expect(() => new Function(`return ${js}`)).not.toThrow();
+    expect(js).toContain("update-card-focus");
+    expect(js).toContain("replaceableComment_urn:li:comment:");
+    expect(js).toContain(`/in/${ME}/`);
+    expect(js).not.toMatch(/__name/);
   });
 });
 
 describe("linkedin activity: the flow and the route", () => {
-  it("scrolls until max, each item once, and never acts", async () => {
+  it("reads the all tab then the comments tab, each item once, merged newest first, never acts", async () => {
     const { fp, acts } = fakePage({ text: [""], present: (h) => h.name !== "/^don.t allow$/i" });
-    const screens = [CARDS.slice(0, 2), CARDS.slice(1, 4)];
+    const opened: string[] = [];
+    fp.open = async (url: string) => {
+      opened.push(url.replace(/^.*recent-activity\//, ""));
+    };
+    const tabs: Record<string, RawActivity[][]> = {
+      "all/": [
+        [POST, REPOST],
+        [REPOST, LIKE, COMMENT],
+      ],
+      "comments/": [[COMMENT]],
+    };
     let shown = 0;
     fp.scroll = async () => {
       shown++;
     };
     fp.page = {
-      evaluate: async (fn: unknown) =>
-        typeof fn === "string" ? 800 : (screens[Math.min(shown, screens.length - 1)] ?? []),
+      evaluate: async (js: string) => {
+        if (js === "innerHeight") return 800;
+        const screens = tabs[opened.at(-1) ?? ""] ?? [];
+        return screens[Math.min(shown, screens.length - 1)] ?? [];
+      },
     } as unknown as typeof fp.page;
-    const out = await linkedinActivity.run(fp, { vanity: "test-person", max: 3 });
-    expect(out.activity.map((a) => a.kind)).toEqual(["post", "repost", "comment"]);
+    const out = await linkedinActivity.run(fp, { vanity: ME, max: 3 });
+    expect(opened).toEqual(["all/", "comments/"]);
+    expect(out.activity.map((a) => a.kind)).toEqual(["comment", "post", "repost"]);
     expect(acts).toEqual([]);
   });
 
