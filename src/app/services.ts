@@ -1084,9 +1084,9 @@ export function memoryFor(settings: Settings, http = httpClient()): Memory {
 /**
  * Google, one token supplier per (subject, scopes), each caching its bearer:
  * an account that consented (`site setup gmail consent --account <it>`,
- * `GMAIL_REFRESH_TOKEN__<IT>`) is acted as through its own refresh token;
- * every other subject through the service account (domain-wide delegation,
- * our Workspace only).
+ * `GMAIL_REFRESH_TOKEN__<IT>`) is acted as through its own refresh token
+ * for Gmail scopes; any other scope (the admin API), and every other subject,
+ * through the service account (domain-wide delegation, our Workspace only).
  */
 export function googleTokens(
   settings: Settings,
@@ -1099,7 +1099,9 @@ export function googleTokens(
   const tokenFor = (subject: string, scopes: readonly string[]): TokenSupplier => {
     const k = `${subject} ${scopes.join(" ")}`;
     let t = tokens.get(k);
-    if (!t && env(accountEnv(gmailOAuth.refreshToken, subject))) {
+    // The consent grants Gmail only: an admin scope on the same account (the admin user) delegates.
+    const gmailOnly = scopes.every((s) => s.startsWith("https://www.googleapis.com/auth/gmail."));
+    if (!t && gmailOnly && env(accountEnv(gmailOAuth.refreshToken, subject))) {
       t = async () => {
         const token = await consented(gmailOAuth, subject);
         if (!token) throw new Error(`no Gmail token for ${subject}`);

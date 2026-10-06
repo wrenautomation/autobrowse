@@ -502,19 +502,23 @@ program
 program
   .command("inbox-photo <address> <file>")
   .description(
-    "A Workspace inbox's picture through the admin API, no sign-in (PNG or JPEG, still); `profile-photo` keeps a GIF animated but signs in",
+    "A Workspace inbox's picture through the admin API, no sign-in (PNG or JPEG, still); `all` = every active user; `profile-photo` keeps a GIF animated but signs in",
   )
   .action(async (address: string, file: string) => {
     const { readFile } = await import("node:fs/promises");
     const { googleAdminFor } = await import("./services.js");
     const { SCOPES } = await import("../google-auth.js");
     const mimeType = /\.jpe?g$/i.test(file) ? "image/jpeg" : "image/png";
-    await googleAdminFor(settings, undefined, [SCOPES.directoryUser]).setPhoto(
-      address.toLowerCase(),
-      await readFile(file),
-      mimeType,
-    );
-    console.log(`${address}: picture set (Gmail shows it within a day)`);
+    const admin = googleAdminFor(settings, undefined, [SCOPES.directoryUser]);
+    const image = await readFile(file);
+    const to =
+      address === "all"
+        ? (await admin.listUsers()).filter((u) => !u.suspended).map((u) => u.primaryEmail)
+        : [address];
+    for (const a of to) {
+      await admin.setPhoto(a.toLowerCase(), image, mimeType);
+      console.log(`${a}: picture set (Gmail shows it within a day)`);
+    }
   });
 
 program

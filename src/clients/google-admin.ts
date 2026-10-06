@@ -30,6 +30,8 @@ export interface GoogleAdminClient {
   verifyDomain(domain: string): Promise<boolean>;
   /** `hasPhoto`: the account carries a picture (Directory's thumbnailPhotoUrl). */
   getUser(email: string): Promise<{ primaryEmail: string; hasPhoto: boolean } | null>;
+  /** Every user in the Workspace, all domains. */
+  listUsers(): Promise<Array<{ primaryEmail: string; suspended: boolean }>>;
   createUser(user: NewUser): Promise<{ primaryEmail: string }>;
   setPassword(email: string, password: string): Promise<void>;
   /** The name mail shows beside the address; a Workspace user cannot change it themselves. */
@@ -107,6 +109,23 @@ export function googleAdmin(opts: { token: TokenSupplier; http: HttpClient }): G
         `${DIRECTORY}/users/${encodeURIComponent(email)}`,
       );
       return u && { primaryEmail: u.primaryEmail, hasPhoto: !!u.thumbnailPhotoUrl };
+    },
+    async listUsers() {
+      const users: Array<{ primaryEmail: string; suspended: boolean }> = [];
+      let pageToken: string | undefined;
+      do {
+        const page = await call<{
+          users?: Array<{ primaryEmail: string; suspended?: boolean }>;
+          nextPageToken?: string;
+        }>(
+          "list users",
+          `${DIRECTORY}/users?customer=my_customer&maxResults=500${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`,
+        );
+        for (const u of page?.users ?? [])
+          users.push({ primaryEmail: u.primaryEmail, suspended: !!u.suspended });
+        pageToken = page?.nextPageToken;
+      } while (pageToken);
+      return users;
     },
     async createUser(user) {
       const u = await call<{ primaryEmail: string }>("create user", `${DIRECTORY}/users`, {

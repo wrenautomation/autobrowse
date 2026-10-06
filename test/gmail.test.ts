@@ -85,7 +85,7 @@ describe("gmail site: one consent per account", () => {
     expect(err.message).not.toContain("rt-own");
   });
 
-  it("googleTokens acts as a consented account through its token, never the service account", async () => {
+  it("googleTokens acts as a consented account through its token for Gmail, the service account for the rest", async () => {
     const api = fakeFetch(() => ({ body: { access_token: "at-will", expires_in: 3600 } }));
     const env: Record<string, string> = {
       GOOGLE_OAUTH_CLIENT_ID: "cid",
@@ -97,9 +97,14 @@ describe("gmail site: one consent per account", () => {
       (n) => env[n],
       httpClient({ fetch: api.fetch }),
     );
-    expect(await tokenFor("will@williamjin.dev", ["s"])()).toBe("at-will");
+    const gmail = "https://www.googleapis.com/auth/gmail.readonly";
+    expect(await tokenFor("will@williamjin.dev", [gmail])()).toBe("at-will");
+    // The consent grants Gmail only: an admin scope on the same account goes to the service account.
+    expect(() =>
+      tokenFor("will@williamjin.dev", ["https://www.googleapis.com/auth/admin.directory.user"]),
+    ).toThrow(/GOOGLE_SERVICE_ACCOUNT/);
     // No key set: a Workspace subject still goes to the service account, which is not there.
-    expect(() => tokenFor("william@wrenautomation.com", ["s"])).toThrow(/GOOGLE_SERVICE_ACCOUNT/);
+    expect(() => tokenFor("william@wrenautomation.com", [gmail])).toThrow(/GOOGLE_SERVICE_ACCOUNT/);
   });
 
   it("the profile for an account is the <site>@<label> credential with that username", async () => {
