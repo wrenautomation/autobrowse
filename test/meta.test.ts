@@ -179,6 +179,27 @@ describe("meta site", () => {
     expect(asked.at(-1)).not.toHaveProperty("amount"); // no budget on the request: an unknown amount
   });
 
+  it("reads the account, ad sets, ads and pixels an audit needs, never asking", async () => {
+    const { sites, calls, asked } = facade(null);
+    for (const p of ["/act_123", "/act_123/adsets", "/act_123/ads", "/act_123/adspixels"])
+      await sites.call("meta", "GET", p, {});
+    expect(asked).toEqual([]);
+    expect(calls.map((c) => c.url.pathname)).toEqual([
+      "/v23.0/act_123",
+      "/v23.0/act_123/adsets",
+      "/v23.0/act_123/ads",
+      "/v23.0/act_123/adspixels",
+    ]);
+    expect(calls[0]?.url.searchParams.get("fields")).toContain("account_status");
+    expect(calls[1]?.url.searchParams.get("fields")).toContain("learning_stage_info");
+    expect(calls[3]?.url.searchParams.get("fields")).toContain("last_fired_time");
+    await sites.call("meta", "GET", "/act_123/insights", {
+      time_range: '{"since":"2026-09-01","until":"2026-09-30"}',
+    });
+    expect(calls.at(-1)?.url.searchParams.get("date_preset")).toBeNull();
+    expect(calls.at(-1)?.url.searchParams.get("time_range")).toContain("2026-09-01");
+  });
+
   it("refuses to spend on a no, or with nobody to ask; the API is never called", async () => {
     const no = facade(async () => false);
     await expect(

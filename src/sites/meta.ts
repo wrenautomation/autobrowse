@@ -124,8 +124,27 @@ const insights = z.object({
   fields: z.string().default("campaign_name,impressions,reach,clicks,ctr,cpc,cpm,spend,actions"),
   level: z.enum(["account", "campaign", "adset", "ad"]).default("campaign"),
   date_preset: z.string().default("last_7d"),
+  /** `{"since":"2026-01-01","until":"2026-09-29"}`; set, it replaces `date_preset`. */
+  time_range: z.string().optional(),
   time_increment: z.string().optional(),
   ...page,
+});
+const accountFields = z.object({
+  adAccountId: adAccount,
+  fields: z.string().default("id,name,account_status,amount_spent,currency,created_time"),
+});
+const adsetsIn = listIn.extend({
+  fields: z
+    .string()
+    .default(
+      "id,name,campaign_id,effective_status,optimization_goal,promoted_object,daily_budget,learning_stage_info",
+    ),
+});
+const adsIn = listIn.extend({
+  fields: z.string().default("id,name,adset_id,effective_status,creative{id,object_type,url_tags}"),
+});
+const pixelsIn = listIn.extend({
+  fields: z.string().default("id,name,creation_time,last_fired_time,is_unavailable"),
 });
 const pagePosts = z.object({
   pageId: id,
@@ -404,6 +423,35 @@ export const meta: SiteApi = {
       api: ({ adAccountId, ...q }, leg) => get(leg, `act_${adAccountId}/campaigns`, q),
     }),
     route({
+      method: "GET",
+      path: "/act_{adAccountId}",
+      summary: "The ad account: status, lifetime spend (`amount_spent`, minor units), created",
+      request: accountFields,
+      api: ({ adAccountId, fields }, leg) => get(leg, `act_${adAccountId}`, { fields }),
+    }),
+    route({
+      method: "GET",
+      path: "/act_{adAccountId}/adsets",
+      summary:
+        "Ad sets on an ad account: goal, budget, learning stage (`fields`, `limit`, `after`)",
+      request: adsetsIn,
+      api: ({ adAccountId, ...q }, leg) => get(leg, `act_${adAccountId}/adsets`, q),
+    }),
+    route({
+      method: "GET",
+      path: "/act_{adAccountId}/ads",
+      summary: "Ads on an ad account with their creative's type and URL tags",
+      request: adsIn,
+      api: ({ adAccountId, ...q }, leg) => get(leg, `act_${adAccountId}/ads`, q),
+    }),
+    route({
+      method: "GET",
+      path: "/act_{adAccountId}/adspixels",
+      summary: "Pixels on an ad account: created, last fired",
+      request: pixelsIn,
+      api: ({ adAccountId, ...q }, leg) => get(leg, `act_${adAccountId}/adspixels`, q),
+    }),
+    route({
       method: "POST",
       path: "/act_{adAccountId}/campaigns",
       summary: "A campaign (PAUSED unless said; ACTIVE with a budget spends)",
@@ -476,9 +524,10 @@ export const meta: SiteApi = {
       method: "GET",
       path: "/act_{adAccountId}/insights",
       summary:
-        "Results by campaign/adset/ad (`fields`, `level`, `date_preset=last_7d`, `time_increment`)",
+        "Results by campaign/adset/ad (`fields`, `level`, `date_preset=last_7d` or `time_range`, `time_increment`)",
       request: insights,
-      api: ({ adAccountId, ...q }, leg) => get(leg, `act_${adAccountId}/insights`, q),
+      api: ({ adAccountId, date_preset, ...q }, leg) =>
+        get(leg, `act_${adAccountId}/insights`, q.time_range ? q : { ...q, date_preset }),
     }),
     route({
       method: "GET",
