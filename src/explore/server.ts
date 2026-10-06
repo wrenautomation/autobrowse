@@ -576,7 +576,7 @@ const DOM_QUIET = `() => new Promise((done) => {
  * is the same one the compiled flow will use.
  */
 export async function startExplore(opts: ExploreOptions): Promise<Explorer> {
-  const ready = new Promise<{ fp: FlowPage; finish: () => void }>((resolve) => {
+  const ready = new Promise<{ fp: FlowPage; finish: () => void }>((resolve, reject) => {
     const flow = defineFlow<undefined, void>({
       site: opts.site,
       name: "explore",
@@ -590,7 +590,9 @@ export async function startExplore(opts: ExploreOptions): Promise<Explorer> {
       ...(opts.login ? { login: opts.login } : {}),
       ...(opts.captcha ? { captcha: opts.captcha } : {}),
     });
-    void runner.run(flow, undefined).catch(() => undefined);
+    // A run that fails before the flow starts (the profile held elsewhere) is the opener's
+    // error; once started, `ready` has settled and the rejection is a no-op.
+    void runner.run(flow, undefined).catch(reject);
   });
   const { fp, finish: finishFlow } = await ready;
   return serve(opts, fp, finishFlow);
@@ -1295,7 +1297,7 @@ async function serve(
       case "select": {
         await gate("select", c, wait);
         await hands.think(page);
-        await chooseOption(page, find(c), c.value, 10_000, hands);
+        await chooseOption(find(c), c.value, 10_000, hands);
         journalAct(c, (target) => ({ kind: "select", target, value: c.value }));
         return { ok: true };
       }

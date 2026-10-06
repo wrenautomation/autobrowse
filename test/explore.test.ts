@@ -610,3 +610,24 @@ describe("help without a pause", () => {
     }
   }, 60_000);
 });
+
+describe("a session that cannot open", () => {
+  it("fails the start with the reason, never hangs", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "explore-fail-"));
+    await expect(
+      startExplore({
+        site: "scratch",
+        port: 9950 + Math.floor(Math.random() * 40),
+        recordingsDir: join(dir, "recordings"),
+        browser: {
+          tier: "browserbase",
+          channel: "chromium",
+          profilesDir: join(dir, "profiles"),
+          artifactsDir: join(dir, "artifacts"),
+          headless: true,
+        },
+      }),
+    ).rejects.toThrow(/needs BROWSERBASE_API_KEY/);
+    await rm(dir, { recursive: true, force: true });
+  });
+});

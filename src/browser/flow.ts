@@ -20,7 +20,14 @@ import { redactAria, redactText } from "../recorder/redact.js";
 import { currentCall, type DoneActs } from "./attempt.js";
 import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js";
 import { type Fixes, flowKey } from "./fixes.js";
-import { type Hands, HUMAN_PACE, handsFor, instantHands, type Pace } from "./human/index.js";
+import {
+  type Hands,
+  HUMAN_PACE,
+  handsFor,
+  instantHands,
+  type Pace,
+  pickOption,
+} from "./human/index.js";
 import { type Hints, locate, textOf } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
 import { describePage } from "./page-state.js";
@@ -308,33 +315,14 @@ async function settle(page: Page, url: string): Promise<void> {
  * The step stays a `select` either way, so a recording replays the same.
  */
 export async function chooseOption(
-  page: Page,
   target: Locator,
   value: string,
   timeout: number,
   hands: Hands = instantHands,
 ): Promise<void> {
-  try {
-    await target.selectOption(value, { timeout });
-    return;
-  } catch (err) {
-    if (!/not a <select>/i.test(String(err))) throw err;
-  }
-  await hands.click(target, { timeout });
-  const option = page
-    .getByRole("option", { name: value, exact: true })
-    .or(page.getByRole("menuitem", { name: value, exact: true }))
-    .or(page.getByRole("menuitemradio", { name: value, exact: true }))
-    .first();
-  const shown = await option
-    .waitFor({ state: "visible", timeout })
-    .then(() => true)
-    .catch(() => false);
-  if (shown) return hands.click(option, { timeout });
-  // A list with no roles: the first visible element whose whole text is the value.
-  await hands.click(page.getByText(value, { exact: true }).locator("visible=true").first(), {
-    timeout,
-  });
+  const o = { timeout };
+  // Asked to choose: a combobox input opens a list too.
+  await pickOption(target, value, o, (l) => hands.click(l, o), null);
 }
 
 async function doOp(
@@ -352,7 +340,7 @@ async function doOp(
     case "fill":
       return hands.type(target, op.value, { timeout });
     case "select":
-      return chooseOption(page, target, op.value, timeout, hands);
+      return chooseOption(target, op.value, timeout, hands);
     case "press":
       return hands.press(target, op.key, { timeout });
     case "upload": {

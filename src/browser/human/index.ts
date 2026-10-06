@@ -137,7 +137,8 @@ async function boxOf(target: Locator, o: ActTimeout) {
 /** Plain Playwright: no pauses, no pointer path. */
 export const instantHands: Hands = {
   think: async () => {},
-  click: (target, { at, ...o }) => target.click({ ...o, ...(at ? { position: at } : {}) }),
+  click: async (target, { at, ...o }) =>
+    (at ? target : await pressable(target, o)).click({ ...o, ...(at ? { position: at } : {}) }),
   type: (target, text, o) => (isPage(target) ? target.keyboard.type(text) : target.fill(text, o)),
   press: (target, key, o) => (isPage(target) ? target.keyboard.press(key) : target.press(key, o)),
   paste: async (target, text, o) => {
@@ -245,7 +246,8 @@ async function wheelTo(target: Locator, o: ActTimeout, pace: Pace, random: Rando
 export function handsFor(pace: Pace | null, random: Random = Math.random): Hands {
   if (!pace) return instantHands;
 
-  const click = async (target: Locator, { at, ...o }: ActTimeout & { at?: Point }) => {
+  const click = async (asked: Locator, { at, ...o }: ActTimeout & { at?: Point }) => {
+    const target = at ? asked : await pressable(asked, o);
     const page = target.page();
     await wheelTo(target, o, pace, random).catch(() => undefined);
     const box = await target
@@ -369,46 +371,128 @@ const hasFocus = (target: Locator): Promise<boolean> =>
  * How many characters the field holds: its maxlength, else 1 for a box in a row of
  * code boxes (`codeEntry-0`, `otp-1`, "digit 1"); null when it is an ordinary field.
  */
+/** A dropdown: a native select, or a control that opens a list. Null: a field that takes keys. */
+async function dropdownKind(target: Locator, o: ActTimeout): Promise<"select" | "list" | null> {
+  return target
+    .evaluate(
+      (el) => {
+        if (el.tagName === "SELECT") return "select";
+        // A label fills its field (Playwright retargets); fields and editors take keys.
+        if (/^(INPUT|TEXTAREA|LABEL)$/.test(el.tagName)) return null;
+        if (el.getAttribute("role") === "combobox") return "list";
+        const takesKeys =
+          (el as { isContentEditable?: boolean }).isContentEditable ||
+          el.querySelector("input, textarea, select, [contenteditable]");
+        return takesKeys ? null : "list";
+      },
+      undefined,
+      o,
+    )
+    .catch(() => null);
+}
+
 /**
- * A dropdown takes a value by its option, not by keys: a native select, or a
- * button that opens a list (Azure's card expiry month, Dynadot's plain divs
- * with no roles). True when it was one.
+ * The control a hand can press: the target, or, when it has no size (Discord's
+ * date pickers put role=combobox on a 0x0 div), its nearest ancestor that has one.
  */
+export async function pressable(target: Locator, o: ActTimeout): Promise<Locator> {
+  const up = await target
+    .evaluate(
+      (el) => {
+        const sized = (e: typeof el) => {
+          const r = e.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        };
+        if (sized(el)) return 0;
+        let n = 0;
+        for (let e = el.parentElement; e && n < 6; e = e.parentElement) {
+          n++;
+          if (sized(e)) return n;
+        }
+        return 0;
+      },
+      undefined,
+      o,
+    )
+    // Not there in time: that is the act's own error, not a second wait.
+    .catch((err: unknown) => {
+      if (/Timeout/.test(String(err))) throw err;
+      return 0;
+    });
+  return up ? target.locator(`xpath=ancestor::*[${up}]`) : target;
+}
+
+/** The open list's option by its whole name, by role. */
+const optionNamed = (page: Page, text: string): Locator =>
+  page
+    .getByRole("option", { name: text, exact: true })
+    .or(page.getByRole("menuitem", { name: text, exact: true }))
+    .or(page.getByRole("menuitemradio", { name: text, exact: true }))
+    .locator("visible=true")
+    .first();
+
+const seen = (l: Locator, timeout: number): Promise<boolean> =>
+  l
+    .waitFor({ state: "visible", timeout })
+    .then(() => true)
+    .catch(() => false);
+
+/**
+ * A long list renders only the rows in view (Discord's years): wheel over it,
+ * down then back up, until the option shows or the list stops moving.
+ */
+async function wheelToOption(page: Page, option: Locator): Promise<boolean> {
+  const list = page.getByRole("listbox").locator("visible=true").first();
+  const box = await list.boundingBox({ timeout: 1_000 }).catch(() => null);
+  if (!box) return false;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const rows = () => list.innerText({ timeout: 1_000 }).catch(() => "");
+  for (const dy of [box.height * 0.8, -box.height * 0.8]) {
+    let last = await rows();
+    for (let step = 0, still = 0; step < 60 && still < 2; step++) {
+      await page.mouse.wheel(0, dy);
+      if (await seen(option, 150)) return true;
+      const now = await rows();
+      still = now === last ? still + 1 : 0;
+      last = now;
+    }
+  }
+  return false;
+}
+
+/**
+ * Choose `text` from a dropdown: a native select by value, any other by
+ * opening it and pressing the option. The option by role, else scrolled into
+ * a long list, else the first visible element whose whole text is it (a list
+ * of plain divs: Azure's card expiry, Dynadot).
+ */
+export async function pickOption(
+  target: Locator,
+  text: string,
+  o: ActTimeout,
+  tap: (l: Locator) => Promise<void>,
+  kind: "select" | "list" | null = null,
+): Promise<void> {
+  if ((kind ?? (await dropdownKind(target, o))) === "select") {
+    await target.selectOption(text, o);
+    return;
+  }
+  await tap(await pressable(target, o));
+  const page = target.page();
+  const option = optionNamed(page, text);
+  if ((await seen(option, 2_000)) || (await wheelToOption(page, option))) return tap(option);
+  await tap(page.getByText(text, { exact: true }).locator("visible=true").first());
+}
+
+/** A dropdown takes a value by its option, not by keys. True when it was one. */
 async function chosen(
   target: Locator,
   text: string,
   o: ActTimeout,
   tap: (l: Locator) => Promise<void>,
 ): Promise<boolean> {
-  const kind = await target
-    .evaluate((el) => {
-      if (el.tagName === "SELECT") return "select";
-      // A label fills its field (Playwright retargets); fields and editors take keys.
-      if (/^(INPUT|TEXTAREA|LABEL)$/.test(el.tagName)) return null;
-      if (el.getAttribute("role") === "combobox") return "list";
-      const takesKeys =
-        (el as { isContentEditable?: boolean }).isContentEditable ||
-        el.querySelector("input, textarea, select, [contenteditable]");
-      return takesKeys ? null : "list";
-    })
-    .catch(() => null);
-  if (kind === "select") await target.selectOption(text, o);
-  else if (kind === "list") {
-    await tap(target);
-    const page = target.page();
-    const option = page.getByRole("option", { name: text, exact: true }).locator("visible=true");
-    const shown = await option
-      .first()
-      .waitFor({ state: "visible", timeout: 2_000 })
-      .then(() => true)
-      .catch(() => false);
-    // A list with no roles: the first visible element whose whole text is the value.
-    await tap(
-      shown
-        ? option.first()
-        : page.getByText(text, { exact: true }).locator("visible=true").first(),
-    );
-  }
+  const kind = await dropdownKind(target, o);
+  if (kind) await pickOption(target, text, o, tap, kind);
   return kind !== null;
 }
 
