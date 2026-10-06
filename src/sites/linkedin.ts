@@ -115,6 +115,10 @@ const connect = z.object({ vanity, note: z.string().min(1).max(200).optional() }
 const message = z.object({ vanity, text: z.string().min(1).max(8000) });
 /** A list read from the top, newest first. */
 const newest = z.object({ max: z.coerce.number().int().min(1).max(200).default(40) });
+const activity = z.object({
+  vanity,
+  max: z.coerce.number().int().min(1).max(100).default(20),
+});
 
 async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
   if (!res.ok) throw new HttpError("CALL", `${LINKEDIN_ORIGIN}/${what}`, res.status);
@@ -151,6 +155,8 @@ export const linkedin: SiteApi = {
     network: 12,
     withdraw: 20,
     notifications: 12,
+    // A member's activity page: off (linkedin, linkedin@wren) unless an account's own caps open it.
+    activity: 0,
   },
   // William's own profile reads and sends nothing until he lifts it (his call, 2026-10-01); a call is a 429.
   // Before: 40 profiles and 15 searches a day for client lookups (wren, 2026-09-29).
@@ -177,6 +183,8 @@ export const linkedin: SiteApi = {
       network: 0,
       withdraw: 0,
       notifications: 0,
+      // wren's signals (designs 2026-10-06-signal-collectors, S5): 10 people a day.
+      activity: 10,
     },
   },
   pace: { gapMs: 10_000, jitterMs: 20_000 },
@@ -373,6 +381,15 @@ export const linkedin: SiteApi = {
       irreversible: true,
       meter: () => ({ connect: 1 }),
       browser: { flow: "linkedin/connect" },
+    }),
+    route({
+      method: "GET",
+      path: "/in/{vanity}/activity",
+      summary:
+        "A member's posts, reposts and comments, newest first (`max`, default 20): urn, kind, text, age label and approximate time, reactions, comments, url, raw. Reads only",
+      request: activity,
+      meter: () => ({ activity: 1 }),
+      browser: { flow: "linkedin/activity" },
     }),
     route({
       method: "GET",
