@@ -117,11 +117,11 @@ describe("a named account", () => {
     expect(caps.today()["linkedin|r@x.com|company"]).toBe(3);
   });
 
-  it("linkedin's own profile reads nothing until William lifts it", () => {
+  it("linkedin's own profile reads at the alt's pace and sends nothing (2026-10-06)", () => {
     expect(linkedin.accountCaps?.linkedin).toEqual({
-      profile: 0,
-      search: 0,
-      company: 0,
+      profile: 20,
+      search: 5,
+      company: 10,
       connect: 0,
       message: 0,
       inbox: 0,
@@ -129,6 +129,7 @@ describe("a named account", () => {
       withdraw: 0,
       notifications: 0,
       audience: 0,
+      activity: 10,
     });
     expect(linkedin.caps).toMatchObject({ company: 40 });
   });
@@ -358,20 +359,26 @@ describe("who spent a cap", () => {
     });
   };
 
-  it("William's own LinkedIn reads nothing: a 429 that spends nothing and runs nothing", async () => {
+  it("William's own LinkedIn past its 10 company reads: a 429 that spends nothing and runs nothing", async () => {
     const calls: string[] = [];
     const caps = memoryCaps(() => noon);
     const sites = facade(caps, calls);
-    const err = await sites
-      .call("linkedin", "GET", "/company/stripe/jobs", {}, "linkedin", { caller: "wren:demo" })
-      .catch((e: unknown) => e);
+    const read = () =>
+      sites.call("linkedin", "GET", "/company/stripe/jobs", {}, "linkedin", {
+        caller: "wren:demo",
+      });
+    for (let i = 0; i < 10; i++) await read();
+    calls.length = 0;
+    const err = await read().catch((e: unknown) => e);
     expect(err).toMatchObject({ status: 429 });
-    expect((err as Error).message).toMatch(/company reads are off for w@x\.com \(cap 0\)/);
     expect(calls).toEqual([]);
-    expect(caps.today()).toEqual({});
-    expect(caps.calls()).toMatchObject([
-      { account: "w@x.com", caller: "wren:demo", outcome: "capped", bucket: "company" },
-    ]);
+    expect(caps.today()).toMatchObject({ "linkedin|w@x.com|company": 10 });
+    expect(caps.calls().at(-1)).toMatchObject({
+      account: "w@x.com",
+      caller: "wren:demo",
+      outcome: "capped",
+      bucket: "company",
+    });
   });
 
   it("notes each metered call with its caller, route template and outcome", async () => {

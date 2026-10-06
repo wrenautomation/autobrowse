@@ -301,8 +301,14 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     if ("flow" in leg) {
       const flow = deps.flow(leg.flow) as BrowserFlow<unknown, unknown> | null;
       if (!flow) return null;
-      // Under another profile the same flow signs in as that account.
-      const sited = profile && profile !== flow.site ? { ...flow, site: profile } : flow;
+      // Under another profile the same flow signs in as that account. The site's own login
+      // runs where its credential's session lives: a provider's profile when it signs in through
+      // the provider's button (William's LinkedIn, in `google`), as `browserFor` opens it.
+      const sited = !profile
+        ? flow
+        : profile !== flow.site
+          ? { ...flow, site: profile }
+          : { ...flow, profile: flow.profile ?? ("provider" as const) };
       return (input) => deps.runner.run(sited, input);
     }
     const workflow = await deps.compiled?.get(leg.workflow);

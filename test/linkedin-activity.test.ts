@@ -146,7 +146,28 @@ describe("linkedin activity: the flow and the route", () => {
     expect(seen).toEqual(['linkedin@alt activity {"vanity":"test-person","max":20}']);
   });
 
-  it("the activity cap: 10 a day as linkedin@alt, off as linkedin and linkedin@wren", async () => {
+  it("as the site's own login, the flow runs where that login's session lives (provider)", async () => {
+    const seen: Array<string | undefined> = [];
+    const sites = siteFacade([{ ...linkedin, pace: { gapMs: 0 } }], {
+      http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+      env: () => undefined,
+      sink: memorySink(),
+      runner: {
+        async run(flow) {
+          seen.push(`${flow.site} ${flow.profile ?? "-"}`);
+          return { activity: [] } as never;
+        },
+      },
+      flow: (n) => BROWSER_FLOWS[n] ?? null,
+      providerOf: () => null,
+      profileFor: async (site, account) => (account === "main@x.test" ? site : `${site}@alt`),
+    });
+    await sites.call("linkedin", "GET", "/in/test-person/activity", {}, "main@x.test");
+    await sites.call("linkedin", "GET", "/in/test-person/activity", {}, "alt@x.test");
+    expect(seen).toEqual(["linkedin provider", "linkedin@alt -"]);
+  });
+
+  it("the activity cap: 10 a day as linkedin@alt and linkedin (his main), off as linkedin@wren", async () => {
     const caps = memoryCaps(() => NOW.getTime());
     const sites = siteFacade([{ ...linkedin, pace: { gapMs: 0 } }], {
       http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
@@ -162,7 +183,8 @@ describe("linkedin activity: the flow and the route", () => {
       sites.call("linkedin", "GET", "/in/test-person/activity", {}, who);
     for (let i = 0; i < 10; i++) await read("linkedin@alt");
     await expect(read("linkedin@alt")).rejects.toMatchObject({ status: 429 });
-    await expect(read("linkedin")).rejects.toThrow(/activity reads are off/);
+    for (let i = 0; i < 10; i++) await read("linkedin");
+    await expect(read("linkedin")).rejects.toMatchObject({ status: 429 });
     await expect(read("linkedin@wren")).rejects.toThrow(/activity reads are off/);
     expect(caps.today()["linkedin|linkedin.alt@x.test|activity"]).toBe(10);
   });

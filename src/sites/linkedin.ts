@@ -160,13 +160,14 @@ export const linkedin: SiteApi = {
     // Our own audience (profile + Page, two page loads): on demand from wren, never on a timer.
     audience: 4,
   },
-  // William's own profile reads and sends nothing until he lifts it (his call, 2026-10-01); a call is a 429.
-  // Before: 40 profiles and 15 searches a day for client lookups (wren, 2026-09-29).
+  // William's own profile (shown as "Will Jin"): research reads since 2026-10-06, when the alt was
+  // restricted ("just use my main ... unless alt still works"); the alt's pace, nothing sent, never
+  // anything that ties it to Wren. Before: all 0 from 2026-10-01 (ban risk).
   accountCaps: {
     linkedin: {
-      profile: 0,
-      search: 0,
-      company: 0,
+      profile: 20,
+      search: 5,
+      company: 10,
       connect: 0,
       message: 0,
       inbox: 0,
@@ -174,8 +175,9 @@ export const linkedin: SiteApi = {
       withdraw: 0,
       notifications: 0,
       audience: 0,
+      activity: 10,
     },
-    // The research alt (2026-10-05): reads only, at a new account's pace for its first weeks.
+    // The research alt (2026-10-05): reads only. LinkedIn restricted it 2026-10-06 (asks for an ID).
     "linkedin@alt": {
       profile: 20,
       search: 5,
