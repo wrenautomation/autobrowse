@@ -104,7 +104,7 @@ async function shown(fp: FlowPage, options: Hints[], withinMs = 0): Promise<Hint
 async function openProfile(fp: FlowPage): Promise<void> {
   await fp.open(ME);
   if (WALL.test(fp.url()) || (await fp.waitForUrl(WALL, 4_000))) {
-    if ((await fp.signIn("linkedin")) !== "signed-in")
+    if ((await fp.signIn()) !== "signed-in")
       fp.human("LinkedIn is signed out and the one sign-in try failed");
     await fp.open(ME);
   }
@@ -122,7 +122,8 @@ async function readPhoto(fp: FlowPage): Promise<string | null> {
     .catch(() => null);
 }
 
-const profilePhotoFlow = defineFlow<ProfilePhotoInput, ProfilePhotoOutput>({
+/** Signs in as the flow's site: `{ ...profilePhotoFlow, site: "linkedin@wren" }` runs it there. */
+export const profilePhotoFlow = defineFlow<ProfilePhotoInput, ProfilePhotoOutput>({
   site: "linkedin",
   name: "profile-photo",
   // William's account signs in by Google: its session lives in that profile.
