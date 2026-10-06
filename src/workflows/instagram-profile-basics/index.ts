@@ -52,10 +52,12 @@ const uploadProfilePhotoFlow = defineFlow<UploadProfilePhotoInput, { proof: stri
       { goal: "click Change photo" },
     );
     if (!input.submit) return { proof: null };
+    // With a photo already set, Change photo opens a menu and its "Upload Photo" takes the file.
+    const menu = await fp.has({ role: "button", name: "Upload Photo" }, 3_000);
     await fp.act(
       { kind: "upload", files: [input.profilePhotoFile] },
-      { role: "button", name: "Change photo" },
-      { goal: "upload to Change photo", irreversible: true },
+      { role: "button", name: menu ? "Upload Photo" : "Change photo" },
+      { goal: "upload the profile photo", irreversible: true },
     );
     await fp.wait(3_000);
     const text = await fp.text();
