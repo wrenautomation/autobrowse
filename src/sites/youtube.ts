@@ -5,7 +5,9 @@
  * posts and Studio-only settings need the browser, and those routes say
  * they have no official path.
  */
-import { readFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
+import { Readable } from "node:stream";
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi, SiteError } from "./types.js";
@@ -78,6 +80,24 @@ export async function bytesOf(
   }
   return new Uint8Array(await readFile(source));
 }
+
+/** A video body: a local file streams from disk (videos run to GBs), a URL is read whole. */
+async function videoOf(
+  source: string,
+): Promise<{ length: number; open: () => Uint8Array<ArrayBuffer> | ReadableStream<Uint8Array> }> {
+  if (/^https?:\/\//.test(source)) {
+    const bytes = await bytesOf(source);
+    return { length: bytes.byteLength, open: () => bytes };
+  }
+  const { size } = await stat(source);
+  return {
+    length: size,
+    open: () => Readable.toWeb(createReadStream(source)) as ReadableStream<Uint8Array>,
+  };
+}
+
+/** The bytes PUT gets this long: ~2 GB at a slow uplink. One attempt; a stream is not retried. */
+const VIDEO_PUT_MS = 2 * 60 * 60_000;
 
 const upload = z.object({
   uploadType: z.literal("resumable").default("resumable"),
@@ -165,7 +185,7 @@ export const youtube: SiteApi = {
       api: async (body, leg) => {
         await onTheRightChannel(leg);
         const { file, contentType, part, uploadType, ...meta } = body;
-        const bytes = await bytesOf(file);
+        const video = await videoOf(file);
         const start = await leg.http.json<unknown>(
           `${YOUTUBE_ORIGIN}/upload/youtube/v3/videos?uploadType=${uploadType}&part=${encodeURIComponent(part)}`,
           {
@@ -173,7 +193,7 @@ export const youtube: SiteApi = {
             headers: {
               ...bearer(leg),
               "X-Upload-Content-Type": contentType,
-              "X-Upload-Content-Length": String(bytes.byteLength),
+              "X-Upload-Content-Length": String(video.length),
             },
             body: meta,
           },
@@ -190,8 +210,9 @@ export const youtube: SiteApi = {
         return must(
           await leg.http.json<unknown>(location, {
             method: "PUT",
-            headers: { "content-type": contentType },
-            raw: bytes,
+            headers: { "content-type": contentType, "content-length": String(video.length) },
+            raw: video.open(),
+            timeoutMs: VIDEO_PUT_MS,
           }),
           "upload/youtube/v3/videos (bytes)",
         );

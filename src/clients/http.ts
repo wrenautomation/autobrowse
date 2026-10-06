@@ -9,6 +9,7 @@
  * - POST is retried only on 429 (the server refused it, so it did not run).
  *   A POST that timed out may have run; the caller's step is idempotent
  *   (get before create) and simply reruns.
+ * - A stream body is never retried: once read it is gone.
  */
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -28,8 +29,10 @@ export interface JsonRequest {
   headers?: Record<string, string>;
   /** JSON-encoded when present. */
   body?: unknown;
-  /** Raw body, already encoded; sets no content type (set one in `headers`). */
-  raw?: string | Uint8Array<ArrayBuffer>;
+  /** Raw body, already encoded; sets no content type (set one in `headers`). A stream is sent once. */
+  raw?: string | Uint8Array<ArrayBuffer> | ReadableStream<Uint8Array>;
+  /** This call's own per-attempt timeout (a large upload), over the client's. */
+  timeoutMs?: number;
 }
 
 export interface JsonResponse<T> {
@@ -84,6 +87,9 @@ export function httpClient(opts: HttpOptions = {}): HttpClient {
     async json<T>(url: string, req: JsonRequest = {}): Promise<JsonResponse<T>> {
       const method = req.method ?? "GET";
       const retryOnServer = method !== "POST";
+      const stream = req.raw instanceof ReadableStream;
+      const tries = stream ? 1 : attempts;
+      const wait = req.timeoutMs ?? timeoutMs;
       const init: RequestInit = {
         method,
         headers: {
@@ -94,14 +100,14 @@ export function httpClient(opts: HttpOptions = {}): HttpClient {
         ...(req.body !== undefined
           ? { body: JSON.stringify(req.body) }
           : req.raw !== undefined
-            ? { body: req.raw }
+            ? { body: req.raw, ...(stream ? { duplex: "half" } : {}) }
             : {}),
       };
       for (let attempt = 1; ; attempt += 1) {
-        const last = attempt === attempts;
+        const last = attempt === tries;
         let response: Response;
         try {
-          response = await doFetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+          response = await doFetch(url, { ...init, signal: AbortSignal.timeout(wait) });
         } catch (err) {
           // Connection refused, DNS, or our own timeout: the request may not have left.
           if (last || !retryOnServer) throw new HttpError(method, url, 0, describe(err));
