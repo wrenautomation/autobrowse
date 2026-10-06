@@ -125,6 +125,10 @@ const thumbnail = z.object({
   file: z.string().min(1),
   contentType: z.string().default("image/jpeg"),
 });
+const banner = z.object({
+  file: z.string().min(1),
+  contentType: z.string().default("image/png"),
+});
 const read = z
   .object({
     resource: z.enum([
@@ -236,6 +240,57 @@ export const youtube: SiteApi = {
           ),
           "upload/youtube/v3/thumbnails/set",
         );
+      },
+    }),
+    route({
+      method: "POST",
+      path: "/youtube/v3/channelBanner",
+      summary:
+        "Set the channel's banner from `file` (path or URL; 2048x1152 min, 6 MB max): uploads it, then points brandingSettings at it, the rest of brandingSettings kept",
+      request: banner,
+      api: async ({ file, contentType }, leg) => {
+        await onTheRightChannel(leg);
+        const { url } = await must(
+          await leg.http.json<{ url: string }>(
+            `${YOUTUBE_ORIGIN}/upload/youtube/v3/channelBanners/insert?uploadType=media`,
+            {
+              method: "POST",
+              headers: { ...bearer(leg), "content-type": contentType },
+              raw: await bytesOf(file),
+            },
+          ),
+          "upload/youtube/v3/channelBanners/insert",
+        );
+        const { items } = await must(
+          await leg.http.json<{
+            items?: Array<{ id: string; brandingSettings?: Record<string, unknown> }>;
+          }>(`${YOUTUBE_ORIGIN}/youtube/v3/channels?mine=true&part=brandingSettings`, {
+            headers: bearer(leg),
+          }),
+          "youtube/v3/channels",
+        );
+        const channel = items?.[0];
+        if (!channel) throw new HttpError("CALL", `${YOUTUBE_ORIGIN}/youtube/v3/channels`, 404);
+        // An update replaces all of brandingSettings: send back what is there, with the new image.
+        const branding = channel.brandingSettings ?? {};
+        await must(
+          await leg.http.json<unknown>(
+            `${YOUTUBE_ORIGIN}/youtube/v3/channels?part=brandingSettings`,
+            {
+              method: "PUT",
+              headers: bearer(leg),
+              body: {
+                id: channel.id,
+                brandingSettings: {
+                  ...branding,
+                  image: { ...((branding.image as object) ?? {}), bannerExternalUrl: url },
+                },
+              },
+            },
+          ),
+          "youtube/v3/channels",
+        );
+        return { channel: channel.id, bannerUrl: url };
       },
     }),
     route({
