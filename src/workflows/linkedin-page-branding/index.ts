@@ -39,8 +39,8 @@ import { type ImageRule, imageProblem } from "../image.js";
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
   companyId: z.string().regex(/^\d+$/).default("143656154").describe("The Page's numeric id"),
-  logoFile: z.string().min(1).optional().describe("Logo, square"), // e.g. "/Users/williamjin/Documents/wren_automation/autobrowse/assets/brand/wren-pfp-rust-on-white.png"
-  bannerFile: z.string().min(1).optional().describe("Banner, 1584x396"), // e.g. "/Users/williamjin/Documents/wren_automation/autobrowse/assets/brand/wren-banner-linkedin-rust-on-white.png"
+  logoFile: z.string().min(1).optional().describe("Logo, square"), // e.g. "/Users/williamjin/Documents/wren_automation/autobrowse/assets/brand/wren-pfp-lavender-on-white.png"
+  bannerFile: z.string().min(1).optional().describe("Banner, 1584x396"), // e.g. "/Users/williamjin/Documents/wren_automation/autobrowse/assets/brand/wren-banner-linkedin-lavender-on-white.png"
   website: z.string().url().optional().describe("Website URL"), // e.g. "https://wrenautomation.com"
 });
 export type Plan = z.infer<typeof planSchema>;
