@@ -406,10 +406,14 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
     run: async (flow, input) => {
       const profile =
         flow.profile === "provider" ? ((await opts.providerProfile?.(flow.site)) ?? null) : null;
-      // A profile opens once: two sites sharing one queue on it.
-      return locks.withLock(profile ?? flow.site, async () => {
+      // A profile opens once: everything that lands on one Chrome profile shares one queue and
+      // one parked browser. A flow under its site (`reddit`) and under its account's profile
+      // (`reddit@wren`, the sites facade) resolve to the same profile, as openSession does.
+      const asked = profile ?? opts.profile ?? flow.site;
+      const key = (await opts.profileName?.(asked)) ?? asked;
+      return locks.withLock(key, async () => {
         // Opening the browser is the first thing the network or the machine can break.
-        const parked = (await runner.park?.take(flow.site)) ?? null;
+        const parked = (await runner.park?.take(key)) ?? null;
         const session =
           parked ??
           (await openSession(flow.site, profile ? { ...opts, profile } : opts).catch(
@@ -874,7 +878,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           if (runner.park && !broken) {
             // Stubs from `answer` belong to this run.
             await session.context.unrouteAll({ behavior: "ignoreErrors" }).catch(() => undefined);
-            await runner.park.put(flow.site, session);
+            await runner.park.put(key, session);
           } else await session.close();
         }
       });

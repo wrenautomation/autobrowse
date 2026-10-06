@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { defineFlow, flowRunner } from "../src/browser/flow.js";
+import { type BrowserFlow, defineFlow, type FlowPage, flowRunner } from "../src/browser/flow.js";
 import { SessionPark } from "../src/browser/park.js";
 import { NeedsHuman } from "../src/browser/session.js";
 
@@ -58,6 +58,47 @@ describe("SessionPark", () => {
     expect(await runner.run(resume, undefined)).toBe("half done");
     // Kept again for the run after.
     expect(park.size).toBe(1);
+  }, 60_000);
+
+  it("a flow under its site and under its account's profile share one browser", async () => {
+    const url = await ready;
+    const shared = new SessionPark({ idleMs: 60_000, max: 2 });
+    const byAccount = flowRunner(
+      {
+        tier: "local",
+        channel: "chromium",
+        profilesDir: join(dir, "profiles"),
+        artifactsDir: join(dir, "artifacts"),
+        headless: true,
+        // The desk's mapping: the site signs in as `acct@wren`, whose profile is its own name.
+        profileName: async (name) => (name === "acct" ? "acct@wren" : name),
+      },
+      { pace: null, park: shared },
+    );
+    const fill = defineFlow<undefined, void>({
+      site: "acct",
+      name: "fill",
+      async run(fp) {
+        await fp.open(url);
+        await fp.page.fill("#f", "same browser");
+      },
+    });
+    const read = {
+      ...fill,
+      site: "acct@wren",
+      run: async (fp: FlowPage) => {
+        await fp.open(url);
+        return fp.page.inputValue("#f");
+      },
+    } as unknown as BrowserFlow<undefined, string>;
+    try {
+      await byAccount.run(fill, undefined);
+      // Before: a second key opened the parked profile again and failed on its lock.
+      expect(await byAccount.run(read, undefined)).toBe("same browser");
+      expect(shared.size).toBe(1);
+    } finally {
+      await shared.closeAll();
+    }
   }, 60_000);
 
   it("keeps at most `max`, closing the oldest", async () => {
