@@ -59,6 +59,7 @@ describe("browser service", () => {
       "google/youtube-community-post",
       "instagram/create-post",
       "instagram/oauth-consent",
+      "linkedin/activity",
       "linkedin/company",
       "linkedin/company-jobs",
       "linkedin/company-people",
