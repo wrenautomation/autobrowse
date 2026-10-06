@@ -1,4 +1,5 @@
 /** Gmail as one user (domain-wide delegation): the send-as signature, and plain mail for notifications. */
+import libmime from "libmime";
 import MailComposer from "nodemailer/lib/mail-composer/index.js";
 import { authedJson, type TokenSupplier } from "../google-auth.js";
 import type { HttpClient } from "./http.js";
@@ -38,12 +39,17 @@ export interface WholeMessage {
   raw: Buffer;
 }
 
-/** A header from raw RFC 822 text (folded lines joined); "" when absent. */
+/** A header from raw RFC 822 text (folded lines joined, RFC 2047 words decoded by libmime); "" when absent. */
 export function rawHeader(raw: Buffer, name: string): string {
   const head = raw.toString("utf8").split(/\r?\n\r?\n/)[0] ?? "";
   const unfolded = head.replace(/\r?\n[ \t]+/g, " ");
   const re = new RegExp(`^${name}:[ \\t]*(.*)$`, "im");
-  return re.exec(unfolded)?.[1]?.trim() ?? "";
+  const value = re.exec(unfolded)?.[1]?.trim() ?? "";
+  try {
+    return libmime.decodeWords(value);
+  } catch {
+    return value;
+  }
 }
 
 export interface GmailMessage {

@@ -124,6 +124,14 @@ describe("charges", () => {
     expect(rawHeader(raw, "subject")).toBe("Your receipt");
     expect(rawHeader(raw, "to")).toBe("");
   });
+  it("decodes RFC 2047 encoded words in a header", () => {
+    const b64 = Buffer.from("Votre reçu n°42").toString("base64");
+    const raw = Buffer.from(
+      `From: =?UTF-8?Q?Caf=C3=A9_Billing?= <b@x.example>\r\nSubject: =?UTF-8?B?${b64}?=\r\n =?ISO-8859-1?Q?_=E9t=E9?=\r\n\r\nbody`,
+    );
+    expect(rawHeader(raw, "subject")).toBe("Votre reçu n°42 été");
+    expect(rawHeader(raw, "from")).toBe("Café Billing <b@x.example>");
+  });
   it("mail with a file is multipart/mixed; without, plain text", async () => {
     const base = { from: "a@x.co", to: "b@x.co", subject: "s", text: "hi" };
     const plain = await mimeMessage(base);
