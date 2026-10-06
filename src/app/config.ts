@@ -5,6 +5,7 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { parseDotenv } from "credvault";
 import { z } from "zod";
 import { DEFAULT_DB } from "../devices/phone.js";
 import { checkOwner, DEFAULT_OWNER, isDefaultOwner, OWNER_NAME } from "../owner.js";
@@ -545,15 +546,13 @@ export function loadEnvFile(from = process.cwd()): { root: string; names: string
   return { root: dir, names };
 }
 
-/** `KEY=value` lines of a dotenv file (none when it is missing); quotes stripped, comments skipped. */
+/**
+ * `KEY=value` lines of a dotenv file (none when it is missing), read by
+ * credvault's `parseDotenv`, the parser of the store that writes this file.
+ * Not `util.parseEnv`: it cuts a value at any `#`, and the store writes
+ * values unquoted.
+ */
 export function readDotenv(file: string): Map<string, string> {
-  const out = new Map<string, string>();
-  if (!existsSync(file)) return out;
-  for (const line of readFileSync(file, "utf8").split("\n")) {
-    const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/.exec(line);
-    if (!m || line.trimStart().startsWith("#")) continue;
-    const [, key, raw] = m as unknown as [string, string, string];
-    out.set(key, raw.replace(/^(['"])(.*)\1$/, "$2"));
-  }
-  return out;
+  if (!existsSync(file)) return new Map();
+  return new Map(parseDotenv(readFileSync(file, "utf8")).map((e) => [e.name, e.value]));
 }
