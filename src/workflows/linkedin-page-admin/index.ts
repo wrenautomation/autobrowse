@@ -56,7 +56,7 @@ export const planSchema = z.object({
   query: z
     .string()
     .min(2)
-    .default("Will Jin Wren Automation")
+    .default("Will Jin Founder, Wren")
     .describe("What to type in the member search: name plus headline words narrows it"),
   role: z.enum(["content", "super", "analyst"]).default("content"),
 });

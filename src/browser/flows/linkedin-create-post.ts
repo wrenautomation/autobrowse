@@ -14,7 +14,7 @@
  * rather than reads. Post is the irreversible act; the route says so, and
  * a run that is not approved stops before it.
  */
-import { defineFlow } from "../flow.js";
+import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
 
 export interface CreatePostInput {
@@ -73,6 +73,12 @@ export const linkedinCreatePost = defineFlow<CreatePostInput, { url: string | nu
       );
     await fp.act({ kind: "fill", value: input.text }, body, { goal: "type the post" });
     await fp.wait(SETTLE_MS);
+    // The editor holds one paragraph per line (mapped 2026-10-07): what Post would publish.
+    const typed = await composed(fp);
+    if (typed !== null && typed !== input.text.replace(/\n+$/, ""))
+      return fp.human(
+        `the composer holds other text than the post (${typed.length} vs ${input.text.length} chars)`,
+      );
     if (!(await fp.has(post, RENDER_MS))) return fp.human("no Post button in the composer");
     await fp.act({ kind: "click" }, post, { goal: "publish the post", irreversible: true });
     // LinkedIn closes the composer and drops a "Post successful" toast with
@@ -88,6 +94,28 @@ export const linkedinCreatePost = defineFlow<CreatePostInput, { url: string | nu
     return fp.human(`the composer never confirmed the post (on ${fp.url()})`);
   },
 });
+
+/** The composer's text, one line per paragraph; null when the editor has no paragraphs (a fake page). */
+async function composed(fp: { page: FlowPage["page"] }): Promise<string | null> {
+  try {
+    return await fp.page
+      .locator("div[role=textbox]")
+      .first()
+      .evaluate(
+        (box) => {
+          type Kid = { tagName: string; textContent: string | null };
+          const kids = Array.from((box as unknown as { children: ArrayLike<Kid> }).children);
+          return kids.length && kids.every((k) => k.tagName === "P")
+            ? kids.map((k) => k.textContent ?? "").join("\n")
+            : null;
+        },
+        undefined,
+        { timeout: 5_000 },
+      );
+  } catch {
+    return null;
+  }
+}
 
 /** The newest activity URN on the page, as the permalink of what was just published. */
 async function newestPost(fp: { html(): Promise<string> }): Promise<string | null> {
