@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { chromium } from "playwright";
 import { describe, expect, it } from "vitest";
 import type { FlowRunner } from "../src/browser/flow.js";
@@ -11,6 +13,8 @@ import {
   postsSearchUrl,
   type RawPost,
   READ_POSTS,
+  urnOf,
+  urnOfTools,
 } from "../src/browser/flows/linkedin-posts.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
@@ -115,6 +119,7 @@ describe("linkedin posts: a card", () => {
       `${WEB}/in/Some-One-12/`,
     );
     expect(authorUrlOf(`${WEB}/company/sample-co#about`)).toBe(`${WEB}/company/sample-co/`);
+    expect(authorUrlOf(`${WEB}/showcase/sample-jobs/?x=1`)).toBe(`${WEB}/showcase/sample-jobs/`);
     expect(authorUrlOf(`${WEB}/feed/update/urn:li:activity:1/`)).toBeNull();
     expect(authorUrlOf(undefined)).toBeNull();
   });
@@ -123,9 +128,38 @@ describe("linkedin posts: a card", () => {
     expect(postsSearchUrl("staffing agency", "past-24h")).toBe(
       `${WEB}/search/results/content/?keywords=staffing+agency&datePosted=%22past-24h%22&sortBy=%22date_posted%22`,
     );
-    expect(companyPostsUrl("sample-co")).toBe(
-      `${WEB}/company/sample-co/posts/?feedView=all&sortBy=recent`,
+    expect(companyPostsUrl("sample-co")).toBe(`${WEB}/company/sample-co/posts/?feedView=all`);
+  });
+
+  it("SDUI urns: LinkedIn's state keys, else the comment box's componentkey", () => {
+    const bare = { ids: [], links: [] };
+    expect(urnOf({ ...bare, state: ["reactionsCount-urn:li:ugcPost:7000000000000000456"] })).toBe(
+      "urn:li:ugcPost:7000000000000000456",
     );
+    // Field 1 activity, field 2 ugcPost; the id a zigzag varint (encoded from synthetic ids).
+    expect(urnOfTools("CgsI9oHgu7K6/6TCAQ-replaceableCommentToolsAbCd")).toBe(
+      "urn:li:activity:7000000000000000123",
+    );
+    expect(urnOfTools("EgsIkIfgu7K6/6TCAQ-replaceableCommentToolsZyXw")).toBe(
+      "urn:li:ugcPost:7000000000000000456",
+    );
+    // An unmapped field, another key, a broken one: none.
+    expect(urnOfTools("GgsIqozgu7K6/6TCAQ-replaceableCommentToolsAbCd")).toBeNull();
+    expect(urnOfTools("update-card-focusAbCd")).toBeNull();
+    expect(urnOfTools("CgsI-replaceableCommentToolsAbCd")).toBeNull();
+    // State keys win over the componentkey.
+    expect(
+      urnOf({
+        ...bare,
+        state: ["commentCount-urn:li:activity:7000000000000000999"],
+        tools: ["EgsIkIfgu7K6/6TCAQ-replaceableCommentToolsZyXw"],
+      }),
+    ).toBe("urn:li:activity:7000000000000000999");
+  });
+
+  it('the SDUI body drops its trailing "… more"', () => {
+    const post = postOf({ ...SDUI, body: "We are hiring recruiters.\n… more" }, NOW);
+    expect(post?.text).toBe("We are hiring recruiters.");
   });
 });
 
@@ -207,6 +241,54 @@ describe("linkedin posts: the page script", () => {
   });
 });
 
+describe("linkedin posts: the SDUI search page (fixture mapped live 2026-10-07)", () => {
+  it("names each post from its React state keys or its comment box; a card with neither is dropped", async () => {
+    const html = readFileSync(
+      join(import.meta.dirname, "fixtures", "linkedin-posts-sdui.html"),
+      "utf8",
+    );
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      // Offline: the fixture is set as the page's content; nothing is fetched.
+      await page.setContent(html);
+      const raws = await page.evaluate<RawPost[]>(READ_POSTS);
+      expect(raws.map((r) => r.layout)).toEqual(["sdui", "sdui", "sdui"]);
+      expect(raws[0]?.ids).toEqual([]);
+      expect(raws[0]?.state).toEqual([
+        "reactionsCount-urn:li:activity:7000000000000000123",
+        "commentCount-urn:li:activity:7000000000000000123",
+      ]);
+      expect(raws[1]?.state).toEqual([]);
+      const [first, second, third] = raws.map((r) => postOf(r, NOW));
+      expect(first).toMatchObject({
+        urn: "urn:li:activity:7000000000000000123",
+        author: "Test Recruiter",
+        authorUrl: `${WEB}/in/test-recruiter-1a2b3c/`,
+        headline: "Founder, Example Recruiting Co | Placing sales leaders",
+        text: "Most agencies lose placed candidates in the first 90 days.\n\nHere is what we changed.",
+        age: "21m",
+        at: "2026-10-07T11:39:00.000Z",
+        reactions: 14,
+        comments: 3,
+        url: `${WEB}/feed/update/urn:li:activity:7000000000000000123/`,
+      });
+      expect(second).toMatchObject({
+        urn: "urn:li:ugcPost:7000000000000000456",
+        author: "Example Staffing Group",
+        authorUrl: `${WEB}/company/example-staffing-group/`,
+        text: "What are you paying for when you use a staffing agency? A short list.",
+        age: "2d",
+        reactions: 1200,
+        comments: 45,
+      });
+      expect(third).toBeNull();
+    } finally {
+      await browser.close();
+    }
+  });
+});
+
 describe("linkedin posts: the flows and the routes", () => {
   const scripted = (screens: RawPost[][]) => {
     const { fp, acts } = fakePage({ text: [""], present: (h) => h.name !== "/^don.t allow$/i" });
@@ -238,11 +320,23 @@ describe("linkedin posts: the flows and the routes", () => {
     expect(acts).toEqual([]);
   });
 
-  it("company: the Posts tab, max kept", async () => {
-    const { fp, opened } = scripted([[CLASSIC, SDUI]]);
+  it("company: the Posts tab sorted by Recent in its menu, max kept", async () => {
+    const { fp, acts, opened } = scripted([[CLASSIC, SDUI]]);
     const out = await linkedinCompanyPosts.run(fp, { company: "sample-co", max: 1 });
     expect(opened).toEqual([companyPostsUrl("sample-co")]);
+    expect(acts.map((a) => `${a.op.kind} ${a.hints.role} ${a.hints.name}`)).toEqual([
+      "click button /^sort by:\\s*top$/i",
+      "click menuitem /^recent$/i",
+    ]);
     expect(out.posts.map((p) => p.urn)).toEqual(["urn:li:activity:7001"]);
+  });
+
+  it("company: no sort menu, the page is read as it is", async () => {
+    const { fp, acts } = scripted([[SDUI]]);
+    fp.has = async (h) => !h.role;
+    const out = await linkedinCompanyPosts.run(fp, { company: "sample-co" });
+    expect(acts).toEqual([]);
+    expect(out.posts.map((p) => p.urn)).toEqual(["urn:li:ugcPost:7002"]);
   });
 
   it("No results found is no posts; anything else goes to a person", async () => {

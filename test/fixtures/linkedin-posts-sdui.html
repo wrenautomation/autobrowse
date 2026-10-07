@@ -1,0 +1,71 @@
+<!--
+  LinkedIn's SDUI content search, as mapped live 2026-10-07 (linkedin@wren, explore):
+  the shape only. Synthetic names, text and ids; no real people or posts.
+  Classes are obfuscated on the page and left out here; its lists are
+  `div role=list`, plain `ul`/`li` here. No card names its urn in
+  markup: card 1 holds it in its buttons' React props (the script below stands in
+  for React), card 2 only in its comment box's componentkey (field 2 = ugcPost),
+  card 3 nowhere (dropped).
+-->
+<main class="workspace">
+  <ul>
+    <li componentkey="expandedAbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd">
+      <div componentkey="update-card-focusAbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd">
+        <h2>Feed post</h2>
+        <a href="https://www.linkedin.com/in/test-recruiter-1a2b3c/"><img alt="View Test Recruiter’s profile" /></a>
+        <a href="https://www.linkedin.com/in/test-recruiter-1a2b3c/"><p>Test Recruiter</p>
+          <p> </p><p> • 3rd+</p></a>
+        <p>Founder, Example Recruiting Co | Placing sales leaders</p>
+        <a href="https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fexample.test%2Fbook">Book an appointment</a>
+        <p>21m</p>
+        <button type="button" aria-label="Follow Test Recruiter">Follow</button>
+        <button type="button" aria-label="Open control menu for post by Test Recruiter"></button>
+        <div data-testid="expandable-text-box">Most agencies lose placed candidates in the first 90 days.<br><br>Here is what we changed.<br><button type="button">… more</button></div>
+        <button type="button" aria-label="Reaction button state: no reaction">14</button>
+        <button type="button" aria-label="Open reactions menu"></button>
+        <button type="button" aria-label="Comment">3</button>
+        <button type="button" aria-label="Repost">Repost</button>
+        <div componentkey="CgsI9oHgu7K6/6TCAQ-replaceableCommentToolsAbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd"></div>
+      </div>
+    </li>
+    <li componentkey="expandedZyXwVuTsRqPoNmLkJiHgFeDcBa9876543210zyxw">
+      <div componentkey="update-card-focusZyXwVuTsRqPoNmLkJiHgFeDcBa9876543210zyxw">
+        <h2>Feed post</h2>
+        <a href="https://www.linkedin.com/company/example-staffing-group/"><img alt="Example Staffing Group" /></a>
+        <a href="https://www.linkedin.com/company/example-staffing-group/"><p>Example Staffing Group</p></a>
+        <p> </p>
+        <p>2d</p>
+        <button type="button" aria-label="Follow Example Staffing Group">Follow</button>
+        <div data-testid="expandable-text-box">What are you paying for when you use a staffing agency? A short list.<br><button type="button">… more</button></div>
+        <button type="button" aria-label="Reaction button state: no reaction">1.2K</button>
+        <button type="button" aria-label="Comment">45</button>
+        <div componentkey="EgsIkIfgu7K6/6TCAQ-replaceableCommentToolsZyXwVuTsRqPoNmLkJiHgFeDcBa9876543210zyxw"></div>
+      </div>
+    </li>
+    <li componentkey="expandedNoUrnNoUrnNoUrnNoUrnNoUrnNoUrnNoUrnNo">
+      <div componentkey="update-card-focusNoUrnNoUrnNoUrnNoUrnNoUrnNoUrnNoUrnNo">
+        <h2>Feed post</h2>
+        <a href="https://www.linkedin.com/in/no-urn-person/"><p>No Urn Person</p></a>
+        <p>5h</p>
+        <div data-testid="expandable-text-box">A card that names no post anywhere.</div>
+        <button type="button" aria-label="Reaction button state: no reaction"></button>
+        <button type="button" aria-label="Comment"></button>
+      </div>
+    </li>
+  </ul>
+</main>
+<script>
+  // What React leaves on card 1's action buttons: props whose rendered children carry the
+  // server's state keys, as read live (button → children.props.text[0].props.children[0].props).
+  const urn = "urn:li:activity:7000000000000000123";
+  const props = (kind) => ({
+    type: "button",
+    "aria-label": kind,
+    children: { props: { text: [{ props: { children: [
+      { props: { stateKey: `reactionsCount-${urn}`, bindingKey: { key: { value: { id: `reactionsCount-${urn}` } } } } },
+      { props: { stateKey: `commentCount-${urn}` } },
+    ] } }] } },
+  });
+  const card = document.querySelector('[componentkey^="update-card-focusAbCd"]');
+  for (const b of card.querySelectorAll("button[aria-label]")) b.__reactProps$synthetic = props(b.getAttribute("aria-label"));
+</script>
