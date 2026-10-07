@@ -26,7 +26,7 @@ import {
   viaLogin,
 } from "../auth/index.js";
 import { CRED_ENV } from "../auth/keep.js";
-import { mintCredentialLink } from "../auth/link.js";
+import { type LinkField, linkLabel, linkTtl, mintCredentialLink } from "../auth/link.js";
 import { dropRole, giveRole } from "../auth/roles.js";
 import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
 import { expandHome } from "../google-auth.js";
@@ -372,32 +372,72 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       );
     });
   creds
-    .command("link <site> [account]")
+    .command("link [logins...]")
     .description(
-      "A one-time link to a stored login, for the phone: after Wren's sign-in it gives Copy username and Copy password; dead after one reveal or 10 min. Only the link is printed. Several accounts on the site: name one",
+      "A one-time link to stored logins (site or site:account) and env keys (--keys): one Copy button per field, dead after one reveal or its TTL. Needs Wren's sign-in unless --open (for someone outside Wren). Only the link is printed",
     )
-    .action(async (given: string, account: string | undefined) => {
-      if (!settings.credLinkSecret)
-        throw new Error("no CRED_LINK_SECRET in the env (wren deploy/phone.md)");
-      const site = await pickAccount(credentialsFor(settings, { armed: false }), given, account);
-      const cred = await credentialsFor(settings).get(site);
-      if (!cred?.password) throw new Error(`${site} has no password stored`);
-      const link = await mintCredentialLink(settings.credLinkUrl, settings.credLinkSecret, {
-        site,
-        username: cred.username,
-        password: cred.password,
-      });
-      await auditFor(settings).record({
-        at: new Date().toISOString(),
-        credential: site,
-        field: "password",
-        site,
-        url: `${settings.credLinkUrl}/links`,
-        by: "creds link",
-        allowed: true,
-      });
-      console.log(link);
-    });
+    .option(
+      "--keys <names>",
+      "env keys to add, comma separated (DYNADOT_API_KEY,DYNADOT_API_SECRET)",
+    )
+    .option("--open", "no sign-in: anyone holding the link opens it once (default TTL 24h)")
+    .option("--ttl <time>", "dies unopened after 10m, 24h, 7d (default 10m, open 24h)")
+    .option("--label <text>", "what the page names before Reveal (default: what's inside)")
+    .action(
+      async (
+        given: string[],
+        o: { keys?: string; open?: boolean; ttl?: string; label?: string },
+      ) => {
+        if (!settings.credLinkSecret)
+          throw new Error("no CRED_LINK_SECRET in the env (wren deploy/phone.md)");
+        const keys = (o.keys ?? "")
+          .split(",")
+          .map((n) => n.trim())
+          .filter(Boolean);
+        if (!given.length && !keys.length) throw new Error("name a login or --keys");
+        const many = given.length + keys.length > 1;
+        const fields: LinkField[] = [];
+        const uses: { credential: string; site: string; field: "password" | "secret" }[] = [];
+        for (const item of given) {
+          const [siteArg, account] = item.split(":") as [string, string | undefined];
+          const site = await pickAccount(
+            credentialsFor(settings, { armed: false }),
+            siteArg,
+            account,
+          );
+          const cred = await credentialsFor(settings).get(site);
+          if (!cred?.password) throw new Error(`${site} has no password stored`);
+          const pre = many ? `${site} ` : "";
+          fields.push(
+            { name: `${pre}username`, value: cred.username },
+            { name: `${pre}password`, value: cred.password },
+          );
+          uses.push({ credential: site, site, field: "password" });
+        }
+        for (const name of keys) {
+          const value = process.env[name];
+          if (!value) throw new Error(`${name} is not in the env`);
+          fields.push({ name, value });
+          uses.push({ credential: `env:${name}`, site: "env", field: "secret" });
+        }
+        const link = await mintCredentialLink(
+          settings.credLinkUrl,
+          settings.credLinkSecret,
+          { label: linkLabel(o.label ? [o.label] : [...given, ...keys]), fields },
+          { open: o.open, ttl: o.ttl ? linkTtl(o.ttl) : o.open ? 86_400 : undefined },
+        );
+        const at = new Date().toISOString();
+        for (const u of uses)
+          await auditFor(settings).record({
+            at,
+            ...u,
+            url: `${settings.credLinkUrl}/links`,
+            by: o.open ? "creds link --open" : "creds link",
+            allowed: true,
+          });
+        console.log(link);
+      },
+    );
   creds
     .command("paste <site>")
     .description(

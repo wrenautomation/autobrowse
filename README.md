@@ -379,6 +379,7 @@ pnpm autobrowse needs                             # what only you can give (logi
 pnpm autobrowse needs do login-linkedin           # runs the row's ingestion (clipboard creds, a consent, a setup step); `needs done <id>` for decisions
 pnpm autobrowse creds copy google                 # one stored field onto the clipboard for a minute (--field password|username|totp|recovery|previous); never printed
 pnpm autobrowse creds link npm                    # one-time link for the phone: Wren sign-in, then Copy username / Copy password; 10 min
+pnpm autobrowse creds link --keys A_KEY,A_SECRET --open   # one-time link for someone outside Wren: no sign-in, 24h (--ttl 7d max)
 pnpm autobrowse creds password google             # you changed it on the site: type it here twice, echo off; only the store is touched
 pnpm autobrowse creds rotate google --ask         # change it on the site itself, to one you type here (no --ask: a random 24-char one)
 pnpm autobrowse creds push linkedin               # that stored credential into SSM as AUTOBROWSE_CRED_LINKEDIN_*: the box signs in too
