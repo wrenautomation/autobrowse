@@ -457,6 +457,7 @@ export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signI
  * is what makes a provider sign-in work on a site nobody wrote a spec for.
  */
 export function viaLogin(site: string, cred: Credential): SiteLogin {
+  if (cred.via === EMAIL_CODE) return emailCodeLogin(site, cred);
   const provider = providerOf(cred.via as Provider);
   // A page that still holds a password field is a sign-in form under some other URL (Telnyx, 2026-09-29).
   // A spinner is neither signed in nor out: wait it out before judging.
@@ -479,6 +480,103 @@ export function viaLogin(site: string, cred: Credential): SiteLogin {
         success: signedIn,
         account: cred.username,
       })(ctx);
+    },
+  };
+}
+
+/** `via: "email"`: no password and no provider; the site emails a code to the address each time. */
+export const EMAIL_CODE = "email";
+
+/** The boxes a passwordless sign-in page shows, by the attributes such pages use. */
+export const EMAIL_CODE_PAGE = {
+  email: {
+    css: "input[type=email], input[autocomplete=email], input[autocomplete=username], input[name*=email i]",
+  },
+  code: {
+    css: "input[autocomplete=one-time-code], input[name*=code i], input[inputmode=numeric], input[name*=otp i]",
+  },
+  submit: { css: "button[type=submit], form button:not([type=button])" },
+  /** A code page's button outside any form (Cap's "Verify Code"): found by its words. */
+  verify: {
+    role: "button",
+    name: "/^\\s*(verify|continue|confirm|submit|sign ?in|log ?in|next)/i",
+  },
+} satisfies Record<string, Hints>;
+const { email: EMAIL_FIELD, code: CODE_FIELD, submit: CONTINUE } = EMAIL_CODE_PAGE;
+
+/**
+ * A passwordless sign-in: type the address, submit, read the emailed code from its inbox
+ * (`codesInbox`, else the username), type it. A walk, so a page it doesn't know goes down
+ * the learned → reader ladder like any form.
+ */
+export function emailCodeLogin(site: string, cred: Credential): SiteLogin {
+  const signedIn = async (fp: FlowPage) =>
+    (await untilLoaded(fp, LOADING_MS)) &&
+    wallOf(fp.url(), (await fp.text()).slice(0, 4000)) === null &&
+    !(await fp.has(EMAIL_FIELD, 500)) &&
+    !(await fp.has(CODE_FIELD, 500));
+  return {
+    site,
+    home: cred.url ?? "",
+    loggedIn: signedIn,
+    signIn: async (ctx) => {
+      if (!cred.url) throw new LoginFailed(site, "no sign-in page known: store it with --url");
+      await ctx.fp.open(cred.url, { allowWall: true });
+      let sent: Date | null = null;
+      let typed = false;
+      const fail = (why: string): never => {
+        throw new LoginFailed(site, why);
+      };
+      await walk(ctx, {
+        site,
+        name: "email-code sign-in",
+        goal: `signed in to ${site}`,
+        fail,
+        screens: [
+          {
+            name: "signed in",
+            looks: "the site signed in, past the email and code boxes",
+            is: async ({ fp }) => typed && (await signedIn(fp)),
+            goal: true,
+          },
+          {
+            name: "code page",
+            looks: "a box asking for the code the site just emailed",
+            shows: [CODE_FIELD],
+            async act({ fp, code }) {
+              if (typed) fail(`the code page came back after the code: ${fp.url()}`);
+              const c = await code("email", site, sent ?? undefined);
+              await fp.act({ kind: "fill", value: c }, CODE_FIELD, {
+                goal: "type the emailed code",
+              });
+              const at = fp.url();
+              // Many code boxes submit themselves on the last digit; else the form's button, else one by its words.
+              if (!(await fp.waitForUrl((u) => u !== at, 2_000))) {
+                const go = (await fp.has(CONTINUE, 500)) ? CONTINUE : EMAIL_CODE_PAGE.verify;
+                if (await fp.has(go, 500))
+                  await fp.act({ kind: "click" }, go, { goal: "submit the code" });
+              }
+              typed = true;
+              // Checking the code takes a round trip: let the page move before the walk judges it.
+              await fp.waitForUrl((u) => u !== at, 20_000);
+            },
+          },
+          {
+            name: "email page",
+            looks: "the sign-in page asking for an email address",
+            shows: [EMAIL_FIELD],
+            hides: [CODE_FIELD],
+            async act({ fp }) {
+              if (sent) fail(`the email page came back after sending: ${fp.url()}`);
+              await fp.act({ kind: "fill", value: cred.username }, EMAIL_FIELD, {
+                goal: "type the email",
+              });
+              sent = new Date();
+              await fp.act({ kind: "click" }, CONTINUE, { goal: "ask for a code" });
+            },
+          },
+        ],
+      });
     },
   };
 }

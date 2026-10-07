@@ -22,6 +22,7 @@ import {
   totpSource,
   viaLogin,
 } from "../src/auth/index.js";
+import { EMAIL_CODE, EMAIL_CODE_PAGE } from "../src/auth/login.js";
 import type { FlowPage } from "../src/browser/flow.js";
 import type { Hints } from "../src/browser/locate.js";
 import { NeedsHuman } from "../src/browser/session.js";
@@ -478,6 +479,88 @@ describe("sign in via a provider on a site nobody wrote a spec for", () => {
         },
       }),
     ).rejects.toThrow(/no password .*via google/);
+  });
+});
+
+describe("sign in by an emailed code, no password", () => {
+  const E = `css:${EMAIL_CODE_PAGE.email.css}`;
+  const C = `css:${EMAIL_CODE_PAGE.code.css}`;
+  const GO = `css:${EMAIL_CODE_PAGE.submit.css}`;
+  const cred = {
+    username: "me@x.test",
+    via: EMAIL_CODE,
+    url: "https://cap.test/login",
+    recoveryCodes: [],
+    passkeys: [],
+  };
+  const home = { url: "https://cap.test/dashboard", has: [], text: "Your recordings" };
+
+  it("types the address, reads the code sent after it, types it, lands", async () => {
+    const site = fakeSite(
+      {
+        email: { has: [E, GO], text: "Sign in", on: { [`click ${GO}`]: "code" } },
+        // The boxes submit on the last digit: no button.
+        code: { has: [C], text: "Check your email", on: { [`fill ${C}`]: "home" } },
+        home,
+      },
+      "email",
+    );
+    const asked: { kind: string; after?: Date }[] = [];
+    const login = viaLogin("cap", cred);
+    await login.signIn({
+      fp: site.fp,
+      cred,
+      code: async (kind, _hint, after) => {
+        asked.push({ kind, ...(after ? { after } : {}) });
+        return "424242";
+      },
+    } as never);
+    expect(site.at()).toBe("home");
+    expect(asked).toHaveLength(1);
+    expect(asked[0]?.kind).toBe("email");
+    expect(asked[0]?.after).toBeInstanceOf(Date);
+    expect(site.acts[0]).toMatch(/^fill .*=me@x\.test$/);
+    expect(site.acts[2]).toMatch(/=424242$/);
+  });
+
+  it("presses a Verify button that sits outside any form", async () => {
+    const site = fakeSite(
+      {
+        email: { has: [E, GO], text: "Sign in", on: { [`click ${GO}`]: "code" } },
+        code: {
+          has: [C, "button:Verify Code"],
+          text: "We sent a 6-digit code",
+          on: { "click button:Verify Code": "home" },
+        },
+        home,
+      },
+      "email",
+    );
+    await viaLogin("cap", cred).signIn({ fp: site.fp, cred, code: async () => "424242" } as never);
+    expect(site.at()).toBe("home");
+    expect(site.acts.at(-1)).toBe("click Verify Code");
+  });
+
+  it("a code the site refuses is a failure, never a second code", async () => {
+    const site = fakeSite(
+      {
+        email: { has: [E, GO], text: "Sign in", on: { [`click ${GO}`]: "code" } },
+        code: { has: [C, GO], text: "Wrong code", on: {} },
+      },
+      "email",
+    );
+    let codes = 0;
+    await expect(
+      viaLogin("cap", cred).signIn({
+        fp: site.fp,
+        cred,
+        code: async () => {
+          codes++;
+          return "1";
+        },
+      } as never),
+    ).rejects.toThrow(LoginFailed);
+    expect(codes).toBe(1);
   });
 });
 

@@ -27,6 +27,7 @@ import {
 } from "../auth/index.js";
 import { CRED_ENV } from "../auth/keep.js";
 import { type LinkField, linkLabel, linkTtl, mintCredentialLink } from "../auth/link.js";
+import { EMAIL_CODE } from "../auth/login.js";
 import { dropRole, giveRole } from "../auth/roles.js";
 import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
 import { expandHome } from "../google-auth.js";
@@ -140,7 +141,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
   creds
     .command("via <site> <provider>")
     .description(
-      `The site signs in through a provider's button ("Continue with Google"): no password of its own; the provider's stored credential does the work. Providers: ${PROVIDERS.join(", ")}`,
+      `The site signs in through a provider's button ("Continue with Google"): no password of its own; the provider's stored credential does the work. Providers: ${PROVIDERS.join(", ")}; or ${EMAIL_CODE} (no password: the site emails a code to --account each time)`,
     )
     .option("--url <url>", "the site's login page (needed for a site autobrowse has no spec for)")
     .option(
@@ -157,8 +158,24 @@ export function registerAuthCommands(program: Command, settings: Settings): void
         provider: string,
         o: { url?: string; account?: string; for?: string },
       ) => {
+        if (provider === EMAIL_CODE) {
+          if (!o.account || !o.url)
+            throw new Error(
+              `via ${EMAIL_CODE} needs --account <the address> and --url <the login page>`,
+            );
+          const store = credentialsFor(settings);
+          const had = await store.get(site);
+          await store.put(
+            site,
+            had?.password
+              ? { ...had, via: EMAIL_CODE, codesInbox: o.account, url: o.url }
+              : { username: o.account, via: EMAIL_CODE, url: o.url },
+          );
+          console.log(`${site} signs in with a code emailed to ${o.account} at ${o.url}`);
+          return;
+        }
         if (!isProvider(provider))
-          throw new Error(`unknown provider ${provider}; ${PROVIDERS.join(", ")}`);
+          throw new Error(`unknown provider ${provider}; ${PROVIDERS.join(", ")} or ${EMAIL_CODE}`);
         const store = credentialsFor(settings);
         const providerCred = await store.get(provider);
         if (!providerCred)

@@ -13,6 +13,8 @@ pnpm -s autobrowse accounts push                   # the policy to the box
 
 Consents, signups and a site's `via` provider read this policy. A site made
 through a provider (`creds via <site> google`) signs in as that provider account.
+A site with no password, only a code emailed each time (Cap), is
+`creds via <site> email --account <address> --url <login page>`.
 
 ## Credentials (sealed store)
 

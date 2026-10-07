@@ -571,6 +571,13 @@ pnpm autobrowse creds set google@ops    # a second Google account, then:
 pnpm autobrowse creds via other-tool google --account ops@x.com --url https://other-tool.test/login
 ```
 
+A site with no password, only a code mailed each sign-in (Cap):
+
+```sh
+pnpm autobrowse creds via cap email --account william@wrenautomation.com --url https://cap.so/login
+pnpm autobrowse login cap               # types the address, reads the code from that inbox, types it
+```
+
 Providers live in `src/auth/providers.ts` (google, github, microsoft); a `via`
 credential on any site takes that path, spec or not. API consent
 (`site setup youtube consent`) is the hand-written `google/oauth-consent`
