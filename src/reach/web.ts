@@ -802,3 +802,66 @@ export async function companySearch(
   }
   return { query, results: out, via: "exa", meta };
 }
+
+/* ---------------- linkedin posts ---------------- */
+
+/** One public LinkedIn post Exa holds. Dates are Exa's (a day); `text` is the post's, cut. */
+export interface FoundPost {
+  url: string;
+  title: string | null;
+  author: string | null;
+  publishedDate: string | null;
+  text: string;
+  /** The result as Exa sent it, every field. */
+  raw: unknown;
+}
+
+export interface PostSearch {
+  query: string;
+  posts: FoundPost[];
+  via: string;
+}
+
+/** Post text kept per result: enough for a line and a signal, not a page. */
+const POST_CHARS = 2_000;
+
+/**
+ * Public LinkedIn posts Exa holds for `query` ("Avery Quinlan Northwind"): one search limited to
+ * `linkedin.com/posts`, newest only when `since` is set. Never reaches linkedin.com. Which posts
+ * are whose is the caller's call (the URL's `/posts/{vanity}_`).
+ */
+export async function linkedinPosts(
+  query: string,
+  deps: Deps,
+  o: { n?: number; since?: string } = {},
+): Promise<PostSearch> {
+  const body = (await exaJson(deps, "/search", {
+    query,
+    includeDomains: ["linkedin.com/posts"],
+    numResults: o.n ?? 10,
+    type: "auto",
+    ...(o.since ? { startPublishedDate: o.since } : {}),
+    contents: { text: { maxCharacters: POST_CHARS } },
+  })) as {
+    results?: Array<{
+      url?: string;
+      title?: string | null;
+      author?: string | null;
+      publishedDate?: string | null;
+      text?: string;
+    }>;
+  };
+  const posts: FoundPost[] = [];
+  for (const r of body.results ?? []) {
+    if (typeof r.url !== "string" || !/linkedin\.com\/posts\//i.test(r.url)) continue;
+    posts.push({
+      url: r.url,
+      title: r.title ?? null,
+      author: r.author ?? null,
+      publishedDate: r.publishedDate ?? null,
+      text: r.text ?? "",
+      raw: r,
+    });
+  }
+  return { query, posts, via: "exa" };
+}

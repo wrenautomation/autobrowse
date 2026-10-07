@@ -8,7 +8,7 @@
  */
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
-import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import { type ApiLeg, type OAuthSpec, route, type SiteApi, type SiteRoute } from "./types.js";
 
 export const LINKEDIN_ORIGIN = "https://api.linkedin.com";
 /** LinkedIn versions its REST API by month; a version is honoured for a year. */
@@ -143,6 +143,22 @@ export const linkedinOAuth: OAuthSpec = {
   consent: { flow: "linkedin/oauth-consent" },
 };
 
+/**
+ * Every metered call also spends its size in `total`: one account's whole day across kinds. Only
+ * an account whose caps name `total` is held to it (the personal one: 20, 2026-10-07).
+ */
+function withTotal(r: SiteRoute<never, unknown>): SiteRoute<never, unknown> {
+  const meter = r.meter;
+  if (!meter) return r;
+  return {
+    ...r,
+    meter: (q) => {
+      const use = meter(q);
+      return { ...use, total: Object.values(use).reduce((n, k) => n + k, 0) };
+    },
+  };
+}
+
 export const linkedin: SiteApi = {
   site: "linkedin",
   origin: LINKEDIN_ORIGIN,
@@ -186,6 +202,8 @@ export const linkedin: SiteApi = {
       audience: 0,
       activity: 10,
       posts: 0,
+      // Research reads in all, search first in wren (designs 2026-10-07-linkedin-search-first): 20 a day.
+      total: 20,
     },
     // The research alt (2026-10-05): reads only. LinkedIn restricted it 2026-10-06 (asks for an ID).
     "linkedin@alt": {
@@ -202,6 +220,7 @@ export const linkedin: SiteApi = {
       // wren's signals (designs 2026-10-06-signal-collectors, S5): 10 people a day.
       activity: 10,
       posts: 0,
+      total: 20,
     },
   },
   pace: { gapMs: 10_000, jitterMs: 20_000 },
@@ -490,7 +509,7 @@ export const linkedin: SiteApi = {
       meter: () => ({ message: 1 }),
       browser: { flow: "linkedin/message" },
     }),
-  ],
+  ].map(withTotal),
   setup: [
     {
       name: "developer-app",

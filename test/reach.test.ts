@@ -9,6 +9,7 @@ import {
   exaCompany,
   exaProfile,
   htmlText,
+  linkedinPosts,
   linkedinSlug,
   people,
   readPage,
@@ -477,5 +478,44 @@ describe("linkedin pages from exa's cache", () => {
       },
     ]);
     expect(out.meta).toEqual({ requestId: "req-1", costDollars: { total: 0.007 } });
+  });
+
+  it("linkedin posts: one search limited to linkedin.com/posts, text cut, other urls dropped", async () => {
+    const post = {
+      id: "p1",
+      url: "https://www.linkedin.com/posts/avery-q_hiring-update-activity-7380000000000000000-AbCd",
+      title: "Hiring update",
+      author: "Avery Quinlan",
+      publishedDate: "2026-09-30T00:00:00.000Z",
+      text: "We placed ten engineers this quarter.",
+    };
+    const { deps, sent } = exa({
+      results: [post, { id: "p2", url: "https://www.linkedin.com/in/avery-q" }, { id: "p3" }],
+    });
+    const out = await linkedinPosts("Avery Quinlan Northwind", deps, { n: 5, since: "2026-07-01" });
+    expect(sent).toEqual([
+      {
+        query: "Avery Quinlan Northwind",
+        includeDomains: ["linkedin.com/posts"],
+        numResults: 5,
+        type: "auto",
+        startPublishedDate: "2026-07-01",
+        contents: { text: { maxCharacters: 2000 } },
+      },
+    ]);
+    expect(out).toEqual({
+      query: "Avery Quinlan Northwind",
+      via: "exa",
+      posts: [
+        {
+          url: post.url,
+          title: "Hiring update",
+          author: "Avery Quinlan",
+          publishedDate: "2026-09-30T00:00:00.000Z",
+          text: "We placed ten engineers this quarter.",
+          raw: post,
+        },
+      ],
+    });
   });
 });

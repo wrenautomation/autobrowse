@@ -24,6 +24,7 @@ import {
   companies,
   companySearch,
   hostOf,
+  linkedinPosts,
   linkedinSlug,
   people,
   readPage,
@@ -168,6 +169,24 @@ export const web: SiteApi = {
           env: async (k) => leg.env(k),
           ...(leg.spent ? { spent: leg.spent } : {}),
         }).catch(final),
+    }),
+    route({
+      method: "GET",
+      path: "/linkedin/posts",
+      summary:
+        'Public LinkedIn posts from Exa\'s index, never fetched live (`q` like "Avery Quinlan Northwind", `n` up to 25, default 10, `since` an ISO date): url, title, author, publishedDate, text and `raw`; only `linkedin.com/posts` urls. 7 of the `exa` budget',
+      request: z.object({
+        q: z.string().min(1),
+        n: z.coerce.number().int().min(1).max(25).default(10),
+        since: z.iso.date().optional(),
+      }),
+      meter: () => ({ exa: 7 }),
+      api: ({ q, n, since }, leg) =>
+        linkedinPosts(
+          q,
+          { env: async (k) => leg.env(k), ...(leg.spent ? { spent: leg.spent } : {}) },
+          { n, ...(since ? { since } : {}) },
+        ).catch(final),
     }),
     route({
       method: "GET",

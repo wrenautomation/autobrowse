@@ -131,8 +131,39 @@ describe("a named account", () => {
       audience: 0,
       activity: 10,
       posts: 0,
+      total: 20,
     });
     expect(linkedin.caps).toMatchObject({ company: 40 });
+    expect(linkedin.caps).not.toHaveProperty("total");
+  });
+
+  it("the personal account reads 20 a day across kinds; the work account has no total", async () => {
+    const browser = fakeBrowser([]);
+    browser.on(linkedinCompanyJobs, async () => ({ companyId: "1", jobs: [] }));
+    const caps = memoryCaps(() => noon);
+    const sites = siteFacade([{ ...linkedin, pace: { gapMs: 0 } }], {
+      http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+      env: () => undefined,
+      sink: memorySink(),
+      runner: browser,
+      flow: (n) => (n === "linkedin/company-jobs" ? (linkedinCompanyJobs as never) : null),
+      caps,
+      accountOf: async (_site, name) =>
+        ({ linkedin: "me@x.com", "linkedin@wren": "w@x.com" })[name] ?? null,
+    });
+    const jobs = (who: string) => sites.call("linkedin", "GET", "/company/stripe/jobs", {}, who);
+    // Company is 10 a day on its own; the total of 20 is shared with every other kind.
+    for (let i = 0; i < 10; i++) await jobs("linkedin");
+    expect(caps.today()["linkedin|me@x.com|total"]).toBe(10);
+    await expect(jobs("linkedin")).rejects.toMatchObject({ status: 429 });
+    for (let i = 0; i < 12; i++) await jobs("linkedin@wren");
+    expect(caps.today()["linkedin|w@x.com|total"]).toBe(12);
+    expect(
+      caps.take("linkedin", "me@x.com", { profile: 10, total: 10 }, { profile: 20, total: 20 }).ok,
+    ).toBe(true);
+    expect(
+      caps.take("linkedin", "me@x.com", { profile: 1, total: 1 }, { profile: 20, total: 20 }),
+    ).toMatchObject({ ok: false, bucket: "total", used: 20, cap: 20 });
   });
 });
 
@@ -247,6 +278,7 @@ describe("web and x reads", () => {
       ["/exa/companies", "api"],
       ["/linkedin/profile", "api"],
       ["/linkedin/company", "api"],
+      ["/linkedin/posts", "api"],
       ["/read", "api"],
       ["/google", "none"], // a browser leg; this fake runner has no flows
     ]);
@@ -405,7 +437,7 @@ describe("who spent a cap", () => {
       site: "linkedin",
       account: "r@x.com",
       route: "GET /company/{company}/jobs",
-      use: { company: 1 },
+      use: { company: 1, total: 1 },
       caller: "wren:research",
       invocation: "inv_1",
       outcome: "ok",
@@ -429,7 +461,7 @@ describe("who spent a cap", () => {
     expect((err as Error).message).toMatch(
       /GET \/company\/\{company\}\/jobs failed after spending a read/,
     );
-    expect(caps.today()).toEqual({ "linkedin|r@x.com|company": 1 });
+    expect(caps.today()).toEqual({ "linkedin|r@x.com|company": 1, "linkedin|r@x.com|total": 1 });
   });
 });
 
@@ -446,7 +478,7 @@ describe("the caps ledger on disk", () => {
       site: "linkedin",
       account: "r@x.com",
       route: "GET /company/{handle}",
-      use: { company: 1 },
+      use: { company: 1, total: 1 },
       caller: "wren:demo",
       outcome: "ok" as const,
     };
