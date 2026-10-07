@@ -19,6 +19,7 @@ One thing `do` can pick: a site route, a compiled workflow, a hand-written flow 
 
 - `AbilityKind = site | workflow | flow | tool`; `Ability { kind, name, site, summary, inputs, irreversible, ready, missing }` — `src/do/catalog.ts:12-30`; `siteAbilityName`, `parseSiteAbility`, `fieldsOf` — `:28-72`; `AbilitySources`, `abilitiesOf` — `:74-83`
 - `DoRequest { goal, inputs?, site?, url?, dryRun? }`; `DoVia`; `DoOutcome`; `DoError` — `src/do/doer.ts:19-57`; `DoerDeps { llm, abilities, sites, callSite, runWorkflow, runFlow, runTool?, memory?, agent?, compile? }` — `:59-84`; `doer(d)` — `:107`
+- Tools: `Tool`, `TOOLS` (`wrangler-deploy`, `wrangler-pages-deploy`, `gh-pr-create`, `ffmpeg-convert`), `runTool` — `src/do/tools.ts:11-91`, `:129-150`
 - The pick: `Pick`, `pickAbility` (a model chooses, earlier picks remembered) — `src/do/pick.ts:11-52`
 - Restate: `DO_SERVICE = "do"`, `doService` — `src/do/service.ts:12-22`
 

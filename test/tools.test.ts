@@ -25,6 +25,22 @@ describe("tools as abilities", () => {
     expect(shellQuote("a'b")).toBe("'a'\\''b'");
   });
 
+  it("deploys a static directory to a Pages project, on main unless a branch is named", async () => {
+    const shell = fakeShell({ wrangler: "Deployment complete!" });
+    const pages = TOOLS.find((t) => t.name === "wrangler-pages-deploy");
+    if (!pages) throw new Error("no wrangler-pages-deploy");
+    expect(pages).toMatchObject({ irreversible: true, timeoutMs: 300_000 });
+    expect(pages.cwd).toBeUndefined();
+    const out = await runTool(pages, { dir: "/tmp/it's site", project: "acme-lp" }, shell);
+    expect(out.command).toBe(
+      "wrangler pages deploy '/tmp/it'\\''s site' --project-name 'acme-lp' --branch 'main'",
+    );
+    const preview = await runTool(pages, { dir: "out", project: "p", branch: "draft" }, shell);
+    expect(preview.command).toBe("wrangler pages deploy 'out' --project-name 'p' --branch 'draft'");
+    await expect(runTool(pages, { project: "p" }, shell)).rejects.toThrow(/needs dir/);
+    await expect(runTool(pages, { dir: "out" }, shell)).rejects.toThrow(/needs project/);
+  });
+
   it("is ready when the binary is on the PATH, and says how to get it otherwise", async () => {
     const shell = fakeShell({
       "command -v 'gh'": { code: 0, stdout: "/usr/bin/gh", stderr: "" },

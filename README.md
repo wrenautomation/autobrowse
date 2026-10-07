@@ -29,8 +29,8 @@ pnpm autobrowse abilities                        # what `do` can pick from, and 
 
 `do` routes a goal to what does it: a site route under its official API
 shape, a compiled workflow, a hand-written flow, a command-line tool
-(`wrangler-deploy`, `gh-pr-create`, `ffmpeg-convert`; ready when the binary
-is on the PATH, `src/do/tools.ts`). What the model picked for earlier goals
+(`wrangler-deploy`, `wrangler-pages-deploy`, `gh-pr-create`, `ffmpeg-convert`;
+ready when the binary is on the PATH, `src/do/tools.ts`). What the model picked for earlier goals
 is kept (`recordings/.do-picks.json`) and shown to it, so the same ask in
 other words lands on the same ability. With nothing ready, the
 agent explores the site once; what it achieved is saved and compiled,

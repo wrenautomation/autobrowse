@@ -44,6 +44,21 @@ export const TOOLS: readonly Tool[] = [
     timeoutMs: 300_000,
   },
   {
+    name: "wrangler-pages-deploy",
+    summary: "Deploy a static directory to a Cloudflare Pages project",
+    bin: "wrangler",
+    install: "npm i -g wrangler; wrangler login",
+    inputs: [
+      { name: "dir", required: true },
+      { name: "project", required: true },
+      { name: "branch" },
+    ],
+    command: (q) =>
+      `wrangler pages deploy ${q.dir} --project-name ${q.project} --branch ${q.branch ?? "'main'"}`,
+    irreversible: true,
+    timeoutMs: 300_000,
+  },
+  {
     name: "gh-pr-create",
     summary: "Open a GitHub pull request from the current branch of a repository directory",
     bin: "gh",
