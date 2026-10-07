@@ -260,6 +260,7 @@ const read = z
       "comments",
       "playlists",
       "subscriptions",
+      "captions",
     ]),
   })
   .loose();
@@ -497,7 +498,7 @@ export const youtube: SiteApi = {
       method: "GET",
       path: "/youtube/v3/{resource}",
       summary:
-        "Any read with its own query: `videos?part=statistics&id=`, `channels?mine=true&part=contentDetails`, `playlistItems?playlistId=`, `commentThreads?videoId=`, `search?forMine=true&type=video`, `subscriptions?myRecentSubscribers=true&part=subscriberSnippet`",
+        "Any read with its own query: `videos?part=statistics&id=`, `channels?mine=true&part=contentDetails`, `playlistItems?playlistId=`, `commentThreads?videoId=`, `search?forMine=true&type=video`, `subscriptions?myRecentSubscribers=true&part=subscriberSnippet`, `captions?part=snippet&videoId=`",
       request: read,
       api: async ({ resource, ...query }, leg) => {
         const u = new URL(`${YOUTUBE_ORIGIN}/youtube/v3/${resource}`);
