@@ -4,17 +4,26 @@
  * with its own query, comments. The API covers the channel; only community
  * posts and Studio-only settings need the browser, and those routes say
  * they have no official path.
+ *
+ * Two more Google APIs on the same token (`yt-analytics.readonly`): YouTube
+ * Analytics v2 (`GET /v2/reports`, a query answered as columns and rows) and
+ * the YouTube Reporting API v1 (`/v1/jobs`, daily bulk CSV reports; the reach
+ * report is the only source of thumbnail impressions and their CTR).
  */
 import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { z } from "zod";
 import { currentCall } from "../browser/attempt.js";
-import { HttpError } from "../clients/http.js";
+import { HttpError, safeUrls } from "../clients/http.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi, SiteError } from "./types.js";
 import { once } from "./uploads.js";
 
 export const YOUTUBE_ORIGIN = "https://www.googleapis.com";
+export const YOUTUBE_ANALYTICS_ORIGIN = "https://youtubeanalytics.googleapis.com";
+export const YOUTUBE_REPORTING_ORIGIN = "https://youtubereporting.googleapis.com";
+/** The Reporting API's reach report: thumbnail impressions and their CTR per video per day. */
+export const REACH_REPORT = "channel_reach_basic_a1";
 
 /**
  * Which channel these writes belong on. A Google account can own several
@@ -65,9 +74,68 @@ export async function onTheRightChannel(leg: ApiLeg): Promise<void> {
 
 const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 
-async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok) throw new HttpError("CALL", `${YOUTUBE_ORIGIN}/${what}`, res.status);
+/** Google's own words on a refusal (`error.message`), its URLs cut to origin and path. */
+function googleWords(body: unknown): string {
+  const m = (body as { error?: { message?: unknown } } | null)?.error?.message;
+  return typeof m === "string" ? safeUrls(m).slice(0, 300) : "";
+}
+
+async function must<T>(
+  res: { ok: boolean; status: number; body: T | null },
+  what: string,
+  origin = YOUTUBE_ORIGIN,
+) {
+  if (!res.ok) throw new HttpError("CALL", `${origin}/${what}`, res.status, googleWords(res.body));
   return res.body as T;
+}
+
+/** A GET with the request as its query; empty values left out. */
+async function getWith(leg: ApiLeg, origin: string, path: string, query: Record<string, unknown>) {
+  const u = new URL(`${origin}/${path}`);
+  for (const [k, v] of Object.entries(query))
+    if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, String(v));
+  return must(await leg.http.json<unknown>(u.toString(), { headers: bearer(leg) }), path, origin);
+}
+
+/** RFC 4180 CSV (quoted fields, doubled quotes, CRLF) as one object per row by the header's names. */
+export function csvRows(text: string): Array<Record<string, string>> {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i] as string;
+    if (quoted) {
+      if (c !== '"') field += c;
+      else if (text[i + 1] === '"') {
+        field += '"';
+        i += 1;
+      } else quoted = false;
+    } else if (c === '"') quoted = true;
+    else if (c === ",") {
+      row.push(field);
+      field = "";
+    } else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i += 1;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else field += c;
+  }
+  if (field || row.length) rows.push([...row, field]);
+  const [head, ...body] = rows.filter((r) => r.some((f) => f !== ""));
+  if (!head) return [];
+  return body.map((r) => Object.fromEntries(head.map((name, i) => [name, r[i] ?? ""])));
+}
+
+interface ReportingReport {
+  id?: string;
+  jobId?: string;
+  startTime?: string;
+  endTime?: string;
+  createTime?: string;
+  downloadUrl?: string;
 }
 
 /** Bytes from a local path or a URL the worker can reach. */
@@ -278,6 +346,37 @@ const reply = z.object({
   snippet: z.object({ parentId: z.string().min(1), textOriginal: z.string().min(1).max(10000) }),
 });
 const communityPost = z.object({ text: z.string().min(1).max(5000), image: z.string().optional() });
+const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
+/** A YouTube Analytics query as `reports.query` takes it; any further parameter passes through. */
+const analyticsQuery = z
+  .object({
+    ids: z.string().min(1).default("channel==MINE"),
+    startDate: isoDay,
+    endDate: isoDay,
+    metrics: z.string().min(1),
+    dimensions: z.string().optional(),
+    filters: z.string().optional(),
+    sort: z.string().optional(),
+    maxResults: z.coerce.number().int().positive().optional(),
+  })
+  .loose();
+const reportingList = z
+  .object({
+    pageSize: z.coerce.number().int().positive().optional(),
+    pageToken: z.string().optional(),
+  })
+  .loose();
+const reportingJob = z.object({
+  reportTypeId: z.string().min(1),
+  name: z.string().min(1).max(100),
+});
+const reportsList = reportingList.extend({
+  jobId: z.string().min(1),
+  createdAfter: z.string().datetime().optional(),
+  startTimeAtOrAfter: z.string().datetime().optional(),
+  startTimeBefore: z.string().datetime().optional(),
+});
+const oneReport = z.object({ jobId: z.string().min(1), reportId: z.string().min(1) });
 
 export const youtubeOAuth: OAuthSpec = {
   authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
@@ -286,6 +385,8 @@ export const youtubeOAuth: OAuthSpec = {
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.force-ssl",
     "https://www.googleapis.com/auth/youtube.readonly",
+    // YouTube Analytics reports and the Reporting API's bulk reports (reach: impressions, CTR).
+    "https://www.googleapis.com/auth/yt-analytics.readonly",
   ],
   clientId: "GOOGLE_OAUTH_CLIENT_ID",
   clientSecret: "GOOGLE_OAUTH_CLIENT_SECRET",
@@ -299,6 +400,8 @@ export const youtube: SiteApi = {
   origin: YOUTUBE_ORIGIN,
   probe: { path: "/youtube/v3/channels", input: { part: "id", mine: true } },
   auth: { oauth: youtubeOAuth },
+  // Analytics and Reporting have their own Google quotas: a day's reads per account, kept well under them.
+  caps: { analytics: 1000, reporting: 300 },
   routes: [
     route({
       method: "POST",
@@ -550,6 +653,104 @@ export const youtube: SiteApi = {
           ),
           "youtube/v3/comments",
         );
+      },
+    }),
+    route({
+      method: "GET",
+      path: "/v2/reports",
+      summary:
+        "A YouTube Analytics report (`youtubeanalytics.googleapis.com/v2/reports`): `ids` (default `channel==MINE`), `startDate`, `endDate`, `metrics`, and `dimensions`, `filters`, `sort`, `maxResults` as the API takes them; answers `columnHeaders` and `rows`. Needs yt-analytics.readonly",
+      request: analyticsQuery,
+      meter: () => ({ analytics: 1 }),
+      api: (q, leg) => getWith(leg, YOUTUBE_ANALYTICS_ORIGIN, "v2/reports", q),
+    }),
+    route({
+      method: "GET",
+      path: "/v1/reportTypes",
+      summary: `The Reporting API's report types this channel can schedule (reach: \`${REACH_REPORT}\`)`,
+      request: reportingList,
+      meter: () => ({ reporting: 1 }),
+      api: (q, leg) => getWith(leg, YOUTUBE_REPORTING_ORIGIN, "v1/reportTypes", q),
+    }),
+    route({
+      method: "GET",
+      path: "/v1/jobs",
+      summary:
+        "The channel's Reporting API jobs: `jobs[]` with `id`, `reportTypeId`, `name`, `createTime`",
+      request: reportingList,
+      meter: () => ({ reporting: 1 }),
+      api: (q, leg) => getWith(leg, YOUTUBE_REPORTING_ORIGIN, "v1/jobs", q),
+    }),
+    route({
+      method: "POST",
+      path: "/v1/jobs",
+      summary: `Start a daily Reporting API job (\`reportTypeId\`, \`name\`); YouTube writes a report a day from then on, plus the 30 days before, the first within 48 hours`,
+      request: reportingJob,
+      meter: () => ({ reporting: 1 }),
+      api: async (body, leg) =>
+        must(
+          await leg.http.json<unknown>(`${YOUTUBE_REPORTING_ORIGIN}/v1/jobs`, {
+            method: "POST",
+            headers: bearer(leg),
+            body,
+          }),
+          "v1/jobs",
+          YOUTUBE_REPORTING_ORIGIN,
+        ),
+    }),
+    route({
+      method: "GET",
+      path: "/v1/jobs/{jobId}/reports",
+      summary:
+        "A job's reports, newest first: `reports[]` with `id`, `startTime`, `endTime`, `createTime`; `createdAfter` (RFC 3339) for the new ones only. A later report for the same day is a backfill and replaces it",
+      request: reportsList,
+      meter: () => ({ reporting: 1 }),
+      api: ({ jobId, ...q }, leg) =>
+        getWith(leg, YOUTUBE_REPORTING_ORIGIN, `v1/jobs/${encodeURIComponent(jobId)}/reports`, q),
+    }),
+    route({
+      method: "GET",
+      path: "/v1/jobs/{jobId}/reports/{reportId}",
+      summary: "One report's metadata",
+      request: oneReport,
+      meter: () => ({ reporting: 1 }),
+      api: ({ jobId, reportId }, leg) =>
+        getWith(
+          leg,
+          YOUTUBE_REPORTING_ORIGIN,
+          `v1/jobs/${encodeURIComponent(jobId)}/reports/${encodeURIComponent(reportId)}`,
+          {},
+        ),
+    }),
+    route({
+      method: "GET",
+      path: "/v1/jobs/{jobId}/reports/{reportId}/rows",
+      summary:
+        "One report downloaded and parsed (autobrowse's own path; the API answers a CSV at the report's `downloadUrl`): `{ id, startTime, endTime, createTime, rows }`, each row an object by the CSV's column names, values as text",
+      request: oneReport,
+      meter: () => ({ reporting: 2 }),
+      api: async ({ jobId, reportId }, leg) => {
+        const report = (await getWith(
+          leg,
+          YOUTUBE_REPORTING_ORIGIN,
+          `v1/jobs/${encodeURIComponent(jobId)}/reports/${encodeURIComponent(reportId)}`,
+          {},
+        )) as ReportingReport;
+        const url = report.downloadUrl ?? "";
+        // The bearer goes to the Reporting host only, whatever the report says.
+        if (!url.startsWith(`${YOUTUBE_REPORTING_ORIGIN}/`))
+          throw new SiteError(502, `report ${reportId} has no download URL on the Reporting API`);
+        const r = await leg.http.json<unknown>(url, {
+          headers: { ...bearer(leg), accept: "text/csv", "accept-encoding": "gzip" },
+        });
+        await must(r, "v1/media (report)", YOUTUBE_REPORTING_ORIGIN);
+        return {
+          id: report.id ?? reportId,
+          startTime: report.startTime ?? null,
+          endTime: report.endTime ?? null,
+          createTime: report.createTime ?? null,
+          rows: csvRows(r.text ?? ""),
+        };
       },
     }),
     route({

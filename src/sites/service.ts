@@ -11,7 +11,7 @@
 import * as restate from "@restatedev/restate-sdk";
 import { z } from "zod";
 import { withCall } from "../browser/attempt.js";
-import { HttpError } from "../clients/http.js";
+import { lastingRefusal } from "../clients/http.js";
 import type { SiteFacade } from "./facade.js";
 import { SiteError } from "./types.js";
 
@@ -48,14 +48,6 @@ function parse<T>(schema: z.ZodType<T>, raw: unknown): T {
   return r.data;
 }
 
-/** A platform's 4xx that waiting won't change (402 out of credit, 403 refused); 408 and 429 heal. */
-const refused = (err: unknown): err is HttpError =>
-  err instanceof HttpError &&
-  err.status >= 400 &&
-  err.status < 500 &&
-  err.status !== 408 &&
-  err.status !== 429;
-
 /**
  * A SiteError is the caller's to read (404 route, 400 request, 501 no leg, 409 blocked, 502 failed),
  * and so is a platform's lasting refusal; nothing else is.
@@ -66,7 +58,7 @@ async function terminalOnSiteError<T>(key: string, fn: () => Promise<T>): Promis
   try {
     return await withCall(key, fn);
   } catch (err) {
-    if (err instanceof SiteError || refused(err))
+    if (err instanceof SiteError || lastingRefusal(err))
       throw new restate.TerminalError(err.message, { errorCode: err.status });
     throw err;
   }

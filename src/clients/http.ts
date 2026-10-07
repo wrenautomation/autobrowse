@@ -54,6 +54,14 @@ export class HttpError extends Error {
   }
 }
 
+/** A platform's 4xx that waiting won't change (402 out of credit, 403 refused); 408 and 429 heal. */
+export const lastingRefusal = (err: unknown): err is HttpError =>
+  err instanceof HttpError &&
+  err.status >= 400 &&
+  err.status < 500 &&
+  err.status !== 408 &&
+  err.status !== 429;
+
 export interface HttpClient {
   json<T>(url: string, req?: JsonRequest): Promise<JsonResponse<T>>;
 }

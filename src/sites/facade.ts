@@ -6,7 +6,7 @@
  */
 
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
-import type { HttpClient } from "../clients/http.js";
+import { type HttpClient, lastingRefusal } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
 import { type JsonSchema, jsonSchemaOf } from "../engine/inputs.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
@@ -514,9 +514,10 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         if (!use || !s.caps || e instanceof SiteError) throw e;
         // The slot is spent whatever broke: a durable retry would spend one per try, so
         // a failed metered read ends here and the caller chooses (six reads ate 40, 2026-10-01).
-        const why = e instanceof Error ? e.message.slice(0, 200) : String(e);
+        // A platform's lasting refusal keeps its status (a 403 is a missing scope to the caller).
+        const why = e instanceof Error ? e.message.slice(0, 300) : String(e);
         throw new SiteError(
-          502,
+          lastingRefusal(e) ? e.status : 502,
           `${s.site} ${method} ${r.path} failed after spending a read: ${why}`,
         );
       }
