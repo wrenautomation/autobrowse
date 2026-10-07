@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { currentCall } from "../src/browser/attempt.js";
+import { HttpError } from "../src/clients/http.js";
 import type { SiteFacade } from "../src/sites/facade.js";
 import { DESK_SERVICE, SITES_SERVICE, SiteError, sitesService } from "../src/sites/index.js";
 
@@ -31,6 +32,8 @@ const facade: SiteFacade = {
     calls.push({ site, method, path, input, from, call: currentCall() });
     if (path === "/rest/boom") throw new SiteError(502, "workflow failed");
     if (path === "/rest/flaky") throw new Error("socket hang up");
+    if (path === "/rest/broke") throw new HttpError("CALL", "https://x.test/rest/broke", 402);
+    if (path === "/rest/busy") throw new HttpError("CALL", "https://x.test/rest/busy", 429);
     return { id: "urn:li:share:1" };
   },
   setup: async () => ({ made: ["LINKEDIN_ACCESS_TOKEN"] }),
@@ -99,6 +102,13 @@ describe("sites service", () => {
     await expect(
       h.call?.(ctx, { site: "linkedin", method: "GET", path: "/rest/flaky" }),
     ).rejects.toMatchObject({ name: "Error", message: "socket hang up" });
+    // A platform's lasting refusal ends the call under its own status; a 429 waits and retries.
+    await expect(
+      h.call?.(ctx, { site: "linkedin", method: "GET", path: "/rest/broke" }),
+    ).rejects.toMatchObject({ name: "TerminalError", code: 402 });
+    await expect(
+      h.call?.(ctx, { site: "linkedin", method: "GET", path: "/rest/busy" }),
+    ).rejects.toMatchObject({ name: "HttpError", status: 429 });
   });
 
   it("a bad request never reaches the facade", async () => {
