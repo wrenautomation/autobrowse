@@ -410,6 +410,22 @@ export const youtube: SiteApi = {
       },
     }),
     route({
+      method: "DELETE",
+      path: "/youtube/v3/videos",
+      summary: "Delete a video (`id`) for good; answers `{ deleted: id }`",
+      request: z.object({ id: z.string().min(1) }),
+      irreversible: true,
+      api: async ({ id }, leg) => {
+        await onTheRightChannel(leg);
+        const r = await leg.http.json<unknown>(
+          `${YOUTUBE_ORIGIN}/youtube/v3/videos?id=${encodeURIComponent(id)}`,
+          { method: "DELETE", headers: bearer(leg) },
+        );
+        await must(r, "youtube/v3/videos (delete)");
+        return { deleted: id };
+      },
+    }),
+    route({
       method: "POST",
       path: "/youtube/v3/playlistItems",
       summary: "Add a video to a playlist (`playlistId`, `videoId`); answers the playlist item",

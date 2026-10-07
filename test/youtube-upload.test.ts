@@ -142,4 +142,32 @@ describe("youtube video upload", () => {
     expect(await Promise.all([first, second])).toEqual([{ id: "vid2" }, { id: "vid2" }]);
     expect(puts).toBe(1);
   });
+
+  it("changes and deletes a video on the configured channel only", async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fetch = async (url: string, init: RequestInit = {}) => {
+      calls.push({ url, init });
+      if (url.includes("/channels")) return Response.json({ items: [{ id: "UC1" }] });
+      if (init.method === "DELETE") return new Response(null, { status: 204 });
+      return Response.json({ id: "v1" });
+    };
+    const leg: ApiLeg = {
+      token: "t-edit",
+      http: httpClient({ fetch }),
+      env: (n) => (n === "YOUTUBE_CHANNEL_ID" ? "UC1" : undefined),
+    };
+    const of = (method: string) => {
+      const r = youtube.routes.find((x) => x.method === method && x.path === "/youtube/v3/videos");
+      if (!r?.api) throw new Error(`no ${method} /youtube/v3/videos`);
+      return { api: r.api as (i: unknown, l: ApiLeg) => Promise<unknown>, request: r.request };
+    };
+    const put = of("PUT");
+    const del = of("DELETE");
+    const status = { privacyStatus: "private" };
+    await put.api(put.request.parse({ id: "v1", status }), leg);
+    expect(calls.at(-1)?.url).toBe("https://www.googleapis.com/youtube/v3/videos?part=status");
+    expect(() => put.request.parse({ id: "v1" })).toThrow();
+    const out = await del.api(del.request.parse({ id: "v1" }), leg);
+    expect([out, calls.at(-1)?.init.method]).toEqual([{ deleted: "v1" }, "DELETE"]);
+  });
 });
