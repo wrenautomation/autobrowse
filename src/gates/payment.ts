@@ -95,11 +95,20 @@ export async function amountNear(el: Evaluable): Promise<Amount | null> {
   return block ? totalIn(block) : null;
 }
 
+/** A button that leaves the flow: "Exit checkout", "Cancel order", "Back to cart". */
+const LEAVE_ACTION = /^(exit|cancel|back|go back|close|leave|return)\b/i;
+
+/** The click leaves the flow: its label starts with a leaving word and names no charge after it ("Close and pay" still spends). */
+function leaves(hints: Hints): boolean {
+  const label = (hints.name ?? hints.text ?? "").replace(/^[^a-z]+/i, "");
+  return LEAVE_ACTION.test(label) && !CHARGE_ACTION.test(label);
+}
+
 export function paymentGate(act: GatedAct, hints: Hints): string | null {
   const w = words(hints);
   if ((act === "fill" || act === "select") && PAYMENT_FIELD.test(w))
     return `${act} a billing field "${hints.name ?? hints.placeholder ?? hints.id ?? w}"`;
-  if (act === "click" && PAYMENT_ACTION.test(w))
+  if (act === "click" && PAYMENT_ACTION.test(w) && !leaves(hints))
     return `press "${hints.name ?? hints.text ?? w}", which spends`;
   return null;
 }

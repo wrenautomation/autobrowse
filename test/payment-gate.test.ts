@@ -29,6 +29,21 @@ describe("paymentGate", () => {
     expect(paymentGate("fill", { role: "textbox", name: "Project name" })).toBeNull();
   });
 
+  it("leaving a checkout never spends: exit, cancel, back, close", () => {
+    expect(paymentGate("click", { role: "button", name: "Exit checkout" })).toBeNull();
+    expect(paymentGate("click", { role: "button", name: "Cancel checkout" })).toBeNull();
+    expect(paymentGate("click", { role: "button", name: "Cancel order" })).toBeNull();
+    expect(paymentGate("click", { role: "link", name: "Back to checkout" })).toBeNull();
+    expect(
+      paymentGate("click", { role: "button", name: "Go back to cart and checkout" }),
+    ).toBeNull();
+    expect(paymentGate("click", { role: "button", name: "Close checkout" })).toBeNull();
+    expect(paymentGate("click", { css: "#x", text: "Leave checkout" })).toBeNull();
+    // A leaving word with a charge after it still asks.
+    expect(paymentGate("click", { role: "button", name: "Close and pay" })).toMatch(/spends/);
+    expect(paymentGate("click", { role: "button", name: "Checkout" })).toMatch(/spends/);
+  });
+
   it("gates the final order button; only a charging click is a charge", () => {
     expect(paymentGate("click", { css: "#btn", text: "Complete Order" })).toMatch(/spends/);
     expect(chargesNow({ text: "Complete Order" })).toBe(true);
