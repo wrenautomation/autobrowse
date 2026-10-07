@@ -47,6 +47,12 @@ import { npmTrustedPublisher } from "../browser/flows/npm-trusted-publisher.js";
 import { googleOauthConsent } from "../browser/flows/oauth-consent.js";
 import { outlookOauthConsent } from "../browser/flows/outlook-oauth-consent.js";
 import { perplexityAsk } from "../browser/flows/perplexity-ask.js";
+import {
+  instagramProfileName,
+  redditProfileName,
+  tiktokProfileName,
+  xProfileName,
+} from "../browser/flows/profile-name.js";
 import { redditComment, redditMessage, redditRead, redditSubmit } from "../browser/flows/reddit.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { tiktokOauthConsent } from "../browser/flows/tiktok-oauth-consent.js";
@@ -133,6 +139,10 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     loomDelete,
     outlookOauthConsent,
     youtubeCommunityPost,
+    instagramProfileName,
+    xProfileName,
+    tiktokProfileName,
+    redditProfileName,
     fingerprint,
   ].map((f) => [`${f.site}/${f.name}`, f as BrowserFlow<never, unknown>]),
 );

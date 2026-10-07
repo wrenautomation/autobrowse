@@ -72,6 +72,14 @@ export {
   perplexityAsk,
 } from "./perplexity-ask.js";
 export {
+  instagramProfileName,
+  type ProfileNameInput,
+  type ProfileNameResult,
+  redditProfileName,
+  tiktokProfileName,
+  xProfileName,
+} from "./profile-name.js";
+export {
   type CommentInput as RedditCommentInput,
   type MessageInput as RedditMessageInput,
   OLD as REDDIT_OLD,

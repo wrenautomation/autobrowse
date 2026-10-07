@@ -136,6 +136,7 @@ describe("x site", () => {
     expect(x.routes.filter((r) => r.irreversible).map((r) => `${r.method} ${r.path}`)).toEqual([
       "POST /2/tweets",
       "DELETE /2/tweets/{id}",
+      "POST /1.1/account/update_profile.json",
     ]);
   });
 

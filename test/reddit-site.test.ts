@@ -66,6 +66,7 @@ describe("reddit site", () => {
       "POST /api/submit",
       "POST /api/comment",
       "POST /api/compose",
+      "POST /web/profile/name",
     ]);
     for (const r of reddit.routes) {
       expect(r.api).toBeUndefined();
@@ -76,7 +77,9 @@ describe("reddit site", () => {
             ? "reddit/submit"
             : r.path === "/api/compose"
               ? "reddit/message"
-              : "reddit/comment",
+              : r.path === "/web/profile/name"
+                ? "reddit/profile-name"
+                : "reddit/comment",
       );
     }
     expect(BROWSER_FLOWS["reddit/read"]).toBe(redditRead);
@@ -324,6 +327,7 @@ describe("reddit through the facade", () => {
       "/api/submit",
       "/api/comment",
       "/api/compose",
+      "/web/profile/name",
     ]);
   });
 

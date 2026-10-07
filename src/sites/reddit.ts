@@ -88,6 +88,11 @@ const inbox = z.object({
   /** `true` marks what the listing shows as read, as the inbox page does. */
   mark: flag.default(false),
 });
+const profileName = z.object({
+  /** The new display name; the handle and profile link stay as they are. */
+  name: z.string().trim().min(1).max(30),
+});
+
 const compose = z.object({
   api_type: z.literal("json").default("json"),
   to: z.string().regex(/^(\/?u\/)?[A-Za-z0-9_-]{3,20}$/, "a Reddit username"),
@@ -279,6 +284,15 @@ export const reddit: SiteApi = {
       },
       summary:
         "! A private message to an account (not chat); answers {json:{errors,data:{delivered}}}; 5 a day",
+    }),
+    route({
+      method: "POST",
+      path: "/web/profile/name",
+      summary:
+        "The profile's display name (new Reddit settings in the browser): `name`; answers `{ before, name }`. The username never changes",
+      request: profileName,
+      irreversible: true,
+      browser: { flow: "reddit/profile-name" },
     }),
   ],
   setup: [],

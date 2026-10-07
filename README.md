@@ -333,7 +333,10 @@ a row; it is work.
   `browser` service's `flow`): `google-admin/dkim-*`,
   `google-admin/workspace-logo`, `google/profile-photo`, `google/oauth-consent`,
   `linkedin/oauth-consent`, `instagram/oauth-consent`, `tiktok/oauth-consent`,
-  `outlook/oauth-consent`, `google/youtube-community-post`.
+  `outlook/oauth-consent`, `google/youtube-community-post`,
+  `<site>/profile-name` for Instagram, X, TikTok and Reddit (display name
+  only, read back; site routes `POST /web/profile/name`, X
+  `POST /1.1/account/update_profile.json`).
 - **Compiled from recordings** (`src/workflows/`): `bootstrap` (mints the
   first Cloudflare token), `google-cloud-project`, `google-cloud-oauth-client`,
   `anthropic-console-api-key`, `workspace-skip-passwords`, `google-name`,

@@ -73,6 +73,11 @@ const webPost = z.object({
   file: z.string().min(1),
 });
 
+const profileName = z.object({
+  /** The new display name; the handle and profile link stay as they are. */
+  name: z.string().trim().min(1).max(30),
+});
+
 async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
   if (!res.ok) throw new HttpError("CALL", `${INSTAGRAM_ORIGIN}/${what}`, res.status);
   return res.body as T;
@@ -234,6 +239,15 @@ export const instagram: SiteApi = {
         workflow: "instagram-reply",
         input: (b) => ({ commentId: b.commentId, text: b.message }),
       },
+    }),
+    route({
+      method: "POST",
+      path: "/web/profile/name",
+      summary:
+        "The account's display name (no API sets it; Accounts Center in the browser): `name`; answers `{ before, name }`. Twice in 14 days; the username never changes",
+      request: profileName,
+      irreversible: true,
+      browser: { flow: "instagram/profile-name" },
     }),
   ],
   setup: [

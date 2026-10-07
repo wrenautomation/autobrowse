@@ -68,6 +68,11 @@ const upload = z.object({
   media_category: z.enum(["tweet_image", "tweet_video", "tweet_gif"]).optional(),
 });
 
+const profileName = z.object({
+  /** The new display name; the handle and profile link stay as they are. */
+  name: z.string().trim().min(1).max(50),
+});
+
 const MIME: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
@@ -296,6 +301,15 @@ export const x: SiteApi = {
         "Upload an image or video (`file`: path or URL) for a post; answers `data.id` (a video is chunked and waited on until processed)",
       request: upload,
       api: (input, leg) => uploadMedia(leg, input),
+    }),
+    route({
+      method: "POST",
+      path: "/1.1/account/update_profile.json",
+      summary:
+        "The account's display name (v1.1 wants OAuth 1.0a, so the Edit profile dialog in the browser): `name`; answers `{ before, name }`. The handle never changes",
+      request: profileName,
+      irreversible: true,
+      browser: { flow: "x/profile-name" },
     }),
   ],
   setup: [
