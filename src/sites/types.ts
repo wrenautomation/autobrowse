@@ -14,6 +14,7 @@ import type { HttpClient } from "../clients/http.js";
 import type { Amount } from "../gates/spend.js";
 import type { SpentKeys } from "../reach/key-ring.js";
 import type { Pace } from "./caps.js";
+import type { UploadSessions } from "./uploads.js";
 
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -27,6 +28,8 @@ export interface ApiLeg {
   keep?: (name: string, value: string) => Promise<void>;
   /** Paid keys out of credit, kept on disk (`reach/key-ring.ts`). */
   spent?: SpentKeys;
+  /** Resumable upload sessions by durable call (`sites/uploads.ts`); absent, an upload can't resume. */
+  uploads?: UploadSessions;
 }
 
 /**

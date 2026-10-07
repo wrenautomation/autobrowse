@@ -158,6 +158,7 @@ import {
   sitesFor,
   sitesService,
 } from "../sites/index.js";
+import { fileUploadSessions } from "../sites/uploads.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import { type WalkDeps, type WalkInput, type WalkOutput, walkFlow } from "../walks/flow.js";
 import { loadWalk, saveWalk, type WalkSpec } from "../walks/spec.js";
@@ -1530,6 +1531,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       reload: (have) => missingEntries(sink, have),
       caps: fileCaps(expandHome(settings.capsFile)),
       spent: fileSpent(join(dirname(expandHome(settings.capsFile)), "spent-keys.json")),
+      uploads: fileUploadSessions(join(expandHome(settings.artifactsDir), "uploads")),
       walks: (name) => walkFor(settings, name, sink),
     }),
   );

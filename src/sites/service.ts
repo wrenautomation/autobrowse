@@ -62,6 +62,13 @@ async function terminalOnSiteError<T>(key: string, fn: () => Promise<T>): Promis
   }
 }
 
+/**
+ * A call can be one long step: a video's bytes run for minutes. Restate's default timeouts cut
+ * such a step off mid-upload (every ~3 minutes on 10-07) and rerun it, so the bytes never finish.
+ */
+const CALL_MS = 2 * 60 * 60_000;
+const CALL_OPTS = { inactivityTimeout: CALL_MS, abortTimeout: CALL_MS };
+
 /** `name`: `sites` on the box, `desk` on the Mac; one shape, two machines. */
 export function sitesService(facade: SiteFacade, name: string = SITES_SERVICE) {
   return restate.service({
@@ -76,7 +83,7 @@ export function sitesService(facade: SiteFacade, name: string = SITES_SERVICE) {
           READ_RETRY,
         );
       },
-      call: async (ctx: restate.Context, raw: unknown) => {
+      call: restate.handlers.handler(CALL_OPTS, async (ctx: restate.Context, raw: unknown) => {
         const req = parse(call, raw);
         const retry = req.method === "GET" ? READ_RETRY : WRITE_RETRY;
         const from = {
@@ -92,7 +99,7 @@ export function sitesService(facade: SiteFacade, name: string = SITES_SERVICE) {
             ),
           retry,
         );
-      },
+      }),
       /** A day's capped reads: each bucket's use and every metered call, who asked, how it went. */
       caps: async (ctx: restate.Context, raw: unknown) => {
         const q = parse(

@@ -26,6 +26,7 @@ import { type SiteFacade, siteFacade } from "./facade.js";
 import { SITES } from "./index.js";
 import { nextLapse, renewals, renewDue, renewWording } from "./renew.js";
 import { type SetupStep, type SiteApi, SiteError } from "./types.js";
+import type { UploadSessions } from "./uploads.js";
 
 export interface SiteParts {
   catalog: CompiledCatalog;
@@ -64,6 +65,8 @@ export interface SiteParts {
   caps?: DailyCaps;
   /** Paid keys out of credit (Exa's ring); absent: each process remembers its own. */
   spent?: SpentKeys;
+  /** Resumable upload sessions by durable call (`uploads.ts`); absent: a rerun upload starts over. */
+  uploads?: UploadSessions;
 }
 
 /** How long a store read on a token miss stands before a miss reads again. */
@@ -177,6 +180,7 @@ export function sitesFor(p: SiteParts): SiteFacade {
     approve: p.approve ?? null,
     ...(p.caps ? { caps: p.caps } : {}),
     ...(p.spent ? { spent: p.spent } : {}),
+    ...(p.uploads ? { uploads: p.uploads } : {}),
     ...(p.credentials
       ? {
           profileFor: (site, account) => profileOf(p.credentials as CredentialStore, site, account),

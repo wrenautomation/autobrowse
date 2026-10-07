@@ -15,6 +15,7 @@ import { ringCount, type SpentKeys } from "../reach/key-ring.js";
 import type { Proof, RunAs } from "../workflows/proof.js";
 import type { DailyCaps, MeteredCall } from "./caps.js";
 import { accessTokens, accountEnv, pointTo, runConsent } from "./oauth.js";
+import type { UploadSessions } from "./uploads.js";
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -74,6 +75,8 @@ export interface SiteFacadeDeps {
   caps?: DailyCaps;
   /** Paid keys out of credit (`reach/key-ring.ts`), for `capsPerKey` and api legs that rotate keys. */
   spent?: SpentKeys;
+  /** Resumable upload sessions by durable call, so a rerun call resumes its bytes. */
+  uploads?: UploadSessions;
   /** How a paced call waits for its slot (tests pass a fake). */
   sleep?: (ms: number) => Promise<void>;
   /**
@@ -540,6 +543,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
             env: deps.env,
             keep: async (name, value) => deps.sink.put(name, value),
             ...(deps.spent ? { spent: deps.spent } : {}),
+            ...(deps.uploads ? { uploads: deps.uploads } : {}),
           });
         if (r.browser) {
           // The same account the API leg would have used: its profile, so a browser

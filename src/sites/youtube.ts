@@ -9,8 +9,10 @@ import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { z } from "zod";
+import { currentCall } from "../browser/attempt.js";
 import { HttpError } from "../clients/http.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi, SiteError } from "./types.js";
+import { once } from "./uploads.js";
 
 export const YOUTUBE_ORIGIN = "https://www.googleapis.com";
 
@@ -82,17 +84,22 @@ export async function bytesOf(
 }
 
 /** A video body: a local file streams from disk (videos run to GBs), a URL is read whole. */
-async function videoOf(
-  source: string,
-): Promise<{ length: number; open: () => Uint8Array<ArrayBuffer> | ReadableStream<Uint8Array> }> {
+interface Video {
+  length: number;
+  /** The bytes from `from` on: a resumed upload sends only the rest. */
+  open: (from: number) => Uint8Array<ArrayBuffer> | ReadableStream<Uint8Array>;
+}
+
+async function videoOf(source: string): Promise<Video> {
   if (/^https?:\/\//.test(source)) {
     const bytes = await bytesOf(source);
-    return { length: bytes.byteLength, open: () => bytes };
+    return { length: bytes.byteLength, open: (from) => bytes.slice(from) };
   }
   const { size } = await stat(source);
   return {
     length: size,
-    open: () => Readable.toWeb(createReadStream(source)) as ReadableStream<Uint8Array>,
+    open: (from) =>
+      Readable.toWeb(createReadStream(source, { start: from })) as ReadableStream<Uint8Array>,
   };
 }
 
@@ -120,8 +127,63 @@ export function related(
   return { type: `multipart/related; boundary=${boundary}`, body };
 }
 
-/** The bytes PUT gets this long: ~2 GB at a slow uplink. One attempt; a stream is not retried. */
+/** The bytes PUT gets this long: ~2 GB at a slow uplink. A stream is not retried; a dropped one resumes. */
 const VIDEO_PUT_MS = 2 * 60 * 60_000;
+/** Times one call resumes a dropped PUT before it gives up and Restate reruns it (which resumes too). */
+const RESUMES = 5;
+
+/** Where a session stands: finished (its resource), the next byte it wants, or gone (start again). */
+type Standing = { done: unknown } | { next: number } | null;
+
+/** Asks a resumable session how far it got (Google's empty PUT with `bytes *\/<total>`). */
+async function standing(leg: ApiLeg, session: string, total: number): Promise<Standing> {
+  const r = await leg.http.json<unknown>(session, {
+    method: "PUT",
+    headers: { "content-range": `bytes */${total}` },
+    raw: new Uint8Array(0),
+  });
+  if (r.status === 200 || r.status === 201) return { done: r.body };
+  if (r.status === 404 || r.status === 410) return null;
+  if (r.status !== 308) await must(r, "upload/youtube/v3/videos (status)");
+  const got = /bytes=0-(\d+)/.exec(r.headers.get("range") ?? "");
+  return { next: got ? Number(got[1]) + 1 : 0 };
+}
+
+/** Sends the bytes from `from` on; a connection that drops mid-stream asks the session and goes on. */
+async function sendFrom(
+  leg: ApiLeg,
+  session: string,
+  video: Video,
+  contentType: string,
+  from: number,
+): Promise<unknown> {
+  let at = from;
+  for (let n = 0; ; n += 1) {
+    try {
+      return await must(
+        await leg.http.json<unknown>(session, {
+          method: "PUT",
+          headers: {
+            "content-type": contentType,
+            "content-length": String(video.length - at),
+            ...(at > 0
+              ? { "content-range": `bytes ${at}-${video.length - 1}/${video.length}` }
+              : {}),
+          },
+          raw: video.open(at),
+          timeoutMs: VIDEO_PUT_MS,
+        }),
+        "upload/youtube/v3/videos (bytes)",
+      );
+    } catch (err) {
+      if (!(err instanceof HttpError) || err.status !== 0 || n >= RESUMES) throw err;
+      const now = await standing(leg, session, video.length);
+      if (!now) throw err;
+      if ("done" in now) return now.done;
+      at = now.next;
+    }
+  }
+}
 
 const upload = z.object({
   uploadType: z.literal("resumable").default("resumable"),
@@ -150,6 +212,21 @@ const upload = z.object({
   /** Tell subscribers about the upload. A query parameter, never in the body; unset, YouTube notifies. */
   notifySubscribers: z.boolean().optional(),
 });
+/** A video's own fields changed (videos.update): each part sent replaces that part whole. */
+const videoUpdate = z
+  .object({
+    id: z.string().min(1),
+    snippet: upload.shape.snippet.optional(),
+    status: z
+      .object({
+        privacyStatus: z.enum(["public", "unlisted", "private"]),
+        publishAt: z.string().datetime().optional(),
+        selfDeclaredMadeForKids: z.boolean().default(false),
+        containsSyntheticMedia: z.boolean().optional(),
+      })
+      .optional(),
+  })
+  .refine((v) => v.snippet || v.status, "send `snippet`, `status` or both");
 const thumbnail = z.object({
   videoId: z.string().min(1),
   file: z.string().min(1),
@@ -233,38 +310,39 @@ export const youtube: SiteApi = {
         await onTheRightChannel(leg);
         const { file, contentType, part, uploadType, notifySubscribers, ...meta } = body;
         const video = await videoOf(file);
-        const notify =
-          notifySubscribers === undefined ? "" : `&notifySubscribers=${notifySubscribers}`;
-        const start = await leg.http.json<unknown>(
-          `${YOUTUBE_ORIGIN}/upload/youtube/v3/videos?uploadType=${uploadType}&part=${encodeURIComponent(part)}${notify}`,
-          {
-            method: "POST",
-            headers: {
-              ...bearer(leg),
-              "X-Upload-Content-Type": contentType,
-              "X-Upload-Content-Length": String(video.length),
+        // A rerun of this call (Restate, after a dropped connection) resumes its session.
+        const call = currentCall();
+        return once(call, async () => {
+          const kept = call ? (leg.uploads?.get(call) ?? null) : null;
+          const now = kept ? await standing(leg, kept, video.length) : null;
+          if (kept && now)
+            return "done" in now ? now.done : sendFrom(leg, kept, video, contentType, now.next);
+          const notify =
+            notifySubscribers === undefined ? "" : `&notifySubscribers=${notifySubscribers}`;
+          const start = await leg.http.json<unknown>(
+            `${YOUTUBE_ORIGIN}/upload/youtube/v3/videos?uploadType=${uploadType}&part=${encodeURIComponent(part)}${notify}`,
+            {
+              method: "POST",
+              headers: {
+                ...bearer(leg),
+                "X-Upload-Content-Type": contentType,
+                "X-Upload-Content-Length": String(video.length),
+              },
+              body: meta,
             },
-            body: meta,
-          },
-        );
-        await must(start, "upload/youtube/v3/videos");
-        const location = start.headers.get("location");
-        if (!location)
-          throw new HttpError(
-            "POST",
-            `${YOUTUBE_ORIGIN}/upload/youtube/v3/videos`,
-            start.status,
-            "no upload URL",
           );
-        return must(
-          await leg.http.json<unknown>(location, {
-            method: "PUT",
-            headers: { "content-type": contentType, "content-length": String(video.length) },
-            raw: video.open(),
-            timeoutMs: VIDEO_PUT_MS,
-          }),
-          "upload/youtube/v3/videos (bytes)",
-        );
+          await must(start, "upload/youtube/v3/videos");
+          const location = start.headers.get("location");
+          if (!location)
+            throw new HttpError(
+              "POST",
+              `${YOUTUBE_ORIGIN}/upload/youtube/v3/videos`,
+              start.status,
+              "no upload URL",
+            );
+          if (call) leg.uploads?.set(call, location);
+          return sendFrom(leg, location, video, contentType, 0);
+        });
       },
     }),
     route({
@@ -309,6 +387,25 @@ export const youtube: SiteApi = {
             },
           ),
           "upload/youtube/v3/captions",
+        );
+      },
+    }),
+    route({
+      method: "PUT",
+      path: "/youtube/v3/videos",
+      summary:
+        "Change a video (`id`, and `snippet` and/or `status`: each part sent replaces that part); answers the video",
+      request: videoUpdate,
+      api: async (body, leg) => {
+        await onTheRightChannel(leg);
+        const part = (["snippet", "status"] as const).filter((k) => body[k]).join(",");
+        return must(
+          await leg.http.json<unknown>(`${YOUTUBE_ORIGIN}/youtube/v3/videos?part=${part}`, {
+            method: "PUT",
+            headers: bearer(leg),
+            body,
+          }),
+          "youtube/v3/videos",
         );
       },
     }),
