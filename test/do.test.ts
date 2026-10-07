@@ -278,6 +278,28 @@ describe("do", () => {
     await expect(verb.do({ goal: "  " })).rejects.toMatchObject({ status: 400 });
   });
 
+  it("runs in its own owner's accounts: no owner or its own runs, another owner is refused", async () => {
+    const d = deps();
+    const verb = doer(d);
+    await expect(verb.do({ goal: "google-name", owner: "wren" })).resolves.toMatchObject({
+      status: "done",
+    });
+    await expect(verb.do({ goal: "google-name", owner: null })).resolves.toMatchObject({
+      status: "done",
+    });
+    await expect(verb.do({ goal: "google-name", owner: "acme" })).rejects.toMatchObject({
+      status: 409,
+    });
+    const theirs = doer({ ...deps(), owner: "acme" });
+    await expect(theirs.do({ goal: "google-name", owner: "acme" })).resolves.toMatchObject({
+      status: "done",
+    });
+    await expect(theirs.do({ goal: "google-name", owner: "wren" })).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(d.calls).toEqual(["workflow google-name {}", "workflow google-name {}"]);
+  });
+
   it("fills a route's {param} segments from the input, or says which are missing", async () => {
     const d = deps({
       abilities: async () =>

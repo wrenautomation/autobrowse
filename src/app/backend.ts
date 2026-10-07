@@ -426,6 +426,7 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
     catalog: app.catalog,
     browser: app.browser,
     sink: app.sink,
+    owner: settings.owner,
     ...(app.sites ? { sites: app.sites } : {}),
     ...(agent ? { agent } : {}),
     memory: filePicks(join(recordingsDir, ".do-picks.json")),

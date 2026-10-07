@@ -20,7 +20,7 @@ Deterministic first, model last: the model chooses among named abilities and nev
 
 ## Steps
 
-1. `doer(deps).do(req)`: `abilities()` (cut to scope through `doAs`) — `src/do/doer.ts:107,231`, `src/app/backend.ts:134`
+1. `doer(deps).do(req)`: a `req.owner` other than this process's owner (`DoerDeps.owner`, `settings.owner`) is refused 409; none runs as before. Then `abilities()` (cut to scope through `doAs`) — `src/do/doer.ts:107,231`, `src/app/backend.ts:134`
 2. `pickAbility(llm, goal, abilities, memory)`; a remembered pick skips the model — `src/do/pick.ts:52`
 3. `dryRun` → the pick and why, nothing runs — `src/do/doer.ts:249-262`
 4. By kind: `callSite` → [[site-call]]; `runWorkflow` → `runCompiled` with gates approved; `runFlow`; `runTool` — `src/do/doer.ts:59-84`

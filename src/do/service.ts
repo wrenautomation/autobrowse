@@ -18,6 +18,7 @@ const request = z.object({
   site: z.string().nullable().default(null),
   url: z.string().nullable().default(null),
   dryRun: z.boolean().default(false),
+  owner: z.string().nullable().default(null),
 });
 
 export function doService(verb: () => Doer | null, name: string = DO_SERVICE) {

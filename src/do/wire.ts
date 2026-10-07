@@ -59,6 +59,8 @@ export interface DoerParts {
    * unless the scope may `agent`. The operator's when absent.
    */
   scope?: Scope;
+  /** The owner this process serves; a request for another is refused. The default owner when absent. */
+  owner?: string;
 }
 
 /** Whether a scope may run this ability: its site (default account), workflow or tool. */
@@ -131,6 +133,7 @@ export function doerFor(p: DoerParts): Verb {
       }
     },
     ...(p.memory ? { memory: p.memory } : {}),
+    ...(p.owner ? { owner: p.owner } : {}),
     ...(p.agent && agentOk ? { agent: p.agent } : {}),
     ...(p.compile && agentOk ? { compile: p.compile } : {}),
   });

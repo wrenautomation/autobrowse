@@ -10,6 +10,7 @@
 import { settleSession } from "../agent/builder.js";
 import type { AgentSessions } from "../agent/sessions.js";
 import type { Llm, LlmUsage } from "../llm/index.js";
+import { DEFAULT_OWNER } from "../owner.js";
 import type { CompiledRun } from "../sites/facade.js";
 import type { Method } from "../sites/types.js";
 import { type Ability, parseSiteAbility } from "./catalog.js";
@@ -26,6 +27,11 @@ export interface DoRequest {
   url?: string | null;
   /** Route only: say what would run and with what, run nothing. */
   dryRun?: boolean;
+  /**
+   * Whose accounts the goal runs in. Absent or null: this process's owner, as before owners
+   * were asked for. Another owner is refused (409), never run in this owner's accounts.
+   */
+  owner?: string | null;
 }
 
 export type DoVia = "site" | "workflow" | "flow" | "tool" | "agent" | "none";
@@ -81,6 +87,8 @@ export interface DoerDeps {
   compile?(name: string): Promise<{ workflow: string }>;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
+  /** The owner this process serves; the default owner when absent. */
+  owner?: string;
 }
 
 export interface Doer {
@@ -230,6 +238,9 @@ export function doer(d: DoerDeps): Doer {
   return {
     async do(req) {
       if (!req.goal.trim()) throw new DoError(400, "an empty goal");
+      const runs = d.owner ?? DEFAULT_OWNER;
+      if (req.owner != null && req.owner !== runs)
+        throw new DoError(409, `this autobrowse runs as owner ${runs}, not ${req.owner}`);
       const [abilities, sites, earlier] = await Promise.all([
         d.abilities(),
         d.sites(),

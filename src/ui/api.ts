@@ -456,6 +456,7 @@ export function api(deps: ApiDeps): Hono<Env> {
     site: z.string().regex(SITE).nullable().default(null),
     url: z.string().url().nullable().default(null),
     dryRun: z.boolean().default(false),
+    owner: z.string().nullable().default(null),
   });
   app.get("/api/abilities", async (c) => c.json(await verbOf(scopeOf(c)).abilities()));
   app.post("/api/do", async (c) => {
