@@ -84,7 +84,13 @@ const MIME: Record<string, string> = {
 };
 
 async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok) throw new HttpError("CALL", `${X_ORIGIN}/${what}`, res.status);
+  if (!res.ok)
+    throw new HttpError(
+      "CALL",
+      `${X_ORIGIN}${what}`,
+      res.status,
+      JSON.stringify(res.body ?? "").slice(0, 300),
+    );
   return res.body as T;
 }
 const withQuery = (path: string, q: Record<string, string | number | undefined>) => {

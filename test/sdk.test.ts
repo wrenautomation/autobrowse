@@ -7,7 +7,7 @@ import { defineFlow } from "../src/browser/flow.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import { abilitiesOf, doer, doerFor } from "../src/do/index.js";
-import { accessTokens, meta, SITES, sitesFor, youtube } from "../src/sites/index.js";
+import { accessTokens, meta, SITES, sitesFor, x, youtube } from "../src/sites/index.js";
 import { fakeBrowser } from "./fakes.js";
 
 const jsonFetch =
@@ -16,6 +16,17 @@ const jsonFetch =
       status: 200,
       headers: { "content-type": "application/json" },
     });
+
+/** Like jsonFetch, with the status the answer names. */
+const statusFetch =
+  (answer: (url: URL, init?: RequestInit) => { status?: number; body: unknown }) =>
+  async (url: string, init?: RequestInit) => {
+    const a = answer(new URL(url), init);
+    return new Response(JSON.stringify(a.body), {
+      status: a.status ?? 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
 
 describe("use as a library", () => {
   it("one piece: a route's api leg with the caller's own token and http", async () => {
@@ -131,6 +142,61 @@ describe("use as a library", () => {
     expect(reads).toBe(2);
     expect(seen.length).toBe(1);
     expect(seen[0]).toMatch(/^Bearer laptop \/v[\d.]+\/me\/adaccounts$/);
+  });
+
+  it("a refresh token another process rolled: read it from the store once, retry; still refused is terminal", async () => {
+    const env: Record<string, string> = {
+      X_CLIENT_ID: "cid",
+      X_CLIENT_SECRET: "cs",
+      X_REFRESH_TOKEN: "rt-old",
+    };
+    let stored = "rt-new";
+    const refreshed: string[] = [];
+    const sites = sitesFor({
+      sites: [x],
+      env: (n) => env[n],
+      http: httpClient({
+        fetch: statusFetch((u, init) => {
+          if (u.pathname.endsWith("/oauth2/token")) {
+            const rt = new URLSearchParams(String(init?.body)).get("refresh_token") ?? "";
+            refreshed.push(rt);
+            return rt === "rt-new"
+              ? { body: { access_token: "at", expires_in: 7200, refresh_token: "rt-new" } }
+              : {
+                  status: 400,
+                  body: {
+                    error: "invalid_request",
+                    error_description: "Value passed for the token was invalid.",
+                  },
+                };
+          }
+          return { body: { data: { id: "me" } } };
+        }),
+      }),
+      catalog: { list: async () => [], get: async () => null, proofs: async () => ({}) },
+      browser: fakeBrowser([]),
+      sink: memorySink(),
+      oauthPort: 9433,
+      reload: async (have) =>
+        have("X_REFRESH_TOKEN") ? [] : [{ name: "X_REFRESH_TOKEN", value: stored }],
+    });
+    expect(await sites.call("x", "GET", "/2/users/me", {})).toEqual({ data: { id: "me" } });
+    expect(refreshed).toEqual(["rt-old", "rt-new"]);
+    stored = "rt-new";
+    env.X_REFRESH_TOKEN = "rt-dead";
+    const two = sitesFor({
+      sites: [x],
+      env: (n) => env[n],
+      http: httpClient({
+        fetch: statusFetch(() => ({ status: 400, body: { error: "invalid_grant" } })),
+      }),
+      catalog: { list: async () => [], get: async () => null, proofs: async () => ({}) },
+      browser: fakeBrowser([]),
+      sink: memorySink(),
+      oauthPort: 9434,
+      reload: async () => [{ name: "X_REFRESH_TOKEN", value: "rt-dead" }],
+    });
+    await expect(two.call("x", "GET", "/2/users/me", {})).rejects.toMatchObject({ status: 409 });
   });
 
   it("a token miss reads only the names this process lacks, never the whole store", async () => {

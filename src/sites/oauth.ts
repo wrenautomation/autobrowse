@@ -95,6 +95,18 @@ export const pointedAt = (value: string | undefined): string | null =>
   value?.startsWith(POINTER) ? value.slice(POINTER.length) : null;
 
 /**
+ * A refresh token the site refused: revoked, expired, or rolled by another process sharing it.
+ * The facade's caller reads `token` from the store once before calling it re-consent.
+ */
+export class TokenRefused extends SiteError {
+  readonly token: string;
+  constructor(token: string, why: string) {
+    super(409, `${token} was refused (${why}); re-consent the account`);
+    this.token = token;
+  }
+}
+
+/**
  * An access token: minted from the refresh token when there is one (cached
  * until a minute before it expires), else the kept access token itself.
  * With `account`, that account's tokens (see `accountEnv`).
@@ -126,13 +138,14 @@ export function accessTokens(
       "POST",
       client.headers,
     ).catch((err) => {
-      // A revoked or expired refresh token never heals on retry: only a person re-consenting
-      // fixes it, so it is a terminal 409 (blocked), not an error a durable caller retries forever.
-      if (err instanceof HttpError && err.status < 500 && /invalid_grant/.test(err.message))
-        throw new SiteError(
-          409,
-          `${refreshName} was refused (invalid_grant: revoked or expired); re-consent the account`,
-        );
+      // A refused refresh token never heals on retry: a terminal 409 (blocked), not an error a
+      // durable caller retries forever. X answers invalid_request for one another process rolled.
+      if (
+        err instanceof HttpError &&
+        err.status < 500 &&
+        /invalid_grant|invalid_request/.test(err.message)
+      )
+        throw new TokenRefused(refreshName, err.message);
       throw err;
     });
     const token = body.access_token as string;

@@ -24,6 +24,7 @@ import { runCompiled } from "../workflows/proof.js";
 import type { DailyCaps } from "./caps.js";
 import { type SiteFacade, siteFacade } from "./facade.js";
 import { SITES } from "./index.js";
+import { TokenRefused } from "./oauth.js";
 import { nextLapse, renewals, renewDue, renewWording } from "./renew.js";
 import { type SetupStep, type SiteApi, SiteError } from "./types.js";
 import type { UploadSessions } from "./uploads.js";
@@ -202,6 +203,15 @@ export function sitesFor(p: SiteParts): SiteFacade {
         try {
           return await facade.call(...a);
         } catch (e) {
+          // Another process (the laptop, the desk) rolled the refresh token: the store holds the new one.
+          if (e instanceof TokenRefused) {
+            const held = made.get(e.token) ?? env(e.token);
+            const entries = await reload((name) => name !== e.token).catch(() => null);
+            const fresh = entries?.find((x) => x.name === e.token)?.value;
+            if (!fresh || fresh === held) throw e;
+            made.set(e.token, fresh);
+            return facade.call(...a);
+          }
           const miss = e instanceof SiteError && e.status === 501 && /no token/.test(e.message);
           if (!miss || Date.now() - readAt < RELOAD_EVERY_MS) throw e;
           readAt = Date.now();
