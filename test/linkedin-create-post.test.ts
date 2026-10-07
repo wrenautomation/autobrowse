@@ -27,8 +27,8 @@ describe("linkedin/create-post", () => {
         { author, commentary: "hi", visibility: "PUBLIC" } as never,
         () => undefined,
       );
-    expect(input(PAGE)).toEqual({ text: "hi", visibility: "PUBLIC", author: "Wren Automation" });
-    expect(input(MEMBER)).toEqual({ text: "hi", visibility: "PUBLIC", author: undefined });
+    expect(input(PAGE)).toEqual({ text: "hi", visibility: "PUBLIC", page: "143656154" });
+    expect(input(MEMBER)).toEqual({ text: "hi", visibility: "PUBLIC", page: undefined });
     expect(BROWSER_FLOWS["linkedin/create-post"]).toBe(linkedinCreatePost);
   });
 
@@ -66,19 +66,19 @@ describe("linkedin/create-post", () => {
     });
     expect(api.calls).toHaveLength(1);
     expect(seen).toEqual([
-      'linkedin@wren create-post {"text":"hi","visibility":"PUBLIC","author":"Wren Automation"}',
+      'linkedin@wren create-post {"text":"hi","visibility":"PUBLIC","page":"143656154"}',
     ]);
 
     await expect(post("urn:li:organization:999")).rejects.toMatchObject({ status: 400 });
     expect(seen).toHaveLength(1);
   });
 
-  it("switches the author, types the post and answers with its permalink", async () => {
+  it("reads the Page's name live, switches to it, types the post and answers with its permalink", async () => {
     let posted = false;
     const { fp, acts } = fakePage({
       text: ["", "", "", "", "Post successful"],
       present: () => true,
-      read: () => "Post to Anyone",
+      read: (h) => (h.css === "h1" ? " Wren " : "Post to Anyone"),
       url: "https://www.linkedin.com/sharing/compose",
       onAct: (n) => {
         if (n === 5) posted = true;
@@ -88,12 +88,12 @@ describe("linkedin/create-post", () => {
       posted ? '<div data-urn="urn:li:activity:7300000000000000000"></div>' : "";
     const out = await linkedinCreatePost.run(fp, {
       text: "hello",
-      author: "Wren Automation",
+      page: "143656154",
       visibility: "PUBLIC",
     });
     expect(acts.map(line)).toEqual([
       "click div[role=button][aria-expanded]",
-      "click Wren Automation",
+      "click Wren",
       "click /^(done|save)$/i",
       "fill div[role=textbox]",
       "click /^post$/i",
@@ -107,11 +107,11 @@ describe("linkedin/create-post", () => {
     const { fp, acts } = fakePage({
       text: [""],
       present: (h) => h.role !== "radio",
-      read: () => "Post to Anyone",
+      read: (h) => (h.css === "h1" ? "Someone Else" : "Post to Anyone"),
     });
-    await expect(
-      linkedinCreatePost.run(fp, { text: "hi", author: "Someone Else" }),
-    ).rejects.toThrow(/not an author this account can post as/);
+    await expect(linkedinCreatePost.run(fp, { text: "hi", page: "999" })).rejects.toThrow(
+      /"Someone Else" is not an author this account can post as/,
+    );
     expect(acts.map(line)).toEqual(["click div[role=button][aria-expanded]"]);
   });
 

@@ -22,24 +22,24 @@ export const LINKEDIN_ORIGIN = "https://api.linkedin.com";
 /** LinkedIn versions its REST API by month; a version is honoured for a year. */
 export const LINKEDIN_VERSION = "202508";
 /**
- * Pages by numeric id, with the name the composer lists them by. The API says
- * who posts with an author URN; the browser leg can only pick a name off the
- * composer's author list, as an account that admins the Page.
+ * Pages Wren's account admins, by numeric id. The API says who posts with an
+ * author URN; the browser leg reads the Page's name live and picks it off the
+ * composer's author list, so a rename needs no change here.
  */
-export const LINKEDIN_PAGES: Record<string, string> = { [WREN_PAGE]: "Wren Automation" };
+export const LINKEDIN_PAGES: ReadonlySet<string> = new Set([WREN_PAGE]);
 
 const PAGE_URN = /^urn:li:organization:(\d+)$/;
 
 /**
- * The composer's author for an author URN: a Page's name, or none for the member.
+ * The Page id an author URN posts as, or none for the member.
  * Wren's token holds `w_member_social` only, so a Page's post goes by the browser.
  */
-export function composerAuthor(author: string): string | undefined {
+export function composerPage(author: string): string | undefined {
   const id = PAGE_URN.exec(author)?.[1];
   if (!id) return undefined;
-  const name = LINKEDIN_PAGES[id];
-  if (!name) throw new SiteError(400, `no Page name for ${author}: add it to LINKEDIN_PAGES`);
-  return name;
+  if (!LINKEDIN_PAGES.has(id))
+    throw new SiteError(400, `${author} is not a Page Wren admins: add it to LINKEDIN_PAGES`);
+  return id;
 }
 
 const headers = (leg: ApiLeg, version = LINKEDIN_VERSION) => ({
@@ -270,7 +270,7 @@ export const linkedin: SiteApi = {
       request: post,
       irreversible: true,
       // The token posts only as its member (no w_organization_social): a Page's post is the composer's.
-      prefer: (b) => (composerAuthor(b.author) ? "browser" : undefined),
+      prefer: (b) => (composerPage(b.author) ? "browser" : undefined),
       api: async (body, leg) => {
         const res = await leg.http.json<unknown>(`${LINKEDIN_ORIGIN}/rest/posts`, {
           method: "POST",
@@ -286,7 +286,7 @@ export const linkedin: SiteApi = {
         input: (b) => ({
           text: b.commentary,
           visibility: b.visibility,
-          author: composerAuthor(b.author),
+          page: composerPage(b.author),
         }),
       },
     }),

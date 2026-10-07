@@ -1,5 +1,5 @@
 /**
- * Set a LinkedIn company Page's logo, banner and website from its admin editor.
+ * Set a LinkedIn company Page's name, logo, banner and website from its admin editor.
  * Hand-written from the 2026-10-05 explore run on Wren's Page, branches mapped
  * from its aria tree the same day. What the editor does:
  * - A logo and a banner saved together keep only the banner: each change gets
@@ -14,7 +14,10 @@
  *   dismiss, then Escape, if that button moves. Its Share button is never clicked.
  * - The Save click can time out while that dialog opens over it, though the save went through.
  * - The website field fills in a beat after the tab loads: read it once it settles.
- * - Images read back by URL (a new upload gets a new asset id), the website by value.
+ * - Images read back by URL (a new upload gets a new asset id), the website and name by value.
+ * - The name sits on the info tab; only it changes, the public URL field is never touched.
+ *   A name LinkedIn refuses shows an inline error under the field: its words go to a person.
+ * - Only a super admin opens the editor: a Content admin is sent to the dashboard (2026-10-07).
  * Runs in the profile where William's LinkedIn signs in (Google): a Page admin.
  * Wren's own account can't be one until LinkedIn verifies it (government ID, William's step).
  */
@@ -42,6 +45,7 @@ export const planSchema = z.object({
   logoFile: z.string().min(1).optional().describe("Logo, square"), // e.g. "/Users/williamjin/Documents/wren_automation/autobrowse/assets/brand/wren-pfp-lavender-on-white.png"
   bannerFile: z.string().min(1).optional().describe("Banner, 1584x396"), // e.g. "/Users/williamjin/Documents/wren_automation/autobrowse/assets/brand/wren-banner-linkedin-lavender-on-white.png"
   website: z.string().url().optional().describe("Website URL"), // e.g. "https://wrenautomation.com"
+  name: z.string().trim().min(1).max(100).optional().describe("Page name"), // e.g. "Wren"
 });
 export type Plan = z.infer<typeof planSchema>;
 
@@ -49,13 +53,15 @@ export interface Deps {
   browser: FlowRunner;
 }
 
-export type Item = "logo" | "banner" | "website";
+export type Item = "logo" | "banner" | "website" | "name";
 
 export interface Memo {
   /** What each item was set to and read back: a file's sha256, or the website. A rerun skips a match. */
   saved?: Partial<Record<Item, string>>;
   /** The website the editor showed at check: already right needs no save. */
   liveWebsite?: string;
+  /** The name the editor showed at check. */
+  liveName?: string;
 }
 
 type Step<S extends string> = StepDef<Plan, Deps, Memo, S>;
@@ -65,12 +71,14 @@ export interface EditorState {
   logo: string | null;
   banner: string | null;
   website: string;
+  name: string;
 }
 
 export type Change =
   | { item: "logo"; file: string }
   | { item: "banner"; file: string }
-  | { item: "website"; url: string };
+  | { item: "website"; url: string }
+  | { item: "name"; name: string };
 
 export interface BrandPageInput {
   companyId: string;
@@ -117,6 +125,9 @@ const DIALOG_APPLY: Hints[] = [
   { css: '[role=dialog] button:text-is("Save")' },
 ];
 const WEBSITE: Hints = { id: "organization-website-field" };
+/** The name field: by id as its siblings are, else by its label. */
+const NAME_CSS = '#organization-name-field, input[id*="organization-name" i]';
+const FIELD_ERROR = ".artdeco-inline-feedback--error, .artdeco-inline-feedback__message";
 const NO_WEBSITE = 'input[type=checkbox][id*="website" i]';
 const SAVE_ERROR = /something went wrong|couldn.t (save|update)|try again|failed/i;
 
@@ -186,14 +197,13 @@ async function readImages(fp: FlowPage): Promise<Pick<EditorState, "logo" | "ban
 /** The website once it settles: it fills in a beat after the tab loads. Empty when none is set. */
 async function readWebsite(fp: FlowPage): Promise<string> {
   const field = fp.page.locator(READY.details);
-  let last = await field.inputValue();
-  for (let i = 0; i < 16; i++) {
-    await fp.wait(500);
-    const now = await field.inputValue();
-    if (now && now === last) return now;
-    last = now;
-  }
-  return last;
+  return settled(fp, () => field.inputValue());
+}
+
+/** The Page's name on the info tab, once it settles. */
+async function readName(fp: FlowPage): Promise<string> {
+  const field = await nameField(fp);
+  return (await settled(fp, () => field.inputValue())).trim();
 }
 
 /** Wait for an image's URL to move off `before`: the save landed. */
@@ -230,6 +240,42 @@ async function declineShare(fp: FlowPage, withinMs = 10_000): Promise<void> {
   if (await fp.has(SHARE_DIALOG)) await fp.page.keyboard.press("Escape");
 }
 
+/** Inline field errors on the form, word for word. */
+async function fieldErrors(fp: FlowPage): Promise<string[]> {
+  const all = await fp.page
+    .locator(FIELD_ERROR)
+    .allInnerTexts()
+    .catch(() => []);
+  return [...new Set(all.map((t) => t.trim()).filter(Boolean))];
+}
+
+/** The name input, or a person told which inputs the info tab has. */
+async function nameField(fp: FlowPage) {
+  const byId = fp.page.locator(NAME_CSS).first();
+  if (await byId.count()) return byId;
+  const byLabel = fp.page.getByLabel(/^\s*name\s*\*?\s*$/i).first();
+  if (await byLabel.count()) return byLabel;
+  const ids = await fp.page
+    .locator("input[type=text], input:not([type])")
+    .evaluateAll((es) => es.map((e) => (e as unknown as { id: string }).id).filter(Boolean))
+    .catch(() => [] as string[]);
+  return fp.human(
+    `no name field on the editor's info tab (text inputs: ${ids.join(", ") || "none"})`,
+  );
+}
+
+/** A field's value once it settles: the editor fills it in a beat after the tab loads. */
+async function settled(fp: FlowPage, read: () => Promise<string>): Promise<string> {
+  let last = await read();
+  for (let i = 0; i < 16; i++) {
+    await fp.wait(500);
+    const now = await read();
+    if (now && now === last) return now;
+    last = now;
+  }
+  return last;
+}
+
 async function saveError(fp: FlowPage): Promise<string | null> {
   const toasts = await fp.page
     .locator(".artdeco-toast-item")
@@ -253,7 +299,10 @@ async function save(fp: FlowPage, what: string): Promise<void> {
     if (!(await fp.has(SAVE, 3_000))) return;
     if (!error) break;
   }
-  fp.human(`LinkedIn still shows Save after saving ${what}`);
+  const said = [...(await fieldErrors(fp)), (await saveError(fp)) ?? ""].filter(Boolean);
+  fp.human(
+    `LinkedIn still shows Save after saving ${what}${said.length ? `: "${said.join('"; "')}"` : ""}`,
+  );
 }
 
 async function setLogo(fp: FlowPage, id: string, file: string, before: EditorState) {
@@ -313,6 +362,19 @@ async function setWebsite(fp: FlowPage, id: string, url: string, before: EditorS
   return { ...before, website: after };
 }
 
+async function setName(fp: FlowPage, id: string, name: string, before: EditorState) {
+  const field = await nameField(fp);
+  await field.fill(name, { timeout: 10_000 });
+  await fp.wait(1_000);
+  const refused = await fieldErrors(fp);
+  if (refused.length) fp.human(`LinkedIn refused the name "${name}": "${refused.join('"; "')}"`);
+  await save(fp, `the name "${name}"`);
+  await openEditor(fp, id, "info");
+  const after = await readName(fp);
+  if (after !== name) fp.human(`the name reads "${after}" after saving "${name}"`);
+  return { ...before, name: after };
+}
+
 const brandPageFlow = defineFlow<BrandPageInput, BrandPageOutput>({
   site: "linkedin",
   name: "brand-page",
@@ -321,9 +383,15 @@ const brandPageFlow = defineFlow<BrandPageInput, BrandPageOutput>({
   async run(fp, { companyId: id, change }) {
     await openEditor(fp, id, "info");
     const images = await readImages(fp);
+    const name = await readName(fp);
     await openEditor(fp, id, "details");
-    const state: EditorState = { ...images, website: await readWebsite(fp) };
+    const state: EditorState = { ...images, name, website: await readWebsite(fp) };
     if (!change) return { state, outcome: "read" };
+    if (change.item === "name") {
+      if (state.name === change.name) return { state, outcome: "same" };
+      await openEditor(fp, id, "info");
+      return { state: await setName(fp, id, change.name, state), outcome: "saved" };
+    }
     if (change.item === "website") {
       if (sameUrl(state.website, change.url)) return { state, outcome: "same" };
       return { state: await setWebsite(fp, id, change.url, state), outcome: "saved" };
@@ -350,6 +418,7 @@ export function wanted(plan: Plan): { change: Change; mark: string }[] {
     out.push({ change: { item: "banner", file: plan.bannerFile }, mark: sha(plan.bannerFile) });
   if (plan.website)
     out.push({ change: { item: "website", url: plan.website }, mark: plan.website });
+  if (plan.name) out.push({ change: { item: "name", name: plan.name }, mark: plan.name });
   return out;
 }
 
@@ -357,6 +426,7 @@ export function wanted(plan: Plan): { change: Change; mark: string }[] {
 export function todo(plan: Plan, memo: Memo) {
   return wanted(plan).filter(({ change, mark }) => {
     if (memo.saved?.[change.item] === mark) return false;
+    if (change.item === "name") return memo.liveName !== change.name;
     return !(
       change.item === "website" &&
       memo.liveWebsite &&
@@ -365,7 +435,12 @@ export function todo(plan: Plan, memo: Memo) {
   });
 }
 
-const describe = (c: Change) => (c.item === "website" ? `website ${c.url}` : `${c.item} ${c.file}`);
+const describe = (c: Change) =>
+  c.item === "website"
+    ? `website ${c.url}`
+    : c.item === "name"
+      ? `name "${c.name}"`
+      : `${c.item} ${c.file}`;
 
 const check: Step<"check"> = {
   name: "check",
@@ -379,9 +454,10 @@ const check: Step<"check"> = {
       deps.browser.run(brandPageFlow, { companyId: plan.companyId, change: null }),
     );
     memo.liveWebsite = state.website;
+    memo.liveName = state.name;
     const left = todo(plan, memo).map((t) => t.change.item);
     return done(
-      `admin of ${plan.companyId}, website "${state.website}", ` +
+      `admin of ${plan.companyId}, name "${state.name}", website "${state.website}", ` +
         `${state.logo ? "has" : "no"} logo, ${state.banner ? "has" : "no"} banner; ` +
         (left.length ? `to set: ${left.join(", ")}` : "nothing to set"),
     );
@@ -393,7 +469,7 @@ const brand: Step<"brand"> = {
   irreversible: true,
   harmless: (plan, memo) => todo(plan, memo).length === 0,
   async run({ fx, deps, plan, memo, gate }) {
-    if (!wanted(plan).length) return skipped("no logo, banner or website given");
+    if (!wanted(plan).length) return skipped("no name, logo, banner or website given");
     const left = todo(plan, memo);
     if (!left.length) return skipped("already set");
     const answer = gate(
@@ -417,7 +493,7 @@ const brand: Step<"brand"> = {
 export const workflow = defineWorkflow<Deps, Memo>()({
   name: "linkedin-page-branding",
   description:
-    "Set a LinkedIn company Page's logo, banner and website from its admin editor: files checked first, one save each, each read back, the share-your-edits post declined.",
+    "Set a LinkedIn company Page's name, logo, banner and website from its admin editor (super admin): files checked first, one save each, each read back, the share-your-edits post declined.",
   plan: planSchema,
   steps: [check, brand],
   emptyMemo: () => ({}),

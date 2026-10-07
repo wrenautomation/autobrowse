@@ -11,7 +11,8 @@
  * on the page is a build hash, so the author control is found by shape:
  * the first `div[role=button][aria-expanded]` (author, audience, comments,
  * in that order). Choosing the author is idempotent, so the flow picks
- * rather than reads. Post is the irreversible act; the route says so, and
+ * rather than reads. The author list carries names only, no ids: a Page's
+ * name is read off its own page first, so a renamed Page still matches. Post is the irreversible act; the route says so, and
  * a run that is not approved stops before it.
  */
 import { defineFlow, type FlowPage } from "../flow.js";
@@ -19,8 +20,8 @@ import type { Hints } from "../locate.js";
 
 export interface CreatePostInput {
   text: string;
-  /** Who the post is by: a Page's name as the composer lists it, else the member. */
-  author?: string;
+  /** A Page's numeric id to post as (an admin's account); none posts as the member. */
+  page?: string;
   visibility?: "PUBLIC" | "CONNECTIONS" | "LOGGED_IN";
   /** A local image or video to attach. */
   file?: string;
@@ -47,15 +48,16 @@ export const linkedinCreatePost = defineFlow<CreatePostInput, { url: string | nu
   site: "linkedin",
   name: "create-post",
   async run(fp, input) {
+    const author = input.page ? await pageName(fp, input.page) : null;
     await fp.open(COMPOSE);
     if (!(await fp.has(body, RENDER_MS)))
       return fp.human(`the composer did not open (${fp.url()})`);
-    if (input.author) {
+    if (author) {
       await fp.act({ kind: "click" }, authorButton, { goal: "open the author list" });
-      const pick: Hints = { role: "radio", name: input.author };
+      const pick: Hints = { role: "radio", name: author };
       if (!(await fp.has(pick, RENDER_MS)))
-        return fp.human(`"${input.author}" is not an author this account can post as`);
-      await fp.act({ kind: "click" }, pick, { goal: `post as ${input.author}` });
+        return fp.human(`"${author}" is not an author this account can post as`);
+      await fp.act({ kind: "click" }, pick, { goal: `post as ${author}` });
       await fp.wait(SETTLE_MS);
       const done = { role: "button", name: "/^(done|save)$/i" } as const;
       if (await fp.has(done, 3_000))
@@ -94,6 +96,15 @@ export const linkedinCreatePost = defineFlow<CreatePostInput, { url: string | nu
     return fp.human(`the composer never confirmed the post (on ${fp.url()})`);
   },
 });
+
+/** A Page's name as it shows now: the h1 of `/company/<id>/` (an admin lands on its dashboard, same h1). */
+async function pageName(fp: FlowPage, id: string): Promise<string> {
+  await fp.open(`https://www.linkedin.com/company/${encodeURIComponent(id)}/`);
+  const h1: Hints = { css: "h1" };
+  if (!(await fp.has(h1, RENDER_MS))) return fp.human(`no Page name at ${fp.url()}`);
+  const name = (await fp.read(h1)).trim();
+  return name || fp.human(`the Page at ${fp.url()} shows an empty name`);
+}
 
 /** The composer's text, one line per paragraph; null when the editor has no paragraphs (a fake page). */
 async function composed(fp: { page: FlowPage["page"] }): Promise<string | null> {

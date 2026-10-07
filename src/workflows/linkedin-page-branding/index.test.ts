@@ -40,7 +40,7 @@ const plan = (dryRun: boolean, extra: Record<string, string> = {}) =>
     ...extra,
   });
 
-const live: EditorState = { logo: "L1", banner: "B1", website: "" };
+const live: EditorState = { logo: "L1", banner: "B1", website: "", name: "Wren Automation" };
 
 /** A browser whose Page shows `state`; `failOn` throws when that item is set. */
 const deps = (runs: BrandPageInput[], state = live, failOn?: string) => ({
@@ -93,6 +93,25 @@ describe("linkedin-page-branding", () => {
     expect(out.status).toBe("done");
     expect(out.results.brand?.detail).toBe("already set");
     expect(items(runs)).toEqual(["read"]);
+  });
+
+  it("renames the Page alone, behind the send gate, and skips a name already live", async () => {
+    const runs: BrandPageInput[] = [];
+    const { fx } = memoryEffects();
+    const rename = planSchema.parse({ dryRun: false, name: "Wren" });
+    const out = await runFlow(fx, workflow, deps(runs), rename, (gate) => {
+      expect(gate.prompt).toBe('Set LinkedIn Page 143656154: name "Wren"?');
+      return yes();
+    });
+    expect(out.status).toBe("done");
+    expect(runs.map((r) => r.change)).toEqual([null, { item: "name", name: "Wren" }]);
+    expect(out.results.check?.detail).toContain('name "Wren Automation"');
+
+    const again: BrandPageInput[] = [];
+    const named = { ...live, name: "Wren" };
+    const same = await runFlow(memoryEffects().fx, workflow, deps(again, named), rename);
+    expect(same.results.brand?.detail).toBe("already set");
+    expect(items(again)).toEqual(["read"]);
   });
 
   it("keeps what saved when a later item fails, and redoes only the rest", async () => {
