@@ -7,18 +7,40 @@
  * legs answer in the same shape.
  */
 import { z } from "zod";
+import { WREN_PAGE } from "../browser/flows/linkedin-audience.js";
 import { HttpError } from "../clients/http.js";
-import { type ApiLeg, type OAuthSpec, route, type SiteApi, type SiteRoute } from "./types.js";
+import {
+  type ApiLeg,
+  type OAuthSpec,
+  route,
+  type SiteApi,
+  SiteError,
+  type SiteRoute,
+} from "./types.js";
 
 export const LINKEDIN_ORIGIN = "https://api.linkedin.com";
 /** LinkedIn versions its REST API by month; a version is honoured for a year. */
 export const LINKEDIN_VERSION = "202508";
 /**
- * Who the composer posts as, by the name it lists (the member, or a Page
- * this account admins). The API says it with an author URN; the browser
- * leg can only read names off the author list.
+ * Pages by numeric id, with the name the composer lists them by. The API says
+ * who posts with an author URN; the browser leg can only pick a name off the
+ * composer's author list, as an account that admins the Page.
  */
-export const LINKEDIN_AUTHOR = "LINKEDIN_AUTHOR";
+export const LINKEDIN_PAGES: Record<string, string> = { [WREN_PAGE]: "Wren Automation" };
+
+const PAGE_URN = /^urn:li:organization:(\d+)$/;
+
+/**
+ * The composer's author for an author URN: a Page's name, or none for the member.
+ * Wren's token holds `w_member_social` only, so a Page's post goes by the browser.
+ */
+export function composerAuthor(author: string): string | undefined {
+  const id = PAGE_URN.exec(author)?.[1];
+  if (!id) return undefined;
+  const name = LINKEDIN_PAGES[id];
+  if (!name) throw new SiteError(400, `no Page name for ${author}: add it to LINKEDIN_PAGES`);
+  return name;
+}
 
 const headers = (leg: ApiLeg, version = LINKEDIN_VERSION) => ({
   authorization: `Bearer ${leg.token}`,
@@ -243,9 +265,12 @@ export const linkedin: SiteApi = {
     route({
       method: "POST",
       path: "/rest/posts",
-      summary: "Publish a post as the member (text, or text + an uploaded image/video)",
+      summary:
+        "Publish a post as the member, or as a Page it admins (`author: urn:li:organization:…`, by the browser)",
       request: post,
       irreversible: true,
+      // The token posts only as its member (no w_organization_social): a Page's post is the composer's.
+      prefer: (b) => (composerAuthor(b.author) ? "browser" : undefined),
       api: async (body, leg) => {
         const res = await leg.http.json<unknown>(`${LINKEDIN_ORIGIN}/rest/posts`, {
           method: "POST",
@@ -258,10 +283,10 @@ export const linkedin: SiteApi = {
       },
       browser: {
         flow: "linkedin/create-post",
-        input: (b, env) => ({
+        input: (b) => ({
           text: b.commentary,
           visibility: b.visibility,
-          author: env(LINKEDIN_AUTHOR),
+          author: composerAuthor(b.author),
         }),
       },
     }),

@@ -78,10 +78,18 @@ export interface SiteRoute<I = unknown, O = unknown> {
   /**
    * "browser": the browser leg answers even when a token is in hand (the API
    * charges per read and the signed-in page shows the same thing for free).
+   * A function decides per request: a LinkedIn post by a Page goes by the
+   * browser, since the token may post only as its member.
    */
-  prefer?: "browser";
+  prefer?: "browser" | ((input: I) => "browser" | undefined);
   summary: string;
 }
+
+/** Whether this request skips the API leg; with no request (a route listing), only a fixed "browser" does. */
+export const prefersBrowser = <I>(r: Pick<SiteRoute<I>, "prefer">, input?: I): boolean =>
+  typeof r.prefer === "function"
+    ? input !== undefined && r.prefer(input) === "browser"
+    : r.prefer === "browser";
 
 /** One key or token the site needs, and what makes it. */
 /**

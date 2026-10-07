@@ -1,9 +1,18 @@
 import { describe, expect, it } from "vitest";
+import type { FlowRunner } from "../src/browser/flow.js";
 import { linkedinCreatePost } from "../src/browser/flows/linkedin-create-post.js";
 import type { Hints } from "../src/browser/locate.js";
+import { httpClient } from "../src/clients/http.js";
+import { memorySink } from "../src/deps/sink.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
-import { LINKEDIN_AUTHOR, linkedin } from "../src/sites/linkedin.js";
+import { siteFacade } from "../src/sites/facade.js";
+import { linkedin } from "../src/sites/linkedin.js";
+import { prefersBrowser } from "../src/sites/types.js";
 import { fakePage } from "./auth-fakes.js";
+import { fakeFetch } from "./fakes.js";
+
+const PAGE = "urn:li:organization:143656154";
+const MEMBER = "urn:li:person:abc123";
 
 const line = (a: { op: { kind: string }; hints: Hints }) =>
   `${a.op.kind} ${a.hints.name ?? a.hints.css}`;
@@ -13,12 +22,55 @@ describe("linkedin/create-post", () => {
     const route = linkedin.routes.find((r) => r.path === "/rest/posts" && r.method === "POST");
     expect(route?.browser?.flow).toBe("linkedin/create-post");
     expect(route?.irreversible).toBe(true);
-    expect(
-      route?.browser?.input?.({ commentary: "hi", visibility: "PUBLIC" }, (n) =>
-        n === LINKEDIN_AUTHOR ? "Wren Automation" : undefined,
-      ),
-    ).toEqual({ text: "hi", visibility: "PUBLIC", author: "Wren Automation" });
+    const input = (author: string) =>
+      route?.browser?.input?.(
+        { author, commentary: "hi", visibility: "PUBLIC" } as never,
+        () => undefined,
+      );
+    expect(input(PAGE)).toEqual({ text: "hi", visibility: "PUBLIC", author: "Wren Automation" });
+    expect(input(MEMBER)).toEqual({ text: "hi", visibility: "PUBLIC", author: undefined });
     expect(BROWSER_FLOWS["linkedin/create-post"]).toBe(linkedinCreatePost);
+  });
+
+  it("a Page's post goes by the browser even with a token; the member's by the API", async () => {
+    const route = linkedin.routes.find((r) => r.path === "/rest/posts" && r.method === "POST");
+    expect(prefersBrowser(route as never)).toBe(false);
+    const api = fakeFetch(() => ({ status: 201, headers: { "x-restli-id": "urn:li:share:1" } }));
+    const seen: string[] = [];
+    const runner: FlowRunner = {
+      async run(flow, input) {
+        seen.push(`${flow.site} ${flow.name} ${JSON.stringify(input)}`);
+        return { url: "https://www.linkedin.com/feed/update/urn:li:activity:2/" } as never;
+      },
+    };
+    const env: Record<string, string> = { LINKEDIN_ACCESS_TOKEN__HELLO_WREN_TEST: "tok" };
+    const sites = siteFacade([linkedin], {
+      http: httpClient({ fetch: api.fetch }),
+      env: (n) => env[n],
+      sink: memorySink(),
+      runner,
+      flow: (n) => BROWSER_FLOWS[n] ?? null,
+      providerOf: () => null,
+      accountFor: async () => "hello@wren.test",
+      profileFor: async (site) => `${site}@wren`,
+    });
+    const post = (author: string) =>
+      sites.call("linkedin", "POST", "/rest/posts", { author, commentary: "hi" });
+
+    expect(await post(MEMBER)).toEqual({ id: "urn:li:share:1" });
+    expect(api.calls.map((c) => `${c.method} ${c.url.pathname}`)).toEqual(["POST /rest/posts"]);
+    expect(seen).toEqual([]);
+
+    expect(await post(PAGE)).toEqual({
+      url: "https://www.linkedin.com/feed/update/urn:li:activity:2/",
+    });
+    expect(api.calls).toHaveLength(1);
+    expect(seen).toEqual([
+      'linkedin@wren create-post {"text":"hi","visibility":"PUBLIC","author":"Wren Automation"}',
+    ]);
+
+    await expect(post("urn:li:organization:999")).rejects.toMatchObject({ status: 400 });
+    expect(seen).toHaveLength(1);
   });
 
   it("switches the author, types the post and answers with its permalink", async () => {

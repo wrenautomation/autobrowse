@@ -25,6 +25,7 @@ import {
   legName,
   type Method,
   type OAuthSpec,
+  prefersBrowser,
   type SetupStep,
   type SiteApi,
   SiteError,
@@ -345,7 +346,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       request: jsonSchemaOf(r.request),
     };
     const recorded = r.browser ? Boolean(await legOf(r.browser)) : false;
-    if (r.api && r.prefer !== "browser" && hasToken(s, account)) return { ...base, via: "api" };
+    if (r.api && !prefersBrowser(r) && hasToken(s, account)) return { ...base, via: "api" };
     if (r.browser) {
       if (!recorded) return { ...base, via: "none", missing: `${legName(r.browser)} not recorded` };
       return { ...base, via: "browser" };
@@ -456,7 +457,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       const fallback = !account && chosen && (deps.providerOf?.(s) || oneKey);
       // A route that prefers the browser never reaches the API, so never pays for a read.
       const token =
-        r.api && r.prefer !== "browser"
+        r.api && !prefersBrowser(r, parsed.data as never)
           ? ((await tokenFor(s, chosen)) ?? (fallback ? await tokenFor(s, null) : null))
           : null;
       const byBrowser = !(r.api && token !== null) && Boolean(r.browser);
