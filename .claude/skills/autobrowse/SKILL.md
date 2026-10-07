@@ -42,7 +42,8 @@ Changing autobrowse's code: `map/CLAUDE.md`.
 - William's personal accounts: only when he asks. Wren's work runs on
   Wren's accounts, picked by the accounts policy.
 - Never change or rotate a stored password. Never wipe a browser profile.
-  Never open `www.linkedin.com` in an explore session.
+  Explore LinkedIn only as `linkedin@wren`: reads, under 20 page loads,
+  stop on a 429. Never William's own LinkedIn in an explore session.
 - Stop every explore session you start (`stop.sh`). `pnpm -s autobrowse browsers`
   lists our browsers and sessions (owner, memory, idle, held); `doctor` warns.
 - One sign-in try per site, then report. Repeated tries get accounts
