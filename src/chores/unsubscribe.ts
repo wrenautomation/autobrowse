@@ -64,10 +64,19 @@ export function parseListUnsubscribe(value: string): { https: string[]; mailto: 
   return { https, mailto };
 }
 
-const mailtoOf = (u: string): { to: string; subject: string } => {
+/** A sender's own header: a bad `%` escape keeps the address as written, not a crash of the whole list. */
+const decoded = (s: string): string => {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+};
+
+export const mailtoOf = (u: string): { to: string; subject: string } => {
   const [addr, query = ""] = u.slice("mailto:".length).split("?");
   const subject = new URLSearchParams(query).get("subject") ?? "unsubscribe";
-  return { to: decodeURIComponent(addr ?? ""), subject };
+  return { to: decoded(addr ?? ""), subject };
 };
 
 /** Gmail answers a burst with 403/429 (per-user rate): wait and try again. */

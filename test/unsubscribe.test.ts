@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   findSubscriptions,
   leave,
+  mailtoOf,
   parseFrom,
   parseListUnsubscribe,
   rawMail,
@@ -47,6 +48,14 @@ describe("unsubscribe", () => {
       https: ["https://x.io/u?t=1"],
       mailto: ["mailto:u@x.io?subject=unsub"],
     });
+  });
+
+  it("reads a mailto entry, and a bad % escape keeps the address as written", () => {
+    expect(mailtoOf("mailto:u%2Bnews@x.io?subject=stop")).toEqual({
+      to: "u+news@x.io",
+      subject: "stop",
+    });
+    expect(mailtoOf("mailto:u%zz@x.io")).toEqual({ to: "u%zz@x.io", subject: "unsubscribe" });
   });
 
   it("lists one row per sender that offers a way out, most mail first, never the kept or the headerless", async () => {
