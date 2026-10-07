@@ -242,6 +242,39 @@ describe("gmail site: one consent per account", () => {
   });
 });
 
+describe("gmail site: push", () => {
+  it("watch posts the topic as the account and refuses a topic that isn't one", async () => {
+    const env: Record<string, string> = {
+      GOOGLE_OAUTH_CLIENT_ID: "cid",
+      GOOGLE_OAUTH_CLIENT_SECRET: "cs",
+      GMAIL_REFRESH_TOKEN: "rt-own",
+    };
+    const api = fakeFetch(({ url }) =>
+      url.host === "oauth2.googleapis.com"
+        ? { body: { access_token: "at-own", expires_in: 3600 } }
+        : { body: { historyId: "7", expiration: "1700000000000" } },
+    );
+    const sites = siteFacade([gmail], {
+      http: httpClient({ fetch: api.fetch }),
+      env: (n) => env[n],
+      sink: memorySink(),
+      runner: { run: async () => ({ landed: "" }) as never },
+      flow: () => null,
+    });
+    const topicName = "projects/p/topics/gmail-push";
+    await expect(
+      sites.call("gmail", "POST", "/gmail/v1/users/me/watch", { topicName, labelIds: ["INBOX"] }),
+    ).resolves.toEqual({ historyId: "7", expiration: "1700000000000" });
+    const sent = api.calls.find((c) => c.url.pathname === "/gmail/v1/users/me/watch");
+    expect(sent?.method).toBe("POST");
+    expect(sent?.headers.get("authorization")).toBe("Bearer at-own");
+    expect(JSON.parse(sent?.body ?? "{}")).toEqual({ topicName, labelIds: ["INBOX"] });
+    await expect(
+      sites.call("gmail", "POST", "/gmail/v1/users/me/watch", { topicName: "gmail-push" }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+});
+
 describe("messageText", () => {
   it("keeps link targets of an HTML-only mail and drops its CSS", async () => {
     const { messageText } = await import("../src/clients/gmail.js");

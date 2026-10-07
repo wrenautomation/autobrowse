@@ -63,6 +63,12 @@ const send = z.object({
   raw: z.string().min(1),
   threadId: z.string().optional(),
 });
+/** Gmail publishes only to a topic in the OAuth client's own Cloud project. */
+const watch = z.object({
+  topicName: z.string().regex(/^projects\/[^/]+\/topics\/[^/]+$/),
+  labelIds: z.array(z.string()).optional(),
+  labelFilterBehavior: z.enum(["INCLUDE", "EXCLUDE"]).optional(),
+});
 
 export const gmail: SiteApi = {
   site: "gmail",
@@ -122,6 +128,22 @@ export const gmail: SiteApi = {
             body,
           }),
           "messages/send",
+        ),
+    }),
+    route({
+      method: "POST",
+      path: "/gmail/v1/users/me/watch",
+      summary:
+        "Push this inbox's changes to a Pub/Sub topic for 7 days; again renews. Answers `historyId`, `expiration` (ms)",
+      request: watch,
+      api: async (body, leg) =>
+        must(
+          await leg.http.json<{ historyId: string; expiration: string }>(`${ME}/watch`, {
+            method: "POST",
+            headers: bearer(leg),
+            body,
+          }),
+          "watch",
         ),
     }),
   ],
