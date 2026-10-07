@@ -26,6 +26,7 @@ import { linkedinAudience } from "../browser/flows/linkedin-audience.js";
 import { linkedinCreatePost } from "../browser/flows/linkedin-create-post.js";
 import { linkedinNotifications } from "../browser/flows/linkedin-notifications.js";
 import { linkedinOauthConsent } from "../browser/flows/linkedin-oauth-consent.js";
+import { linkedinCompanyPosts, linkedinSearchPosts } from "../browser/flows/linkedin-posts.js";
 import {
   linkedinCompany,
   linkedinCompanyJobs,
@@ -106,6 +107,8 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinNotifications,
     linkedinActivity,
     linkedinAudience,
+    linkedinSearchPosts,
+    linkedinCompanyPosts,
     linkedinWithdraw,
     resetMailProbe,
     npmCreateOrg,

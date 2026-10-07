@@ -72,10 +72,10 @@ export interface Activity {
   raw: RawActivity;
 }
 
-const HEADER =
+export const HEADER =
   /\b(reposted|commented|replied|likes?|liked|loves|celebrates|supports|finds|reacted)\b/i;
-const AGE_LINE = /^(\d+(?:mo|min|yr|hr|s|m|h|d|w|y))\s*(?:•|$)/;
-const FEED_URN = /\/feed\/update\/(urn:li:(?:activity|ugcPost|share):\d+)/;
+export const AGE_LINE = /^(\d+(?:mo|min|yr|hr|s|m|h|d|w|y))\s*(?:•|$)/;
+export const FEED_URN = /\/feed\/update\/(urn:li:(?:activity|ugcPost|share):\d+)/;
 
 function kindOf(header: string | undefined): ActivityKind | null {
   if (!header) return "post";
@@ -84,7 +84,7 @@ function kindOf(header: string | undefined): ActivityKind | null {
   return null;
 }
 
-const linesOf = (text: string) =>
+export const linesOf = (text: string) =>
   text
     .split("\n")
     .map((l) => l.trim())

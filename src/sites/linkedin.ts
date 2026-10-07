@@ -119,6 +119,13 @@ const activity = z.object({
   vanity,
   max: z.coerce.number().int().min(1).max(100).default(20),
 });
+const postsMax = z.coerce.number().int().min(1).max(50).default(20);
+const searchPosts = z.object({
+  keywords: z.string().min(1).max(200),
+  max: postsMax,
+  since: z.enum(["past-24h", "past-week", "past-month"]).default("past-week"),
+});
+const companyPosts = z.object({ company: handle, max: postsMax });
 
 async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
   if (!res.ok) throw new HttpError("CALL", `${LINKEDIN_ORIGIN}/${what}`, res.status);
@@ -159,6 +166,8 @@ export const linkedin: SiteApi = {
     activity: 0,
     // Our own audience (profile + Page, two page loads): on demand from wren, never on a timer.
     audience: 4,
+    // Posts by others to comment on (search, a company's Posts tab): reads run only as linkedin@wren.
+    posts: 12,
   },
   // William's own profile (shown as "Will Jin"): research reads since 2026-10-06, when the alt was
   // restricted ("just use my main ... unless alt still works"); the alt's pace, nothing sent, never
@@ -176,6 +185,7 @@ export const linkedin: SiteApi = {
       notifications: 0,
       audience: 0,
       activity: 10,
+      posts: 0,
     },
     // The research alt (2026-10-05): reads only. LinkedIn restricted it 2026-10-06 (asks for an ID).
     "linkedin@alt": {
@@ -191,6 +201,7 @@ export const linkedin: SiteApi = {
       audience: 0,
       // wren's signals (designs 2026-10-06-signal-collectors, S5): 10 people a day.
       activity: 10,
+      posts: 0,
     },
   },
   pace: { gapMs: 10_000, jitterMs: 20_000 },
@@ -396,6 +407,24 @@ export const linkedin: SiteApi = {
       request: activity,
       meter: () => ({ activity: 1 }),
       browser: { flow: "linkedin/activity" },
+    }),
+    route({
+      method: "GET",
+      path: "/search/results/content",
+      summary:
+        "Posts for a keyword, newest first (`keywords`, `max` default 20, `since` past-24h|past-week|past-month): urn, author, authorUrl, headline, text, age, reactions, comments, url, raw; `dropped` counts cards with no post urn. Reads only",
+      request: searchPosts,
+      meter: () => ({ posts: 1 }),
+      browser: { flow: "linkedin/search-posts" },
+    }),
+    route({
+      method: "GET",
+      path: "/company/{company}/posts",
+      summary:
+        "A company's recent posts (`max`, default 20), in the search's shape: posts and dropped. Reads only",
+      request: companyPosts,
+      meter: () => ({ posts: 1 }),
+      browser: { flow: "linkedin/company-posts" },
     }),
     route({
       method: "GET",
