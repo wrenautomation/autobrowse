@@ -31,6 +31,8 @@ const post = z.object({
   poll: z
     .object({ options: z.array(z.string()).min(2).max(4), duration_minutes: z.number().int() })
     .optional(),
+  /** Who may reply; unset, everyone can. */
+  reply_settings: z.enum(["following", "mentionedUsers", "subscribers", "verified"]).optional(),
 });
 const one = z.object({ id });
 const timeline = z.object({

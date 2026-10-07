@@ -39,6 +39,12 @@ const publishInit = z.object({
     disable_comment: z.boolean().optional(),
     disable_stitch: z.boolean().optional(),
     video_cover_timestamp_ms: z.number().int().optional(),
+    /** The video is AI-generated content. */
+    is_aigc: z.boolean().optional(),
+    /** Paid partnership: promotes a third party's brand. */
+    brand_content_toggle: z.boolean().optional(),
+    /** Promotes the creator's own business. */
+    brand_organic_toggle: z.boolean().optional(),
   }),
   source_info: z.union([
     z.object({ source: z.literal("PULL_FROM_URL"), video_url: z.string().url() }),

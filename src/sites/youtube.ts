@@ -96,6 +96,30 @@ async function videoOf(
   };
 }
 
+/** A multipart/related body: the JSON metadata part, then the media part (Google's multipart upload). */
+export function related(
+  meta: unknown,
+  media: { type: string; bytes: Uint8Array },
+): { type: string; body: Uint8Array<ArrayBuffer> } {
+  const boundary = `autobrowse${Math.random().toString(16).slice(2)}`;
+  const text = (s: string) => new TextEncoder().encode(s);
+  const parts = [
+    text(
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n`,
+    ),
+    text(`--${boundary}\r\nContent-Type: ${media.type}\r\n\r\n`),
+    media.bytes,
+    text(`\r\n--${boundary}--\r\n`),
+  ];
+  const body = new Uint8Array(parts.reduce((n, p) => n + p.byteLength, 0));
+  let at = 0;
+  for (const p of parts) {
+    body.set(p, at);
+    at += p.byteLength;
+  }
+  return { type: `multipart/related; boundary=${boundary}`, body };
+}
+
 /** The bytes PUT gets this long: ~2 GB at a slow uplink. One attempt; a stream is not retried. */
 const VIDEO_PUT_MS = 2 * 60 * 60_000;
 
@@ -108,22 +132,41 @@ const upload = z.object({
     tags: z.array(z.string()).max(500).default([]),
     categoryId: z.string().default("22"),
     defaultLanguage: z.string().optional(),
+    /** The spoken language (BCP-47). */
+    defaultAudioLanguage: z.string().optional(),
   }),
   status: z
     .object({
       privacyStatus: z.enum(["public", "unlisted", "private"]).default("private"),
       publishAt: z.string().datetime().optional(),
       selfDeclaredMadeForKids: z.boolean().default(false),
+      /** Altered or synthetic content a viewer could take as real. */
+      containsSyntheticMedia: z.boolean().optional(),
     })
     .default({ privacyStatus: "private", selfDeclaredMadeForKids: false }),
   /** The video: a path on the worker or a URL. Not part of the official body (it is the upload's bytes). */
   file: z.string().min(1),
   contentType: z.string().default("video/*"),
+  /** Tell subscribers about the upload. A query parameter, never in the body; unset, YouTube notifies. */
+  notifySubscribers: z.boolean().optional(),
 });
 const thumbnail = z.object({
   videoId: z.string().min(1),
   file: z.string().min(1),
   contentType: z.string().default("image/jpeg"),
+});
+const caption = z.object({
+  videoId: z.string().min(1),
+  /** BCP-47, e.g. `en` or `pt-BR`. */
+  language: z.string().min(2),
+  name: z.string().max(150).default(""),
+  /** The caption track (SRT, VTT, SBV...): a path on the worker or a URL. */
+  file: z.string().min(1),
+  contentType: z.string().default("application/octet-stream"),
+});
+const playlistItem = z.object({
+  playlistId: z.string().min(1),
+  videoId: z.string().min(1),
 });
 const banner = z.object({
   file: z.string().min(1),
@@ -188,10 +231,12 @@ export const youtube: SiteApi = {
       irreversible: true,
       api: async (body, leg) => {
         await onTheRightChannel(leg);
-        const { file, contentType, part, uploadType, ...meta } = body;
+        const { file, contentType, part, uploadType, notifySubscribers, ...meta } = body;
         const video = await videoOf(file);
+        const notify =
+          notifySubscribers === undefined ? "" : `&notifySubscribers=${notifySubscribers}`;
         const start = await leg.http.json<unknown>(
-          `${YOUTUBE_ORIGIN}/upload/youtube/v3/videos?uploadType=${uploadType}&part=${encodeURIComponent(part)}`,
+          `${YOUTUBE_ORIGIN}/upload/youtube/v3/videos?uploadType=${uploadType}&part=${encodeURIComponent(part)}${notify}`,
           {
             method: "POST",
             headers: {
@@ -239,6 +284,48 @@ export const youtube: SiteApi = {
             },
           ),
           "upload/youtube/v3/thumbnails/set",
+        );
+      },
+    }),
+    route({
+      method: "POST",
+      path: "/upload/youtube/v3/captions",
+      summary:
+        "Add a caption track to a video from `file` (path or URL), with `language` (BCP-47) and `name`; answers the caption resource",
+      request: caption,
+      api: async ({ videoId, language, name, file, contentType }, leg) => {
+        await onTheRightChannel(leg);
+        const form = related(
+          { snippet: { videoId, language, name, isDraft: false } },
+          { type: contentType, bytes: await bytesOf(file) },
+        );
+        return must(
+          await leg.http.json<unknown>(
+            `${YOUTUBE_ORIGIN}/upload/youtube/v3/captions?uploadType=multipart&part=snippet`,
+            {
+              method: "POST",
+              headers: { ...bearer(leg), "content-type": form.type },
+              raw: form.body,
+            },
+          ),
+          "upload/youtube/v3/captions",
+        );
+      },
+    }),
+    route({
+      method: "POST",
+      path: "/youtube/v3/playlistItems",
+      summary: "Add a video to a playlist (`playlistId`, `videoId`); answers the playlist item",
+      request: playlistItem,
+      api: async ({ playlistId, videoId }, leg) => {
+        await onTheRightChannel(leg);
+        return must(
+          await leg.http.json<unknown>(`${YOUTUBE_ORIGIN}/youtube/v3/playlistItems?part=snippet`, {
+            method: "POST",
+            headers: bearer(leg),
+            body: { snippet: { playlistId, resourceId: { kind: "youtube#video", videoId } } },
+          }),
+          "youtube/v3/playlistItems",
         );
       },
     }),
