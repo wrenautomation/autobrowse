@@ -232,6 +232,13 @@ const igComments = z.object({
 /** Instagram usernames: letters, digits, `.` and `_`, up to 30. */
 const igLookup = z.object({
   username: z.string().regex(/^[A-Za-z0-9._]{1,30}$/, "an Instagram username"),
+  /** The page after this one: a previous answer's `next`. */
+  after: z
+    .string()
+    .regex(/^[A-Za-z0-9_=-]{1,512}$/, "a cursor from a previous answer's `next`")
+    .optional(),
+  /** Posts a page, newest first. */
+  limit: z.coerce.number().int().min(1).max(50).default(25),
 });
 const igReply = z.object({ commentId: id, message: z.string().min(1).max(2200) });
 
@@ -304,21 +311,29 @@ function igUserOf(leg: ApiLeg): Promise<string> {
 }
 
 /**
- * `business_discovery`: a business or creator account's profile and newest 25 posts,
- * read as our own Instagram business account. A name that does not exist, or a
- * personal account, is an answer (`found: false`), not an error.
+ * `business_discovery`: a business or creator account's profile and a page of its posts, newest
+ * first, read as our own Instagram business account; `next` is the cursor of the page after, null
+ * at the first post. A name that does not exist, or a personal account, is an answer
+ * (`found: false`), not an error.
  */
-async function igDiscover(leg: ApiLeg, username: string) {
-  const fields = `business_discovery.username(${username}){${IG_PROFILE},media.limit(25){${IG_MEDIA}}}`;
+async function igDiscover(
+  leg: ApiLeg,
+  { username, after, limit }: { username: string; after?: string | undefined; limit: number },
+) {
+  const media = `media${after ? `.after(${after})` : ""}.limit(${limit})`;
+  const fields = `business_discovery.username(${username}){${IG_PROFILE},${media}{${IG_MEDIA}}}`;
   const res = await leg.http.json<
     {
-      business_discovery?: { media?: { data?: unknown[] } } & Record<string, unknown>;
+      business_discovery?: {
+        media?: { data?: unknown[]; paging?: { cursors?: { after?: string }; next?: string } };
+      } & Record<string, unknown>;
     } & GraphFailure
   >(withQuery(v(await igUserOf(leg)), { fields }), { headers: bearer(leg) });
   const found = res.body?.business_discovery;
   if (res.ok && found) {
     const { media, ...profile } = found;
-    return { found: true, profile, media: media?.data ?? [] };
+    const next = media?.paging?.next ? (media.paging.cursors?.after ?? null) : null;
+    return { found: true, profile, media: media?.data ?? [], next };
   }
   const e = res.body?.error;
   const why = e?.error_user_msg ?? e?.message ?? "";
@@ -420,10 +435,10 @@ export const meta: SiteApi = {
       method: "GET",
       path: "/instagram/{username}",
       summary:
-        "Another business or creator Instagram account by username (`business_discovery`, read as ours): `{ found: true, profile, media }` with the bio, site, counts and the newest 25 posts, or `{ found: false, reason }` for an unknown name or a personal account. A Graph rate limit is a 429",
+        "Another business or creator Instagram account by username (`business_discovery`, read as ours): `{ found: true, profile, media, next }` with the bio, site, counts and a page of posts, newest first (`limit`, default 25, max 50; `after` = a previous `next` for the page after, `next` null at the first post), or `{ found: false, reason }` for an unknown name or a personal account. A Graph rate limit is a 429",
       request: igLookup,
       meter: () => ({ reads: 1 }),
-      api: ({ username }, leg) => igDiscover(leg, username),
+      api: (q, leg) => igDiscover(leg, q),
     }),
     route({
       method: "GET",

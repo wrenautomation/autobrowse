@@ -364,12 +364,43 @@ describe("meta GET /instagram/{username}", () => {
       found: true,
       profile: { id: "5", username: "acme.recruit", followers_count: 10 },
       media: [{ id: "m1", caption: "We are hiring", permalink: "https://www.instagram.com/p/x/" }],
+      next: null,
     });
     expect(calls.at(-1)?.pathname).toBe("/v23.0/1784");
     const fields = calls.at(-1)?.searchParams.get("fields") ?? "";
     expect(fields).toMatch(
       /^business_discovery\.username\(acme\.recruit\)\{id,ig_id,username,name,biography,website,profile_picture_url,followers_count,follows_count,media_count,media\.limit\(25\)\{id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count\}\}$/,
     );
+  });
+
+  it("pages back: `after` and `limit` go into the media edge, `next` is the cursor while there is more", async () => {
+    const { sites, calls } = setup((fields) => ({
+      status: 200,
+      body: {
+        business_discovery: {
+          id: "5",
+          media: {
+            data: [{ id: "m9" }],
+            paging: {
+              cursors: { before: "QVFB", after: "QVFIUm9" },
+              ...(fields.includes(".after(") ? {} : { next: "https://graph.example/next" }),
+            },
+          },
+        },
+      },
+    }));
+    expect(await sites.call("meta", "GET", "/instagram/acme", { limit: 10 })).toMatchObject({
+      media: [{ id: "m9" }],
+      next: "QVFIUm9",
+    });
+    expect(calls.at(-1)?.searchParams.get("fields")).toContain(",media.limit(10){");
+    expect(
+      await sites.call("meta", "GET", "/instagram/acme", { after: "QVFIUm9", limit: 10 }),
+    ).toMatchObject({ next: null });
+    expect(calls.at(-1)?.searchParams.get("fields")).toContain(",media.after(QVFIUm9).limit(10){");
+    await expect(
+      sites.call("meta", "GET", "/instagram/acme", { after: "x){id}" }),
+    ).rejects.toMatchObject({ status: 400 });
   });
 
   it("looks the Instagram account up once per token, and counts every read", async () => {
