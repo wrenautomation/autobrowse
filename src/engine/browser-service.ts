@@ -20,8 +20,16 @@ import { googlePlace } from "../browser/flows/google-place.js";
 import { googleProfilePhoto } from "../browser/flows/google-profile-photo.js";
 import { googleSearch } from "../browser/flows/google-search.js";
 import { googleWorkspaceLogo } from "../browser/flows/google-workspace-logo.js";
+import {
+  instagramComment,
+  instagramFollow,
+  instagramLike,
+  instagramPost,
+  instagramSearch,
+} from "../browser/flows/instagram-act.js";
 import { instagramCreatePost } from "../browser/flows/instagram-create-post.js";
 import { instagramOauthConsent } from "../browser/flows/instagram-oauth-consent.js";
+import { linkedinFollow, linkedinLike } from "../browser/flows/linkedin-act.js";
 import { linkedinActivity } from "../browser/flows/linkedin-activity.js";
 import { linkedinAudience } from "../browser/flows/linkedin-audience.js";
 import { linkedinCreatePost } from "../browser/flows/linkedin-create-post.js";
@@ -60,6 +68,7 @@ import { redditComment, redditMessage, redditRead, redditSubmit } from "../brows
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { tiktokPostComments } from "../browser/flows/tiktok-comments.js";
 import { tiktokOauthConsent } from "../browser/flows/tiktok-oauth-consent.js";
+import { xFollow, xLike, xReply } from "../browser/flows/x-act.js";
 import { xOauthConsent } from "../browser/flows/x-oauth-consent.js";
 import { xPost, xPosts, xProfile, xSearch } from "../browser/flows/x-read.js";
 import { youtubeCommunityPost } from "../browser/flows/youtube-community-post.js";
@@ -104,6 +113,11 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinOauthConsent,
     instagramOauthConsent,
     instagramCreatePost,
+    instagramFollow,
+    instagramLike,
+    instagramComment,
+    instagramPost,
+    instagramSearch,
     linkedinCreatePost,
     linkedinSearchPeople,
     linkedinProfile,
@@ -123,6 +137,8 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinSearchPosts,
     linkedinCompanyPosts,
     linkedinWithdraw,
+    linkedinLike,
+    linkedinFollow,
     resetMailProbe,
     npmCreateOrg,
     npmGranularToken,
@@ -138,6 +154,9 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     xPosts,
     xProfile,
     xSearch,
+    xFollow,
+    xLike,
+    xReply,
     redditRead,
     redditSubmit,
     redditComment,

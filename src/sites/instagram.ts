@@ -73,6 +73,16 @@ const webPost = z.object({
   file: z.string().min(1),
 });
 
+const username = z.string().regex(/^[A-Za-z0-9._]{1,30}$/, "an Instagram username without the @");
+const shortcode = z.string().regex(/^[\w-]{5,40}$/, "a post code, as in /p/<code>/");
+const webFollow = z.object({ username, undo: z.boolean().optional() });
+const webLike = z.object({ shortcode, undo: z.boolean().optional() });
+const webComment = z.object({ shortcode, text: z.string().trim().min(1).max(2200) });
+const webSearch = z.object({
+  q: z.string().trim().min(1).max(100),
+  max: z.coerce.number().int().min(1).max(30).default(12),
+});
+
 const profileName = z.object({
   /** The new display name; the handle and profile link stay as they are. */
   name: z.string().trim().min(1).max(30),
@@ -120,6 +130,9 @@ export const instagram: SiteApi = {
   origin: INSTAGRAM_ORIGIN,
   probe: { path: "/me" },
   auth: { oauth: instagramOAuth },
+  // Acts on others' accounts go through the page (no API does them): a person's pace, per account.
+  caps: { follow: 15, like: 40, comment: 10, post: 60, search: 10 },
+  pace: { gapMs: 8_000, jitterMs: 12_000 },
   routes: [
     route({
       method: "GET",
@@ -239,6 +252,52 @@ export const instagram: SiteApi = {
         workflow: "instagram-reply",
         input: (b) => ({ commentId: b.commentId, text: b.message }),
       },
+    }),
+    route({
+      method: "POST",
+      path: "/web/{username}/follow",
+      summary:
+        "Follow another account (`undo` unfollows): `{ username, following, already? }` or `{ found: false }`",
+      request: webFollow,
+      meter: () => ({ follow: 1 }),
+      browser: { flow: "instagram/follow" },
+    }),
+    route({
+      method: "POST",
+      path: "/web/p/{shortcode}/like",
+      summary:
+        "Like another account's post (`undo` takes it back): `{ shortcode, liked, already? }`",
+      request: webLike,
+      meter: () => ({ like: 1 }),
+      browser: { flow: "instagram/like" },
+    }),
+    route({
+      method: "POST",
+      path: "/web/p/{shortcode}/comments",
+      summary:
+        "Comment on another account's post (the API comments only on our own): `{ shortcode, commented }`",
+      request: webComment,
+      irreversible: true,
+      meter: () => ({ comment: 1 }),
+      browser: { flow: "instagram/comment" },
+    }),
+    route({
+      method: "GET",
+      path: "/web/p/{shortcode}",
+      summary:
+        "Any public post: owner `username`, caption, likes, comments, timestamp (the page's own tags)",
+      request: z.object({ shortcode }),
+      meter: () => ({ post: 1 }),
+      browser: { flow: "instagram/post" },
+    }),
+    route({
+      method: "GET",
+      path: "/web/search",
+      summary:
+        "Posts for words or a #hashtag as Instagram's search shows them, top first: `{ q, shortcodes }` (`max`); read each with `GET /web/p/{shortcode}`",
+      request: webSearch,
+      meter: () => ({ search: 1 }),
+      browser: { flow: "instagram/search" },
     }),
     route({
       method: "POST",

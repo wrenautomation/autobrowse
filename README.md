@@ -618,7 +618,9 @@ app: Marketing API campaigns/ad sets/creatives/ads/insights under
 publishing for the Page's professional account), `x` (API v2: `/2/tweets`,
 `/2/users/me`, a user's posts, metrics, `/2/media/upload` from a local
 image or video — chunked and waited on; OAuth 2.0 with PKCE, the refresh
-token rolls on every mint and is kept). Instagram, TikTok, Outlook, Meta
+token rolls on every mint and is kept; follows, likes and text replies run
+on the signed-in page, as do Instagram's and LinkedIn's follows, likes and
+comments on others). Instagram, TikTok, Outlook, Meta
 and X are written from the public docs and unproven until a credential
 and a developer app exist.
 

@@ -26,8 +26,17 @@ export {
   type Serp,
 } from "./google-search.js";
 export { googleWorkspaceLogo } from "./google-workspace-logo.js";
+export {
+  type IgPost,
+  instagramComment,
+  instagramFollow,
+  instagramLike,
+  instagramPost,
+  instagramSearch,
+} from "./instagram-act.js";
 export { type CreatePostInput, instagramCreatePost } from "./instagram-create-post.js";
 export { instagramOauthConsent } from "./instagram-oauth-consent.js";
+export { linkedinFollow, linkedinLike } from "./linkedin-act.js";
 export { type Audience as LinkedInAudience, linkedinAudience } from "./linkedin-audience.js";
 export {
   type CreatePostInput as LinkedInCreatePostInput,
@@ -98,6 +107,7 @@ export {
 } from "./reddit.js";
 export { type ResetProbeInput, resetMailProbe } from "./reset-mail-probe.js";
 export { tiktokOauthConsent } from "./tiktok-oauth-consent.js";
+export { xFollow, xLike, xReply } from "./x-act.js";
 export { xOauthConsent } from "./x-oauth-consent.js";
 export { type Tweet, type User as XUser, xPost, xPosts, xProfile, xSearch } from "./x-read.js";
 export { youtubeCommunityPost } from "./youtube-community-post.js";

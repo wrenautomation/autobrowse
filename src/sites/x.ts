@@ -75,6 +75,14 @@ const upload = z.object({
   media_category: z.enum(["tweet_image", "tweet_video", "tweet_gif"]).optional(),
 });
 
+const handle = z.string().regex(/^[A-Za-z0-9_]{1,15}$/, "an X handle without the @");
+const follow = z.object({ username: handle, undo: z.boolean().optional() });
+const like = z.object({ id, undo: z.boolean().optional() });
+
+/** A text-only reply goes through the page: free, and the API's reply limits don't apply. */
+const pageReply = (b: z.infer<typeof post>) =>
+  b.reply && b.text && !b.media && !b.poll && !b.quote_tweet_id && !b.reply_settings;
+
 const profileName = z.object({
   /** The new display name; the handle and profile link stay as they are. */
   name: z.string().trim().min(1).max(50),
@@ -238,7 +246,7 @@ export const x: SiteApi = {
   probe: { path: "/2/users/me" },
   auth: { oauth: xOAuth },
   // Well under what a person scrolls in a day; reads look like one reader, not a scraper.
-  caps: { profile: 150, posts: 100, search: 50 },
+  caps: { profile: 150, posts: 100, search: 50, follow: 20, like: 50, reply: 30 },
   pace: { gapMs: 5_000, jitterMs: 10_000 },
   routes: [
     route({
@@ -265,7 +273,31 @@ export const x: SiteApi = {
       summary: "A post: text, a reply (`reply.in_reply_to_tweet_id`), a quote, media ids, a poll",
       request: post,
       irreversible: true,
+      prefer: (b) => (pageReply(b) ? "browser" : undefined),
+      meter: (b) => (b.reply ? { reply: 1 } : {}),
+      browser: {
+        flow: "x/reply",
+        input: (b) => ({ id: b.reply?.in_reply_to_tweet_id, text: b.text }),
+      },
       api: (body, leg) => send(leg, "POST", "/2/tweets", body),
+    }),
+    route({
+      method: "POST",
+      path: "/2/users/me/following",
+      summary:
+        "Follow a user by handle (`undo` unfollows): `data.following` (free: the signed-in page; the free API tier has no follows)",
+      request: follow,
+      meter: () => ({ follow: 1 }),
+      browser: { flow: "x/follow" },
+    }),
+    route({
+      method: "POST",
+      path: "/2/users/me/likes",
+      summary:
+        "Like a post (`id`; `undo` takes it back): `data.liked` (free: the signed-in page; the free API tier has no likes)",
+      request: like,
+      meter: () => ({ like: 1 }),
+      browser: { flow: "x/like" },
     }),
     route({
       method: "DELETE",

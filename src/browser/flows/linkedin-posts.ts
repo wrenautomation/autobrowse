@@ -326,6 +326,8 @@ export interface SearchPostsInput {
   /** How many from the top, newest first (default 20). */
   max?: number;
   since?: PostsSince;
+  /** Only authors whose title says this ("founder"): LinkedIn's own Author job title filter. */
+  authorTitle?: string;
 }
 
 export interface CompanyPostsInput {
@@ -340,11 +342,16 @@ export interface Posts {
 }
 
 /** LinkedIn's own query: filters quoted (`datePosted="past-week"`), newest first. */
-export const postsSearchUrl = (keywords: string, since: PostsSince = "past-week"): string => {
+export const postsSearchUrl = (
+  keywords: string,
+  since: PostsSince = "past-week",
+  authorTitle?: string,
+): string => {
   const u = new URL(`${WEB}/search/results/content/`);
   u.searchParams.set("keywords", keywords);
   u.searchParams.set("datePosted", JSON.stringify(since));
   u.searchParams.set("sortBy", JSON.stringify("date_posted"));
+  if (authorTitle?.trim()) u.searchParams.set("authorJobTitle", JSON.stringify(authorTitle.trim()));
   return u.toString();
 };
 
@@ -410,7 +417,8 @@ export async function readPosts(
 export const linkedinSearchPosts = defineFlow<SearchPostsInput, Posts>({
   site: "linkedin",
   name: "search-posts",
-  run: (fp, input) => readPosts(fp, postsSearchUrl(input.keywords, input.since), input.max ?? 20),
+  run: (fp, input) =>
+    readPosts(fp, postsSearchUrl(input.keywords, input.since, input.authorTitle), input.max ?? 20),
 });
 
 export const linkedinCompanyPosts = defineFlow<CompanyPostsInput, Posts>({

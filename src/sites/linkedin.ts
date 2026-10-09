@@ -157,6 +157,8 @@ const searchPosts = z.object({
   keywords: z.string().min(1).max(200),
   max: postsMax,
   since: z.enum(["past-24h", "past-week", "past-month"]).default("past-week"),
+  /** Only authors whose job title says this ("founder"). */
+  authorTitle: z.string().trim().min(1).max(100).optional(),
 });
 const companyPosts = z.object({ company: handle, max: postsMax });
 
@@ -219,6 +221,9 @@ export const linkedin: SiteApi = {
     posts: 12,
     // One post's analytics page or the dashboard, on Wren's own account: wren reads its own numbers.
     analytics: 10,
+    // Likes on others' posts and follows: wren's reach loop, as linkedin@wren only.
+    like: 30,
+    follow: 20,
   },
   // William's own profile (shown as "Will Jin"): research reads since 2026-10-06, when the alt was
   // restricted ("just use my main ... unless alt still works"); the alt's pace, nothing sent, never
@@ -238,6 +243,8 @@ export const linkedin: SiteApi = {
       activity: 10,
       posts: 0,
       analytics: 0,
+      like: 0,
+      follow: 0,
       // Research reads in all, search first in wren (designs 2026-10-07-linkedin-search-first): 20 a day.
       total: 20,
     },
@@ -257,6 +264,8 @@ export const linkedin: SiteApi = {
       activity: 10,
       posts: 0,
       analytics: 0,
+      like: 0,
+      follow: 0,
       total: 20,
     },
   },
@@ -494,6 +503,33 @@ export const linkedin: SiteApi = {
       irreversible: true,
       meter: () => ({ connect: 1 }),
       browser: { flow: "linkedin/connect" },
+    }),
+    route({
+      method: "POST",
+      path: "/in/{vanity}/follow",
+      summary: "Follow a member (`undo` unfollows): `{ following, already? }`",
+      request: z.object({ vanity, undo: z.boolean().optional() }),
+      meter: () => ({ follow: 1 }),
+      browser: { flow: "linkedin/follow" },
+    }),
+    route({
+      method: "POST",
+      path: "/company/{company}/follow",
+      summary: "Follow a company page (`undo` unfollows): `{ following, already? }`",
+      request: z.object({ company: handle, undo: z.boolean().optional() }),
+      meter: () => ({ follow: 1 }),
+      browser: { flow: "linkedin/follow" },
+    }),
+    route({
+      method: "POST",
+      path: "/feed/update/{urn}/like",
+      summary: "Like someone's post (`undo` takes it back): `{ urn, liked, already? }`",
+      request: z.object({
+        urn: z.string().regex(POST_URN, "a post urn"),
+        undo: z.boolean().optional(),
+      }),
+      meter: () => ({ like: 1 }),
+      browser: { flow: "linkedin/like" },
     }),
     route({
       method: "GET",
