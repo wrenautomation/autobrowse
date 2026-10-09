@@ -8,7 +8,8 @@
  * page read in a browser (`browser/flows/google-search.ts`): the AI Overview,
  * every result, the ads. Google bot-checks the box's IP, so callers send it
  * to the Mac's desk (`desk/call`), paced like a person searching. `GET /place` is a
- * business's Place ID off Google Maps the same way (`browser/flows/google-place.ts`).
+ * business's Place ID off Google Maps the same way (`browser/flows/google-place.ts`), and
+ * `GET /place/reviews` its reviews, signed in (`browser/flows/google-reviews.ts`).
  *
  * LinkedIn without LinkedIn: `GET /linkedin/profile?url=` and
  * `/linkedin/company?url=` read Exa's cached copy (never live, so neither
@@ -19,6 +20,7 @@
  * (about $10 a month, its free credit). Raising it is a spend decision.
  */
 import { z } from "zod";
+import { MAX_REVIEWS } from "../browser/flows/google-reviews.js";
 import {
   cachedLinkedinCompany,
   cachedLinkedinProfile,
@@ -234,6 +236,18 @@ export const web: SiteApi = {
       request: z.object({ q: z.string().trim().min(3).max(300) }),
       meter: () => ({ google: 1 }),
       browser: { flow: "web/google-place" },
+    }),
+    route({
+      method: "GET",
+      path: "/place/reviews",
+      summary:
+        "A place's Google reviews off Google Maps, newest first (`placeId`, `limit` up to 50, default 20): `name`, `url` (the place on Maps) and `reviews`, each with `id`, `author`, `authorUrl`, `stars`, `text`, `at` (ISO), `ago`, `edited` and the owner's `reply`. Signed out Maps hides reviews, so it reads in the `google` profile. A browser leg: call it on the desk",
+      request: z.object({
+        placeId: z.string().regex(/^[A-Za-z0-9_-]{16,200}$/),
+        limit: z.coerce.number().int().min(1).max(MAX_REVIEWS).default(20),
+      }),
+      meter: () => ({ google: 1 }),
+      browser: { flow: "google/maps-reviews", signedIn: true },
     }),
   ],
   setup: [],

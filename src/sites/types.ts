@@ -44,6 +44,11 @@ export type BrowserLeg<I, O> = Leg & {
   output?: (o: unknown) => O;
   /** The input field holding the file the leg uploads: a URL there is downloaded to a temp file first. */
   uploads?: string;
+  /**
+   * On a `signedOut` site, run in the flow's own site profile, signed in: a page that shows
+   * nothing signed out (Maps reviews, in `google`).
+   */
+  signedIn?: true;
 };
 
 /** A hand-written flow by `site/name`, or a compiled workflow by name (what a recording becomes). */

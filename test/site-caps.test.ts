@@ -285,6 +285,7 @@ describe("web and x reads", () => {
       ["/read", "api"],
       ["/google", "none"], // a browser leg; this fake runner has no flows
       ["/place", "none"],
+      ["/place/reviews", "none"],
     ]);
     await expect(sites.call("web", "GET", "/search", {})).rejects.toMatchObject({ status: 400 });
   });

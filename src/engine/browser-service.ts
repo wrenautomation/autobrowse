@@ -18,6 +18,7 @@ import { fingerprint } from "../browser/flows/fingerprint.js";
 import { googleDkimGenerate, googleDkimStart } from "../browser/flows/google-dkim.js";
 import { googlePlace } from "../browser/flows/google-place.js";
 import { googleProfilePhoto } from "../browser/flows/google-profile-photo.js";
+import { googleReviews } from "../browser/flows/google-reviews.js";
 import { googleSearch } from "../browser/flows/google-search.js";
 import { googleWorkspaceLogo } from "../browser/flows/google-workspace-logo.js";
 import {
@@ -109,6 +110,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     googleOauthConsent,
     googleSearch,
     googlePlace,
+    googleReviews,
     perplexityAsk,
     linkedinOauthConsent,
     instagramOauthConsent,

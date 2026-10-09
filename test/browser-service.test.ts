@@ -54,6 +54,7 @@ describe("browser service", () => {
       "google-admin/dkim-generate",
       "google-admin/dkim-start",
       "google-admin/workspace-logo",
+      "google/maps-reviews",
       "google/oauth-consent",
       "google/profile-photo",
       "google/youtube-community-post",

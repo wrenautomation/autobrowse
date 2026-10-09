@@ -553,10 +553,11 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           // profile happens to be signed in as.
           // A site with its own logins (LinkedIn) keeps the account in its own `site@label` profile.
           const at = deps.providerOf?.(s) ?? s.site;
-          // A signed-out site borrowing another's flow (reddit-public runs reddit/read) stays in its own profile.
+          // A signed-out site borrowing another's flow (reddit-public runs reddit/read) stays in its
+          // own profile, unless the leg says it needs the flow's signed-in one.
           const profile = chosen
             ? await deps.profileFor?.(at, chosen)
-            : s.signedOut
+            : s.signedOut && !r.browser.signedIn
               ? s.site
               : null;
           if (chosen && at === s.site && deps.profileFor && !profile)
