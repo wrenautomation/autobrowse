@@ -62,6 +62,18 @@ export interface NetRow {
   cut?: boolean;
 }
 
+/**
+ * Whether sessions record page calls and failed flows save HTML. Off unless
+ * `AUTOBROWSE_NETWORK` is 1, true or on: agents read the logs and saved pages, which cost
+ * tokens on every failure (William, 2026-10-09).
+ */
+export function networkOn(env = process.env.AUTOBROWSE_NETWORK): boolean {
+  return /^(1|true|on)$/i.test((env ?? "").trim());
+}
+
+/** The error the network and html commands give while capture is off. */
+export const NETWORK_OFF = "network capture is off: set AUTOBROWSE_NETWORK=1 to turn it on";
+
 /** `x`, `linkedin@main` → personal; `x@wren` is not. `NETWORK_PERSONAL` (comma list) adds profiles. */
 export function isPersonalProfile(site: string, env = process.env.NETWORK_PERSONAL): boolean {
   const extra = (env ?? "")

@@ -30,7 +30,7 @@ import {
 } from "./human/index.js";
 import { type Hints, locate, textOf } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
-import { htmlForFile, NetLog } from "./network.js";
+import { htmlForFile, NetLog, networkOn } from "./network.js";
 import { describePage } from "./page-state.js";
 import type { SessionPark } from "./park.js";
 import {
@@ -424,12 +424,15 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         // reloading would lose what the last run left there (a form, a list).
         let keepPage = parked !== null;
         // A flow keeps a short log: enough to see the call that broke, not a session's worth.
-        const network = NetLog.of(session.context, {
-          site: key,
-          maxRows: FLOW_NET_ROWS,
-          maxBodyBytes: FLOW_NET_BYTES,
-          ...runner.network,
-        });
+        // Off by default (`networkOn`).
+        const network = networkOn()
+          ? NetLog.of(session.context, {
+              site: key,
+              maxRows: FLOW_NET_ROWS,
+              maxBodyBytes: FLOW_NET_BYTES,
+              ...runner.network,
+            })
+          : undefined;
         let broken = false;
         const stamp = `${flow.site}-${flow.name}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
         let lastGoal: string | null = null;
@@ -573,7 +576,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             throw new NeedsHuman(`${flow.site}: ${reason}`);
           },
           passkeys: session.passkeys,
-          network,
+          ...(network ? { network } : {}),
           screens: help,
         };
         /** An interrupt the page shows now: a coded one, else a click learned on this site. */
@@ -830,7 +833,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             writeFileSync(aria, redactAria(`${session.page.url()}\n\n${tree}`));
             artifacts.aria = aria;
           }
-          if (!flow.secret) {
+          if (network && !flow.secret) {
             const calls = join(artifactsDir, `${stamp}.network.jsonl`);
             const text = network.jsonl();
             if (text) {

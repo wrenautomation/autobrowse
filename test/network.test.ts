@@ -1,5 +1,5 @@
 import { chromium } from "playwright";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   diffHtml,
   diffShapes,
@@ -7,6 +7,7 @@ import {
   isPersonalProfile,
   NetLog,
   type NetRow,
+  networkOn,
   parseRows,
   redactBody,
   redactHeaders,
@@ -17,6 +18,17 @@ import {
 } from "../src/browser/network.js";
 
 const JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnop";
+
+describe("networkOn", () => {
+  it("is off unless AUTOBROWSE_NETWORK says 1, true or on", () => {
+    expect(networkOn(undefined)).toBe(false);
+    expect(networkOn("")).toBe(false);
+    expect(networkOn("0")).toBe(false);
+    expect(networkOn("1")).toBe(true);
+    expect(networkOn("TRUE")).toBe(true);
+    expect(networkOn(" on ")).toBe(true);
+  });
+});
 
 describe("redaction", () => {
   it("names secrets by whole words", () => {
@@ -227,6 +239,15 @@ describe("NetLog on a real browser", () => {
 });
 
 describe("a failed flow", () => {
+  const was = process.env.AUTOBROWSE_NETWORK;
+  beforeAll(() => {
+    process.env.AUTOBROWSE_NETWORK = "1";
+  });
+  afterAll(() => {
+    if (was === undefined) delete process.env.AUTOBROWSE_NETWORK;
+    else process.env.AUTOBROWSE_NETWORK = was;
+  });
+
   it("writes its page calls and HTML beside the PNG, and names them in the failure record", async () => {
     const { mkdtempSync, readFileSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");

@@ -4,6 +4,8 @@ Living doc. Started 2026-10-06. William: "Autobrowse network tools tracking site
 
 ## Answer first
 
+- Off by default since 2026-10-09. `AUTOBROWSE_NETWORK=1` (or true, on) turns it on for a process: flows log calls and save HTML on failure, and explore's `network` and `html` work. Off, none of it runs and both commands say how to turn it on. William: it "might be taking too many tokens"; agents read the failure logs and saved pages.
+
 - Each browser session keeps a log of its page calls: XHR and fetch, plus document loads. A row holds the method, the URL, the status, the request body and the JSON or text response. HTML is saved on a failure and on explore's `html` command.
 - Explore gets two commands. `network` lists the calls, shows one, or diffs them against the site's last session. `html` saves the page and diffs it against the last save of the same URL shape.
 - Stored like screenshots. An explore session writes `recordings/.explore-<site>/network-<stamp>.jsonl` and `html/<stamp>-<n>.html`, and the shots shipper sends both to the private S3 bucket. A failed flow writes `<stamp>.network.jsonl` and `<stamp>.html` beside its PNG.
@@ -44,6 +46,8 @@ Explore:
 - `{ cmd: "html" }`: saves the page and returns the path and size. `diff: true` adds the lines added and removed against the last save of the same URL shape.
 
 ## Decision log
+
+- 2026-10-09: Off by default (`networkOn` in `src/browser/network.ts`). William suspected the token cost, and the skill told agents to reach for `network`. The code stays; one env var brings it back.
 
 - 2026-10-06: William approved it as part of "go on everything", relayed by the wren UI session. Built without a second yes.
 - 2026-10-06: The capture listens on the browser context, not the page, so OAuth popups and new tabs are in the log.

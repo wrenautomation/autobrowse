@@ -633,6 +633,15 @@ describe("a session that cannot open", () => {
 });
 
 describe("network and html", () => {
+  const was = process.env.AUTOBROWSE_NETWORK;
+  beforeAll(() => {
+    process.env.AUTOBROWSE_NETWORK = "1";
+  });
+  afterAll(() => {
+    if (was === undefined) delete process.env.AUTOBROWSE_NETWORK;
+    else process.env.AUTOBROWSE_NETWORK = was;
+  });
+
   it("lists the page's calls redacted, shows one, saves and diffs pages, and diffs against the last session", async () => {
     const { createServer } = await import("node:http");
     let version = 1;

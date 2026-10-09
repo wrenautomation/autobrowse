@@ -46,8 +46,7 @@ Look:
 - `{"cmd":"aria"}` — accessibility tree, masked. `hints` scopes it, `limit` caps characters (default 12000).
 - `{"cmd":"text"}` — the page's words as laid out: side-by-side reads as a row (`Price | $40`), tables across, a sidebar as `[col 1/2]`. Costs what plain text does. `"coords":true` adds `@x,y` per line (+25%); `"layout":false` = DOM order.
 - `{"cmd":"url"}`, `{"cmd":"screenshot"}` (path back), `{"cmd":"count","hints":…}`.
-- `{"cmd":"network"}` lists the page's calls (XHR, fetch, loads), redacted, one line each: `id method status host/path size {keys}`. `filter` matches the URL. `{"cmd":"network","id":12}` shows one call with its body. `"diff":true` compares calls and response keys with the site's last session. When a list comes from a JSON call, call that API instead of reading the DOM.
-- `{"cmd":"html"}` saves the page (scripts emptied, redacted) and returns its path. `"diff":true` gives the lines added and removed since the last save of the same URL shape. A personal profile (`x`, `linkedin`, `google`) keeps calls with no content, and no HTML.
+- `network` and `html` (page calls, saved pages) are off by default: they cost tokens. Only when William asks, start explore with `AUTOBROWSE_NETWORK=1`; see `designs/2026-10-06-network-capture.md`.
 - `{"cmd":"pages"}` / `{"cmd":"page","index":1}` or `"main"` — OAuth popups; the session returns to main when the popup closes.
 
 Act (journaled):

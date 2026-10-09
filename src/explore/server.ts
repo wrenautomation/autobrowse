@@ -49,6 +49,7 @@ import {
   htmlForFile,
   MAX_BODY_BYTES,
   MAX_ROWS,
+  NETWORK_OFF,
   type NetRow,
   parseRows,
   redactUrl,
@@ -853,7 +854,7 @@ async function serve(
   };
   const network = (c: Extract<Command, { cmd: "network" }>) => {
     const log = fp.network;
-    if (!log) throw new Error("no network log in this session");
+    if (!log) throw new Error(NETWORK_OFF);
     writeNet();
     const rows = log.rows();
     if (c.id !== undefined) {
@@ -882,7 +883,8 @@ async function serve(
     };
   };
   const html = async (c: Extract<Command, { cmd: "html" }>) => {
-    if (fp.network?.personal) throw new Error("a personal profile keeps no HTML");
+    if (!fp.network) throw new Error(NETWORK_OFF);
+    if (fp.network.personal) throw new Error("a personal profile keeps no HTML");
     const url = page.url();
     const text = htmlForFile(await page.content());
     mkdirSync(htmlDir, { recursive: true });
