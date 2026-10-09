@@ -33,11 +33,10 @@ A person or a model maps a page and acts on it; what works is journaled and beco
 - **owns:** the journal, its [[explore-run]]
 - **owned-by:** [[backend]]; [[agent-session]] (the agent drives one)
 - **joins:** [[session]], [[flow]] (same runner), [[recording]] (`save`), [[approval]], [[card]], [[guard]], the desktop (`src/desktop/types.ts:53`)
-- **looks-like-but-is-not:** the MCP server (`src/mcp/server.ts`, leftover)
 
 ## If you change this
 
-- **Hits:** `src/browser/browsers.ts` (reads the info file), `.claude/skills/autobrowse/scripts/state.sh` (held sessions), `src/agent/explorer.ts`, `test/layout.test.ts` (the `text` layout), `src/agent/sessions.ts`, `src/app/cli-record.ts`, `src/app/backend.ts:252`, `.claude/skills/autobrowse/explore.md` and the skill's scripts (the command list is documented there), `src/mcp/server.ts`.
+- **Hits:** `src/browser/browsers.ts` (reads the info file), `.claude/skills/autobrowse/scripts/state.sh` (held sessions), `src/agent/explorer.ts`, `test/layout.test.ts` (the `text` layout), `src/agent/sessions.ts`, `src/app/cli-record.ts`, `src/app/backend.ts:252`, `.claude/skills/autobrowse/explore.md` and the skill's scripts (the command list is documented there).
 - **Does not hit:** compiled workflows already rendered; the run object.
 
 ## Surfaces

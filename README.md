@@ -37,8 +37,7 @@ agent explores the site once; what it achieved is saved and compiled,
 under the missing leg's name when a route was waiting on one, so the second
 same ask runs deterministically. Gates hold inside every leg. The same verb
 is `POST /api/do` (a job; `dryRun` answers at once), the Restate service
-`do/run` for wren (`restateDo` in `@wren/core/content`), and the `do` tool
-of the MCP server. `src/do/`.
+`do/run` for wren (`restateDo` in `@wren/core/content`). `src/do/`.
 
 ## Hands off
 
@@ -184,9 +183,7 @@ a row; it is work.
   explore session is `scripts/start.sh <site> [url]`, then
   `scripts/cmd.sh <port> '{"cmd":…}'`, `save`, `stop.sh`. It costs context
   only when invoked; an MCP server's tool schemas would sit in every
-  session. `autobrowse mcp` still exists for clients that want tools
-  (`claude mcp add autobrowse -- pnpm autobrowse mcp`), off by default.
-  Same journal, same redaction, same compile. `LLM_PROVIDER=claude-code`
+  session, so there is none: skills and the CLI only. Same journal, same redaction, same compile. `LLM_PROVIDER=claude-code`
   is the other direction: Claude Code as the model behind the built-in
   agent. `explore` leaves its bearer token in
   `$TMPDIR/autobrowse/explore-<port>.token` (owner-only) for the session's
@@ -740,8 +737,7 @@ const verb = doerFor({ llm, catalog, browser, sink, sites, agent, compile }); //
 await verb.do({ goal: "upload this to youtube", inputs: { file: "talk.mp4" } });
 ```
 
-Or over HTTP/Restate/MCP from any language: `POST /api/do`, `do/run`, the
-`do` tool. Sites, workflows and flows you hand `abilitiesOf` are what it can
+Or over HTTP/Restate from any language: `POST /api/do`, `do/run`. Sites, workflows and flows you hand `abilitiesOf` are what it can
 route to; anything else the agent explores once.
 
 **One site, your wiring.** The facade takes your env store, HTTP client,

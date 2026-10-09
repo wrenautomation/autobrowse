@@ -102,7 +102,6 @@ const GROUPS: [string, [string, string][]][] = [
       ["watched", "What a watched flow did, step by step"],
       ["repairs", "Locators fixed at run time"],
       ["screens", "Pages learned on each site"],
-      ["mcp", "Serve autobrowse as MCP tools"],
     ],
   ],
   [

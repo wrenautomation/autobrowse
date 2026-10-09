@@ -256,7 +256,7 @@ export function healer(
 /**
  * How every face opens an explore server: one browser on a site, the worker's
  * login, a person's pace, its secret sink and payment approver. The CLI's
- * `explore`, the MCP server, the agent's sessions and a heal all go through here.
+ * `explore`, the agent's sessions and a heal all go through here.
  */
 export function explorerOpener(
   settings: Settings,

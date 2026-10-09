@@ -44,7 +44,7 @@ Nouns, verbs, and what a change hits, for an agent editing this repo. The code i
 
 ## Universes
 
-live = in force. leftover = still present, not the main path: `src/mcp/` (Claude Code uses the skill, not MCP), `src/workflows/example-title/` (a compiled demo no route names). ghost = none found. Each card says which.
+live = in force. leftover = still present, not the main path: `src/workflows/example-title/` (a compiled demo no route names). ghost = none found. Each card says which.
 
 ## The one rule
 

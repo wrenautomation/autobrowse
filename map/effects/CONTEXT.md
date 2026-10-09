@@ -20,7 +20,7 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | token names, renewal, the env store | [[token]] | [[site-facade]], wren `TokenRenewal` |
 | accounts and purposes | [[account]] | [[site-facade]] (which account runs), [[need]], `Policy` |
 | the compiler's output | [[compiled-workflow]] | [[outline]], [[proof]], [[heal]] process, `src/index.ts` exports |
-| the explore command set | [[explore-session]] | `.claude/skills/autobrowse/`, [[agent-session]], `src/mcp/server.ts` |
+| the explore command set | [[explore-session]] | `.claude/skills/autobrowse/`, [[agent-session]] |
 | a run row, the `goal`/`done` commands | [[explore-run]] | [[walk-spec]] (build reads acts and looks), [[llm-call]] (`tokens` reads `cmd` rows), `.claude/skills/autobrowse/explore.md` |
 | a walk's spec or how one is built, taught or run | [[walk-spec]] | [[screen]] (`walk()`), [[outline]] (op schemas), [[mod]] (`packInto`, the scrubber), [[explore-session]] (hand looks), [[card]] (`profileField`, src/money/profile.ts), walk files on disk (`WALK_VERSION`) |
 | a mod's format, pack scrubber, or how installed mods load | [[mod]] | [[walk-spec]] (`loadWalk`, `listWalks`), [[screen]], [[fix]] (`from`, `keep`), [[site-login]] (`siteAllowsHost`, data logins in `SITE_LOGINS`), [[compiled-workflow]] (trusted roots in `compiledCatalog`), the UI Mods page (`ModView`), mods already installed (`modSchema`) |

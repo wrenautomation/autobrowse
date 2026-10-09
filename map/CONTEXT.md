@@ -18,7 +18,7 @@ Open `CLAUDE.md`, find the noun in `objects/_index.md`, open its card. A card is
 ## Universes
 
 - **live**: implement and cite against it.
-- **leftover**: `src/mcp/server.ts` (MCP over stdio; the Claude Code skill in `.claude/skills/autobrowse` is the live path), `src/workflows/example-title/` (compiled 2026-09-20 as a demo; no site route or ability names it).
+- **leftover**: `src/workflows/example-title/` (compiled 2026-09-20 as a demo; no site route or ability names it).
 - **ghost**: none found at 70aefc3. `SITES` in `src/browser/flow.ts:63` (three profile home pages) is live but small; the login specs in `src/auth/sites.ts` are the real list.
 
 ## What the map is not
