@@ -23,6 +23,9 @@ import { bytesOf } from "./youtube.js";
 export const LINKEDIN_ORIGIN = "https://api.linkedin.com";
 /** A PDF runs to 100 MB; its PUT gets this long. */
 const UPLOAD_PUT_MS = 10 * 60_000;
+/** A video is ready for a post once LinkedIn has processed it: ask every 5 s, up to 5 minutes. */
+const VIDEO_POLL_MS = 5_000;
+const VIDEO_READY_MS = 5 * 60_000;
 /** LinkedIn versions its REST API by month; a version is honoured for a year. */
 export const LINKEDIN_VERSION = "202508";
 /**
@@ -103,7 +106,7 @@ const initUpload = z.object({
 });
 
 const upload = z.object({
-  kind: z.enum(["image", "document"]),
+  kind: z.enum(["image", "document", "video"]),
   owner: urn,
   /** Where the bytes are: an https URL (a signed media link), never a path on this machine. */
   file: z.string().regex(/^https:\/\/\S+$/, "an https URL"),
@@ -161,6 +164,89 @@ const searchPosts = z.object({
   authorTitle: z.string().trim().min(1).max(100).optional(),
 });
 const companyPosts = z.object({ company: handle, max: postsMax });
+
+interface VideoInit {
+  value?: {
+    video?: string;
+    uploadToken?: string;
+    uploadInstructions?: Array<{ uploadUrl: string; firstByte: number; lastByte: number }>;
+  };
+}
+
+/**
+ * The Videos API: start with the size, PUT each part LinkedIn names (its ETag is the part's id),
+ * finalize, then wait until the video is AVAILABLE, since a post can't name it before.
+ */
+async function uploadVideo(leg: ApiLeg, owner: string, file: string): Promise<string> {
+  const bytes = await bytesOf(file);
+  const init = await must(
+    await leg.http.json<VideoInit>(`${LINKEDIN_ORIGIN}/rest/videos?action=initializeUpload`, {
+      method: "POST",
+      headers: headers(leg),
+      body: {
+        initializeUploadRequest: {
+          owner,
+          fileSizeBytes: bytes.length,
+          uploadCaptions: false,
+          uploadThumbnail: false,
+        },
+      },
+    }),
+    "rest/videos",
+  );
+  const video = init?.value?.video;
+  const parts = init?.value?.uploadInstructions ?? [];
+  if (!video || parts.length === 0)
+    throw new SiteError(502, "rest/videos: no video URN or upload parts in the answer");
+  const ids: string[] = [];
+  for (const part of parts) {
+    const res = await leg.http.json<unknown>(part.uploadUrl, {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${leg.token}`,
+        "content-type": "application/octet-stream",
+      },
+      raw: bytes.slice(part.firstByte, part.lastByte + 1),
+      timeoutMs: UPLOAD_PUT_MS,
+    });
+    await must(res, "rest/videos (bytes)");
+    const etag = res.headers.get("etag");
+    if (!etag) throw new SiteError(502, "rest/videos: a part answered without its ETag");
+    ids.push(etag);
+  }
+  await must(
+    await leg.http.json<unknown>(`${LINKEDIN_ORIGIN}/rest/videos?action=finalizeUpload`, {
+      method: "POST",
+      headers: headers(leg),
+      body: {
+        finalizeUploadRequest: {
+          video,
+          uploadToken: init?.value?.uploadToken ?? "",
+          uploadedPartIds: ids,
+        },
+      },
+    }),
+    "rest/videos (finalize)",
+  );
+  for (let waited = 0; ; waited += VIDEO_POLL_MS) {
+    const v = await must(
+      await leg.http.json<{ status?: string }>(
+        `${LINKEDIN_ORIGIN}/rest/videos/${encodeURIComponent(video)}`,
+        { headers: headers(leg) },
+      ),
+      "rest/videos (status)",
+    );
+    if (v?.status === "AVAILABLE") return video;
+    if (v?.status === "PROCESSING_FAILED")
+      throw new SiteError(422, `rest/videos: LinkedIn could not process ${video}`);
+    if (waited >= VIDEO_READY_MS)
+      throw new SiteError(
+        504,
+        `rest/videos: ${video} still ${v?.status ?? "unknown"} after 5 minutes`,
+      );
+    await new Promise((ok) => setTimeout(ok, VIDEO_POLL_MS));
+  }
+}
 
 async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
   if (!res.ok) throw new HttpError("CALL", `${LINKEDIN_ORIGIN}/${what}`, res.status);
@@ -418,9 +504,10 @@ export const linkedin: SiteApi = {
       method: "POST",
       path: "/upload",
       summary:
-        "Upload an image or a document (PDF) from an https URL in one call: answers the `urn` a post names",
+        "Upload an image, a document (PDF) or a video from an https URL in one call: answers the `urn` a post names",
       request: upload,
       api: async (body, leg) => {
+        if (body.kind === "video") return { urn: await uploadVideo(leg, body.owner, body.file) };
         const rest = body.kind === "image" ? "images" : "documents";
         const init = await must(
           await leg.http.json<{

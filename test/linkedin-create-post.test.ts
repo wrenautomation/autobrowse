@@ -174,4 +174,62 @@ describe("linkedin upload", () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it("a video goes up in LinkedIn's parts, is finalized by their ETags, and waits until ready", async () => {
+    let asked = 0;
+    const api = fakeFetch((req) => {
+      const at = `${req.method} ${req.url.pathname}${req.url.search}`;
+      if (at === "POST /rest/videos?action=initializeUpload")
+        return {
+          body: {
+            value: {
+              video: "urn:li:video:V1",
+              uploadToken: "t1",
+              uploadInstructions: [
+                { uploadUrl: "https://www.linkedin.com/dms-uploads/p1", firstByte: 0, lastByte: 2 },
+                { uploadUrl: "https://www.linkedin.com/dms-uploads/p2", firstByte: 3, lastByte: 4 },
+              ],
+            },
+          },
+        };
+      if (req.method === "PUT") return { headers: { etag: `e-${req.url.pathname.slice(-2)}` } };
+      if (at === "POST /rest/videos?action=finalizeUpload") return {};
+      asked += 1;
+      return { body: { status: "AVAILABLE" } };
+    });
+    const file = vi.fn(async () => new Response(new Uint8Array([1, 2, 3, 4, 5])));
+    vi.stubGlobal("fetch", file);
+    try {
+      const env: Record<string, string> = { LINKEDIN_ACCESS_TOKEN__HELLO_WREN_TEST: "tok" };
+      const sites = siteFacade([linkedin], {
+        http: httpClient({ fetch: api.fetch }),
+        env: (n) => env[n],
+        sink: memorySink(),
+        providerOf: () => null,
+        accountFor: async () => "hello@wren.test",
+      });
+      const out = await sites.call("linkedin", "POST", "/upload", {
+        kind: "video",
+        owner: PAGE,
+        file: "https://media.test/clip.mp4",
+      });
+      expect(out).toEqual({ urn: "urn:li:video:V1" });
+      expect(api.calls.map((c) => `${c.method} ${c.url.pathname}`)).toEqual([
+        "POST /rest/videos",
+        "PUT /dms-uploads/p1",
+        "PUT /dms-uploads/p2",
+        "POST /rest/videos",
+        "GET /rest/videos/urn%3Ali%3Avideo%3AV1",
+      ]);
+      expect(JSON.parse(api.calls[0]?.body ?? "{}").initializeUploadRequest.fileSizeBytes).toBe(5);
+      expect(JSON.parse(api.calls[3]?.body ?? "{}").finalizeUploadRequest).toEqual({
+        video: "urn:li:video:V1",
+        uploadToken: "t1",
+        uploadedPartIds: ["e-p1", "e-p2"],
+      });
+      expect(asked).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
