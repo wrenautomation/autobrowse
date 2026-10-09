@@ -57,7 +57,12 @@ const publishInit = z.object({
     }),
   ]),
 });
-const publishStatus = z.object({ publish_id: z.string().min(1) });
+/** `wait`: seconds to keep asking until the post is done or failed (at most 120), as a client's own call does. */
+const publishStatus = z.object({
+  publish_id: z.string().min(1),
+  wait: z.number().int().min(0).max(120).optional(),
+});
+const STATUS_POLL_MS = 5_000;
 const webPost = z.object({
   caption: z.string().max(2200).default(""),
   /** The video the browser leg uploads: a path on the box, or a URL it downloads. */
@@ -179,15 +184,22 @@ export const tiktok: SiteApi = {
       path: "/v2/post/publish/status/fetch/",
       summary: "Where a publish stands (`publish_id`)",
       request: publishStatus,
-      api: async (body, leg) =>
-        must(
-          await leg.http.json<unknown>(`${TIKTOK_ORIGIN}/v2/post/publish/status/fetch/`, {
-            method: "POST",
-            headers: bearer(leg),
-            body,
-          }),
-          "v2/post/publish/status/fetch/",
-        ),
+      api: async ({ wait, ...body }, leg) => {
+        const until = (wait ?? 0) * 1000;
+        for (let waited = 0; ; waited += STATUS_POLL_MS) {
+          const b = (await must(
+            await leg.http.json<unknown>(`${TIKTOK_ORIGIN}/v2/post/publish/status/fetch/`, {
+              method: "POST",
+              headers: bearer(leg),
+              body,
+            }),
+            "v2/post/publish/status/fetch/",
+          )) as { data?: { status?: string } };
+          const status = b.data?.status;
+          if (status === "PUBLISH_COMPLETE" || status === "FAILED" || waited >= until) return b;
+          await new Promise((ok) => setTimeout(ok, STATUS_POLL_MS));
+        }
+      },
     }),
     route({
       method: "POST",

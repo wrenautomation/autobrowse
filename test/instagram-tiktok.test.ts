@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { INSTAGRAM_LOGIN_URL, signInToInstagram } from "../src/auth/instagram.js";
 import type { CodeKind, SignInContext } from "../src/auth/login.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";
@@ -12,7 +12,9 @@ import { SITES } from "../src/sites/index.js";
 import { instagram, instagramOAuth } from "../src/sites/instagram.js";
 import { accessTokens, runConsent, WEB_REDIRECT } from "../src/sites/oauth.js";
 import { tiktok, tiktokOAuth } from "../src/sites/tiktok.js";
+import type { ApiLeg } from "../src/sites/types.js";
 import { fakePage } from "./auth-fakes.js";
+import { fakeFetch } from "./fakes.js";
 
 const base = { username: "wren", password: "p", recoveryCodes: [], passkeys: [] };
 const ctx = (fp: SignInContext["fp"], kinds: CodeKind[]): SignInContext => ({
@@ -296,5 +298,39 @@ describe("instagram and tiktok consents and OAuth shapes", () => {
     const mint = accessTokens(http, (n) => env[n]);
     expect(await mint(tiktokOAuth)).toBe("short");
     expect(calls.at(-1)?.body).toContain("client_key=k");
+  });
+});
+
+describe("tiktok publish status", () => {
+  const status = tiktok.routes.find(
+    (r) => r.path === "/v2/post/publish/status/fetch/",
+  ) as unknown as {
+    request: { parse: (i: unknown) => unknown };
+    api: (i: unknown, leg: ApiLeg) => Promise<{ data?: { status?: string } }>;
+  };
+  const legOf = (states: string[]) => {
+    const f = fakeFetch(() => ({
+      body: { data: { status: states.shift() ?? "PUBLISH_COMPLETE" }, error: { code: "ok" } },
+    }));
+    return { leg: { token: "t", http: httpClient({ fetch: f.fetch }), env: () => undefined }, f };
+  };
+
+  it("asks once without a wait, and keeps asking until done with one", async () => {
+    vi.useFakeTimers();
+    try {
+      const once = legOf(["PROCESSING_DOWNLOAD"]);
+      const a = await status.api(status.request.parse({ publish_id: "p1" }), once.leg);
+      expect(a.data?.status).toBe("PROCESSING_DOWNLOAD");
+      expect(once.f.calls).toHaveLength(1);
+      expect(JSON.parse(once.f.calls[0]?.body ?? "{}")).toEqual({ publish_id: "p1" });
+
+      const waits = legOf(["PROCESSING_DOWNLOAD", "PROCESSING_UPLOAD", "PUBLISH_COMPLETE"]);
+      const b = status.api(status.request.parse({ publish_id: "p1", wait: 60 }), waits.leg);
+      await vi.runAllTimersAsync();
+      expect((await b).data?.status).toBe("PUBLISH_COMPLETE");
+      expect(waits.f.calls).toHaveLength(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
