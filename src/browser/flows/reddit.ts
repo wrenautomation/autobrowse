@@ -305,7 +305,68 @@ export interface SubmitInput {
   text?: string;
   url?: string;
   flair_id?: string;
+  /** The flair as the sub shows it: old Reddit picks it on the post, after it lands. */
+  flair_text?: string;
+  nsfw?: boolean;
+  spoiler?: boolean;
   sendreplies?: boolean;
+}
+
+/** The post page's own toggles: each asks "are you sure?" and takes "yes". */
+const TOGGLES = { nsfw: "marknsfw-button", spoiler: "spoiler-button" } as const;
+const MARK_MS = 5_000;
+
+/**
+ * Marks the post as old Reddit does, from its own page: NSFW, spoiler, then the flair by its
+ * text. The post is up by now, so a miss is a note on the answer, never a throw (a retry would
+ * post twice).
+ */
+async function markPost(fp: FlowPage, id: string, i: SubmitInput): Promise<string[]> {
+  const thing = `#thing_t3_${id}`;
+  const notes: string[] = [];
+  const step = async (what: string, run: () => Promise<boolean>) => {
+    try {
+      if (!(await run())) notes.push(`Posted, but couldn't set ${what}: set it on the post.`);
+    } catch {
+      notes.push(`Posted, but couldn't set ${what}: set it on the post.`);
+    }
+  };
+  for (const key of ["nsfw", "spoiler"] as const) {
+    if (!i[key]) continue;
+    await step(key === "nsfw" ? "NSFW" : "spoiler", async () => {
+      const toggle: Hints = { css: `${thing} .${TOGGLES[key]} a` };
+      if (!(await fp.has(toggle, MARK_MS))) return false;
+      await fp.act({ kind: "click" }, toggle, { goal: `mark the post ${key}` });
+      await fp.act(
+        { kind: "click" },
+        { css: `${thing} .${TOGGLES[key]} .yes` },
+        {
+          goal: `confirm ${key}`,
+        },
+      );
+      return true;
+    });
+  }
+  if (i.flair_text) {
+    const flair = i.flair_text;
+    await step(`the flair "${flair}"`, async () => {
+      const open: Hints = { css: `${thing} .flairselectbtn` };
+      if (!(await fp.has(open, MARK_MS))) return false;
+      await fp.act({ kind: "click" }, open, { goal: "open the flair picker" });
+      const pick: Hints = { css: ".flairselector li", text: flair };
+      if (!(await fp.has(pick, MARK_MS))) return false;
+      await fp.act({ kind: "click" }, pick, { goal: `pick the flair ${flair}` });
+      await fp.act(
+        { kind: "click" },
+        { css: ".flairselector button[type=submit]" },
+        {
+          goal: "save the flair",
+        },
+      );
+      return true;
+    });
+  }
+  return notes;
 }
 
 /** `u_WrenAutomation` (or `u/…`): the account's own profile, the form's "Your profile" radio. */
@@ -314,13 +375,13 @@ const POST_URL = /\/comments\/([a-z0-9]+)(\/|$)/;
 
 export const redditSubmit = defineFlow<
   SubmitInput,
-  JsonAnswer<{ id: string; name: string; url: string }>
+  JsonAnswer<{ id: string; name: string; url: string; notes?: string[] }>
 >({
   site: "reddit",
   name: "submit",
   async run(fp, i) {
-    if (i.flair_id)
-      return refused("FLAIR_UNSUPPORTED", "the browser leg cannot pick a flair yet", "flair");
+    if (i.flair_id && !i.flair_text)
+      return refused("FLAIR_UNSUPPORTED", "the browser leg picks a flair by its text", "flair");
     await fp.open(`${OLD}/submit${i.kind === "self" ? "?selftext=true" : ""}`);
     const title: Hints = { css: "textarea[name=title]" };
     if (!(await fp.has(title, RENDER_MS))) return fp.human(`reddit: no submit form (${fp.url()})`);
@@ -381,10 +442,12 @@ export const redditSubmit = defineFlow<
     );
     if (await fp.waitForUrl(POST_URL, LAND_MS)) {
       const id = POST_URL.exec(fp.url())?.[1] ?? "";
+      const url = fp.url().replace(OLD, "https://www.reddit.com");
+      const notes = await markPost(fp, id, i);
       return {
         json: {
           errors: [],
-          data: { id, name: `t3_${id}`, url: fp.url().replace(OLD, "https://www.reddit.com") },
+          data: { id, name: `t3_${id}`, url, ...(notes.length ? { notes } : {}) },
         },
       };
     }

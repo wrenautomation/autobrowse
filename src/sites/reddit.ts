@@ -46,6 +46,9 @@ const submit = z
     text: z.string().max(40_000).optional(),
     url: z.string().url().optional(),
     flair_id: z.string().optional(),
+    flair_text: z.string().min(1).max(64).optional(),
+    nsfw: flag.optional(),
+    spoiler: flag.optional(),
     resubmit: flag.optional(),
     sendreplies: flag.default(true),
   })
@@ -261,7 +264,7 @@ export const reddit: SiteApi = {
         input: (s) => ({ ...s, sr: s.sr.replace(/^r\//, "") }),
       },
       summary:
-        "! A text or link post into a subreddit (or u_<name>, the profile); answers {json:{errors,data:{id,name,url}}}",
+        "! A text or link post into a subreddit (or u_<name>, the profile), with flair_text, nsfw, spoiler; answers {json:{errors,data:{id,name,url,notes?}}}",
     }),
     route({
       method: "POST",

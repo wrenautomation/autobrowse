@@ -516,7 +516,7 @@ describe("reddit/submit", () => {
     }
   });
 
-  it("a flair is refused in Reddit's envelope before the page opens", async () => {
+  it("a flair id alone is refused in Reddit's envelope before the page opens", async () => {
     const p = submitPage();
     const out = await redditSubmit.run(p.fp, {
       sr: "startups",
@@ -526,11 +526,56 @@ describe("reddit/submit", () => {
     });
     expect(out).toEqual({
       json: {
-        errors: [["FLAIR_UNSUPPORTED", "the browser leg cannot pick a flair yet", "flair"]],
+        errors: [["FLAIR_UNSUPPORTED", "the browser leg picks a flair by its text", "flair"]],
       },
     });
     expect(p.opens).toEqual([]);
     expect(p.acts).toEqual([]);
+  });
+
+  it("marks NSFW, spoiler and the flair on the landed post, after the post button", async () => {
+    const p = submitPage();
+    const out = await redditSubmit.run(p.fp, {
+      sr: "startups",
+      title: "T",
+      kind: "self",
+      nsfw: true,
+      spoiler: true,
+      flair_text: "Feedback",
+    });
+    const after = p.acts.map(line).slice(p.acts.findIndex((a) => a.opts.irreversible) + 1);
+    expect(after).toEqual([
+      "click #thing_t3_abc123 .marknsfw-button a",
+      "click #thing_t3_abc123 .marknsfw-button .yes",
+      "click #thing_t3_abc123 .spoiler-button a",
+      "click #thing_t3_abc123 .spoiler-button .yes",
+      "click #thing_t3_abc123 .flairselectbtn",
+      "click .flairselector li",
+      "click .flairselector button[type=submit]",
+    ]);
+    expect(out.json.data?.notes).toBeUndefined();
+  });
+
+  it("a mark it can't find is a note on the posted answer, not a failure", async () => {
+    const p = redditPage({
+      present: (h) => !/flairselectbtn|recaptcha/.test(String(h.css ?? "")),
+      srValue: "startups",
+      captcha: { solved: false, reason: "picture captcha" },
+      dom: (sel) => (sel === "#header .user a" ? [el({ text: "WrenAutomation" })] : []),
+      onAct: (a, page) => {
+        if (a.hints.css === SUBMIT_BUTTON.css) page.go(POST);
+      },
+    });
+    const out = await redditSubmit.run(p.fp, {
+      sr: "startups",
+      title: "T",
+      kind: "self",
+      flair_text: "Feedback",
+    });
+    expect(out.json.data?.id).toBe("abc123");
+    expect(out.json.data?.notes).toEqual([
+      'Posted, but couldn\'t set the flair "Feedback": set it on the post.',
+    ]);
   });
 
   it("no form goes to a person before any act", async () => {
