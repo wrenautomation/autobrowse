@@ -22,6 +22,11 @@ export const planSchema = z.object({
   email: z.string().min(1).describe("The account's email (support contact and test user)"), // e.g. "jinwilliam.jin@gmail.com"
   clientName: z.string().min(1).describe("OAuth client name"), // e.g. "autobrowse"
   redirectUri: z.string().min(1).describe("Authorized redirect URI"), // e.g. "http://127.0.0.1:9400/oauth/callback"
+  idEnv: z.string().default("GOOGLE_OAUTH_CLIENT_ID").describe("Env name the client id is kept as"),
+  secretEnv: z
+    .string()
+    .default("GOOGLE_OAUTH_CLIENT_SECRET")
+    .describe("Env name the client secret is kept as"),
 });
 export type Plan = z.infer<typeof planSchema>;
 
@@ -72,6 +77,8 @@ export interface ConsentAndClientInput {
   email: string;
   clientName: string;
   redirectUri: string;
+  idEnv: string;
+  secretEnv: string;
   sink: SecretSink;
 }
 
@@ -170,12 +177,9 @@ const consentAndClientFlow = defineFlow<ConsentAndClientInput, void>({
       { role: "button", name: "Create" },
       { goal: "press Enter in Create" },
     ); // page.getByRole("button", { name: "Create", exact: true })
+    await input.sink.put(input.idEnv, await fp.read({ css: "mat-dialog-container dd" })); // page.locator("mat-dialog-container dd")
     await input.sink.put(
-      "GOOGLE_OAUTH_CLIENT_ID",
-      await fp.read({ css: "mat-dialog-container dd" }),
-    ); // page.locator("mat-dialog-container dd")
-    await input.sink.put(
-      "GOOGLE_OAUTH_CLIENT_SECRET",
+      input.secretEnv,
       await fp.read({ css: "mat-dialog-container dd", nth: 1 }),
     ); // page.locator("mat-dialog-container dd")
     await fp.act({ kind: "click" }, { role: "button", name: "OK" }, { goal: "click OK" }); // page.getByRole("button", { name: "OK", exact: true })
@@ -192,6 +196,8 @@ const consentAndClient: Step<"consent-and-client"> = {
         email: plan.email,
         clientName: plan.clientName,
         redirectUri: plan.redirectUri,
+        idEnv: plan.idEnv,
+        secretEnv: plan.secretEnv,
         sink: deps.sink,
       }),
     );

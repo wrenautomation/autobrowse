@@ -27,6 +27,12 @@ describe("redact", () => {
     expect(redactText("export TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123 && echo ok")).toBe(
       "export TOKEN=<redacted> && echo ok",
     );
+    expect(
+      redactText(`Copy to clipboard: ${["GOCSPX", "abcdEFGH1234ijklMNOP5678qrst"].join("-")}`),
+    ).toBe("Copy to clipboard: <redacted>");
+    expect(redactText(`secret ${["WPL", "AP1.AbCdEfGhIjKlMnOp.QrStUv=="].join("_")} shown`)).toBe(
+      "secret <redacted> shown",
+    );
   });
 
   it("masks a secret dropdown's choice in a snapshot row", () => {

@@ -11,6 +11,8 @@ const SECRET_VALUES: RegExp[] = [
   /\bgithub_pat_[A-Za-z0-9_]{20,}\b/,
   /\bsk-[A-Za-z0-9_-]{20,}\b/, // OpenAI / Anthropic-style
   /\bxox[abp]-[A-Za-z0-9-]{10,}\b/, // Slack
+  /\bGOCSPX-[A-Za-z0-9_-]{16,}/, // Google OAuth client secret
+  /\bWPL_AP\d\.[A-Za-z0-9._=+/-]{8,}/, // LinkedIn client secret
   /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/, // JWT
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
   /\b[A-Za-z0-9_-]{40,}\b/, // long opaque strings: Cloudflare tokens, Google keys

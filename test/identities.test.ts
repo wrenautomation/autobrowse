@@ -124,8 +124,8 @@ describe("facade with the policy", () => {
       return { body: { bearer: headers.get("authorization") } };
     });
     const env: Record<string, string> = {
-      GOOGLE_OAUTH_CLIENT_ID: "cid",
-      GOOGLE_OAUTH_CLIENT_SECRET: "cs",
+      YOUTUBE_OAUTH_CLIENT_ID: "cid",
+      YOUTUBE_OAUTH_CLIENT_SECRET: "cs",
       YOUTUBE_REFRESH_TOKEN: "rt-own",
     };
     const sites = siteFacade([youtube], {
@@ -177,8 +177,8 @@ describe("facade with the policy", () => {
       body: { access_token: "at", refresh_token: "rt", expires_in: 3600 },
     }));
     const env: Record<string, string> = {
-      GOOGLE_OAUTH_CLIENT_ID: "cid",
-      GOOGLE_OAUTH_CLIENT_SECRET: "cs",
+      YOUTUBE_OAUTH_CLIENT_ID: "cid",
+      YOUTUBE_OAUTH_CLIENT_SECRET: "cs",
     };
     const sink = memorySink();
     const browser = fakeBrowser([]);

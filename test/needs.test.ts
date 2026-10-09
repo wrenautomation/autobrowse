@@ -83,8 +83,8 @@ describe("needs", () => {
   });
   it("checks clear rows from what is in hand; a decision clears when the person says so", async () => {
     const c = ctx({
-      GOOGLE_OAUTH_CLIENT_ID: "x",
-      GOOGLE_OAUTH_CLIENT_SECRET: "y",
+      YOUTUBE_OAUTH_CLIENT_ID: "x",
+      YOUTUBE_OAUTH_CLIENT_SECRET: "y",
       YOUTUBE_REFRESH_TOKEN: "rt",
       GMAIL_REFRESH_TOKEN__JIN_GMAIL_COM: "rt",
     });

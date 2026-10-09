@@ -27,8 +27,8 @@ function facade(channel: string, env: Record<string, string>) {
 }
 
 const KEYS = {
-  GOOGLE_OAUTH_CLIENT_ID: "cid",
-  GOOGLE_OAUTH_CLIENT_SECRET: "cs",
+  YOUTUBE_OAUTH_CLIENT_ID: "cid",
+  YOUTUBE_OAUTH_CLIENT_SECRET: "cs",
   YOUTUBE_REFRESH_TOKEN: "rt",
 };
 const comment = {

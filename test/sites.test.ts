@@ -199,8 +199,8 @@ describe("site facade", () => {
       return { body: { items: [{ id: "v1", statistics: { viewCount: "3" } }] } };
     });
     const env: Record<string, string> = {
-      GOOGLE_OAUTH_CLIENT_ID: "cid",
-      GOOGLE_OAUTH_CLIENT_SECRET: "cs",
+      YOUTUBE_OAUTH_CLIENT_ID: "cid",
+      YOUTUBE_OAUTH_CLIENT_SECRET: "cs",
       YOUTUBE_REFRESH_TOKEN: "rt",
     };
     const sites = siteFacade([youtube], {
@@ -269,8 +269,8 @@ describe("site facade", () => {
       return { body: { access_token: "at", refresh_token: "rt", expires_in: 3600 } };
     });
     const env: Record<string, string> = {
-      GOOGLE_OAUTH_CLIENT_ID: "cid",
-      GOOGLE_OAUTH_CLIENT_SECRET: "cs",
+      YOUTUBE_OAUTH_CLIENT_ID: "cid",
+      YOUTUBE_OAUTH_CLIENT_SECRET: "cs",
     };
     const sink = memorySink();
     // The consent walk is the hand-written google/oauth-consent flow; here a fake stands in for the browser.
@@ -300,9 +300,9 @@ describe("site facade", () => {
     expect(sink.values).toEqual({ YOUTUBE_REFRESH_TOKEN: "rt" });
     // The client step needs the project first (409); with it, its workflow is not compiled here (501).
     await expect(sites.setup("youtube", "oauth-client")).rejects.toMatchObject({ status: 409 });
-    env.GOOGLE_CLOUD_PROJECT = "p1";
+    env.YOUTUBE_CLOUD_PROJECT = "p1";
     await expect(sites.setup("youtube", "oauth-client")).rejects.toMatchObject({ status: 501 });
-    env.GOOGLE_OAUTH_CLIENT_ID = "";
+    env.YOUTUBE_OAUTH_CLIENT_ID = "";
     await expect(sites.setup("youtube", "consent")).rejects.toMatchObject({ status: 409 });
   });
 
@@ -312,7 +312,7 @@ describe("site facade", () => {
     await expect(
       runConsent(o, {
         http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
-        env: (n) => ({ GOOGLE_OAUTH_CLIENT_ID: "cid", GOOGLE_OAUTH_CLIENT_SECRET: "cs" })[n],
+        env: (n) => ({ YOUTUBE_OAUTH_CLIENT_ID: "cid", YOUTUBE_OAUTH_CLIENT_SECRET: "cs" })[n],
         open: async () => {
           await fetch(`http://127.0.0.1:${port}/oauth/callback?code=c&state=x`);
         },
@@ -322,7 +322,7 @@ describe("site facade", () => {
     await expect(
       runConsent(o, {
         http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
-        env: (n) => ({ GOOGLE_OAUTH_CLIENT_ID: "cid", GOOGLE_OAUTH_CLIENT_SECRET: "cs" })[n],
+        env: (n) => ({ YOUTUBE_OAUTH_CLIENT_ID: "cid", YOUTUBE_OAUTH_CLIENT_SECRET: "cs" })[n],
         open: async () => {
           await fetch(`http://127.0.0.1:${port}/oauth/callback?error=access_denied&state=x`);
         },
@@ -340,7 +340,7 @@ describe("site facade", () => {
       await expect(
         runConsent(o, {
           http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
-          env: (n) => ({ GOOGLE_OAUTH_CLIENT_ID: "cid", GOOGLE_OAUTH_CLIENT_SECRET: "cs" })[n],
+          env: (n) => ({ YOUTUBE_OAUTH_CLIENT_ID: "cid", YOUTUBE_OAUTH_CLIENT_SECRET: "cs" })[n],
           open: () => new Promise(() => {}),
           port,
         }),
@@ -413,7 +413,7 @@ describe("site facade", () => {
       setup: [
         {
           name: "oauth-client",
-          makes: ["GOOGLE_OAUTH_CLIENT_ID"],
+          makes: ["YOUTUBE_OAUTH_CLIENT_ID"],
           needs: [],
           how: { workflow: "google-cloud-oauth-client", input: { email: { account: true } } },
           summary: "the console that bills",

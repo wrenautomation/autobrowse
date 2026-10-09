@@ -18,6 +18,7 @@ import {
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
   name: z.string().min(1).describe("Project name"), // e.g. "wren"
+  keepAs: z.string().default("GOOGLE_CLOUD_PROJECT").describe("Env name the project id is kept as"),
 });
 export type Plan = z.infer<typeof planSchema>;
 
@@ -34,6 +35,7 @@ type Step<S extends string> = StepDef<Plan, Deps, Memo, S>;
 export interface CreateProjectInput {
   name: string;
   sink: SecretSink;
+  keepAs: string;
 }
 
 const createProjectFlow = defineFlow<CreateProjectInput, void>({
@@ -52,7 +54,7 @@ const createProjectFlow = defineFlow<CreateProjectInput, void>({
       { goal: "click Edit the project id." },
     ); // page.getByRole("button", { name: "Edit the project id.", exact: true })
     await input.sink.put(
-      "GOOGLE_CLOUD_PROJECT",
+      input.keepAs,
       await fp.read({ tag: "input", role: "textbox", name: "Project ID" }),
     ); // page.getByRole("textbox", { name: "Project ID", exact: true })
     await fp.act(
@@ -73,7 +75,11 @@ const createProject: Step<"create-project"> = {
     );
     if (!answer.approved) return rejected(answer.note ?? "declined");
     await fx.run("browser create-project", () =>
-      deps.browser.run(createProjectFlow, { name: plan.name, sink: deps.sink }),
+      deps.browser.run(createProjectFlow, {
+        name: plan.name,
+        keepAs: plan.keepAs,
+        sink: deps.sink,
+      }),
     );
     // TODO proof: the project id is in the env store
     return done(

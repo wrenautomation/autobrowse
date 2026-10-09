@@ -7,8 +7,8 @@ import { csvRows, REACH_REPORT, youtubeOAuth } from "../src/sites/youtube.js";
 import { fakeBrowser } from "./fakes.js";
 
 const KEYS: Record<string, string> = {
-  GOOGLE_OAUTH_CLIENT_ID: "cid",
-  GOOGLE_OAUTH_CLIENT_SECRET: "cs",
+  YOUTUBE_OAUTH_CLIENT_ID: "cid",
+  YOUTUBE_OAUTH_CLIENT_SECRET: "cs",
   YOUTUBE_REFRESH_TOKEN: "rt",
 };
 

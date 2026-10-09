@@ -388,8 +388,9 @@ export const youtubeOAuth: OAuthSpec = {
     // YouTube Analytics reports and the Reporting API's bulk reports (reach: impressions, CTR).
     "https://www.googleapis.com/auth/yt-analytics.readonly",
   ],
-  clientId: "GOOGLE_OAUTH_CLIENT_ID",
-  clientSecret: "GOOGLE_OAUTH_CLIENT_SECRET",
+  // Its own client in Wren's Cloud project, apart from Gmail's and Drive's (GOOGLE_OAUTH_*).
+  clientId: "YOUTUBE_OAUTH_CLIENT_ID",
+  clientSecret: "YOUTUBE_OAUTH_CLIENT_SECRET",
   refreshToken: "YOUTUBE_REFRESH_TOKEN",
   params: { access_type: "offline", prompt: "consent", include_granted_scopes: "true" },
   consent: { flow: "google/oauth-consent" },
@@ -769,34 +770,38 @@ export const youtube: SiteApi = {
   setup: [
     {
       name: "project",
-      makes: ["GOOGLE_CLOUD_PROJECT"],
-      how: { workflow: "google-cloud-project", input: { name: "wren" } },
-      summary: "In Google Cloud Console: a project to hold the OAuth client; its id is kept",
-      purpose: "pays",
+      makes: ["YOUTUBE_CLOUD_PROJECT"],
+      how: {
+        workflow: "google-cloud-project",
+        input: { name: "wren", keepAs: "YOUTUBE_CLOUD_PROJECT" },
+      },
+      summary:
+        "In Google Cloud Console, as the channel's own Workspace account: a project to hold the OAuth client; its id is kept",
     },
     {
       name: "oauth-client",
-      makes: ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
-      needs: ["GOOGLE_CLOUD_PROJECT"],
+      makes: ["YOUTUBE_OAUTH_CLIENT_ID", "YOUTUBE_OAUTH_CLIENT_SECRET"],
+      needs: ["YOUTUBE_CLOUD_PROJECT"],
       how: {
         workflow: "google-cloud-oauth-client",
         input: {
-          project: { env: "GOOGLE_CLOUD_PROJECT" },
+          project: { env: "YOUTUBE_CLOUD_PROJECT" },
           api: "youtube.googleapis.com",
           appName: "Wren Automation",
           email: { account: true },
-          clientName: "autobrowse",
+          clientName: "autobrowse youtube",
           redirectUri: "http://127.0.0.1:9400/oauth/callback",
+          idEnv: "YOUTUBE_OAUTH_CLIENT_ID",
+          secretEnv: "YOUTUBE_OAUTH_CLIENT_SECRET",
         },
       },
       summary:
-        "In Google Cloud Console: enable the YouTube Data API v3, configure the consent screen (external, testing, one test user), create a Web OAuth client with the loopback redirect, keep its id and secret",
-      purpose: "pays",
+        "In Google Cloud Console: enable the YouTube Data API v3, configure the consent screen, create a Web OAuth client with the loopback redirect, keep its id and secret",
     },
     {
       name: "consent",
       makes: ["YOUTUBE_REFRESH_TOKEN"],
-      needs: ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+      needs: ["YOUTUBE_OAUTH_CLIENT_ID", "YOUTUBE_OAUTH_CLIENT_SECRET"],
       how: { oauth: youtubeOAuth },
       summary:
         "Consent once as the channel's Google account (offline access); the refresh token is kept",

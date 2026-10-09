@@ -55,8 +55,8 @@ describe("use as a library", () => {
       }),
     });
     const env: Record<string, string> = {
-      GOOGLE_OAUTH_CLIENT_ID: "id",
-      GOOGLE_OAUTH_CLIENT_SECRET: "s",
+      YOUTUBE_OAUTH_CLIENT_ID: "id",
+      YOUTUBE_OAUTH_CLIENT_SECRET: "s",
       YOUTUBE_REFRESH_TOKEN: "r",
     };
     let now = 0;
@@ -84,7 +84,7 @@ describe("use as a library", () => {
       },
     });
     const sink = memorySink();
-    const env: Record<string, string> = { GOOGLE_OAUTH_CLIENT_ID: "id" };
+    const env: Record<string, string> = { YOUTUBE_OAUTH_CLIENT_ID: "id" };
     const sites = sitesFor({
       sites: [youtube],
       env: (n) => env[n],
@@ -100,10 +100,10 @@ describe("use as a library", () => {
     expect(rows[0]?.authed).toBe(false);
     const status = await sites.status("youtube");
     const step = status.setup.find((s) => s.name === "consent");
-    expect(step?.blockedOn).toEqual(["GOOGLE_OAUTH_CLIENT_SECRET"]);
+    expect(step?.blockedOn).toEqual(["YOUTUBE_OAUTH_CLIENT_SECRET"]);
     expect(step?.unrecorded).toBeUndefined();
-    await expect(sites.setup("youtube", "consent")).rejects.toThrow(/GOOGLE_OAUTH_CLIENT_SECRET/);
-    expect(process.env.GOOGLE_OAUTH_CLIENT_ID).toBeUndefined();
+    await expect(sites.setup("youtube", "consent")).rejects.toThrow(/YOUTUBE_OAUTH_CLIENT_SECRET/);
+    expect(process.env.YOUTUBE_OAUTH_CLIENT_ID).toBeUndefined();
     expect(opened).toEqual([]);
     expect(SITES.length).toBeGreaterThan(1);
   });
