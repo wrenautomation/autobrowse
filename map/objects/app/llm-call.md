@@ -3,7 +3,7 @@ type: object
 cluster: app
 universe: live
 status: verified
-verified: 2026-09-30 @ runs-and-walks
+verified: 2026-10-09 @ eca4223
 entity: src/llm/ledger.ts
 ---
 
@@ -24,12 +24,12 @@ Spend has to be read back by purpose to judge it. Purpose rides on the request (
 ## Connected to
 
 - **owned-by:** the app's model ([[app]])
-- **joins:** [[explore-run]] (answer tokens), [[agent-session]] (`steps.jsonl`, read when no call rows exist)
-- **looks-like-but-is-not:** the OTLP trace sink (spans to Langfuse); the step ledger
+- **joins:** [[explore-run]] (answer tokens), [[site-call-ledger]] (`autobrowse success` counts failed calls with it), [[agent-session]] (`steps.jsonl`, read when no call rows exist)
+- **looks-like-but-is-not:** the [[site-call-ledger]] (site calls, not model calls); the OTLP trace sink (spans to Langfuse); the step ledger
 
 ## If you change this
 
-- **Hits:** `src/runs/tokens.ts`, every caller that sets `purpose` (`src/agent/explorer.ts`, `src/browser/repair.ts`, `src/browser/screens.ts`, `src/browser/captcha/llm-eyes.ts`, `src/compiler/polish.ts`, `src/compiler/finish.ts`, `src/agent/evaluator.ts`, `src/do/pick.ts`).
+- **Hits:** `src/runs/tokens.ts`, `src/runs/success.ts`, every caller that sets `purpose` (`src/agent/explorer.ts`, `src/browser/repair.ts`, `src/browser/screens.ts`, `src/browser/captcha/llm-eyes.ts`, `src/compiler/polish.ts`, `src/compiler/finish.ts`, `src/agent/evaluator.ts`, `src/do/pick.ts`).
 - **Does not hit:** the providers themselves.
 
 ## Surfaces
@@ -37,7 +37,7 @@ Spend has to be read back by purpose to judge it. Purpose rides on the request (
 | Surface | Role |
 |---|---|
 | every model call | writes |
-| `autobrowse tokens` | reads |
+| `autobrowse tokens`, `success` | reads |
 
 ## See
 

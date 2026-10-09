@@ -1,9 +1,9 @@
 ---
 type: process
 status: verified
-verified: 2026-09-28 @ 70aefc3
+verified: 2026-10-09 @ eca4223
 consumes: [site-api, token, account, spend-policy]
-produces: [approval]
+produces: [approval, site-call-ledger]
 ---
 
 # site-call
@@ -28,6 +28,7 @@ One shape for everyone (CLI, HTTP, Restate `sites`, wren): the caller never know
 6. Browser leg: `{ flow }` → `flow(name, input)` on the worker's runner, `{ workflow }` → `compiled.run(name, plan)` (gates approved by the caller) — `src/sites/types.ts:37-49`, `src/workflows/proof.ts:49`
 7. `setup(site, step, …)` mints a token the same way and keeps it through the sink under the account's name — `src/sites/facade.ts:151`, `src/sites/oauth.ts:212`; an OAuth consent opens in the account's provider profile for a `via` site (TikTok), like its browser legs — `src/sites/facade.ts:607-611`
 8. Restate face: `sites/call`, `sites/status`, `sites/setup`, `sites/renew` — `src/sites/service.ts:61-121`; the same handlers as `desk/*` from the Mac (`src/app/desk.ts`) for legs a site refuses from the box's IP (Reddit)
+9. Every try, retries included, is a line in the [[site-call-ledger]] inside the `ctx.run` — `src/sites/service.ts:122,153`
 
 ## If you change this
 
@@ -43,5 +44,5 @@ One shape for everyone (CLI, HTTP, Restate `sites`, wren): the caller never know
 
 ## See
 
-- Objects: [[site-api]], [[site-facade]], [[token]], [[account]], [[approval]], [[spend-policy]]
+- Objects: [[site-call-ledger]], [[site-api]], [[site-facade]], [[token]], [[account]], [[approval]], [[spend-policy]]
 - Source: `src/sites/facade.ts`, `src/sites/service.ts`
