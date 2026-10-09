@@ -54,6 +54,13 @@ const byUsername = z.object({
 const lookup = z.object({
   id,
   "tweet.fields": z.string().default("id,text,created_at,public_metrics,non_public_metrics"),
+  /** `attachments.media_keys` puts the post's media in `includes.media`. */
+  expansions: z.string().optional(),
+  /**
+   * Set, the call goes to the API: only it gives a video's views and playback quartiles
+   * (`public_metrics.view_count`, `non_public_metrics`/`organic_metrics` `playback_0_count`..`playback_100_count`).
+   */
+  "media.fields": z.string().optional(),
 });
 const search = z.object({
   query: z.string().min(1),
@@ -271,9 +278,10 @@ export const x: SiteApi = {
     route({
       method: "GET",
       path: "/2/tweets/{id}",
-      summary: "One post with its metrics (free: the signed-in page)",
+      summary:
+        "One post with its metrics (free: the signed-in page; with `media.fields`, the API, for a video's views and playback quartiles)",
       request: lookup,
-      prefer: "browser",
+      prefer: (q) => (q["media.fields"] ? undefined : "browser"),
       meter: () => ({ posts: 1 }),
       browser: { flow: "x/post" },
       api: ({ id: tweetId, ...q }, leg) => get(leg, `/2/tweets/${tweetId}`, q),

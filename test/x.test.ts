@@ -286,6 +286,43 @@ describe("x site", () => {
     });
   });
 
+  it("a post lookup reads the page, unless it asks for media fields: then the API, with both params", async () => {
+    const { http, calls } = fakeApi(() => ({ data: { id: "7" } }));
+    const flows: string[] = [];
+    const sites = siteFacade([x], {
+      http,
+      env: (n) => ({ X_ACCESS_TOKEN: "t" })[n],
+      sink: memorySink(),
+      runner: {
+        async run(flow) {
+          flows.push(`${flow.site}/${flow.name}`);
+          return { data: { id: "7", text: "page" } } as never;
+        },
+      },
+      flow: (n) => BROWSER_FLOWS[n] ?? null,
+    });
+    await expect(sites.call("x", "GET", "/2/tweets/7", {})).resolves.toEqual({
+      data: { id: "7", text: "page" },
+    });
+    expect(flows).toEqual(["x/post"]);
+    expect(calls).toEqual([]);
+
+    const fields = "media_key,type,duration_ms,public_metrics,non_public_metrics,organic_metrics";
+    await expect(
+      sites.call("x", "GET", "/2/tweets/7", {
+        expansions: "attachments.media_keys",
+        "media.fields": fields,
+      }),
+    ).resolves.toEqual({ data: { id: "7" } });
+    expect(flows).toHaveLength(1);
+    expect(calls).toHaveLength(1);
+    const u = calls[0]?.url;
+    expect(u?.pathname).toBe("/2/tweets/7");
+    expect(u?.searchParams.get("expansions")).toBe("attachments.media_keys");
+    expect(u?.searchParams.get("media.fields")).toBe(fields);
+    expect(u?.searchParams.get("tweet.fields")).toContain("public_metrics");
+  });
+
   it("builds a multipart body with the fields before the file", () => {
     const { type, body } = multipart(
       { a: "1" },

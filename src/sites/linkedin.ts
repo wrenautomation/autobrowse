@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 import { WREN_PAGE } from "../browser/flows/linkedin-audience.js";
+import { POST_URN } from "../browser/flows/linkedin-post-analytics.js";
 import { HttpError } from "../clients/http.js";
 import {
   type ApiLeg,
@@ -206,6 +207,8 @@ export const linkedin: SiteApi = {
     audience: 4,
     // Posts by others to comment on (search, a company's Posts tab): reads run only as linkedin@wren.
     posts: 12,
+    // One post's analytics page, on Wren's own account: wren reads its posts' numbers.
+    analytics: 10,
   },
   // William's own profile (shown as "Will Jin"): research reads since 2026-10-06, when the alt was
   // restricted ("just use my main ... unless alt still works"); the alt's pace, nothing sent, never
@@ -224,6 +227,7 @@ export const linkedin: SiteApi = {
       audience: 0,
       activity: 10,
       posts: 0,
+      analytics: 0,
       // Research reads in all, search first in wren (designs 2026-10-07-linkedin-search-first): 20 a day.
       total: 20,
     },
@@ -242,6 +246,7 @@ export const linkedin: SiteApi = {
       // wren's signals (designs 2026-10-06-signal-collectors, S5): 10 people a day.
       activity: 10,
       posts: 0,
+      analytics: 0,
       total: 20,
     },
   },
@@ -515,6 +520,15 @@ export const linkedin: SiteApi = {
       request: z.object({ page: z.union([handle, z.literal("")]).optional() }),
       meter: () => ({ audience: 1 }),
       browser: { flow: "linkedin/audience" },
+    }),
+    route({
+      method: "GET",
+      path: "/analytics/post-summary/{urn}",
+      summary:
+        "A post's analytics page on Wren's own account (`urn`: activity, share or ugcPost, URL-encoded in the path): impressions, reached, reactions, comments, reposts, saves, sends, profileViewers, followersGained (null when the page shows none), raw. Reads only",
+      request: z.object({ urn: z.string().regex(POST_URN, "a post urn") }),
+      meter: () => ({ analytics: 1 }),
+      browser: { flow: "linkedin/post-analytics" },
     }),
     route({
       method: "GET",

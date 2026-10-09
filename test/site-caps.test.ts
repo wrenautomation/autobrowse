@@ -131,6 +131,7 @@ describe("a named account", () => {
       audience: 0,
       activity: 10,
       posts: 0,
+      analytics: 0,
       total: 20,
     });
     expect(linkedin.caps).toMatchObject({ company: 40 });
