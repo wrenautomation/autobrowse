@@ -144,6 +144,7 @@ import { type Charge, type ChargeRow, reportCharge } from "../money/charges.js";
 import type { Profile } from "../money/profile.js";
 import { isDefaultOwner, named, ownerKeys } from "../owner.js";
 import { fileSpent } from "../reach/key-ring.js";
+import { fileSiteCalls } from "../runs/calls.js";
 import { s3BlobStore } from "../shots/s3.js";
 import { keepArtifact, keepRecording, type ShipReport, shipShots } from "../shots/ship.js";
 import { fileCaps } from "../sites/caps.js";
@@ -602,6 +603,9 @@ export const fixesFor = (settings: Settings): Fixes =>
 
 /** Every model call, one file per month (src/llm/ledger.ts). */
 export const llmCallsDirFor = (settings: Settings): string => join(stateDir(settings), "llm");
+
+/** Every try of a `sites`/`desk` call (src/runs/calls.ts): `calls/calls-YYYY-MM.jsonl`, kept for good. */
+export const siteCallsDirFor = (settings: Settings): string => join(stateDir(settings), "calls");
 
 /** Placed secrets a walk asks for: its sites' stored logins, codes from their inboxes; a bare `password` is the walk's own site's. */
 function walkSecrets(settings: Settings, spec: WalkSpec): SecretValues {
@@ -1546,7 +1550,11 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
         named(BROWSER_SERVICE, settings.owner),
       ),
       // The site APIs for the same orchestrator: official shapes, durable over the tunnel.
-      sitesService(sites, named(SITES_SERVICE, settings.owner)),
+      sitesService(
+        sites,
+        named(SITES_SERVICE, settings.owner),
+        fileSiteCalls(siteCallsDirFor(settings)),
+      ),
       // One verb for the same orchestrator; the backend wires the doer in after the model exists.
       doService(
         () => (late.doer ? holding(idle, late.doer) : null),

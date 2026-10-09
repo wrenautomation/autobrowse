@@ -20,13 +20,14 @@ import pino from "pino";
 import { CLAUDE_SERVICE, claudeService } from "../claude/service.js";
 import { httpClient } from "../clients/http.js";
 import { isDefaultOwner, named } from "../owner.js";
+import { fileSiteCalls } from "../runs/calls.js";
 import { DESK_SERVICE, sitesService } from "../sites/index.js";
 import { studioService, watchRecordings, wrenIn } from "../studio/service.js";
 import { registerOnBox } from "./box-register.js";
 import { cloudAdminUrl, planEndpoint } from "./endpoint.js";
 import { awsFor, boot } from "./owner.js";
 import { registerDeployment } from "./register.js";
-import { buildApp } from "./services.js";
+import { buildApp, siteCallsDirFor } from "./services.js";
 
 /** The port deploy/desk/install.sh points the Cloudflare Tunnel at. */
 const DESK_PORT = 9083;
@@ -34,7 +35,11 @@ const DESK_PORT = 9083;
 const { settings } = boot();
 const log = pino({ level: settings.logLevel });
 const app = await buildApp(settings, log);
-const desk = sitesService(app.sites, named(DESK_SERVICE, settings.owner));
+const desk = sitesService(
+  app.sites,
+  named(DESK_SERVICE, settings.owner),
+  fileSiteCalls(siteCallsDirFor(settings)),
+);
 // Claude Code reads the workspace holding this checkout (wren's `Ask`).
 const claude = claudeService(resolve(".."), named(CLAUDE_SERVICE, settings.owner));
 // Wren's video editor: its prod, its recordings; never another owner's desk.

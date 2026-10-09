@@ -12,6 +12,7 @@ import * as restate from "@restatedev/restate-sdk";
 import { z } from "zod";
 import { withCall } from "../browser/attempt.js";
 import { lastingRefusal } from "../clients/http.js";
+import type { SiteCalls } from "../runs/calls.js";
 import type { SiteFacade } from "./facade.js";
 import { SiteError } from "./types.js";
 
@@ -71,8 +72,54 @@ async function terminalOnSiteError<T>(key: string, fn: () => Promise<T>): Promis
 const CALL_MS = 2 * 60 * 60_000;
 const CALL_OPTS = { inactivityTimeout: CALL_MS, abortTimeout: CALL_MS };
 
-/** `name`: `sites` on the box, `desk` on the Mac; one shape, two machines. */
-export function sitesService(facade: SiteFacade, name: string = SITES_SERVICE) {
+/**
+ * Each try of `fn` as one ledger line: ok, or the error and whether the caller gets it.
+ * Inside `ctx.run`, so a replay (answered from the journal) writes nothing.
+ */
+async function recorded<T>(
+  calls: SiteCalls | undefined,
+  base: { service: string; site: string; route: string; caller: string | null; invocation: string },
+  attempt: number,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const t0 = Date.now();
+  const at = new Date(t0).toISOString();
+  try {
+    const out = await fn();
+    calls?.record({
+      ...base,
+      at,
+      attempt,
+      ok: true,
+      status: null,
+      terminal: false,
+      error: null,
+      ms: Date.now() - t0,
+    });
+    return out;
+  } catch (err) {
+    const terminal = err instanceof restate.TerminalError;
+    const status = terminal ? (err.code ?? null) : null;
+    const error = err instanceof Error ? err.message : String(err);
+    calls?.record({
+      ...base,
+      at,
+      attempt,
+      ok: false,
+      status,
+      terminal,
+      error,
+      ms: Date.now() - t0,
+    });
+    throw err;
+  }
+}
+
+/**
+ * `name`: `sites` on the box, `desk` on the Mac; one shape, two machines.
+ * `calls`: every try of a call, one line each (`src/runs/calls.ts`).
+ */
+export function sitesService(facade: SiteFacade, name: string = SITES_SERVICE, calls?: SiteCalls) {
   return restate.service({
     name,
     handlers: {
@@ -93,11 +140,20 @@ export function sitesService(facade: SiteFacade, name: string = SITES_SERVICE) {
           invocation: ctx.request().id,
         };
         const step = `sites ${req.site} ${req.method} ${req.path}`;
+        const base = {
+          service: name,
+          site: req.site,
+          route: `${req.method} ${req.path}`,
+          ...from,
+        };
+        let attempt = 0;
         return ctx.run(
           step,
           () =>
-            terminalOnSiteError(`${ctx.request().id} ${step}`, () =>
-              facade.call(req.site, req.method, req.path, req.input, req.account, from),
+            recorded(calls, base, ++attempt, () =>
+              terminalOnSiteError(`${ctx.request().id} ${step}`, () =>
+                facade.call(req.site, req.method, req.path, req.input, req.account, from),
+              ),
             ),
           retry,
         );

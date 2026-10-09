@@ -9,18 +9,30 @@
  *   (src/agent/records, designs/2026-10-05-records-and-ai-steps.md).
  * - `tokens`: what autobrowse spends, and the verdict against tools that
  *   send the whole page (src/runs/tokens).
+ * - `success`: how often runs and site calls reach what they were asked for,
+ *   and every try that did not (src/runs/success); `success import` backfills
+ *   site calls from Restate and the caps ledger.
  */
 
-import { writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import type { Command } from "commander";
 import { writeRecords } from "../agent/records.js";
 import { SITE_LOGINS } from "../auth/sites.js";
 import { defineFlow } from "../browser/flow.js";
 import type { RecordsOp, Row } from "../browser/records.js";
+import { httpClient } from "../clients/http.js";
+import { expandHome } from "../google-auth.js";
 import { readLlmCalls } from "../llm/ledger.js";
+import { named } from "../owner.js";
+import { fileSiteCalls, readSiteCalls } from "../runs/calls.js";
+import { finishedCalls, fromCaps, fromRestate, newRows } from "../runs/import.js";
 import { baseSite, listRuns, openRuns, readRun, runFile } from "../runs/log.js";
+import { formatSuccessReport, successReport } from "../runs/success.js";
 import { formatTokenReport, readCmds, tokenReport } from "../runs/tokens.js";
+import type { MeteredCall } from "../sites/caps.js";
+import { DESK_SERVICE, SITES_SERVICE } from "../sites/service.js";
 import { accent, columns, dim, good, warn } from "../style.js";
 import { buildWalk } from "../walks/build.js";
 import { walkFlowName } from "../walks/flow.js";
@@ -41,6 +53,7 @@ import {
   llmFor,
   recordsFile,
   runsDirFor,
+  siteCallsDirFor,
   stepLedgerFor,
   walkFor,
   walksDirFor,
@@ -443,5 +456,69 @@ export function registerRunsCommands(
       });
       if (o.json) console.log(JSON.stringify(report, null, 2));
       else for (const line of formatTokenReport(report)) console.log(line);
+    });
+
+  const success = program
+    .command("success")
+    .description(
+      "Success rates: explore runs and their failed commands, site calls and their retries, agent steps, model calls",
+    )
+    .option("--days <n>", "window, in days", "30")
+    .option("--site <site>", "one site only")
+    .option("--json", "the report as JSON")
+    .action(async (o: { days: string; site?: string; json?: boolean }) => {
+      const until = new Date().toISOString();
+      const since = new Date(Date.now() - Number(o.days) * 86_400_000).toISOString();
+      const report = successReport({
+        since,
+        until,
+        runs: listRuns(runsDir),
+        cmds: readCmds(runsDir, since),
+        calls: readSiteCalls(siteCallsDirFor(settings), since),
+        steps: await stepLedgerFor(settings).recent(100_000),
+        models: readLlmCalls(llmCallsDirFor(settings), since),
+        ...(o.site ? { site: o.site } : {}),
+      });
+      if (o.json) console.log(JSON.stringify(report, null, 2));
+      else for (const line of formatSuccessReport(report)) console.log(line);
+    });
+
+  success
+    .command("import")
+    .description(
+      "Backfill site calls from before the ledger: Restate's finished invocations (about a day) and the caps ledger (14 days)",
+    )
+    .option("--no-restate", "skip Restate")
+    .action(async (o: { restate: boolean }) => {
+      const dir = siteCallsDirFor(settings);
+      const have = readSiteCalls(dir, "2000-01-01");
+      let restate: ReturnType<typeof fromRestate> = [];
+      if (o.restate) {
+        restate = fromRestate(
+          await finishedCalls({
+            adminUrl: `${settings.restateIngressUrl.replace(/\/$/, "")}/admin`,
+            authToken: settings.restateAuthToken ?? null,
+            http: httpClient(),
+            services: [SITES_SERVICE, DESK_SERVICE].map((n) => named(n, settings.owner)),
+          }),
+        );
+      }
+      const capsDir = join(dirname(expandHome(settings.capsFile)), "caps-calls");
+      const metered: MeteredCall[] = [];
+      if (existsSync(capsDir))
+        for (const f of readdirSync(capsDir).sort())
+          if (f.endsWith(".jsonl"))
+            for (const line of readFileSync(join(capsDir, f), "utf8").split("\n"))
+              try {
+                if (line.trim()) metered.push(JSON.parse(line) as MeteredCall);
+              } catch {
+                // torn
+              }
+      const rows = newRows(have, restate, fromCaps(metered));
+      const ledger = fileSiteCalls(dir);
+      for (const r of rows) ledger.record(r);
+      console.log(
+        `${rows.length} calls imported (${rows.filter((r) => r.from === "restate").length} from Restate, ${rows.filter((r) => r.from === "caps").length} from the caps ledger); ${have.length} already there`,
+      );
     });
 }

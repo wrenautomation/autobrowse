@@ -417,6 +417,8 @@ pnpm autobrowse mods search [words]             # npm mods: sites, domains, gate
 pnpm autobrowse mods add <npm-name|dir|tgz>     # checks hashes, domains, gates, asks yes; code needs --trust; mods list, mods remove
                                                   # (the UI Mods page lists, searches, adds data mods, removes; sample: walkthrough/mods/)
 pnpm autobrowse tokens --days 30               # model calls by purpose, explore answers vs whole-page reads, the verdict
+pnpm autobrowse success --days 30 [--site x]   # success rates: explore verdicts, failed commands by kind, site calls by route
+pnpm autobrowse success import                 # backfill site calls from Restate (~1 day) and the caps ledger (14 days)
 pnpm autobrowse status domain wren-six.com     # every run is <workflow> <key>
 pnpm autobrowse approve domain wren-six.com purchase
 pnpm autobrowse approve domain wren-six.com human     # after doing what the email asked

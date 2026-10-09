@@ -19,7 +19,7 @@ pnpm -s autobrowse site status <site>          # the site's API and browser rout
 ```bash
 scripts/start.sh <site> [url] [port] [flags]   # default port 9090; prints "port N" when ready
 scripts/cmd.sh <port> '<json>'                 # one command, JSON back
-scripts/stop.sh <port>                         # close browser + socket
+scripts/stop.sh <port> achieved|failed "…"     # verdict, then close browser + socket
 scripts/state.sh                               # open sessions (held ones marked), resumable journals, profiles
 pnpm -s autobrowse browsers [--json]           # every browser of ours: owner, age, MB; sessions: idle, held
 pnpm -s autobrowse browsers stop <port>        # close a session, journal kept (--forget drops it)
@@ -90,7 +90,7 @@ Every look costs tokens. Look once, then let the acts tell you what changed.
 4. Acts you are sure of (fill a form, submit) go in one `batch`. It stops at the first failure: `failed: {at, cmd, error}`, `done` holds what ran. A paying click goes alone.
 5. Prefer `role`+`name`; fall back to `css`+`nth`. A failed act is not journaled. Change the hints; don't repeat.
 6. Never `raw:true` on a page showing a key.
-7. Done: `done` with the outcome and a one-line summary, `save` with a kebab name if it should compile, `stop.sh`.
+7. Done: `done` with the outcome and a one-line summary, `save` with a kebab name if it should compile, `stop.sh`. Or `stop.sh <port> achieved|failed "summary"` in one go. Never stop without a verdict: `autobrowse success` counts a run with none as unknown.
 
 The payment gate: a billing field (card, CVC, tax id, billing address) or a
 spending button (Buy, Pay, Subscribe, Add funds, Start trial) texts William and

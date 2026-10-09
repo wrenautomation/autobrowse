@@ -27,7 +27,7 @@ export type Grade = "good" | "standard" | "bad";
 export const grade = (perCall: number): Grade =>
   perCall <= GOOD_PER_CALL ? "good" : perCall <= BASELINES.stagehand ? "standard" : "bad";
 
-type Cmd = Extract<RunRow, { kind: "cmd" }> & { site: string };
+export type Cmd = Extract<RunRow, { kind: "cmd" }> & { site: string };
 
 export interface TokenReport {
   since: string;

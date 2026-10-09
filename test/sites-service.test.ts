@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { currentCall } from "../src/browser/attempt.js";
 import { HttpError } from "../src/clients/http.js";
+import { memorySiteCalls } from "../src/runs/calls.js";
 import type { SiteFacade } from "../src/sites/facade.js";
 import { DESK_SERVICE, SITES_SERVICE, SiteError, sitesService } from "../src/sites/index.js";
 
@@ -120,6 +121,42 @@ describe("sites service", () => {
     expect(await h.setup?.(ctx, { site: "linkedin", step: "consent" })).toEqual({
       made: ["LINKEDIN_ACCESS_TOKEN"],
     });
+  });
+
+  it("writes every try of a call to the ledger: the retry, the end, the status", async () => {
+    const ledger = memorySiteCalls();
+    const svc = (
+      sitesService(facade, DESK_SERVICE, ledger) as unknown as {
+        service: Record<string, (...args: never) => unknown>;
+      }
+    ).service;
+    // Restate retrying a step: the closure runs again until it stops throwing or turns terminal.
+    const retrying = {
+      request: () => ({ id: "inv_9", headers: new Map([["x-caller", "Loop/a/b"]]) }),
+      run: async <T>(_n: string, fn: () => Promise<T>): Promise<T> => {
+        try {
+          return await fn();
+        } catch {
+          return fn();
+        }
+      },
+    } as never;
+    await expect(
+      svc.call?.(retrying, { site: "linkedin", method: "GET", path: "/rest/flaky" }),
+    ).rejects.toThrow("socket hang up");
+    await expect(
+      svc.call?.(ctxOf().ctx, { site: "linkedin", method: "GET", path: "/rest/boom" }),
+    ).rejects.toMatchObject({ code: 502 });
+    await svc.call?.(ctxOf().ctx, { site: "linkedin", method: "GET", path: "/rest/posts" });
+    expect(
+      ledger.rows.map((r) => [r.service, r.route, r.caller, r.attempt, r.ok, r.status, r.terminal]),
+    ).toEqual([
+      ["desk", "GET /rest/flaky", "Loop/a/b", 1, false, null, false],
+      ["desk", "GET /rest/flaky", "Loop/a/b", 2, false, null, false],
+      ["desk", "GET /rest/boom", null, 1, false, 502, true],
+      ["desk", "GET /rest/posts", null, 1, true, null, false],
+    ]);
+    expect(ledger.rows[0]).toMatchObject({ invocation: "inv_9", error: "socket hang up" });
   });
 
   it("is named sites by default; the Mac serves the same handlers as desk", async () => {
