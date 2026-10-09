@@ -7,7 +7,8 @@
  * when unset. `via` reorders them for one call. `GET /google` is Google's own
  * page read in a browser (`browser/flows/google-search.ts`): the AI Overview,
  * every result, the ads. Google bot-checks the box's IP, so callers send it
- * to the Mac's desk (`desk/call`), paced like a person searching.
+ * to the Mac's desk (`desk/call`), paced like a person searching. `GET /place` is a
+ * business's Place ID off Google Maps the same way (`browser/flows/google-place.ts`).
  *
  * LinkedIn without LinkedIn: `GET /linkedin/profile?url=` and
  * `/linkedin/company?url=` read Exa's cached copy (never live, so neither
@@ -224,6 +225,15 @@ export const web: SiteApi = {
       }),
       meter: ({ n }) => ({ google: Math.ceil(n / 10) }),
       browser: { flow: "web/google" },
+    }),
+    route({
+      method: "GET",
+      path: "/place",
+      summary:
+        "A business's Google Place ID from Google Maps, signed out (`q`: name and address, \"Northwind Plumbing, 12 Elm St, Springfield\"): `placeId` (null when no place carries the name), `name`, `address`, `url`, `via` (place, list or none) and the list's `candidates`. A browser leg: call it on the desk",
+      request: z.object({ q: z.string().trim().min(3).max(300) }),
+      meter: () => ({ google: 1 }),
+      browser: { flow: "web/google-place" },
     }),
   ],
   setup: [],

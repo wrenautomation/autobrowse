@@ -95,6 +95,7 @@ describe("browser service", () => {
       "tiktok/oauth-consent",
       "tiktok/profile-name",
       "web/google",
+      "web/google-place",
       "x/oauth-consent",
       "x/post",
       "x/posts",

@@ -10,6 +10,12 @@ export {
 export { facebookOauthConsent } from "./facebook-oauth-consent.js";
 export { type Fingerprint, fingerprint, tellsOf } from "./fingerprint.js";
 export { googleDkimGenerate, googleDkimStart } from "./google-dkim.js";
+export {
+  type Candidate as GooglePlaceCandidate,
+  googlePlace,
+  type Place as GooglePlace,
+  type PlaceInput as GooglePlaceInput,
+} from "./google-place.js";
 export { googleProfilePhoto } from "./google-profile-photo.js";
 export {
   type Ad as GoogleAd,
