@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { FlowRunner } from "../src/browser/flow.js";
 import { linkedinCreatePost } from "../src/browser/flows/linkedin-create-post.js";
 import type { Hints } from "../src/browser/locate.js";
@@ -121,5 +121,57 @@ describe("linkedin/create-post", () => {
       /composer did not open/,
     );
     expect(acts).toEqual([]);
+  });
+});
+
+describe("linkedin upload", () => {
+  it("starts the upload, PUTs the fetched bytes with the token, answers the URN", async () => {
+    const api = fakeFetch((req) =>
+      req.method === "POST"
+        ? {
+            body: {
+              value: {
+                uploadUrl: "https://www.linkedin.com/dms-uploads/d1",
+                document: "urn:li:document:D1",
+              },
+            },
+          }
+        : { status: 201 },
+    );
+    const file = vi.fn(async () => new Response(new Uint8Array([37, 80, 68, 70])));
+    vi.stubGlobal("fetch", file);
+    try {
+      const env: Record<string, string> = { LINKEDIN_ACCESS_TOKEN__HELLO_WREN_TEST: "tok" };
+      const sites = siteFacade([linkedin], {
+        http: httpClient({ fetch: api.fetch }),
+        env: (n) => env[n],
+        sink: memorySink(),
+        providerOf: () => null,
+        accountFor: async () => "hello@wren.test",
+      });
+      const out = await sites.call("linkedin", "POST", "/upload", {
+        kind: "document",
+        owner: PAGE,
+        file: "https://media.test/deck.pdf",
+      });
+      expect(out).toEqual({ urn: "urn:li:document:D1" });
+      expect(file).toHaveBeenCalledWith("https://media.test/deck.pdf");
+      expect(api.calls.map((c) => `${c.method} ${c.url.pathname}${c.url.search}`)).toEqual([
+        "POST /rest/documents?action=initializeUpload",
+        "PUT /dms-uploads/d1",
+      ]);
+      expect(api.calls[0]?.body).toContain(PAGE);
+      expect(api.calls[1]?.headers.get("authorization")).toBe("Bearer tok");
+      expect(api.calls[1]?.body).toBe("<bytes>");
+      await expect(
+        sites.call("linkedin", "POST", "/upload", {
+          kind: "image",
+          owner: PAGE,
+          file: "/etc/hosts",
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

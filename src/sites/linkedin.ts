@@ -18,8 +18,11 @@ import {
   SiteError,
   type SiteRoute,
 } from "./types.js";
+import { bytesOf } from "./youtube.js";
 
 export const LINKEDIN_ORIGIN = "https://api.linkedin.com";
+/** A PDF runs to 100 MB; its PUT gets this long. */
+const UPLOAD_PUT_MS = 10 * 60_000;
 /** LinkedIn versions its REST API by month; a version is honoured for a year. */
 export const LINKEDIN_VERSION = "202508";
 /**
@@ -97,6 +100,13 @@ const comments = z.object({
 const initUpload = z.object({
   action: z.literal("initializeUpload").default("initializeUpload"),
   initializeUploadRequest: z.object({ owner: urn }),
+});
+
+const upload = z.object({
+  kind: z.enum(["image", "document"]),
+  owner: urn,
+  /** Where the bytes are: an https URL (a signed media link), never a path on this machine. */
+  file: z.string().regex(/^https:\/\/\S+$/, "an https URL"),
 });
 
 const vanity = z
@@ -394,6 +404,43 @@ export const linkedin: SiteApi = {
           }),
           "rest/images",
         ),
+    }),
+    route({
+      method: "POST",
+      path: "/upload",
+      summary:
+        "Upload an image or a document (PDF) from an https URL in one call: answers the `urn` a post names",
+      request: upload,
+      api: async (body, leg) => {
+        const rest = body.kind === "image" ? "images" : "documents";
+        const init = await must(
+          await leg.http.json<{
+            value?: { uploadUrl?: string; image?: string; document?: string };
+          }>(`${LINKEDIN_ORIGIN}/rest/${rest}?action=initializeUpload`, {
+            method: "POST",
+            headers: headers(leg),
+            body: { initializeUploadRequest: { owner: body.owner } },
+          }),
+          `rest/${rest}`,
+        );
+        const at = init?.value?.uploadUrl;
+        const made = body.kind === "image" ? init?.value?.image : init?.value?.document;
+        if (!at || !made)
+          throw new SiteError(502, `rest/${rest}: no uploadUrl or URN in the answer`);
+        await must(
+          await leg.http.json<unknown>(at, {
+            method: "PUT",
+            headers: {
+              authorization: `Bearer ${leg.token}`,
+              "content-type": "application/octet-stream",
+            },
+            raw: await bytesOf(body.file),
+            timeoutMs: UPLOAD_PUT_MS,
+          }),
+          `rest/${rest} (bytes)`,
+        );
+        return { urn: made };
+      },
     }),
     // No API sells these to anyone but partners: the paths are linkedin.com's own pages.
     route({
