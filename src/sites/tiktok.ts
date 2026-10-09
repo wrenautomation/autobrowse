@@ -3,10 +3,11 @@
  * the token, Display API for the account and its videos, Content Posting
  * API for publishing (an unaudited app can only post as private/self,
  * and only to the app's own testers). Comments have no public API, so
- * that route is browser-only. Written from the docs 2026-09-21, unproven
+ * those routes are browser-only. Written from the docs 2026-09-21, unproven
  * until a developer app and an account exist.
  */
 import { z } from "zod";
+import { MAX_COMMENTS } from "../browser/flows/tiktok-comments.js";
 import { HttpError } from "../clients/http.js";
 import { WEB_REDIRECT } from "./oauth.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
@@ -62,7 +63,11 @@ const webPost = z.object({
   /** The video the browser leg uploads: a path on the box, or a URL it downloads. */
   file: z.string().min(1),
 });
-const videoId = z.object({ videoId: z.string().min(1) });
+const postComments = z.object({
+  videoId: z.string().regex(/^\d+$/, "a video id"),
+  username: z.string().min(1).optional(),
+  max: z.coerce.number().int().min(1).max(MAX_COMMENTS).default(50),
+});
 const reply = z.object({
   videoId: z.string().min(1),
   commentId: z.string().min(1),
@@ -101,6 +106,10 @@ export const tiktok: SiteApi = {
   auth: { oauth: tiktokOAuth },
   // Wren's account was made with "Continue with Google" (2026-09-29).
   via: "google",
+  caps: {
+    // A video's comments, read off its page: a pass every 30 minutes at most.
+    comments: 24,
+  },
   routes: [
     route({
       method: "GET",
@@ -192,9 +201,11 @@ export const tiktok: SiteApi = {
     route({
       method: "GET",
       path: "/web/videos/{videoId}/comments",
-      summary: "Comments on a video (no public API; browser)",
-      request: videoId,
-      browser: { workflow: "tiktok-post-comments" },
+      summary:
+        "Comments on a video, read from the page's own comment calls (no public API; browser): `username` (the video's handle, optional), `max` (default 50, at most 100); answers `{ videoId, url, comments: [{ id, text, at, author, authorName, authorId, parentId, creator, likes }] }`, newest first. Reads only",
+      request: postComments,
+      meter: () => ({ comments: 1 }),
+      browser: { flow: "tiktok/post-comments" },
     }),
     route({
       method: "POST",

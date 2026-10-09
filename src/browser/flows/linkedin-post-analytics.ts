@@ -19,7 +19,7 @@ const WEB = "https://www.linkedin.com";
 const RENDER_MS = 15_000;
 const SETTLE_MS = 1_500;
 const SETTLE_TRIES = 4;
-const RAW_CAP = 4_000;
+export const RAW_CAP = 4_000;
 
 export const POST_URN = /^urn:li:(activity|share|ugcPost):[0-9]+$/;
 
@@ -55,7 +55,6 @@ const LABELS: Record<keyof PostStats, string[]> = {
   profileViewers: ["profile viewers from this post"],
   followersGained: ["followers gained from this post"],
 };
-const KEYS = Object.keys(LABELS) as Array<keyof PostStats>;
 const NUM = "(\\d[\\d,.]*)\\s*([KkMm])?";
 const SUFFIX: Record<string, number> = { k: 1_000, m: 1_000_000 };
 
@@ -67,53 +66,45 @@ export function countIn(s: string): number | null {
   return Number.isFinite(n) ? Math.round(n) : null;
 }
 
-const labelOf = (line: string): keyof PostStats | null => {
-  const l = line.toLowerCase().replace(/:$/, "").trim();
-  return KEYS.find((k) => LABELS[k].includes(l)) ?? null;
-};
-
-/** "Reposts 3", "Reposts: 3", "3 Reposts": a count on its label's line. */
-function sameLine(line: string): [keyof PostStats, number] | null {
-  for (const k of KEYS)
-    for (const label of LABELS[k]) {
-      const m =
-        new RegExp(`^${label}:?\\s+(.+)$`, "i").exec(line) ??
-        new RegExp(`^(.+?)\\s+${label}$`, "i").exec(line);
-      const n = m?.[1] ? countIn(m[1]) : null;
-      if (n !== null) return [k, n];
-    }
-  return null;
-}
-
 /**
- * The counts on an analytics page's text; a missing label is null. Lines that
- * alternate count and label form a run; a run that opens on a count pairs each
- * count with the label after it, one that opens on a label pairs it with the
- * count after it. Any other line ends the run. The first value found wins.
+ * The counts on a page's text, one per key of `labels` (each key's labels
+ * lowercase, the longer first); a missing label is null. Lines that alternate
+ * count and label form a run; a run that opens on a count pairs each count
+ * with the label after it, one that opens on a label pairs it with the count
+ * after it. Any other line ends the run, except lines `skip` names, which are
+ * left out first. A count on its label's line counts too. The first value
+ * found wins.
  */
-export function postAnalyticsOf(text: string): PostStats {
-  const out = Object.fromEntries(KEYS.map((k) => [k, null])) as unknown as Record<
-    keyof PostStats,
-    number | null
-  >;
-  const put = (k: keyof PostStats, n: number) => {
+export function countsOf<K extends string>(
+  text: string,
+  labels: Record<K, string[]>,
+  skip: (line: string) => boolean = () => false,
+): Record<K, number | null> {
+  const keys = Object.keys(labels) as K[];
+  const out = Object.fromEntries(keys.map((k) => [k, null])) as Record<K, number | null>;
+  const put = (k: K, n: number) => {
     if (out[k] === null) out[k] = n;
   };
   const lines = text
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
-  type Tok = { label: keyof PostStats } | { n: number } | null;
-  const toks: Tok[] = lines.map((l) => {
-    const label = labelOf(l);
-    if (label) return { label };
-    const n = countIn(l);
-    return n === null ? null : { n };
-  });
+  const labelOf = (line: string): K | null => {
+    const l = line.toLowerCase().replace(/:$/, "").trim();
+    return keys.find((k) => labels[k].includes(l)) ?? null;
+  };
+  type Tok = { label: K } | { n: number } | null;
+  const toks: Tok[] = lines
+    .filter((l) => !skip(l))
+    .map((l) => {
+      const label = labelOf(l);
+      if (label) return { label };
+      const n = countIn(l);
+      return n === null ? null : { n };
+    });
   let i = 0;
   while (i < toks.length) {
-    const first = toks[i];
-    if (!first) {
+    if (!toks[i]) {
       i++;
       continue;
     }
@@ -122,9 +113,7 @@ export function postAnalyticsOf(text: string): PostStats {
     while (end < toks.length) {
       const prev = toks[end - 1];
       const cur = toks[end];
-      if (!cur || !prev) break;
-      const alternates = "n" in cur !== "n" in prev;
-      if (!alternates) break;
+      if (!cur || !prev || "n" in cur === "n" in prev) break;
       end++;
     }
     for (let j = i; j + 1 < end; j += 2) {
@@ -135,11 +124,28 @@ export function postAnalyticsOf(text: string): PostStats {
     }
     i = end;
   }
-  for (const l of lines) {
-    const hit = sameLine(l);
+  // "Reposts 3", "Reposts: 3", "3 Reposts": a count on its label's line.
+  const sameLine = (line: string): [K, number] | null => {
+    for (const k of keys)
+      for (const label of labels[k]) {
+        const m =
+          new RegExp(`^${label}:?\\s+(.+)$`, "i").exec(line) ??
+          new RegExp(`^(.+?)\\s+${label}$`, "i").exec(line);
+        const n = m?.[1] ? countIn(m[1]) : null;
+        if (n !== null) return [k, n];
+      }
+    return null;
+  };
+  for (const line of lines) {
+    const hit = sameLine(line);
     if (hit) put(...hit);
   }
   return out;
+}
+
+/** The counts on an analytics page's text; a missing label is null. */
+export function postAnalyticsOf(text: string): PostStats {
+  return countsOf(text, LABELS);
 }
 
 const hasAnalytics = (s: PostStats) => s.impressions !== null || s.reached !== null;

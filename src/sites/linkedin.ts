@@ -217,7 +217,7 @@ export const linkedin: SiteApi = {
     audience: 4,
     // Posts by others to comment on (search, a company's Posts tab): reads run only as linkedin@wren.
     posts: 12,
-    // One post's analytics page, on Wren's own account: wren reads its posts' numbers.
+    // One post's analytics page or the dashboard, on Wren's own account: wren reads its own numbers.
     analytics: 10,
   },
   // William's own profile (shown as "Will Jin"): research reads since 2026-10-06, when the alt was
@@ -576,6 +576,15 @@ export const linkedin: SiteApi = {
       request: z.object({ urn: z.string().regex(POST_URN, "a post urn") }),
       meter: () => ({ analytics: 1 }),
       browser: { flow: "linkedin/post-analytics" },
+    }),
+    route({
+      method: "GET",
+      path: "/analytics/dashboard",
+      summary:
+        "The account's own dashboard on Wren's account: profileViewers (past 90 days), searchAppearances (previous week), postImpressions (past 7 days), followers, each null when the page shows none, plus windows (each count's window words), url and raw. Reads only",
+      request: z.object({}),
+      meter: () => ({ analytics: 1 }),
+      browser: { flow: "linkedin/dashboard" },
     }),
     route({
       method: "GET",

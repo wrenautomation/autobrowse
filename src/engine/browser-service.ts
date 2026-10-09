@@ -25,6 +25,7 @@ import { instagramOauthConsent } from "../browser/flows/instagram-oauth-consent.
 import { linkedinActivity } from "../browser/flows/linkedin-activity.js";
 import { linkedinAudience } from "../browser/flows/linkedin-audience.js";
 import { linkedinCreatePost } from "../browser/flows/linkedin-create-post.js";
+import { linkedinDashboard } from "../browser/flows/linkedin-dashboard.js";
 import { linkedinNotifications } from "../browser/flows/linkedin-notifications.js";
 import { linkedinOauthConsent } from "../browser/flows/linkedin-oauth-consent.js";
 import { linkedinPostAnalytics } from "../browser/flows/linkedin-post-analytics.js";
@@ -57,6 +58,7 @@ import {
 } from "../browser/flows/profile-name.js";
 import { redditComment, redditMessage, redditRead, redditSubmit } from "../browser/flows/reddit.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
+import { tiktokPostComments } from "../browser/flows/tiktok-comments.js";
 import { tiktokOauthConsent } from "../browser/flows/tiktok-oauth-consent.js";
 import { xOauthConsent } from "../browser/flows/x-oauth-consent.js";
 import { xPost, xPosts, xProfile, xSearch } from "../browser/flows/x-read.js";
@@ -117,6 +119,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinActivity,
     linkedinAudience,
     linkedinPostAnalytics,
+    linkedinDashboard,
     linkedinSearchPosts,
     linkedinCompanyPosts,
     linkedinWithdraw,
@@ -129,6 +132,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     discordInvite,
     facebookOauthConsent,
     tiktokOauthConsent,
+    tiktokPostComments,
     xOauthConsent,
     xPost,
     xPosts,
