@@ -379,25 +379,23 @@ describe("meta GET /instagram/{username}", () => {
       body: {
         business_discovery: {
           id: "5",
+          // Discovery gives the cursor, no `next` link: a full page has more after it.
           media: {
-            data: [{ id: "m9" }],
-            paging: {
-              cursors: { before: "QVFB", after: "QVFIUm9" },
-              ...(fields.includes(".after(") ? {} : { next: "https://graph.example/next" }),
-            },
+            data: fields.includes(".after(") ? [{ id: "m9" }] : [{ id: "m9" }, { id: "m8" }],
+            paging: { cursors: { before: "QVFB", after: "QVFIUm9" } },
           },
         },
       },
     }));
-    expect(await sites.call("meta", "GET", "/instagram/acme", { limit: 10 })).toMatchObject({
-      media: [{ id: "m9" }],
+    expect(await sites.call("meta", "GET", "/instagram/acme", { limit: 2 })).toMatchObject({
+      media: [{ id: "m9" }, { id: "m8" }],
       next: "QVFIUm9",
     });
-    expect(calls.at(-1)?.searchParams.get("fields")).toContain(",media.limit(10){");
+    expect(calls.at(-1)?.searchParams.get("fields")).toContain(",media.limit(2){");
     expect(
-      await sites.call("meta", "GET", "/instagram/acme", { after: "QVFIUm9", limit: 10 }),
+      await sites.call("meta", "GET", "/instagram/acme", { after: "QVFIUm9", limit: 2 }),
     ).toMatchObject({ next: null });
-    expect(calls.at(-1)?.searchParams.get("fields")).toContain(",media.after(QVFIUm9).limit(10){");
+    expect(calls.at(-1)?.searchParams.get("fields")).toContain(",media.after(QVFIUm9).limit(2){");
     await expect(
       sites.call("meta", "GET", "/instagram/acme", { after: "x){id}" }),
     ).rejects.toMatchObject({ status: 400 });

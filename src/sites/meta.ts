@@ -313,7 +313,7 @@ function igUserOf(leg: ApiLeg): Promise<string> {
 /**
  * `business_discovery`: a business or creator account's profile and a page of its posts, newest
  * first, read as our own Instagram business account; `next` is the cursor of the page after, null
- * at the first post. A name that does not exist, or a personal account, is an answer
+ * once a page comes back short (the oldest post). A name that does not exist, or a personal account, is an answer
  * (`found: false`), not an error.
  */
 async function igDiscover(
@@ -332,8 +332,11 @@ async function igDiscover(
   const found = res.body?.business_discovery;
   if (res.ok && found) {
     const { media, ...profile } = found;
-    const next = media?.paging?.next ? (media.paging.cursors?.after ?? null) : null;
-    return { found: true, profile, media: media?.data ?? [], next };
+    // Discovery's paging has the cursor and no `next` link: a short page is the last one.
+    const data = media?.data ?? [];
+    const after = media?.paging?.cursors?.after ?? null;
+    const next = data.length >= limit || media?.paging?.next ? after : null;
+    return { found: true, profile, media: data, next };
   }
   const e = res.body?.error;
   const why = e?.error_user_msg ?? e?.message ?? "";
