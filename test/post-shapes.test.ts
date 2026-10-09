@@ -161,6 +161,22 @@ describe("tiktok publish init shape", () => {
       brand_organic_toggle: true,
     });
   });
+
+  it("takes TikTok's own privacy names, Friends as MUTUAL_FOLLOW_FRIENDS", () => {
+    const init = routeOf(tiktok, "POST", "/v2/post/publish/video/init/");
+    const ask = (privacy_level: string) => ({
+      post_info: { privacy_level },
+      source_info: { source: "PULL_FROM_URL", video_url: "https://cdn.test/v.mp4" },
+    });
+    for (const v of [
+      "PUBLIC_TO_EVERYONE",
+      "MUTUAL_FOLLOW_FRIENDS",
+      "FOLLOWER_OF_CREATOR",
+      "SELF_ONLY",
+    ])
+      expect(init.r.request.safeParse(ask(v)).success).toBe(true);
+    expect(init.r.request.safeParse(ask("MUTUALLY_FOLLOW_FRIENDS")).success).toBe(false);
+  });
 });
 
 describe("instagram container shape", () => {

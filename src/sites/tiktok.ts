@@ -33,7 +33,7 @@ const publishInit = z.object({
   post_info: z.object({
     title: z.string().max(2200).optional(),
     privacy_level: z
-      .enum(["PUBLIC_TO_EVERYONE", "MUTUALLY_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY"])
+      .enum(["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY"])
       .default("SELF_ONLY"),
     disable_duet: z.boolean().optional(),
     disable_comment: z.boolean().optional(),
