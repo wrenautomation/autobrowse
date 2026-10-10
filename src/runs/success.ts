@@ -146,7 +146,19 @@ export interface SuccessReport {
     /** Calls that took more than one try. */
     retried: number;
     byFailure: { kind: CallFailure; n: number; example: string }[];
-    byRoute: ({ site: string; route: string; retried: number; topError: string | null } & Rate)[];
+    /** Refused at a cap: nothing was spent, the caller asked past its day. */
+    capped: number;
+    /**
+     * Per route, worst first by failures that are not caps. `capped` counts in `failed` (the call
+     * did not get its answer) and is shown apart: a caller over its cap is not a broken route.
+     */
+    byRoute: ({
+      site: string;
+      route: string;
+      retried: number;
+      capped: number;
+      topError: string | null;
+    } & Rate)[];
     /** Rows imported from Restate or the caps ledger, not written live. */
     imported: number;
   };
@@ -256,17 +268,22 @@ export function successReport(o: {
   const byRoute = [...routes.values()]
     .map((cs) => {
       const failed = cs.filter((c) => !c.ok);
+      const capped = failed.filter((c) => callFailure(c) === "cap").length;
       const first = cs[0] as (typeof cs)[number];
       return {
         site: first.site,
         route: routeShape(first.route),
         ...rate(cs.length, failed.length),
         retried: cs.filter((c) => c.attempts > 1).length,
-        topError: failed[0]?.error ?? null,
+        capped,
+        topError: failed.find((c) => callFailure(c) !== "cap")?.error ?? failed[0]?.error ?? null,
       };
     })
     .filter((r) => r.failed > 0 || r.retried > 0)
-    .sort((a, b) => b.failed - a.failed || b.retried - a.retried);
+    .sort(
+      (a, b) =>
+        b.failed - b.capped - (a.failed - a.capped) || b.failed - a.failed || b.retried - a.retried,
+    );
 
   const days = [
     ...new Set([
@@ -329,6 +346,7 @@ export function successReport(o: {
       settled: rate(calls.length, calls.filter((c) => !c.ok).length),
       tries: rows.length,
       retried: calls.filter((c) => c.attempts > 1).length,
+      capped: calls.filter((c) => !c.ok && callFailure(c) === "cap").length,
       byFailure: tally(
         calls.filter((c) => !c.ok).map((c) => ({ kind: callFailure(c), error: c.error ?? "" })),
       ),
@@ -392,7 +410,7 @@ export function formatSuccessReport(r: SuccessReport): string[] {
   out.push(
     "",
     "site calls",
-    `  ${line("calls", c.settled)}  (${c.tries} tries, ${c.retried} retried${c.imported ? `, ${c.imported} imported` : ""})`,
+    `  ${line("calls", c.settled)}  (${c.capped} of them capped, nothing spent; ${c.tries} tries, ${c.retried} retried${c.imported ? `, ${c.imported} imported` : ""})`,
   );
   if (c.byFailure.length) {
     out.push("  why calls failed");
@@ -400,9 +418,11 @@ export function formatSuccessReport(r: SuccessReport): string[] {
       out.push(`    ${f.kind.padEnd(14)} ${String(f.n).padStart(5)}  ${f.example}`);
   }
   if (c.byRoute.length) {
-    out.push("  by route");
+    out.push("  by route, worst first by failures that are not caps");
     for (const x of c.byRoute.slice(0, 12))
-      out.push(`    ${line(`${x.site} ${x.route}`.slice(0, 44), x, 44)}  retried ${x.retried}`);
+      out.push(
+        `    ${line(`${x.site} ${x.route}`.slice(0, 44), x, 44)}  capped ${x.capped}, retried ${x.retried}`,
+      );
   }
   out.push("", `${line("agent steps", r.steps)}`, `${line("model calls", r.models)}`);
   if (r.days.length > 1) {

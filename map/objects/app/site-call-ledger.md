@@ -19,7 +19,7 @@ Restate keeps a finished invocation about a day and `caps` only metered reads fo
 
 - `SiteCallRow { at, service, site, route, caller, invocation, attempt, ok, status, terminal, error, ms, from? }` — `src/runs/calls.ts:13-33`; `fileSiteCalls` (plain appends, error cut to 300 chars) — `:42`; `readSiteCalls` — `:64`; `settledCalls` (one line per invocation, its last try) — `:85`
 - Written inside `ctx.run` on every try, retries included — `src/sites/service.ts:80-122,153`; dir `siteCallsDirFor` — `src/app/services.ts:608`; wired for `sites` (`:1556`) and `desk` (`src/app/desk.ts:41`)
-- Report: `successReport` — `src/runs/success.ts:191`; failure kinds `cmdFailure` (`:35`), `callFailure` (`:73`); a target miss's cause off Playwright's call log, `missCause` (`:48`): `not-found` is the digest's, `hidden`/`covered`/`disabled`/`detached` the hands' or the page's; `STRUGGLE` 3 failed commands a run — `:88`
+- Report: `successReport` — `src/runs/success.ts:203`; a call refused at a cap (spent nothing) shows as `capped`, apart from a broken route; failure kinds `cmdFailure` (`:35`), `callFailure` (`:73`); a target miss's cause off Playwright's call log, `missCause` (`:48`): `not-found` is the digest's, `hidden`/`covered`/`disabled`/`detached` the hands' or the page's; `STRUGGLE` 3 failed commands a run — `:88`
 - Backfill: `fromRestate`, `fromCaps`, `newRows` (never a row the ledger has) — `src/runs/import.ts:31,60,83`
 
 ## Connected to

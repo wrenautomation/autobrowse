@@ -164,6 +164,17 @@ describe("success report", () => {
         call({ ok: false, error: "socket" }),
         call({ attempt: 2 }),
         call({ invocation: "inv_2", ok: false, status: 400, terminal: true, error: "Too big" }),
+        ...["inv_3", "inv_4"].map((invocation) =>
+          call({
+            invocation,
+            site: "meta",
+            route: "GET /instagram/a",
+            ok: false,
+            status: 429,
+            terminal: true,
+            error: "capped (reads)",
+          }),
+        ),
       ],
       steps: [{ at: "2026-10-05T10:00:00.000Z", site: "trello", ok: false, error: "x" }],
       models: [{ at: "2026-10-05T10:00:00.000Z", ok: true } as LlmCall],
@@ -190,8 +201,21 @@ describe("success report", () => {
         failed: STRUGGLE,
       },
     ]);
-    expect(r.calls).toMatchObject({ settled: { n: 2, failed: 1 }, tries: 3, retried: 1 });
-    expect(r.calls.byFailure).toMatchObject([{ kind: "request", n: 1 }]);
+    expect(r.calls).toMatchObject({
+      settled: { n: 4, failed: 3 },
+      capped: 2,
+      tries: 5,
+      retried: 1,
+    });
+    expect(r.calls.byFailure).toMatchObject([
+      { kind: "cap", n: 2 },
+      { kind: "request", n: 1 },
+    ]);
+    // A route over its cap ranks under one that broke, however many it was refused.
+    expect(r.calls.byRoute.map((x) => [x.site, x.failed, x.capped])).toEqual([
+      ["reddit", 1, 0],
+      ["meta", 2, 2],
+    ]);
     expect(r.steps).toMatchObject({ n: 1, failed: 1 });
     expect(formatSuccessReport(r).join("\n")).toContain("1 reached, 1 failed, 1 no verdict");
   });

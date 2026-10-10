@@ -50,3 +50,9 @@ misses point at the page digest.
   `hidden`, `covered`, `disabled`, `detached` (the hands' or the page's). The first report could
   not say which: 184 timeouts, no targets. `select`'s 65% was one Discord session on code a day
   old (the 0x0 combobox fix, cb8f7e1); since then 3 of 4.
+- 2026-10-10: a call refused at a cap is shown apart (`capped`) and routes rank by failures that
+  are not caps. Of the first report's worst routes, `meta GET /instagram/{username}` was 120 asks
+  past the cap in one 10-06 enrichment run (3 real failures of 307), `linkedin GET /messaging`
+  the reach poller asking past the 48 a day inbox cap. `fb-public` group posts failed 48 of 93 in
+  one signed-out burst on 10-06 (backfilled, no error text); the walk is unchanged and reads 3 of
+  3 today.
