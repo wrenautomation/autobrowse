@@ -45,3 +45,8 @@ misses point at the page digest.
 - Site calls: 21% failed. Most were the reddit-public `limit=200` bug, fixed in
   wren 46d2d16d. Next: meta `/instagram/{username}` 29% and fb-public group
   posts 51%.
+- 2026-10-09: a failed act's row keeps its target in a few words and why the locator missed,
+  read off Playwright's call log: `not-found` (nothing matched: the digest's fault) or found but
+  `hidden`, `covered`, `disabled`, `detached` (the hands' or the page's). The first report could
+  not say which: 184 timeouts, no targets. `select`'s 65% was one Discord session on code a day
+  old (the 0x0 combobox fix, cb8f7e1); since then 3 of 4.

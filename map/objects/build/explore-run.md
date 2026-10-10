@@ -17,11 +17,11 @@ The journal is resume state and goes on `close`; history has to outlive it so wa
 
 ## Shape
 
-- `RunRow`: `start` (driver, goal, machine, viewport), `goal`, `cmd` (answer chars and tokens, whole-page size), `act` (the journaled act, the look before it, `hand`), `end` (outcome, summary, last look) — `src/runs/log.ts:35-86`
-- `RunOutcome`: achieved, failed, saved, closed, idle — `:33`; `RunSummary` (one line per ended life in `index.jsonl`) — `:93-107`
-- `runLog(dir, site, {id})` writes rows synchronously and chains them (credvault `rowHash`) — `:163-244`; `readRun`, `listRuns`, `openRuns` (the last life died without `end`) — `:247-319`
-- The explore server opens a run on the first command or a `goal`, ends it on `done`, `save`, `close` or idle — `openRun` `src/explore/server.ts:637`, `endRun` `:660`; the `goal`/`done` commands; `done` takes `outcome` achieved or failed, the run's verdict (`stop.sh <port> achieved|failed`) — `:276`, `:1568`
-- Dir: `runsDirFor` — `src/app/services.ts:559`
+- `RunRow`: `start` (driver, goal, machine, viewport), `goal`, `cmd` (answer chars and tokens, whole-page size; a failed act's `target` and `miss`, `MissCause` `:39`), `act` (the journaled act, the look before it, `hand`), `end` (outcome, summary, last look) — `src/runs/log.ts:41-95`
+- `RunOutcome`: achieved, failed, saved, closed, idle — `:33`; `RunSummary` (one line per ended life in `index.jsonl`) — `:102-116`
+- `runLog(dir, site, {id})` writes rows synchronously and chains them (credvault `rowHash`) — `:172-253`; `readRun`, `listRuns`, `openRuns` (the last life died without `end`) — `:256-328`
+- The explore server opens a run on the first command or a `goal`, ends it on `done`, `save`, `close` or idle — `openRun` `src/explore/server.ts:766`, `endRun` `:793`; the `goal`/`done` commands; `done` takes `outcome` achieved or failed, the run's verdict (`stop.sh <port> achieved|failed`) — `:274-277`, `:1581`
+- Dir: `runsDirFor` — `src/app/services.ts:581`
 
 ## Connected to
 

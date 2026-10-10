@@ -32,6 +32,12 @@ import type { Action } from "../recorder/types.js";
 /** How a run ended: the caller said (`done`), a `save` implied it, or the session just stopped. */
 export type RunOutcome = "achieved" | "failed" | "saved" | "closed" | "idle";
 
+/**
+ * Why a locator timed out, off Playwright's call log: `not-found` means nothing on the page
+ * matched (the digest named something that is not there); the rest found it and could not use it.
+ */
+export type MissCause = "not-found" | "hidden" | "covered" | "disabled" | "detached" | "unknown";
+
 export type RunRow =
   | {
       kind: "start";
@@ -67,6 +73,9 @@ export type RunRow =
       full: number | null;
       /** The page's host, never its path. */
       host: string;
+      /** A failed act's target in a few words (`targetOf`), and why the locator missed. */
+      target?: string;
+      miss?: MissCause;
     }
   | {
       kind: "act";

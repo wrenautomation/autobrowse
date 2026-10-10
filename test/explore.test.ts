@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,6 +19,7 @@ import type { Charge, Receipt } from "../src/money/charges.js";
 import type { Contacts } from "../src/money/profile.js";
 import { parseCardLine } from "../src/money/wallet.js";
 import { loadRecording } from "../src/recorder/store.js";
+import { readRun } from "../src/runs/log.js";
 
 const sink = memorySink();
 const desktop = fakeDesktop([
@@ -602,6 +603,47 @@ describe("help without a pause", () => {
       expect(journal.actions.some((a) => a.kind === "note" && /by hand/.test(a.text ?? ""))).toBe(
         true,
       );
+    } finally {
+      await ex.exec({ cmd: "close" }).catch(() => undefined);
+      await ex.done;
+      await new Promise((r) => setTimeout(r, 500));
+      await rm(dir, { recursive: true, force: true, maxRetries: 5 });
+    }
+  }, 60_000);
+});
+
+describe("a missed act in the history", () => {
+  it("records what it aimed at and why the locator missed", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "explore-miss-"));
+    const port = 9800 + Math.floor(Math.random() * 150);
+    const ex = await startExplore({
+      site: "scratch",
+      port,
+      recordingsDir: join(dir, "recordings"),
+      runs: join(dir, "runs"),
+      browser: {
+        tier: "local",
+        channel: "chromium",
+        profilesDir: join(dir, "profiles"),
+        artifactsDir: join(dir, "artifacts"),
+        headless: true,
+      },
+    });
+    try {
+      await ex.exec({
+        cmd: "open",
+        url: `data:text/html,${encodeURIComponent(
+          `<button>Go</button><div style="position:fixed;inset:0;background:#0001"></div>`,
+        )}`,
+      });
+      await expect(
+        ex.exec({ cmd: "click", hints: { role: "button", name: "Go" } }),
+      ).rejects.toThrow(/Timeout/);
+      const [file] = readdirSync(join(dir, "runs", "scratch"));
+      const missed = readRun(join(dir, "runs", "scratch", file as string)).find(
+        (r) => r.kind === "cmd" && r.cmd === "click",
+      );
+      expect(missed).toMatchObject({ ok: false, target: 'button "Go"', miss: "covered" });
     } finally {
       await ex.exec({ cmd: "close" }).catch(() => undefined);
       await ex.done;

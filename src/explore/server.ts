@@ -116,6 +116,7 @@ import {
 import { saveRecording } from "../recorder/store.js";
 import type { Action, LocatorHints, Recording } from "../recorder/types.js";
 import { machine, type RunLog, type RunOutcome, runLog } from "../runs/log.js";
+import { missCause, targetOf } from "../runs/success.js";
 
 const hintsSchema = z.object({
   tag: z.string().nullable().optional(),
@@ -813,11 +814,22 @@ async function serve(
    * and (for acts and looks) what the whole page would have. The whole page
    * is measured beside the next command, never in its way.
    */
-  const counted = (c: Command, t0: number, error: string | null, chars: number) => {
+  const counted = (
+    c: Command,
+    t0: number,
+    error: string | null,
+    chars: number,
+    /** The whole error, call log included: why a locator missed. */
+    detail?: string,
+  ) => {
     const h = history;
     if (!h || h.ended()) return;
     const ms = now() - t0;
     const host = URL.canParse(page.url()) ? new URL(page.url()).host : "";
+    const missed =
+      error !== null && "hints" in c && c.hints && /^locator\.\w+: Timeout/.test(error)
+        ? { target: redactText(targetOf(c.hints)), miss: missCause(detail ?? error) }
+        : {};
     const write = (full: number | null) =>
       logged((l) =>
         l.cmd({
@@ -828,6 +840,7 @@ async function serve(
           chars,
           full,
           host,
+          ...missed,
         }),
       );
     if (error !== null || !WHOLE_PAGE.has(c.cmd)) return write(null);
@@ -1686,13 +1699,14 @@ async function serve(
         res.end(body);
       } catch (err) {
         res.statusCode = err instanceof PaymentGate ? (err.reason === "asked" ? 202 : 403) : 500;
-        const error = err instanceof Error ? err.message.split("\n")[0] : String(err);
+        const detail = err instanceof Error ? err.message : String(err);
+        const error = detail.split("\n")[0];
         const body = JSON.stringify({
           error,
           url: shortUrl(page.url()),
           ...(err instanceof PaymentGate ? { gate: err.gate, reason: err.reason } : {}),
         });
-        counted(parsed, t, error ?? "", body.length);
+        counted(parsed, t, error ?? "", body.length, detail);
         res.end(body);
       }
     });
@@ -1759,8 +1773,9 @@ async function serve(
         counted(c, t, null, JSON.stringify(answer ?? null).length);
         return answer;
       } catch (err) {
-        const error = err instanceof Error ? (err.message.split("\n")[0] ?? "") : String(err);
-        counted(c, t, error, error.length);
+        const detail = err instanceof Error ? err.message : String(err);
+        const error = detail.split("\n")[0] ?? "";
+        counted(c, t, error, error.length, detail);
         throw err;
       }
     },

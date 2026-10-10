@@ -10,9 +10,11 @@ import {
   callFailure,
   cmdFailure,
   formatSuccessReport,
+  missCause,
   routeShape,
   STRUGGLE,
   successReport,
+  targetOf,
 } from "../src/runs/success.js";
 import type { Cmd } from "../src/runs/tokens.js";
 
@@ -100,6 +102,26 @@ describe("failure kinds", () => {
     expect(callFailure({ status: null, terminal: false })).toBe("unexpected");
   });
 
+  it("reads why a locator missed off Playwright's call log", () => {
+    const log = (lines: string[]) =>
+      ["locator.click: Timeout 10000ms exceeded.", "Call log:", ...lines].join("\n  - ");
+    expect(missCause(log(["waiting for getByRole('button', { name: 'Go' })"]))).toBe("not-found");
+    expect(
+      missCause(
+        log([
+          "waiting for getByRole('button', { name: 'Go' })",
+          "  locator resolved to <button>Go</button>",
+          '  <div class="modal"></div> intercepts pointer events',
+        ]),
+      ),
+    ).toBe("covered");
+    expect(
+      missCause(log(["  locator resolved to <button>Go</button>", "  element is not visible"])),
+    ).toBe("hidden");
+    expect(targetOf({ role: "button", name: "Create board" })).toBe('button "Create board"');
+    expect(targetOf({ css: "#dob-month" })).toBe("#dob-month");
+  });
+
   it("reads routes with ids as one route", () => {
     expect(routeShape("GET /comments/1x02rzo?limit=100")).toBe("GET /comments/{id}");
     expect(routeShape("GET /r/sales/new")).toBe("GET /r/{sub}/new");
@@ -110,7 +132,13 @@ describe("failure kinds", () => {
 describe("success report", () => {
   it("counts verdicts, misses per act, struggling runs and settled calls", () => {
     const misses = Array.from({ length: STRUGGLE }, (_, i) =>
-      cmd({ n: i + 2, ok: false, error: "locator.click: Timeout 10000ms exceeded." }),
+      cmd({
+        n: i + 2,
+        ok: false,
+        error: "locator.click: Timeout 10000ms exceeded.",
+        // Older rows say no why: counted as misses, left out of the causes.
+        ...(i ? { target: 'button "Create"', miss: "not-found" as const } : {}),
+      }),
     );
     const r = successReport({
       since: SINCE,
@@ -148,6 +176,11 @@ describe("success report", () => {
       successRate: 0.5,
     });
     expect(r.explore.targetMiss).toMatchObject({ n: STRUGGLE + 1, failed: STRUGGLE });
+    expect(r.explore.missCauses).toEqual([{ cause: "not-found", n: STRUGGLE - 1 }]);
+    expect(r.explore.missTargets).toEqual([
+      { site: "trello", target: 'button "Create"', cause: "not-found", n: STRUGGLE - 1 },
+    ]);
+    expect(formatSuccessReport(r).join("\n")).toContain("why: not-found 2");
     expect(r.explore.struggled).toEqual([
       {
         run: "20261005-100000-aaaa",

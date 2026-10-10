@@ -16,7 +16,7 @@
 import type { LlmCall } from "../llm/ledger.js";
 import type { SiteCallRow } from "./calls.js";
 import { settledCalls } from "./calls.js";
-import type { RunSummary } from "./log.js";
+import type { MissCause, RunSummary } from "./log.js";
 import type { Cmd } from "./tokens.js";
 
 /** Commands that act on a target the page showed: their misses are the digest's. */
@@ -42,6 +42,29 @@ export function cmdFailure(error: string | null): CmdFailure {
   if (/password|login|sign-?in|verification|signed out|secrets|code is not available/i.test(e))
     return "sign-in";
   return "other";
+}
+
+/** Why a locator timed out (`MissCause`), off Playwright's call log. */
+export function missCause(message: string): MissCause {
+  if (/intercepts pointer events/.test(message)) return "covered";
+  if (/element is not enabled|element is disabled/.test(message)) return "disabled";
+  if (/element is not visible|outside of the viewport/.test(message)) return "hidden";
+  if (/detached from the DOM/.test(message)) return "detached";
+  if (!/locator resolved to|resolved to \d+ element/.test(message)) return "not-found";
+  return "unknown";
+}
+
+/** An act's target in a few words, for the report: role and name, else text, else css. */
+export function targetOf(
+  hints: Partial<
+    Record<"role" | "name" | "text" | "placeholder" | "css", string | null | undefined>
+  >,
+): string {
+  const said = hints.name ?? hints.text ?? hints.placeholder ?? null;
+  const out = [hints.role, said ? `"${said}"` : null, !said && hints.css ? hints.css : null]
+    .filter(Boolean)
+    .join(" ");
+  return out.slice(0, 80);
 }
 
 /** Why a site call failed, by status: whose problem it is. */
@@ -98,6 +121,12 @@ export interface SuccessReport {
     commands: Rate;
     /** Target misses over act commands: how often the digest pointed wrong. */
     targetMiss: Rate;
+    /**
+     * Misses that say why (recorded since 2026-10-09): `not-found` is the digest's, the rest the
+     * hands' or the page's; and the targets that missed most.
+     */
+    missCauses: { cause: MissCause; n: number }[];
+    missTargets: { site: string; target: string; cause: MissCause; n: number }[];
     byFailure: { kind: CmdFailure; n: number; example: string }[];
     byCmd: ({ cmd: string } & Rate)[];
     bySite: ({ site: string; runs: number; reached: number; unknown: number } & Rate)[];
@@ -127,6 +156,16 @@ export interface SuccessReport {
 }
 
 const dayOf = (iso: string) => iso.slice(0, 10);
+
+/** How many of `xs` share each key, most first; a null key is not counted. */
+function countBy<T, K extends string>(xs: readonly T[], key: (x: T) => K | null): [K, number][] {
+  const m = new Map<K, number>();
+  for (const x of xs) {
+    const k = key(x);
+    if (k !== null) m.set(k, (m.get(k) ?? 0) + 1);
+  }
+  return [...m.entries()].sort((a, b) => b[1] - a[1]);
+}
 
 function tally<K extends string>(
   xs: readonly { kind: K; error: string }[],
@@ -264,6 +303,15 @@ export function successReport(o: {
       successRate: reached + failedRuns ? reached / (reached + failedRuns) : null,
       commands: rate(cmds.length, failedCmds.length),
       targetMiss: rate(acts.length, misses.length),
+      missCauses: countBy(misses, (c) => c.miss ?? null).map(([cause, n]) => ({ cause, n })),
+      missTargets: countBy(misses, (c) =>
+        c.miss && c.target ? `${c.site}\t${c.target}\t${c.miss}` : null,
+      )
+        .slice(0, 10)
+        .map(([k, n]) => {
+          const [site, target, cause] = k.split("\t") as [string, string, MissCause];
+          return { site, target, cause, n };
+        }),
       byFailure: tally(
         failedCmds.map((c) => ({ kind: cmdFailure(c.error), error: c.error ?? "" })),
       ),
@@ -307,6 +355,15 @@ export function formatSuccessReport(r: SuccessReport): string[] {
       (e.successRate === null ? "" : `  → ${pct(e.successRate)} of runs with a verdict reached it`),
     `  ${line("commands", e.commands)}`,
     `  ${line("target misses", e.targetMiss)}  (of acts: the digest pointed wrong)`,
+    ...(e.missCauses.length
+      ? [
+          `    why: ${e.missCauses.map((m) => `${m.cause} ${m.n}`).join(", ")}  (not-found = the digest's; the rest found it and could not use it)`,
+          ...e.missTargets.map(
+            (t) =>
+              `    ${String(t.n).padStart(4)}  ${t.site.padEnd(12)} ${t.cause.padEnd(10)} ${t.target}`,
+          ),
+        ]
+      : []),
   ];
   if (e.byFailure.length) {
     out.push("  why commands failed");
