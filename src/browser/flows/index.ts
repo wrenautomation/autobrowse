@@ -119,3 +119,4 @@ export { xFollow, xLike, xReply } from "./x-act.js";
 export { xOauthConsent } from "./x-oauth-consent.js";
 export { type Tweet, type User as XUser, xPost, xPosts, xProfile, xSearch } from "./x-read.js";
 export { youtubeCommunityPost } from "./youtube-community-post.js";
+export { youtubeThumbnail } from "./youtube-thumbnail.js";

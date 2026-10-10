@@ -34,6 +34,12 @@ the box's IP run on the Mac's desk (`desk/call`).
 Something may already do the whole job: `pnpm -s autobrowse do "<goal>" --dry-run`
 says what would run.
 
+## Browser-only posting shapes
+
+- Reddit image post: `site call reddit POST /api/submit` with `{"sr","title","kind":"image","image":"<path|url>","text"?}`. www's composer (old.reddit has no upload). Flair, nsfw, spoiler not mapped for images.
+- Custom thumbnail, Shorts included: `site call youtube POST /studio/thumbnail` with `{"videoId","file":"<path|url>"}`. Runs in Studio as the channel's account; refuses another channel.
+- Both take `"dry":true`: fill everything, never press Post/Save (Studio undoes the staged image). Run dry first.
+
 ## wren's connector apps
 
 The OAuth clients a business connects its HubSpot, QuickBooks or Jobber

@@ -331,6 +331,7 @@ a row; it is work.
   `google-admin/workspace-logo`, `google/profile-photo`, `google/oauth-consent`,
   `linkedin/oauth-consent`, `instagram/oauth-consent`, `tiktok/oauth-consent`,
   `outlook/oauth-consent`, `google/youtube-community-post`,
+  `google/youtube-thumbnail` (Studio; Shorts too, which `thumbnails.set` refuses),
   `<site>/profile-name` for Instagram, X, TikTok and Reddit (display name
   only, read back; site routes `POST /web/profile/name`, X
   `POST /1.1/account/update_profile.json`).
@@ -609,6 +610,9 @@ takes what LinkedIn's Posts API takes and answers what it answers; `GET
 /api/sites/youtube/youtube/v3/videos?part=statistics&id=…` is the Data API.
 Behind one route the official API answers when a token is in hand, a browser
 flow otherwise (gated reads, community posts). The caller has one client.
+Reddit image posts (`kind: "image"`) and Studio thumbnails
+(`POST /studio/thumbnail`) are browser only; both take `dry`, which fills
+everything and stops before the irreversible click.
 Sites: `linkedin`, `youtube`, `instagram` (Graph API, long-lived token),
 `tiktok` (Content Posting API; `client_key`), `outlook` (Microsoft Graph:
 mail and calendar, `/me/messages`, `/me/sendMail`, `/me/events`), `gmail`

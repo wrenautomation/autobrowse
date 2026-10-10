@@ -301,9 +301,13 @@ async function passCaptcha(fp: FlowPage) {
 export interface SubmitInput {
   sr: string;
   title: string;
-  kind: "self" | "link";
+  kind: "self" | "link" | "image";
   text?: string;
   url?: string;
+  /** An image post's file, a local path by now (the route downloads a URL first). */
+  image?: string;
+  /** Fill everything, press nothing: the answer says what would post. */
+  dry?: boolean;
   flair_id?: string;
   /** The flair as the sub shows it: old Reddit picks it on the post, after it lands. */
   flair_text?: string;
@@ -373,15 +377,70 @@ async function markPost(fp: FlowPage, id: string, i: SubmitInput): Promise<strin
 const PROFILE_SR = /^u[_/]/i;
 const POST_URL = /\/comments\/([a-z0-9]+)(\/|$)/;
 
+/**
+ * An image post on www's composer: old Reddit's form takes no image. Mapped
+ * 2026-10-09 on /r/test/submit/?type=IMAGE: textbox "Title", the toolbar
+ * Image button's file input (`post-composer-toolbar-button-image`, shadow
+ * DOM, which CSS pierces) turns the post into an image post (button "Add images" shows),
+ * textbox "Post body text field" is optional, button "Post" sends.
+ */
+async function submitImage(
+  fp: FlowPage,
+  i: SubmitInput,
+): Promise<JsonAnswer<{ id: string; name: string; url: string; dry?: boolean }>> {
+  if (!i.image) return refused("NO_IMAGE", "an image post needs image (a path or URL)", "image");
+  if (i.flair_text || i.nsfw || i.spoiler)
+    return refused("IMAGE_MARKS_UNSUPPORTED", "flair, nsfw and spoiler are not mapped on www yet");
+  const me = PROFILE_SR.test(i.sr) ? await signedIn(fp) : null;
+  if (PROFILE_SR.test(i.sr) && (!me || me.toLowerCase() !== i.sr.slice(2).toLowerCase()))
+    return refused(
+      "SUBREDDIT_NOTALLOWED",
+      `only ${me || "the account"}'s own profile takes its posts`,
+      "sr",
+    );
+  const where = PROFILE_SR.test(i.sr) ? `user/${i.sr.slice(2)}` : `r/${i.sr}`;
+  await fp.open(`${WWW}/${where}/submit/?type=IMAGE`);
+  const title: Hints = { role: "textbox", name: "Title" };
+  if (!(await fp.has(title, RENDER_MS))) return fp.human(`reddit: no composer (${fp.url()})`);
+  await fp.act({ kind: "fill", value: i.title }, title, { goal: "type the title" });
+  await fp.act(
+    { kind: "upload", files: [i.image] },
+    { css: "post-composer-toolbar-button-image input[type=file]" },
+    { goal: "add the image" },
+  );
+  if (!(await fp.has({ role: "button", name: "/add images/i" }, LAND_MS)))
+    return fp.human("reddit: the image never showed in the composer");
+  if (i.text)
+    await fp.act(
+      { kind: "fill", value: i.text },
+      { role: "textbox", name: "Post body text field" },
+      { goal: "type the body" },
+    );
+  const at = `${WWW}/${where}`;
+  if (i.dry) return { json: { errors: [], data: { id: "", name: "", url: at, dry: true } } };
+  await fp.act(
+    { kind: "click" },
+    { role: "button", name: "Post" },
+    { goal: "post the image", irreversible: true },
+  );
+  // www's refusals are toasts with no codes: a person reads them.
+  if (!(await fp.waitForUrl(POST_URL, LAND_MS)))
+    return fp.human(`reddit: the image post did not land (${fp.url()})`);
+  const id = POST_URL.exec(fp.url())?.[1] ?? "";
+  return { json: { errors: [], data: { id, name: `t3_${id}`, url: fp.url() } } };
+}
+
 export const redditSubmit = defineFlow<
   SubmitInput,
-  JsonAnswer<{ id: string; name: string; url: string; notes?: string[] }>
+  JsonAnswer<{ id: string; name: string; url: string; notes?: string[]; dry?: boolean }>
 >({
   site: "reddit",
   name: "submit",
   async run(fp, i) {
     if (i.flair_id && !i.flair_text)
       return refused("FLAIR_UNSUPPORTED", "the browser leg picks a flair by its text", "flair");
+    if (i.kind === "image") return submitImage(fp, i);
+    if (i.dry) return refused("DRY_UNSUPPORTED", "only an image post takes dry", "dry");
     await fp.open(`${OLD}/submit${i.kind === "self" ? "?selftext=true" : ""}`);
     const title: Hints = { css: "textarea[name=title]" };
     if (!(await fp.has(title, RENDER_MS))) return fp.human(`reddit: no submit form (${fp.url()})`);

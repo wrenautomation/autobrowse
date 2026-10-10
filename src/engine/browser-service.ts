@@ -78,6 +78,7 @@ import { xFollow, xLike, xReply } from "../browser/flows/x-act.js";
 import { xOauthConsent } from "../browser/flows/x-oauth-consent.js";
 import { xPost, xPosts, xProfile, xSearch } from "../browser/flows/x-read.js";
 import { youtubeCommunityPost } from "../browser/flows/youtube-community-post.js";
+import { youtubeThumbnail } from "../browser/flows/youtube-thumbnail.js";
 import { NeedsHuman } from "../browser/session.js";
 
 export const BROWSER_SERVICE = "browser";
@@ -176,6 +177,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     loomDelete,
     outlookOauthConsent,
     youtubeCommunityPost,
+    youtubeThumbnail,
     instagramProfileName,
     xProfileName,
     tiktokProfileName,

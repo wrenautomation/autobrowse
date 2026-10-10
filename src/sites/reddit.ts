@@ -42,9 +42,13 @@ const submit = z
     /** A subreddit without r/, or `u_<name>` for the account's own profile. */
     sr: z.string().regex(/^(r\/)?[A-Za-z0-9_]{2,21}$|^u[_/][A-Za-z0-9_-]{3,20}$/),
     title: z.string().min(1).max(300),
-    kind: z.enum(["self", "link"]),
+    kind: z.enum(["self", "link", "image"]),
     text: z.string().max(40_000).optional(),
     url: z.string().url().optional(),
+    /** An image post's file: a path, or a URL downloaded first (the API's media asset step). */
+    image: z.string().min(1).optional(),
+    /** An image post filled but not sent: proves the leg, posts nothing. */
+    dry: flag.optional(),
     flair_id: z.string().optional(),
     flair_text: z.string().min(1).max(64).optional(),
     nsfw: flag.optional(),
@@ -52,7 +56,8 @@ const submit = z
     resubmit: flag.optional(),
     sendreplies: flag.default(true),
   })
-  .refine((s) => s.kind !== "link" || s.url, "a link post needs url");
+  .refine((s) => s.kind !== "link" || s.url, "a link post needs url")
+  .refine((s) => s.kind !== "image" || s.image || s.url, "an image post needs image (or url)");
 const comment = z.object({
   api_type: z.literal("json").default("json"),
   thing_id: z.string().regex(/^t[13]_[a-z0-9]+$/, "t1_ (a comment) or t3_ (a post)"),
@@ -258,13 +263,18 @@ export const reddit: SiteApi = {
       path: "/api/submit",
       request: submit,
       irreversible: true,
-      meter: () => ({ posts: 1 }),
+      meter: (s) => (s.dry ? {} : { posts: 1 }),
       browser: {
         flow: "reddit/submit",
-        input: (s) => ({ ...s, sr: s.sr.replace(/^r\//, "") }),
+        uploads: "image",
+        input: (s) => ({
+          ...s,
+          sr: s.sr.replace(/^r\//, ""),
+          ...(s.kind === "image" ? { image: s.image ?? s.url } : {}),
+        }),
       },
       summary:
-        "! A text or link post into a subreddit (or u_<name>, the profile), with flair_text, nsfw, spoiler; answers {json:{errors,data:{id,name,url,notes?}}}",
+        "! A text, link or image post into a subreddit (or u_<name>, the profile), with flair_text, nsfw, spoiler (text and link); image takes a path or URL, dry fills it and stops; answers {json:{errors,data:{id,name,url,notes?}}}",
     }),
     route({
       method: "POST",

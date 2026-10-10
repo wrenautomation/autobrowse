@@ -345,6 +345,12 @@ const reply = z.object({
   part: z.string().default("snippet"),
   snippet: z.object({ parentId: z.string().min(1), textOriginal: z.string().min(1).max(10000) }),
 });
+const studioThumbnail = z.object({
+  videoId: z.string().min(1),
+  file: z.string().min(1),
+  /** Stage the image, then undo: proves the leg, changes nothing. */
+  dry: z.boolean().optional(),
+});
 const communityPost = z.object({ text: z.string().min(1).max(5000), image: z.string().optional() });
 const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
 /** A YouTube Analytics query as `reports.query` takes it; any further parameter passes through. */
@@ -763,6 +769,19 @@ export const youtube: SiteApi = {
       irreversible: true,
       browser: {
         flow: "google/youtube-community-post",
+        input: (i, env) => ({ ...i, channel: env(YOUTUBE_CHANNEL) }),
+      },
+    }),
+    route({
+      method: "POST",
+      path: "/studio/thumbnail",
+      summary:
+        "! A video's custom thumbnail through Studio, Shorts too (thumbnails.set refuses them); file is a path or URL, dry stages then undoes; answers {videoId,saved,dry?}",
+      request: studioThumbnail,
+      irreversible: true,
+      browser: {
+        flow: "google/youtube-thumbnail",
+        uploads: "file",
         input: (i, env) => ({ ...i, channel: env(YOUTUBE_CHANNEL) }),
       },
     }),

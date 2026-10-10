@@ -58,6 +58,7 @@ describe("browser service", () => {
       "google/oauth-consent",
       "google/profile-photo",
       "google/youtube-community-post",
+      "google/youtube-thumbnail",
       "hubspot/connector-keys",
       "instagram/comment",
       "instagram/create-post",

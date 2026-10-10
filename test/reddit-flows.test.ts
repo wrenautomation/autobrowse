@@ -425,6 +425,58 @@ describe("reddit/submit", () => {
     });
   });
 
+  it("an image post goes to www's composer, uploads, and stops before Post when dry", async () => {
+    const p = submitPage();
+    const out = await redditSubmit.run(p.fp, {
+      sr: "test",
+      title: "T",
+      kind: "image",
+      image: "/tmp/a.png",
+      text: "Body",
+      dry: true,
+    });
+    expect(p.opens).toEqual(["https://www.reddit.com/r/test/submit/?type=IMAGE"]);
+    expect(p.acts.map(line)).toEqual([
+      "fill textbox:Title=T",
+      "upload post-composer-toolbar-button-image input[type=file]",
+      "fill textbox:Post body text field=Body",
+    ]);
+    expect(out).toEqual({
+      json: {
+        errors: [],
+        data: { id: "", name: "", url: "https://www.reddit.com/r/test", dry: true },
+      },
+    });
+  });
+
+  it("an image post sends with Post, the one irreversible act", async () => {
+    const p = redditPage({
+      present: () => true,
+      onAct: (a, page) => {
+        if (a.hints.name === "Post") page.go(POST);
+      },
+    });
+    const out = await redditSubmit.run(p.fp, {
+      sr: "startups",
+      title: "T",
+      kind: "image",
+      image: "/tmp/a.png",
+    });
+    expect(p.acts.filter((a) => a.opts.irreversible).map(line)).toEqual(["click button:Post"]);
+    expect(out).toMatchObject({ json: { errors: [], data: { id: "abc123", name: "t3_abc123" } } });
+  });
+
+  it("refuses an image post with no image, and dry on anything but an image", async () => {
+    const p = submitPage();
+    expect(await redditSubmit.run(p.fp, { sr: "test", title: "T", kind: "image" })).toMatchObject({
+      json: { errors: [["NO_IMAGE", expect.any(String), "image"]] },
+    });
+    expect(
+      await redditSubmit.run(p.fp, { sr: "test", title: "T", kind: "self", dry: true }),
+    ).toMatchObject({ json: { errors: [["DRY_UNSUPPORTED", expect.any(String), "dry"]] } });
+    expect(p.acts).toEqual([]);
+  });
+
   it("only the post button is irreversible", async () => {
     const p = submitPage();
     await redditSubmit.run(p.fp, { sr: "startups", title: "T", kind: "self" });
