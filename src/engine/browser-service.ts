@@ -12,6 +12,11 @@ import { z } from "zod";
 import { withCall } from "../browser/attempt.js";
 import { type BrowserFlow, FlowFailed, type FlowRunner } from "../browser/flow.js";
 import { calcomApiKey } from "../browser/flows/calcom-api-key.js";
+import {
+  hubspotConnectorKeys,
+  jobberConnectorKeys,
+  quickbooksConnectorKeys,
+} from "../browser/flows/connector-keys.js";
 import { discordBotToken, discordInvite } from "../browser/flows/discord.js";
 import { facebookOauthConsent } from "../browser/flows/facebook-oauth-consent.js";
 import { fingerprint } from "../browser/flows/fingerprint.js";
@@ -146,6 +151,9 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     npmGranularToken,
     npmTrustedPublisher,
     calcomApiKey,
+    hubspotConnectorKeys,
+    quickbooksConnectorKeys,
+    jobberConnectorKeys,
     discordBotToken,
     discordInvite,
     facebookOauthConsent,

@@ -1,0 +1,22 @@
+{
+  "uid": "wren_connector_app",
+  "type": "app",
+  "config": {
+    "description": "Wren reads a business's HubSpot contacts and companies so its follow-ups reach the right people. Read only.",
+    "name": "Wren",
+    "distribution": "marketplace",
+    "auth": {
+      "type": "oauth",
+      "redirectUrls": ["https://app.wrenautomation.com/oauth/connector/hubspot"],
+      "requiredScopes": ["oauth", "crm.objects.contacts.read", "crm.objects.companies.read"],
+      "optionalScopes": [],
+      "conditionallyRequiredScopes": []
+    },
+    "permittedUrls": { "fetch": ["https://api.hubapi.com"], "iframe": [], "img": [] },
+    "support": {
+      "supportEmail": "william@wrenautomation.com",
+      "documentationUrl": "https://wrenautomation.com",
+      "supportUrl": "https://wrenautomation.com"
+    }
+  }
+}

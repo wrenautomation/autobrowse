@@ -33,3 +33,19 @@ the box's IP run on the Mac's desk (`desk/call`).
 
 Something may already do the whole job: `pnpm -s autobrowse do "<goal>" --dry-run`
 says what would run.
+
+## wren's connector apps
+
+The OAuth clients a business connects its HubSpot, QuickBooks or Jobber
+through. Made once (2026-10-09); these keep their keys current.
+
+```sh
+pnpm -s autobrowse connectors keys <hubspot|quickbooks|quickbooks-dev|jobber> --check  # matches the store? keeps nothing
+pnpm -s autobrowse connectors keys jobber      # read id + secret off the console into the store
+pnpm -s autobrowse connectors prod             # merge into /wren/prod/env-2 as WREN_CONNECTOR_*
+pnpm -s autobrowse connectors hubspot-upload   # redeploy assets/connectors/hubspot (scopes, redirect)
+```
+
+- `prod` reaches wren on its next cold start or deploy. It never touches
+  `/wren/prod/env`; wren's `push-secrets.sh` must not overwrite env-2 either.
+- Marketplace listings and app reviews are publishing: William's yes first.

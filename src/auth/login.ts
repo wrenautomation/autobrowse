@@ -372,6 +372,11 @@ export interface OauthLoginSpec {
   before?: Hints[];
   /** A saved-account chooser's way out ("Sign in using another account"): pressed only when it shows. */
   reveal?: Hints;
+  /**
+   * An email-first page (HubSpot): the account's address goes in `field`, then
+   * `next` brings the provider's button up. Skipped when the field is absent.
+   */
+  email?: { field: Hints; next: Hints };
   /** The provider's button on the site's login page; the provider's own readings when absent. */
   button?: Hints;
   /** Which identity provider (and stored credential) signs in; `google` by default. */
@@ -416,6 +421,12 @@ export function oauthLogin(site: string, spec: OauthLoginSpec): SiteLogin["signI
         await fp.act({ kind: "click" }, spec.reveal, { goal: "past the saved-account chooser" });
       for (const h of spec.before ?? [])
         await fp.act({ kind: "click" }, h, { goal: `open ${site}'s sign-in` });
+      if (spec.email && (await fp.has(spec.email.field, 3_000))) {
+        await fp.act({ kind: "fill", value: ctx.cred.username }, spec.email.field, {
+          goal: `${site}'s email first`,
+        });
+        await fp.act({ kind: "click" }, spec.email.next, { goal: `past ${site}'s email` });
+      }
       const button = await providerButton(fp, provider, spec.button);
       const popup = fp.nextPage(8_000);
       const failed = await fp

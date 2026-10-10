@@ -1,5 +1,13 @@
 /** The hand-written browser legs, and the walker most OAuth consents are made of. */
 export { CALCOM_API_KEY, type CalcomKeyInput, calcomApiKey } from "./calcom-api-key.js";
+export {
+  CONNECTOR_KEYS,
+  type ConnectorApp,
+  type ConnectorKeysInput,
+  hubspotConnectorKeys,
+  jobberConnectorKeys,
+  quickbooksConnectorKeys,
+} from "./connector-keys.js";
 export { type ConsentWalk, consentFlow } from "./consent-walker.js";
 export {
   type DiscordBotInput,

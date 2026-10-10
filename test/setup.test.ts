@@ -69,6 +69,8 @@ describe("setup", () => {
       "reddit",
       "perplexity",
       "discord",
+      "hubspot",
+      "intuit",
     ]);
     expect((await store.get("cloudflare"))?.via).toBe("google");
     expect(asked.filter((q) => q.startsWith("hidden")).length).toBe(2);
@@ -94,10 +96,12 @@ describe("setup", () => {
       reddit: { username: "WrenAutomation", password: "r" },
       perplexity: { username: "w@x.com", password: "-", via: "google" },
       discord: { username: "w@x.com", password: "d" },
+      hubspot: { username: "w@x.com", password: "-", via: "google" },
+      intuit: { username: "w@x.com", password: "i" },
     });
     const { io, asked, said } = scripted([]);
     await runSetup(io, store, SITE_LOGINS);
     expect(asked).toEqual([]);
-    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(19);
+    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(21);
   });
 });

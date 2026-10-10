@@ -1,4 +1,5 @@
 export { CALCOM_ORIGIN, calcom } from "./calcom.js";
+export { CONNECTOR_PROFILES, connectors } from "./connectors.js";
 export { DISCORD_API, discord, inviteUrl } from "./discord.js";
 export { DRIVE_ORIGIN, drive, driveOAuth } from "./drive.js";
 export {
@@ -33,6 +34,7 @@ export { x, xOAuth } from "./x.js";
 export { youtube } from "./youtube.js";
 
 import { calcom } from "./calcom.js";
+import { connectors } from "./connectors.js";
 import { discord } from "./discord.js";
 import { drive } from "./drive.js";
 import { fbPublic } from "./fb-public.js";
@@ -73,4 +75,5 @@ export const SITES: readonly SiteApi[] = [
   perplexity,
   discord,
   fbPublic,
+  connectors,
 ];

@@ -23,6 +23,7 @@ import { registerAccessCommands } from "./cli-access.js";
 import { registerAccountsCommands } from "./cli-accounts.js";
 import { registerAuthCommands } from "./cli-auth.js";
 import { registerAwsCommands } from "./cli-aws.js";
+import { registerConnectorsCommands } from "./cli-connectors.js";
 import { registerDesktopCommands } from "./cli-desktop.js";
 import { registerDoCommands } from "./cli-do.js";
 import { registerEnvCommands } from "./cli-env.js";
@@ -620,6 +621,11 @@ registerSiteCommands(program, local, api);
 registerUnsubscribe(program, local);
 registerAwsCommands(program, local, settings);
 registerLangfuseCommands(program, () => envStoreFor(settings));
+registerConnectorsCommands(program, {
+  store: () => envStoreFor(settings),
+  sites: () => local().backend.sites,
+  runner: () => local().parts.browser,
+});
 registerReachCommands(
   program,
   () => envStoreFor(settings),

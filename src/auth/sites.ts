@@ -554,6 +554,52 @@ const twilio: SiteLogin = {
  * password); the login page's "Sign in with Google" link signs it in. Signed-in pages
  * live on the org's subdomain, the login page on the bare host.
  */
+/**
+ * HubSpot's developer account was made with Google: the login page asks the
+ * email first, then shows "Sign in with Google" (mapped 2026-10-09).
+ */
+const hubspot: SiteLogin = {
+  site: "hubspot",
+  home: "https://app.hubspot.com/",
+  via: ["google"],
+  loggedIn: async (fp) => /app(-[a-z0-9]+)?\.hubspot\.com\/(?!login|signup)/.test(fp.url()),
+  signIn: oauthLogin("hubspot", {
+    start: "https://app.hubspot.com/login",
+    email: {
+      field: { role: "textbox", name: "Email" },
+      next: { role: "button", name: "Continue" },
+    },
+    button: { role: "button", name: "/sign in with google/i" },
+    success: /app(-[a-z0-9]+)?\.hubspot\.com\/(?!login|signup)/,
+  }),
+};
+
+/**
+ * Intuit (the developer portal behind QuickBooks apps): email and password on
+ * one page, an emailed code when Intuit is unsure of the browser (2026-10-09).
+ */
+const intuit: SiteLogin = {
+  site: "intuit",
+  home: "https://developer.intuit.com/app/developer/dashboard",
+  loggedIn: async (fp) => /developer\.intuit\.com\/(app|appdetail|dashboard)/.test(fp.url()),
+  signIn: formLogin("intuit", {
+    start:
+      "https://accounts.intuit.com/app/sign-in?app_group=ExternalDeveloperPortal&asset_alias=Intuit.devx.devx",
+    username: { role: "textbox", name: "Email or user ID" },
+    password: { role: "textbox", name: "Password" },
+    submit: { role: "button", name: "Sign in" },
+    code: {
+      kind: "email",
+      asks: /verification code|enter the code|we sent|check your email/i,
+      field: { role: "textbox", name: "/code/i" },
+      submit: { role: "button", name: "/continue|verify|confirm/i" },
+      hint: "intuit",
+    },
+    rejected: /incorrect|doesn't match|try again/i,
+    success: /developer\.intuit\.com\//,
+  }),
+};
+
 const SENTRY_HOME = /https:\/\/[a-z0-9-]+\.sentry\.io\//;
 const sentry: SiteLogin = {
   site: "sentry",
@@ -897,6 +943,8 @@ export const SITE_LOGINS: readonly SiteLogin[] = [
   reddit,
   perplexity,
   discord,
+  hubspot,
+  intuit,
 ];
 
 const BUILT_IN = new Set(SITE_LOGINS);

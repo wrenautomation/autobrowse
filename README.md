@@ -548,6 +548,8 @@ pnpm autobrowse site setup discord invite          # the bot joins your server (
 pnpm autobrowse site call discord POST "/channels/<id>/webhooks" --body '{"name":"intake","keep":"LANDER_DISCORD_WEBHOOK"}'  # URL kept, never printed
 pnpm autobrowse site call discord PUT "/guilds/<id>/layout"   # a category + channel + webhook per sales lane; idempotent
 pnpm autobrowse site call discord PATCH "/guilds/<id>" --body '{"icon":"../lander/public/brand/wren-pfp.png"}'  # server icon
+pnpm autobrowse connectors keys jobber             # wren's HubSpot/QuickBooks/Jobber app keys off their consoles
+pnpm autobrowse connectors prod                    # … into wren's /wren/prod/env-2 as WREN_CONNECTOR_*
 pnpm autobrowse langfuse wire                      # derives the three OTEL names from them
 pnpm autobrowse langfuse check                     # the door opens
 pnpm autobrowse langfuse recent --minutes 30       # the spans that actually landed
