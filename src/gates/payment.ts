@@ -33,7 +33,10 @@ export type GatedAct = "fill" | "select" | "click";
 
 /** ids and test ids are snake or kebab case: split so `billing_address` reads as words. */
 function words(h: Hints): string {
-  return [h.name, h.placeholder, h.id, h.testId, h.text, h.css]
+  // A selector names the markup around it (`#subscribe` is often a newsletter form): read it
+  // only when the element says nothing itself.
+  const css = h.name || h.text?.trim() ? undefined : h.css;
+  return [h.name, h.placeholder, h.id, h.testId, h.text, css]
     .filter((s): s is string => Boolean(s))
     .join(" ")
     .replace(/[_-]+/g, " ");

@@ -29,6 +29,12 @@ describe("paymentGate", () => {
     expect(paymentGate("fill", { role: "textbox", name: "Project name" })).toBeNull();
   });
 
+  it("a selector counts only when the element says nothing", () => {
+    expect(paymentGate("click", { css: "#subscribe button", text: "Get new posts" })).toBeNull();
+    expect(paymentGate("click", { css: "#subscribe button", text: "Subscribe" })).toMatch(/spends/);
+    expect(paymentGate("click", { css: "#checkout-pay" })).toMatch(/spends/);
+  });
+
   it("leaving a checkout never spends: exit, cancel, back, close", () => {
     expect(paymentGate("click", { role: "button", name: "Exit checkout" })).toBeNull();
     expect(paymentGate("click", { role: "button", name: "Cancel checkout" })).toBeNull();
