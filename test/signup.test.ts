@@ -124,6 +124,18 @@ describe("signup", () => {
     expect(withPhone).not.toContain("5875550100");
     expect(localPhone("+15875550100")).toBe("5875550100");
     expect(localPhone("+447700900123")).toBe("447700900123");
+    const withPublic = signupGoal({ site: "acme", email: "hello@wren.test" }, null, "+18045550100");
+    expect(withPublic).toContain('place{secret:"publicPhone"}');
+    expect(withPublic).not.toContain("8045550100");
+  });
+
+  it("the public number goes where no code is texted; unset, it is nothing, never the personal one", async () => {
+    const base = { cred, codes: codes([]), since: new Date(), phone: "+15875550100" };
+    const s = signupSecrets({ ...base, publicPhone: "+18045550100" });
+    expect(await s("publicPhone")).toBe("+18045550100");
+    expect(await s("publicPhoneLocal")).toBe("8045550100");
+    expect(await s("phone")).toBe("+15875550100");
+    expect(await signupSecrets(base)("publicPhone")).toBeNull();
   });
 
   it("the agent places a secret by name; the value never enters its prompt", async () => {

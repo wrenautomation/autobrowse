@@ -258,6 +258,14 @@ const schema = z.object({
     .optional(),
   phoneMessagesDb: z.string().min(1).optional(),
   /**
+   * Wren's business number (E.164): what a form gets where no code is texted (a profile's,
+   * company's or contact phone), so the personal phone stays off vendor and broker lists.
+   */
+  publicPhone: z
+    .string()
+    .regex(/^\+\d{8,15}$/)
+    .optional(),
+  /**
    * Linq: iMessage from a number we own, no Mac needed. Notes and gates go
    * to `linqTo` (defaults to phoneNumber); SMS codes are read from the
    * same chats. The webhook secret verifies what Linq posts to /hooks/linq.
@@ -407,6 +415,7 @@ export const ENV_KEYS = {
   accountsFile: "ACCOUNTS_FILE",
   accounts: "AUTOBROWSE_ACCOUNTS",
   phoneNumber: "PHONE_NUMBER",
+  publicPhone: "PUBLIC_PHONE",
   phoneMessagesDb: "PHONE_MESSAGES_DB",
   linqApiKey: "LINQ_API_KEY",
   linqNumber: "LINQ_NUMBER",

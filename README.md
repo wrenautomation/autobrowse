@@ -233,7 +233,9 @@ a row; it is work.
 - **Devices.** `PHONE_NUMBER` links your own phone through the Mac it is
   paired with: SMS codes are read from Messages, "tap Yes" nudges go back
   over iMessage. Twilio is the rented-number twin. `setup` checks the two
-  one-time macOS switches and opens the pane.
+  one-time macOS switches and opens the pane. `PUBLIC_PHONE` is the business
+  number: a signup places it (`publicPhone`) in any phone field no code is
+  texted to, so the personal number stays off vendor lists.
 - **Compiled.** `autobrowse compile <name>`: recording → `outline.json`
   (steps at notes and navigations, typed inputs vs secrets, irreversible
   verbs, pauses → hand-offs) → a workflow module plus a test that

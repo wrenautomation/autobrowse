@@ -351,12 +351,15 @@ export function placeHint(secret: string): string {
     case "phoneLocal":
     case "email":
       return `${secret} needs the session opened with --signup <address>`;
+    case "publicPhone":
+    case "publicPhoneLocal":
+      return `${secret} needs --signup <address> and PUBLIC_PHONE (Wren's business number) set`;
     case "password":
       return "password needs --signup <address> or --new-password <address>";
     case "code":
       return "code needs --codes <inbox> or --signup <address>";
     default:
-      return `no flag gives "${secret}": names are phone, phoneLocal, email, password, code, <site>.username|password|code|phone|phoneLocal, card.*`;
+      return `no flag gives "${secret}": names are phone, phoneLocal, publicPhone, publicPhoneLocal, email, password, code, <site>.username|password|code|phone|phoneLocal, card.*`;
   }
 }
 

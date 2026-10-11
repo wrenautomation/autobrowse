@@ -20,9 +20,18 @@ export type SecretValues = (name: string) => Promise<string | null>;
 /**
  * What a signup can place: the address, the minted password, a code from
  * the inbox, our phone number (`phone` as stored, `phoneLocal` without the
- * country code for a field with its own country picker).
+ * country code for a field with its own country picker), and Wren's business
+ * number (`publicPhone`, `publicPhoneLocal`) for a field no code is texted to.
  */
-export const SIGNUP_SECRETS = ["email", "password", "code", "phone", "phoneLocal"] as const;
+export const SIGNUP_SECRETS = [
+  "email",
+  "password",
+  "code",
+  "phone",
+  "phoneLocal",
+  "publicPhone",
+  "publicPhoneLocal",
+] as const;
 
 /** `+15875550100` → `5875550100`: the national part, for a field whose country code is a picker (only +1 is split; other codes stay as digits). */
 export function localPhone(e164: string): string {
@@ -46,6 +55,8 @@ export interface SignupSecretsOptions {
   since: Date;
   /** The number the site may text; the paired phone or Twilio. */
   phone?: string | null;
+  /** Wren's business number, for a phone field that is never texted a code. */
+  publicPhone?: string | null;
   now?: () => Date;
 }
 
@@ -105,6 +116,10 @@ export function signupSecrets(o: SignupSecretsOptions): SecretValues {
         return o.phone ?? null;
       case "phoneLocal":
         return o.phone ? localPhone(o.phone) : null;
+      case "publicPhone":
+        return o.publicPhone ?? null;
+      case "publicPhoneLocal":
+        return o.publicPhone ? localPhone(o.publicPhone) : null;
       case "code": {
         const code = await nextCode(o.codes, o.cred, since);
         // The next code the site sends is a new one: a resend, a second step.
@@ -324,7 +339,11 @@ export async function mintPassword(
 }
 
 /** The agent's goal text for a signup; the secrets are named, never valued. */
-export function signupGoal(a: NewAccount, phone?: string | null): string {
+export function signupGoal(
+  a: NewAccount,
+  phone?: string | null,
+  publicPhone?: string | null,
+): string {
   const facts = [
     a.name ? `name "${a.name}"` : null,
     a.handle ? `username/handle "${a.handle}" (or the closest free one)` : null,
@@ -335,6 +354,9 @@ export function signupGoal(a: NewAccount, phone?: string | null): string {
     `Sign up with the email address when the site offers it. Fill the email address with place{secret:"email"}, every password field with place{secret:"password"}, a code the site emailed or texted with place{secret:"code"}, and a phone number field with place{secret:"phone"}.`,
     phone
       ? `When the phone field has a separate country-code picker, pick ${phoneCountry(phone)} and place{secret:"phoneLocal"} (the number without the country code) instead. When one box reads the country from what is typed (a flag that changes as you type), keep place{secret:"phone"}: the local number there gets read as another country.`
+      : null,
+    publicPhone
+      ? `A phone field the site will not text a code to (a profile, company or contact phone) gets place{secret:"publicPhone"} (or "publicPhoneLocal" beside a country picker), never "phone".`
       : null,
     facts.length ? `Other details: ${facts.join(", ")}.` : null,
     `Decline optional extras (contacts, ads, trials). Click a checkbox captcha ("I'm not a robot"). At an image or puzzle challenge, or a step you cannot fill, return human{reason}.`,

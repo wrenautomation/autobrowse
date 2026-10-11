@@ -132,6 +132,7 @@ export function registerRecordCommands(
           codes: codesFor(settings, gmailFor(settings)),
           since: new Date(),
           phone: ourPhone(settings),
+          publicPhone: settings.publicPhone ?? null,
         }),
         secretHosts: signupHosts(site, o.url ?? null),
       };
@@ -471,12 +472,13 @@ export function registerRecordCommands(
           codes: codesFor(settings, gmailFor(settings)),
           since: new Date(),
           phone,
+          publicPhone: settings.publicPhone ?? null,
         });
         // The browser runs as the new account's key (`reddit@alt`), so a
         // sibling account's signed-in profile (`reddit`) never answers the signup.
         const { achieved } = await runAgent(settings, {
           site: key,
-          goal: signupGoal({ ...account, site }, phone),
+          goal: signupGoal({ ...account, site }, phone, settings.publicPhone ?? null),
           url: o.url ?? null,
           inputs: {},
           secrets: {
