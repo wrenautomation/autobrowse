@@ -10,7 +10,8 @@ import { z } from "zod";
 import type { Message, MessageReader } from "../auth/codes.js";
 import type { HttpClient } from "./http.js";
 
-export const LINQ_API = "https://api.linqapp.com";
+/** The partner API root; paths below add `/v3/...` (OpenAPI `servers`). */
+export const LINQ_API = "https://api.linqapp.com/api/partner";
 
 const part = z.object({ type: z.string(), value: z.string().optional() }).passthrough();
 const message = z

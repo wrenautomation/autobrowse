@@ -55,8 +55,8 @@ describe("linqClient", () => {
     await c.send("+15550001111", "hello");
     await c.send("+15550001111", "again");
     expect(seen.map((s) => `${s.method} ${new URL(s.url).pathname}`)).toEqual([
-      "POST /v3/chats",
-      "POST /v3/chats/c9/messages",
+      "POST /api/partner/v3/chats",
+      "POST /api/partner/v3/chats/c9/messages",
     ]);
     expect(seen[0]?.body).toEqual({
       from: "+15550009999",
@@ -75,7 +75,7 @@ describe("linqClient", () => {
     const c = linqClient({ apiKey: "k", from: "+15550009999", http });
     c.learn("+15550001111", "c1");
     await c.send("+15550001111", "hi");
-    expect(new URL(seen[0]?.url ?? "").pathname).toBe("/v3/chats/c1/messages");
+    expect(new URL(seen[0]?.url ?? "").pathname).toBe("/api/partner/v3/chats/c1/messages");
   });
 });
 
