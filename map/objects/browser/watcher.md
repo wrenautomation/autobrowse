@@ -17,7 +17,7 @@ LinkedIn, X and Instagram push nothing we can use without a review or credits (w
 
 ## Shape
 
-- `WatchSpec { url, title }`, `WATCH_SPECS` (linkedin feed, x bookmarks, facebook home, instagram home: pages that mark nothing read) — `src/browser/watchers.ts:22-41`
+- `WatchSpec { url, title }`, `WATCH_SPECS` (linkedin saved posts, x bookmarks, facebook home, instagram home: pages that mark nothing read) — `src/browser/watchers.ts:22-41`
 - `watchLease { site, account?, sink: {path: ".../send", body}, until }`; id = the account (profile) — `:43-58`; at most a day out
 - `lease` (`:149`): adopt or renew, write `watchers.json`, open the tab through `FlowRunner.tab` (`src/browser/flow.ts:425`)
 - `check` (`:278`) every 20 s: `page.title()`; first read counts what is unread, after that only a rise; `rise` (`:300`) sends at most once per 30 s, body plus `kind: "activity"`, idempotency key `watch-<id>-<ms>`

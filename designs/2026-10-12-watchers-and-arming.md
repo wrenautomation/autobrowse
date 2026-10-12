@@ -8,12 +8,13 @@ to the approval so they go out the moment it comes. The wren side: wren
 ## Tab watchers
 
 One tab per watched account, in that account's browser, on a page that marks nothing read:
-LinkedIn's feed, X's bookmarks, Facebook's and Instagram's home. The site's own live channel
+LinkedIn's saved posts, X's bookmarks, Facebook's and Instagram's home. The site's own live channel
 keeps the tab's title count current (`(3) Feed | LinkedIn`). Every 20 s the watcher reads the
 title over CDP; a rise sends the lease's sink.
 
-- Cost: one tab in a browser the desk keeps anyway. Images, media and fonts are aborted, and the
-  tab reloads every 3 h so its memory stays flat. The site sees one open tab, never a request
+- Cost: one tab, but it keeps that account's browser open (~1 GB with Chrome's own processes).
+  Images, media, fonts, styles and every other site's frames are aborted (each such frame is
+  a renderer process of its own), and the tab reloads every 3 h so its memory stays flat. The site sees one open tab, never a request
   from us, so no rate limit moves.
 - Lease: `desk/watch {site, account, sink: {path, body}, until}`. The caller renews each pass; a
   caller that stops leaves no tab after `until` (at most a day). Leases are kept in
@@ -57,3 +58,6 @@ only the typing and the click remain.
   never saw the arm, and an edited reply is still the same target.
 - An armed tab is a page of its own, not the parked page: another flow on the profile can run
   meanwhile without losing it.
+- 2026-10-12, William: watched browsers held ~2.9 GB (LinkedIn's feed alone ran 9 renderers).
+  Watching only in waking hours rejected. The LinkedIn tab moved to saved posts, a short list,
+  and the tab now skips styles and other sites' frames.

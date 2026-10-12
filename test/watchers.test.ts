@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FlowRunner, HeldTab } from "../src/browser/flow.js";
 import { SessionPark } from "../src/browser/park.js";
 import type { Session } from "../src/browser/session.js";
-import { Watchers } from "../src/browser/watchers.js";
+import { Watchers, watchSkips } from "../src/browser/watchers.js";
 
 const session = () => {
   const s = { closed: false };
@@ -75,7 +75,7 @@ function fakeTab(titles: { now: string; url: string }) {
 }
 
 function harness(o: { shared?: boolean } = {}) {
-  const titles = { now: "Feed | LinkedIn", url: "https://www.linkedin.com/feed/" };
+  const titles = { now: "Feed | LinkedIn", url: "https://www.linkedin.com/my-items/saved-posts/" };
   const tabs: ReturnType<typeof fakeTab>[] = [];
   const released: string[] = [];
   const runner: FlowRunner = {
@@ -131,6 +131,24 @@ const lease = (until = "2026-10-12T16:00:00Z") => ({
   until,
 });
 
+describe("watchSkips", () => {
+  const site = "https://www.linkedin.com/my-items/saved-posts/";
+  it("skips pictures, styles and another site's frames; keeps scripts, the page and its own frames", () => {
+    const req = (type: string, host = "www.linkedin.com", subframe = false) => ({
+      type,
+      host,
+      subframe,
+    });
+    expect(watchSkips(req("image"), site)).toBe(true);
+    expect(watchSkips(req("stylesheet"), site)).toBe(true);
+    expect(watchSkips(req("document", "ads.example.com", true), site)).toBe(true);
+    expect(watchSkips(req("document"), site)).toBe(false);
+    expect(watchSkips(req("document", "static.linkedin.com", true), site)).toBe(false);
+    expect(watchSkips(req("script", "static.licdn.com"), site)).toBe(false);
+    expect(watchSkips(req("websocket", "realtime.www.linkedin.com"), site)).toBe(false);
+  });
+});
+
 describe("Watchers", () => {
   afterEach(() => vi.useRealTimers());
 
@@ -140,7 +158,7 @@ describe("Watchers", () => {
     const w = h.make();
     const state = await w.lease(lease());
     expect(state).toMatchObject({ id: "linkedin@wren", open: true, count: 0 });
-    expect(h.tabs[0]?.goto).toHaveBeenCalledWith("https://www.linkedin.com/feed/", {
+    expect(h.tabs[0]?.goto).toHaveBeenCalledWith("https://www.linkedin.com/my-items/saved-posts/", {
       waitUntil: "domcontentloaded",
       timeout: 60_000,
     });

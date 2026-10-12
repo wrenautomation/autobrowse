@@ -31,10 +31,11 @@ export interface WatchSpec {
 const COUNT = /^\((\d+)\+?\)/;
 /**
  * Sites whose title carries the unread count. A page off notifications and messages, so
- * sitting there marks nothing seen: LinkedIn's feed, X's bookmarks, Facebook's home.
+ * sitting there marks nothing seen, and light: LinkedIn's and X's saved posts (a short list,
+ * not a feed that keeps loading), Facebook's and Instagram's home.
  */
 export const WATCH_SPECS: Record<string, WatchSpec> = {
-  linkedin: { url: "https://www.linkedin.com/feed/", title: COUNT },
+  linkedin: { url: "https://www.linkedin.com/my-items/saved-posts/", title: COUNT },
   x: { url: "https://x.com/i/bookmarks", title: COUNT },
   facebook: { url: "https://www.facebook.com/", title: COUNT },
   instagram: { url: "https://www.instagram.com/", title: COUNT },
@@ -104,7 +105,22 @@ interface Live {
 }
 
 const MAX_LEASE_MS = 24 * 60 * 60_000;
-const BLOCKED = new Set(["image", "media", "font"]);
+/** Nothing a title count needs: pictures, video, fonts, styles. */
+const BLOCKED = new Set(["image", "media", "font", "stylesheet"]);
+
+/**
+ * What a watch tab skips: anything in `BLOCKED`, and every frame from another site (ads,
+ * trackers, embeds). Each such frame costs a renderer process of its own, ~100 MB.
+ */
+export function watchSkips(
+  req: { type: string; subframe: boolean; host: string },
+  site: string,
+): boolean {
+  if (BLOCKED.has(req.type)) return true;
+  if (req.type !== "document" || !req.subframe) return false;
+  const base = new URL(site).hostname.split(".").slice(-2).join(".");
+  return req.host !== base && !req.host.endsWith(`.${base}`);
+}
 
 /** Still on the spec's page and not a sign-in form: a quiet title then means nothing is unread. */
 const signedIn = (page: Page, spec: WatchSpec, title: string) =>
@@ -228,9 +244,17 @@ export class Watchers {
       l.held = held;
       const page = held.page;
       if (!held.shared)
-        await page.route("**/*", (r: Route) =>
-          BLOCKED.has(r.request().resourceType()) ? r.abort() : r.continue(),
-        );
+        await page.route("**/*", (r: Route) => {
+          const req = r.request();
+          let subframe = false;
+          try {
+            subframe = req.isNavigationRequest() && req.frame().parentFrame() !== null;
+          } catch {} // a service worker's request has no frame
+          const host = new URL(req.url()).hostname;
+          return watchSkips({ type: req.resourceType(), subframe, host }, spec.url)
+            ? r.abort()
+            : r.continue();
+        });
       page.once("close", () => {
         if (l.held !== held) return;
         this.closed(l, "the tab closed");
