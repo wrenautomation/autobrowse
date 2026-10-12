@@ -161,7 +161,8 @@ const appSubscription = z.object({
   object: z.enum(["page", "instagram", "user", "permissions"]),
   callback_url: z.string().url(),
   fields: z.string().min(1),
-  include_values: z.boolean().default(false),
+  // Graph refuses a page subscription without values.
+  include_values: z.boolean().default(true),
 });
 const feed = z.object({
   pageId: id,
@@ -265,9 +266,15 @@ const graphNote = (body: unknown) => {
     : `graph code ${e.code}${e.error_subcode ? `/${e.error_subcode}` : ""}`;
 };
 
+/** The code and Graph's own words: they name the bad field, never the token. */
+const graphWhy = (body: unknown) => {
+  const msg = (body as GraphFailure | null)?.error?.message;
+  return [graphNote(body), msg?.slice(0, 200)].filter(Boolean).join(": ");
+};
+
 async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
   if (!res.ok)
-    throw new HttpError("CALL", `${META_ORIGIN}/${what}`, res.status, graphNote(res.body));
+    throw new HttpError("CALL", `${META_ORIGIN}/${what}`, res.status, graphWhy(res.body));
   return res.body as T;
 }
 const v = (path: string) => `${META_ORIGIN}/${META_VERSION}/${path}`;

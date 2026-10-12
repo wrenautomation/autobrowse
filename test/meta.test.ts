@@ -255,7 +255,7 @@ describe("meta site", () => {
       object: "page",
       fields: "feed,messages",
       verify_token: "verify",
-      include_values: false,
+      include_values: true,
     });
   });
 
