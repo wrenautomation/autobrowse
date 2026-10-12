@@ -411,6 +411,9 @@ export const metaOAuth: OAuthSpec = {
     "pages_read_engagement",
     "pages_manage_posts",
     "pages_manage_ads",
+    // Our Page's webhooks: subscribed_apps for `feed` and `messages`.
+    "pages_manage_metadata",
+    "pages_messaging",
     "instagram_basic",
     "instagram_content_publish",
     "instagram_manage_insights",
