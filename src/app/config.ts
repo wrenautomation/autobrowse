@@ -226,6 +226,10 @@ const schema = z.object({
   credentialsFile: z.string().min(1).default("~/.config/autobrowse/credentials.json"),
   /** William's cards, sealed with their own keychain key; backed up to SSM /wallet (no machine role reads it). */
   walletFile: z.string().min(1).default("~/.config/autobrowse/wallet.sealed"),
+  /** Identity documents (`autobrowse papers`), sealed under the wallet's key; one file each. */
+  papersDir: z.string().min(1).default("~/.config/autobrowse/papers"),
+  /** The papers backup (deploy/terraform papers.tf): only William's AWS user reaches it. Unset = no backup. */
+  papersBucket: z.string().min(1).optional(),
   /** Hosts a debit card may pay on (banking, government), comma separated; empty = debit never. */
   walletDebitHosts: z
     .string()
@@ -408,6 +412,8 @@ export const ENV_KEYS = {
   autoHeal: "AUTO_HEAL",
   credentialsFile: "CREDENTIALS_FILE",
   walletFile: "WALLET_FILE",
+  papersDir: "PAPERS_DIR",
+  papersBucket: "PAPERS_BUCKET",
   walletDebitHosts: "WALLET_DEBIT_HOSTS",
   credentialsCipher: "CREDENTIALS_CIPHER",
   credentialsShared: "CREDENTIALS_SHARED",
@@ -457,6 +463,7 @@ export const OWNER_PATHS = {
   accessFile: "access.json",
   needsDoneFile: "needs-done.json",
   walletFile: "wallet.sealed",
+  papersDir: "papers",
   profilesDir: "profiles",
   artifactsDir: "artifacts",
   recordingsDir: "recordings",

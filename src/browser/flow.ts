@@ -86,8 +86,18 @@ export type Op =
   | { kind: "fill"; value: string }
   | { kind: "select"; value: string }
   | { kind: "press"; key: string }
-  /** Files into a file input, or through the chooser a button opens. */
-  | { kind: "upload"; files: string[] };
+  /**
+   * Files into a file input, or through the chooser a button opens: paths or refs, or bytes
+   * held in memory (a paper), which reach the page without touching the disk.
+   */
+  | { kind: "upload"; files: string[] | FilePayload[] };
+
+/** A file held in memory, as Playwright's `setInputFiles` takes it. */
+export interface FilePayload {
+  name: string;
+  mimeType: string;
+  buffer: Buffer;
+}
 
 export interface ActOptions {
   /** In words, for the repairer and the trace: "click Purchase". */
@@ -375,9 +385,11 @@ async function doOp(
     case "press":
       return hands.press(target, op.key, { timeout });
     case "upload": {
+      if (op.files.some((f) => typeof f !== "string"))
+        return uploadFiles(page, target, op.files as FilePayload[], timeout, hands);
       // A ref from another machine (s3://, a signed URL) becomes a temp file for this act.
       const { localCopies } = await import("./run-files.js");
-      const local = await localCopies(op.files);
+      const local = await localCopies(op.files as string[]);
       try {
         return await uploadFiles(page, target, local.paths, timeout, hands);
       } finally {
@@ -391,7 +403,7 @@ async function doOp(
 async function uploadFiles(
   page: Page,
   target: Locator,
-  files: string[],
+  files: string[] | FilePayload[],
   timeout: number,
   hands: Hands,
 ): Promise<void> {

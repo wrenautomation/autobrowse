@@ -166,6 +166,10 @@ a row; it is work.
   picks one). It is the person's own, not a site's login, so any host may
   have it. A billing email, phone or tax id field is set to the card owner's
   on its own when a card lands and before a spend click.
+  `upload{files:["paper:licence-front"]}` puts an identity document on a
+  page after one yes per paper and host, from memory. `autobrowse papers add`
+  stores one; `papers ask` prints a phone link that seals the photo in the
+  phone's browser so only this Mac opens it (designs/2026-10-12-papers.md).
 - **Env store.** Secrets travel through SSM Parameter Store, one
   SecureString per name under `/autobrowse/config` (KMS at rest, IAM at
   the door, every read in CloudTrail; no extra vendor). `autobrowse env

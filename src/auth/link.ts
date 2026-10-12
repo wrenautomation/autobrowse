@@ -4,7 +4,7 @@
  * wren's phone Worker, HMAC signed with `CRED_LINK_SECRET`. The key rides in the link's
  * fragment, which a browser never sends, so the Worker never holds a secret.
  */
-import { createCipheriv, createHmac, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
 
 /** The header the Worker checks: hex HMAC-SHA256 of the body (apps/phone `LINK_SIGNATURE`). */
 export const LINK_SIGNATURE = "x-wren-signature-256";
@@ -78,4 +78,67 @@ export function linkLabel(names: string[]): string {
     .join(", ")
     .replace(/[^\w .,@+:-]/g, "-")
     .slice(0, 100);
+}
+
+/** A body to the Worker, HMAC signed like a mint: `{...body, at}`. */
+async function signedPost(url: string, secret: string, body: object, post: typeof fetch) {
+  const raw = JSON.stringify({ ...body, at: Date.now() });
+  return post(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      [LINK_SIGNATURE]: createHmac("sha256", secret).update(raw).digest("hex"),
+    },
+    body: raw,
+  });
+}
+
+/** A drop: the link to send, and the key only this process holds. */
+export interface Drop {
+  id: string;
+  link: string;
+  key: Buffer;
+}
+
+/**
+ * A link the other way (designs/2026-10-12-papers.md): `<base>/u/<id>#<key>`. Its page seals a
+ * file in the sender's browser under the key and posts only ciphertext; `takeDrop` opens it.
+ */
+export async function mintDrop(
+  base: string,
+  secret: string,
+  label: string,
+  opts: LinkOptions = {},
+  post: typeof fetch = fetch,
+): Promise<Drop> {
+  const root = base.replace(/\/+$/, "");
+  const res = await signedPost(
+    `${root}/drops`,
+    secret,
+    { label, ...(opts.open ? { open: true } : {}), ...(opts.ttl ? { ttl: opts.ttl } : {}) },
+    post,
+  );
+  if (!res.ok) throw new Error(`phone Worker ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const { id } = (await res.json()) as { id: string };
+  const key = randomBytes(32);
+  return { id, key, link: `${root}/u/${id}#${key.toString("base64url")}` };
+}
+
+/** The drop's file once sent (and gone from the Worker), null while it waits. */
+export async function takeDrop(
+  base: string,
+  secret: string,
+  drop: Pick<Drop, "id" | "key">,
+  post: typeof fetch = fetch,
+): Promise<Buffer | null> {
+  const root = base.replace(/\/+$/, "");
+  const res = await signedPost(`${root}/drops/${drop.id}/take`, secret, {}, post);
+  if (res.status === 404) throw new Error("the drop is used or expired: ask again");
+  if (!res.ok) throw new Error(`phone Worker ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const got = (await res.json()) as { waiting?: true; iv?: string; data?: string };
+  if (got.waiting || !got.iv || !got.data) return null;
+  const sealed = Buffer.from(got.data, "base64");
+  const d = createDecipheriv("aes-256-gcm", drop.key, Buffer.from(got.iv, "base64"));
+  d.setAuthTag(sealed.subarray(sealed.length - 16));
+  return Buffer.concat([d.update(sealed.subarray(0, sealed.length - 16)), d.final()]);
 }

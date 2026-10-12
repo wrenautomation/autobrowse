@@ -16,6 +16,7 @@ import {
   startExplore,
 } from "../src/explore/server.js";
 import type { Charge, Receipt } from "../src/money/charges.js";
+import { memoryPapers, paperOf } from "../src/money/papers.js";
 import type { Contacts } from "../src/money/profile.js";
 import { parseCardLine } from "../src/money/wallet.js";
 import { loadRecording } from "../src/recorder/store.js";
@@ -27,6 +28,13 @@ const desktop = fakeDesktop([
   { role: "checkbox", name: "Remote Login", value: "0", enabled: true, depth: 1 },
   { role: "button", name: "Buy", value: null, enabled: true, depth: 1 },
 ]);
+
+/** A 1x1 PNG as a licence's front: synthetic. */
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+const papers = memoryPapers();
 
 const PAGE = `data:text/html,${encodeURIComponent(
   `<label>Domain <input id="d"></label><label>Password <input type="password" id="p"></label><button id="go" onclick="document.title='clicked';this.after(Object.assign(document.createElement('p'),{textContent:'Payment successful'}))">Buy now</button><button id="co" onclick="document.title='checkout'">Checkout</button><input type="submit" id="done" value="Complete Order" onclick="event.preventDefault();document.title='ordered'"><p id="key">sk-ant-minted-key-1234567890abcdefghijklmnopqrstuvwxyz</p>`,
@@ -82,6 +90,7 @@ describe("explore mode", () => {
         if (label && label !== "main") throw new Error(`no card "${label}" in the wallet`);
         return { ...visa, tell: { email: "card-owner@x.co" } };
       },
+      papers: (name) => papers.get(name),
       charges: async (c, r, tell) => {
         charges.push([c, r, tell]);
         return ["email", "text"];
@@ -350,6 +359,33 @@ describe("explore mode", () => {
     expect(asks).toHaveLength(asked);
     expect(charges.at(-1)?.[0].card).toMatch(/Visa credit ending 4242/);
     expect(charges.at(-1)?.[2]).toEqual({ email: "card-owner@x.co" });
+  });
+  it("uploads a paper from memory after one yes per paper and host", async () => {
+    await papers.put(
+      paperOf(PNG, { name: "licence-front", kind: "drivers-licence", side: "front" }),
+      PNG,
+    );
+    await send({
+      cmd: "open",
+      url: `data:text/html,${encodeURIComponent('<label>ID <input type="file" id="f"></label>')}`,
+    });
+    answer = true;
+    const up = await send(
+      { cmd: "upload", hints: { css: "#f" }, files: ["paper:licence-front"] },
+      true,
+    );
+    expect(up.status).toBe(200);
+    expect(asks.at(-1)).toBe("upload licence-front: drivers-licence front, png 0 KB to this page");
+    expect(
+      (await send({ cmd: "eval", js: "[f.files[0].name, f.files[0].size].join(' ')" })).body.result,
+    ).toBe(`drivers-licence-front.png ${PNG.length}`);
+    const asked = asks.length;
+    await send({ cmd: "upload", hints: { css: "#f" }, files: ["paper:licence-front"] }, true);
+    expect(asks).toHaveLength(asked);
+    const missing = await send({ cmd: "upload", hints: { css: "#f" }, files: ["paper:passport"] });
+    expect(missing.body.error).toMatch(/no paper passport/);
+    const uses = (await audit.recent()).filter((u) => u.credential.startsWith("paper:"));
+    expect(uses.map((u) => u.allowed)).toEqual([true, true, false]);
   });
   it("an act answers what changed on the page; a batch runs in order and stops at the first failure", async () => {
     const grow = `data:text/html,${encodeURIComponent(

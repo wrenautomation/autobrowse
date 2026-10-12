@@ -34,6 +34,7 @@ import type { SecretValues } from "../auth/signup.js";
 import {
   chooseOption,
   defineFlow,
+  type FilePayload,
   type FlowPage,
   flowRunner,
   type RunnerOptions,
@@ -83,6 +84,7 @@ import {
 import type { Amount } from "../gates/spend.js";
 import type { Llm } from "../llm/types.js";
 import { type Charge, type Receipt, receiptOutcome, stillAsking } from "../money/charges.js";
+import { describePaper, type Paper, paperPayload, paperRef } from "../money/papers.js";
 import {
   ADDRESS_FIELDS,
   type Address,
@@ -459,6 +461,11 @@ export interface ExploreOptions {
    * billing page. Id null: the only profile. Absent: refused.
    */
   profiles?: (id: string | null) => Promise<Profile | null>;
+  /**
+   * Identity documents, where they live (the Mac): `upload{files:["paper:<name>"]}`
+   * puts one on the page after a person says yes once per paper and host. Absent: refused.
+   */
+  papers?: (name: string) => Promise<{ paper: Paper; data: Buffer } | null>;
   /**
    * Which card each host was given: written when a card is placed, read when a
    * site charges the card it keeps, so every charge names its card's ending.
@@ -1079,6 +1086,54 @@ async function serve(
       );
     return value;
   };
+  /** Paper-and-host pairs a person said yes to this session. */
+  const papersYes = new Set<string>();
+  /**
+   * An upload's files: paths as given, or every `paper:<name>` as bytes from memory, after a
+   * person's yes for that paper on this host, audited either way. Papers and paths don't mix.
+   */
+  const uploadFiles = async (files: string[], wait: boolean) => {
+    const names = files.map(paperRef);
+    if (names.every((n) => n === null)) return files;
+    if (names.some((n) => n === null))
+      throw new Error("upload: papers and paths in separate uploads");
+    if (!opts.papers)
+      throw new Error("upload: no papers here (they live on the Mac: autobrowse papers add)");
+    const host = new URL(page.url()).host;
+    const out: FilePayload[] = [];
+    for (const name of names as string[]) {
+      const audit = (allowed: boolean) =>
+        opts.audit?.record({
+          at: new Date().toISOString(),
+          credential: `paper:${name}`,
+          field: "secret",
+          site: opts.site,
+          url: urlWithoutQuery(page.url()),
+          by: `upload paper:${name}`,
+          allowed,
+        });
+      const got = await opts.papers(name);
+      if (!got) {
+        await audit(false);
+        throw new Error(`upload: no paper ${name} (autobrowse papers list)`);
+      }
+      const key = `${name}@${host}`;
+      if (!papersYes.has(key)) {
+        const what = `upload ${describePaper(got.paper)} to ${host || "this page"}`;
+        try {
+          if (!approvals) throw new PaymentGate(what, "no-approver");
+          await approvals.decide(`paper ${key}`, { what, url: page.url(), site: opts.site }, wait);
+        } catch (err) {
+          await audit(false);
+          throw err;
+        }
+        papersYes.add(key);
+      }
+      await audit(true);
+      out.push(paperPayload(got.paper, got.data));
+    }
+    return out;
+  };
   /** Card-and-host pairs a person said yes to this session; the card last placed, for the receipt. */
   const cardsYes = new Set<string>();
   let placedCard: {
@@ -1432,10 +1487,14 @@ async function serve(
         return { ok: true };
       }
       case "upload": {
-        await fp.act({ kind: "upload", files: c.files }, c.hints as Hints, {
-          goal: c.goal ?? "upload",
-          timeoutMs: 10_000,
-        });
+        await fp.act(
+          { kind: "upload", files: await uploadFiles(c.files, wait) },
+          c.hints as Hints,
+          {
+            goal: c.goal ?? "upload",
+            timeoutMs: 10_000,
+          },
+        );
         await settle(page);
         journalAct(c, (target) => ({ kind: "upload", target, files: c.files }));
         return { url: page.url() };

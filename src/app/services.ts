@@ -960,6 +960,38 @@ export async function profilesFor(
   );
 }
 
+/**
+ * Identity documents (`autobrowse papers`): sealed under the wallet's key on the Mac, backed up
+ * to PAPERS_BUCKET when set (deploy/terraform papers.tf; only William's AWS user reaches it).
+ */
+export async function papersFor(settings: Settings) {
+  operatorOnly(settings, "papers");
+  if (process.platform !== "darwin") throw new Error("papers live on the Mac only");
+  const { backedUpPapers, bucketPapers, filePapers } = await import("../money/papers.js");
+  const local = filePapers(
+    expandHome(settings.papersDir),
+    aesGcmCipher(keychainKey(WALLET_KEYCHAIN)),
+  );
+  const bucket = settings.papersBucket;
+  if (!bucket) {
+    const none = () => {
+      throw new Error("no PAPERS_BUCKET: these papers have no backup (deploy/terraform papers.tf)");
+    };
+    return { ...local, backedUp: false, restore: none, backup: none };
+  }
+  const { s3PaperBucket } = await import("../shots/s3.js");
+  return {
+    ...backedUpPapers(local, bucketPapers(s3PaperBucket({ bucket, aws: awsFor(settings) }))),
+    backedUp: true,
+  };
+}
+
+/** Explore's papers for `upload{files:["paper:<name>"]}`: on the Mac only, like the wallet. */
+export function papersForUpload(settings: Settings): ExploreOptions["papers"] {
+  if (process.platform !== "darwin" || !isDefaultOwner(settings.owner)) return undefined;
+  return async (name) => (await papersFor(settings)).get(name);
+}
+
 /** Explore's card picker: the Mac's wallet under WALLET_DEBIT_HOSTS; elsewhere none (card places are refused). */
 export function cardsFor(settings: Settings): ExploreOptions["cards"] {
   if (process.platform !== "darwin" || !isDefaultOwner(settings.owner)) return undefined;

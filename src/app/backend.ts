@@ -85,6 +85,7 @@ import {
   missingEntries,
   modsDirFor,
   paceFor,
+  papersForUpload,
   profilesForPlace,
   runsDirFor,
   sinkFor,
@@ -276,6 +277,7 @@ export function explorerOpener(
   const approver: Approver | null = approverFor(settings, gmailFor(settings));
   const cards = cardsFor(settings);
   const profiles = profilesForPlace(settings);
+  const papers = papersForUpload(settings);
   return async (site, port, { signIn = true, ...extra } = {}) =>
     startExplore({
       site,
@@ -287,6 +289,7 @@ export function explorerOpener(
       audit: auditFor(settings),
       ...(cards ? { cards, cardsOnFile: cardsOnFileFor(settings) } : {}),
       ...(profiles ? { profiles } : {}),
+      ...(papers ? { papers } : {}),
       charges: chargesFor(settings, gmailFor(settings)),
       llm: llmFor(settings), // writes `records` code when the driver sends none
       pace: paceFor(settings), // an agent browses at a person's pace: sites watch for the other kind

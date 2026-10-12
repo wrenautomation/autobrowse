@@ -31,6 +31,7 @@ import { readJson } from "./cli-json.js";
 import { registerLangfuseCommands } from "./cli-langfuse.js";
 import { registerModsCommands } from "./cli-mods.js";
 import { registerNeedsCommands } from "./cli-needs.js";
+import { registerPapersCommands } from "./cli-papers.js";
 import { registerReachCommands } from "./cli-reach.js";
 import { registerRecordCommands } from "./cli-record.js";
 import { registerRunsCommands } from "./cli-runs.js";
@@ -791,6 +792,7 @@ registerAccountsCommands(program, () => ({
 registerEnvCommands(program, settings, { store: () => envStoreFor(settings) });
 registerDesktopCommands(program, tmpdir());
 registerWalletCommands(program, settings);
+registerPapersCommands(program, settings);
 registerAccessCommands(program, settings);
 
 tidyHelp(program);
