@@ -129,7 +129,12 @@ describe("meta site", () => {
         });
       },
     });
-    const env: Record<string, string> = { META_ACCESS_TOKEN: "user-token" };
+    const env: Record<string, string> = {
+      META_ACCESS_TOKEN: "user-token",
+      META_CLIENT_ID: "app1",
+      META_CLIENT_SECRET: "app-secret",
+      META_WEBHOOK_TOKEN: "verify",
+    };
     const asked: Approval[] = [];
     const sites = siteFacade([meta], {
       http,
@@ -224,6 +229,34 @@ describe("meta site", () => {
       ["POST", "/v23.0/111/feed", "Bearer page-token"],
     ]);
     expect(calls[0]?.url.searchParams.get("fields")).toBe("access_token");
+  });
+
+  it("subscribes a Page to the app's webhooks with its own token", async () => {
+    const { sites, calls } = facade(null);
+    await sites.call("meta", "POST", "/111/subscribed_apps", {});
+    expect(calls.map((c) => [c.method, c.url.pathname, c.auth])).toEqual([
+      ["GET", "/v23.0/111", "Bearer user-token"],
+      ["POST", "/v23.0/111/subscribed_apps", "Bearer page-token"],
+    ]);
+    expect(JSON.parse(calls[1]?.body ?? "{}")).toEqual({ subscribed_fields: "feed,messages" });
+  });
+
+  it("points the app's webhooks at a callback with the app token and the handshake token", async () => {
+    const { sites, calls } = facade(null);
+    await sites.call("meta", "POST", "/app/subscriptions", {
+      object: "page",
+      callback_url: "https://phone.example.dev/webhooks/meta",
+      fields: "feed,messages",
+    });
+    expect(calls.map((c) => [c.method, c.url.pathname, c.auth])).toEqual([
+      ["POST", "/v23.0/app1/subscriptions", "Bearer app1|app-secret"],
+    ]);
+    expect(JSON.parse(calls[0]?.body ?? "{}")).toMatchObject({
+      object: "page",
+      fields: "feed,messages",
+      verify_token: "verify",
+      include_values: false,
+    });
   });
 
   it("makes an instant form with the Page token and reads its leads by finding the Page first", async () => {

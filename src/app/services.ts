@@ -71,6 +71,7 @@ import {
 } from "../browser/repair.js";
 import { fileScreens, type LearnedScreens } from "../browser/screens.js";
 import type { BrowserOptions, FailureRecord } from "../browser/session.js";
+import { Watchers } from "../browser/watchers.js";
 import {
   type Channel,
   channels,
@@ -86,7 +87,7 @@ import { cloudflare, verifyCloudflareToken } from "../clients/cloudflare.js";
 import { dynadot } from "../clients/dynadot.js";
 import { type GmailUserClient, gmailClient } from "../clients/gmail.js";
 import { type GoogleAdminClient, googleAdmin } from "../clients/google-admin.js";
-import { type HttpClient, httpClient, safeUrl } from "../clients/http.js";
+import { type HttpClient, HttpError, httpClient, safeUrl } from "../clients/http.js";
 import { inboxInsiders } from "../clients/inbox-insiders.js";
 import { type InstantlyClient, instantly } from "../clients/instantly.js";
 import { type LinqClient, linqClient } from "../clients/linq.js";
@@ -606,6 +607,34 @@ export const llmCallsDirFor = (settings: Settings): string => join(stateDir(sett
 
 /** Every try of a `sites`/`desk` call (src/runs/calls.ts): `calls/calls-YYYY-MM.jsonl`, kept for good. */
 export const siteCallsDirFor = (settings: Settings): string => join(stateDir(settings), "calls");
+
+/**
+ * Tab watchers on this worker's browser (`browser/watchers.ts`): leases kept in `watchers.json`,
+ * a rise sent to the Restate ingress. Null without a park, or without the ingress token on Cloud.
+ */
+export function watchersFor(settings: Settings, runner: FlowRunner, log: Logger): Watchers | null {
+  if (!runner.tab) return null;
+  const http = httpClient();
+  const base = settings.restateIngressUrl.replace(/\/$/, "");
+  return new Watchers({
+    runner,
+    file: join(stateDir(settings), "watchers.json"),
+    log: (msg, extra) => log.info(extra ?? {}, msg),
+    send: async (path, body, key) => {
+      const r = await http.json(`${base}${path}`, {
+        method: "POST",
+        body,
+        headers: {
+          "idempotency-key": key,
+          ...(settings.restateAuthToken
+            ? { authorization: `Bearer ${settings.restateAuthToken}` }
+            : {}),
+        },
+      });
+      if (!r.ok) throw new HttpError("POST", `${base}${path}`, r.status, "watch sink");
+    },
+  });
+}
 
 /** Placed secrets a walk asks for: its sites' stored logins, codes from their inboxes; a bare `password` is the walk's own site's. */
 function walkSecrets(settings: Settings, spec: WalkSpec): SecretValues {

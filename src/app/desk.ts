@@ -27,7 +27,7 @@ import { registerOnBox } from "./box-register.js";
 import { cloudAdminUrl, planEndpoint } from "./endpoint.js";
 import { awsFor, boot } from "./owner.js";
 import { registerDeployment } from "./register.js";
-import { buildApp, siteCallsDirFor } from "./services.js";
+import { buildApp, siteCallsDirFor, watchersFor } from "./services.js";
 
 /** The port deploy/desk/install.sh points the Cloudflare Tunnel at. */
 const DESK_PORT = 9083;
@@ -35,10 +35,12 @@ const DESK_PORT = 9083;
 const { settings } = boot();
 const log = pino({ level: settings.logLevel });
 const app = await buildApp(settings, log);
+const watchers = watchersFor(settings, app.browser, log);
 const desk = sitesService(
   app.sites,
   named(DESK_SERVICE, settings.owner),
   fileSiteCalls(siteCallsDirFor(settings)),
+  watchers,
 );
 // Claude Code reads the workspace holding this checkout (wren's `Ask`).
 const claude = claudeService(resolve(".."), named(CLAUDE_SERVICE, settings.owner));
@@ -84,6 +86,7 @@ if (plan.mode === "tunnel") {
   reg = await registerOnBox(awsFor(settings));
 }
 if (wren) watchRecordings(wren, (msg) => log.info({ watch: msg }, "recordings"));
+watchers?.start();
 // deploy/desk/update.mjs waits for this exact message after a restart.
 log.info(
   { deployment: reg.id, services: reg.services, browser: settings.browser, on: plan.mode },

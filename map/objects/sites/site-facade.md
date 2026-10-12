@@ -17,8 +17,9 @@ One place picks the account, mints the bearer, matches the path, books the accou
 
 ## Shape
 
-- `SiteFacade { list, status, call(site, method, path, input, account?, from?), caps(day?, site?), setup(site, step, account?, profile?, input?), renew? }` — `src/sites/facade.ts:136-166`; `CallFrom { caller?, invocation? }`, `CapsReport { day, used, calls }` — `:124-134`
-- `SiteFacadeDeps { http, env, sink, runner, flow, compiled?, oauthPort?, profileFor?, providerOf?, accountFor?, approve?, caps?, sleep?, accountOf? }` — `:33-82`; `matchPath` — `:203`; `checkSite` — `:173`
+- `SiteFacade { list, status, call(site, method, path, input, account?, from?), caps(day?, site?), setup(site, step, account?, profile?, input?), renew? }` — `src/sites/facade.ts:174-204`; `CallFrom { caller?, invocation?, arm?, armId? }`, `Armed`, `CapsReport { day, used, calls }` — `:137-172`
+- Arming (designs/2026-10-12-watchers-and-arming.md): `call(..., {arm: true})` runs a browser leg's `prepare` in a tab of its own (`FlowRunner.tab`) and answers `{armed: id, until}` (`armLeg`, `src/sites/facade.ts:345`); the next call on the same path and target (typed words left out, `armKey`), or `{armId}`, runs the leg in that tab (`takeArm`), so `run`'s opening finds the page open. An API leg, a spend, a GET, an upload or a flow without `prepare`: `{armed: null}`. `ARM_MS` 20 min, 3 per browser (`:153`). Restate `sites/arm`, `armId` on `sites/call` (`src/sites/service.ts:200`)
+- `SiteFacadeDeps { http, env, sink, runner, flow, compiled?, oauthPort?, profileFor?, providerOf?, accountFor?, approve?, caps?, sleep?, accountOf? }` — `:45-98`; `matchPath` — `:244`; `checkSite` — `:215`
 - `SiteParts` (what `sitesFor` needs, including `reload` for tokens minted elsewhere) — `src/sites/wire.ts:30-69`; `usernameOf` — `:137-145`
 - `DailyCaps { take, slot, today, note, calls }`, `Pace { gapMs, jitterMs?, maxWaitMs? }`, `fileCaps` (`CAPS_FILE`, `/data/caps.json` on the box), `memoryCaps` — `src/sites/caps.ts:52-67`; `MeteredCall { at, site, account, route, use, caller, invocation?, outcome, bucket? }` — `:70-84`; the day files — `:156-189`
 - Restate: `SITES_SERVICE = "sites"`, `DESK_SERVICE = "desk"` (the Mac), `sitesService(facade, name)` with `call`, `status`, `caps`, `renew`, `setup` — `src/sites/service.ts:16-122`

@@ -151,6 +151,18 @@ const pagePosts = z.object({
   fields: z.string().default("id,message,created_time,permalink_url,shares,likes.summary(true)"),
   ...page,
 });
+/** Meta's webhook fields a Page sends (wren designs/2026-10-12-push-everywhere.md). */
+const pageSubscription = z.object({
+  pageId: id,
+  subscribed_fields: z.string().default("feed,messages"),
+});
+const pageOnly = z.object({ pageId: id });
+const appSubscription = z.object({
+  object: z.enum(["page", "instagram", "user", "permissions"]),
+  callback_url: z.string().url(),
+  fields: z.string().min(1),
+  include_values: z.boolean().default(false),
+});
 const feed = z.object({
   pageId: id,
   message: z.string().min(1).max(63_206),
@@ -281,6 +293,20 @@ async function pageLeg(leg: ApiLeg, pageId: string): Promise<ApiLeg> {
       "no page token: not an admin of this page",
     );
   return { ...leg, token: got.access_token };
+}
+
+/** The app's id, from the consent's client id. */
+function appId(leg: ApiLeg): string {
+  const v = leg.env("META_CLIENT_ID");
+  if (!v) throw new HttpError("CALL", `${META_ORIGIN}/app`, 400, "no META_CLIENT_ID");
+  return v;
+}
+
+/** An app's own calls (its webhook subscriptions) take the app token `<id>|<secret>`. */
+function appLeg(leg: ApiLeg): ApiLeg {
+  const secret = leg.env("META_CLIENT_SECRET");
+  if (!secret) throw new HttpError("CALL", `${META_ORIGIN}/app`, 400, "no META_CLIENT_SECRET");
+  return { ...leg, token: `${appId(leg)}|${secret}` };
 }
 
 const IG_PROFILE =
@@ -563,6 +589,42 @@ export const meta: SiteApi = {
       summary: "A Page's posts, newest first",
       request: pagePosts,
       api: ({ pageId, ...q }, leg) => get(leg, `${pageId}/posts`, q),
+    }),
+    route({
+      method: "GET",
+      path: "/{pageId}/subscribed_apps",
+      summary: "The apps whose webhooks this Page sends, and which fields",
+      request: pageOnly,
+      api: async ({ pageId }, leg) =>
+        get(await pageLeg(leg, pageId), `${pageId}/subscribed_apps`, {}),
+    }),
+    route({
+      method: "POST",
+      path: "/{pageId}/subscribed_apps",
+      summary: "Send this app the Page's webhooks (`feed,messages`); its own Page token",
+      request: pageSubscription,
+      api: async ({ pageId, subscribed_fields }, leg) =>
+        post(await pageLeg(leg, pageId), `${pageId}/subscribed_apps`, { subscribed_fields }),
+    }),
+    route({
+      method: "GET",
+      path: "/app/subscriptions",
+      summary: "The app's webhook subscriptions: object, callback, fields",
+      request: z.object({}),
+      api: (_q, leg) => get(appLeg(leg), `${appId(leg)}/subscriptions`, {}),
+    }),
+    route({
+      method: "POST",
+      path: "/app/subscriptions",
+      summary:
+        "Point the app's webhooks for one object at a callback; the handshake token is META_WEBHOOK_TOKEN",
+      request: appSubscription,
+      api: (body, leg) => {
+        const verify_token = leg.env("META_WEBHOOK_TOKEN");
+        if (!verify_token)
+          throw new HttpError("CALL", `${META_ORIGIN}/subscriptions`, 400, "no META_WEBHOOK_TOKEN");
+        return post(appLeg(leg), `${appId(leg)}/subscriptions`, { ...body, verify_token });
+      },
     }),
     route({
       method: "POST",

@@ -3,6 +3,10 @@ export { CONNECTOR_PROFILES, connectors } from "./connectors.js";
 export { DISCORD_API, discord, inviteUrl } from "./discord.js";
 export { DRIVE_ORIGIN, drive, driveOAuth } from "./drive.js";
 export {
+  ARM_MS,
+  ARMS_PER_PROFILE,
+  type Armed,
+  type CallFrom,
   type CheckRow,
   checkSite,
   matchPath,

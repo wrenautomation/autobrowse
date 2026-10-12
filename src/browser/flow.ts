@@ -62,6 +62,7 @@ import {
   NeedsHuman,
   openSession,
   pageHtml,
+  type Session,
 } from "./session.js";
 import { type Watch, watches, watchSteps } from "./watch.js";
 import type { Passkeys } from "./webauthn.js";
@@ -186,6 +187,12 @@ export interface BrowserFlow<I, O> {
    */
   profile?: "provider";
   run(fp: FlowPage, input: I): Promise<O>;
+  /**
+   * The part of `run` safe to do before anyone says yes: open the page, find the box. Armed
+   * (`sites/arm`), it runs early in its own tab; the call then runs `run` there, and `run`'s
+   * own opening finds the page already open. Never types, clicks or sends.
+   */
+  prepare?(fp: FlowPage, input: I): Promise<void>;
 }
 
 export function defineFlow<I, O>(flow: BrowserFlow<I, O>): BrowserFlow<I, O> {
@@ -193,7 +200,22 @@ export function defineFlow<I, O>(flow: BrowserFlow<I, O>): BrowserFlow<I, O> {
 }
 
 export interface FlowRunner {
-  run<I, O>(flow: BrowserFlow<I, O>, input: I): Promise<O>;
+  /** `on`: run in this tab (an armed one, `tab`) instead of the browser's own page, kept as it is. */
+  run<I, O>(flow: BrowserFlow<I, O>, input: I, on?: { page: Page }): Promise<O>;
+  /**
+   * A new tab in `site`'s browser (a profile name: `linkedin@wren`) that outlives the runs on it:
+   * the browser stays open, pinned in the park, until `release`. Flows on the profile still
+   * queue and run beside it. Absent without a park.
+   */
+  tab?(site: string): Promise<HeldTab>;
+}
+
+export interface HeldTab {
+  page: Page;
+  /** The browser is the person's own: nothing context-wide or page-routed is done to it. */
+  shared: boolean;
+  /** Close the tab and let the browser idle out again. */
+  release(): Promise<void>;
 }
 
 /**
@@ -399,8 +421,39 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
   const locks = runner.locks ?? new KeyedMutex();
   const repairer = runner.repairer ?? noRepairer;
   const hands = handsFor(runner.pace === undefined ? HUMAN_PACE : runner.pace);
+  const park = runner.park;
+  const tab = park
+    ? async (site: string): Promise<HeldTab> => {
+        const asked = opts.profile ?? site;
+        const key = (await opts.profileName?.(asked)) ?? asked;
+        return locks.withLock(key, async () => {
+          const session = (await park.take(key)) ?? (await openSession(site, opts));
+          park.pin(key);
+          try {
+            const page = await session.context.newPage();
+            let released = false;
+            return {
+              page,
+              shared: session.shared === true,
+              release: async () => {
+                if (released) return;
+                released = true;
+                await page.close().catch(() => undefined);
+                park.unpin(key);
+              },
+            };
+          } catch (err) {
+            park.unpin(key);
+            throw err;
+          } finally {
+            await park.put(key, session);
+          }
+        });
+      }
+    : undefined;
   return {
-    run: async (flow, input) => {
+    ...(tab ? { tab } : {}),
+    run: async (flow, input, on) => {
       const profile =
         flow.profile === "provider" ? ((await opts.providerProfile?.(flow.site)) ?? null) : null;
       // A profile opens once: everything that lands on one Chrome profile shares one queue and
@@ -411,7 +464,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
       return locks.withLock(key, async () => {
         // Opening the browser is the first thing the network or the machine can break.
         const parked = (await runner.park?.take(key)) ?? null;
-        const session =
+        const held =
           parked ??
           (await openSession(flow.site, profile ? { ...opts, profile } : opts).catch(
             (err: unknown) => {
@@ -420,9 +473,14 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               throw err;
             },
           ));
+        // An armed tab stands in for the browser's page; everything else is the browser's.
+        const armed = on && !on.page.isClosed() ? on.page : null;
+        const session: Session = armed
+          ? (Object.create(held, { page: { value: armed } }) as Session)
+          : held;
         // A kept browser already on the page the flow opens first stays put:
-        // reloading would lose what the last run left there (a form, a list).
-        let keepPage = parked !== null;
+        // reloading would lose what the last run left there (a form, a list, an armed reply box).
+        let keepPage = parked !== null || armed !== null;
         // A flow keeps a short log: enough to see the call that broke, not a session's worth.
         // Off by default (`networkOn`).
         const network = networkOn()
@@ -902,8 +960,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           if (runner.park && !broken) {
             // Stubs from `answer` belong to this run.
             await session.context.unrouteAll({ behavior: "ignoreErrors" }).catch(() => undefined);
-            await runner.park.put(key, session);
-          } else await session.close();
+            await runner.park.put(key, held);
+          } else await held.close();
         }
       });
     },

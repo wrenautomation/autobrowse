@@ -3,9 +3,18 @@
  * request as the official API would, answer through the API leg when a
  * token is in hand, else through the browser leg. Setup: which keys the
  * site still lacks and the step that makes each.
+ *
+ * Arming (wren designs/2026-10-12-push-everywhere.md): `arm` runs a browser leg's `prepare` (the
+ * post open, the reply box found) in its own tab before anyone says yes, and answers an arm id.
+ * The next call to the same path on the same browser runs the leg in that tab (or the call that
+ * carries its id), so only the typing and the click remain.
+ * An API leg, a spending route or a flow with no `prepare` arms nothing. An arm lapses after
+ * `ARM_MS`; a lapsed or unknown id just runs the whole leg, so an arm is never trusted.
  */
 
-import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
+import { randomUUID } from "node:crypto";
+import type { Page } from "playwright";
+import type { BrowserFlow, FlowRunner, HeldTab } from "../browser/flow.js";
 import { type HttpClient, lastingRefusal } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
 import { type JsonSchema, jsonSchemaOf } from "../engine/inputs.js";
@@ -128,7 +137,32 @@ export interface SiteRow {
 export interface CallFrom {
   caller?: string | null;
   invocation?: string;
+  /** Run the browser leg up to its last safe step and answer `{armed}`; nothing is sent. */
+  arm?: boolean;
+  /** An earlier `arm`'s id: run the leg in its tab. Without it, the newest arm on the same path. */
+  armId?: string;
 }
+
+/** What `arm` answers: an id for the call to carry, or null when there is nothing to warm. */
+export interface Armed {
+  armed: string | null;
+  until?: string;
+}
+
+/** An armed tab lives this long; a profile holds at most `ARMS_PER_PROFILE` (the oldest goes). */
+export const ARM_MS = 20 * 60_000;
+export const ARMS_PER_PROFILE = 3;
+
+/** The words a call types: left out of the key an arm is matched by, since the yes may edit them. */
+const TYPED = new Set(["text", "message", "body", "note", "comment"]);
+/** One target per arm: `/2/tweets` replies to many posts, `{id}` tells them apart. */
+const armKey = (input: unknown) =>
+  JSON.stringify(input ?? null, (k, v) => (TYPED.has(k) ? undefined : v));
+
+/** A browser leg's runnable: in the browser's page, or in an armed tab. */
+type Runnable = ((input: unknown, on?: { page: Page }) => Promise<unknown>) & {
+  flow?: BrowserFlow<unknown, unknown>;
+};
 
 export interface CapsReport {
   day: string;
@@ -296,12 +330,65 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       );
     return held(null) || (account !== null && held(account));
   };
+  const arms = new Map<
+    string,
+    { route: string; profile: string; held: HeldTab; timer: ReturnType<typeof setTimeout> }
+  >();
+  const disarm = async (id: string) => {
+    const a = arms.get(id);
+    if (!a) return;
+    arms.delete(id);
+    clearTimeout(a.timer);
+    await a.held.release();
+  };
+  /** Open a tab in the leg's browser and run its `prepare` there; null when it has none. */
+  const armLeg = async (run: Runnable, input: unknown, route: string): Promise<Armed> => {
+    const flow = run.flow;
+    if (!flow?.prepare || flow.profile === "provider" || !deps.runner.tab) return { armed: null };
+    const mine = [...arms].filter(([, a]) => a.profile === flow.site);
+    for (const [id] of mine.slice(0, Math.max(0, mine.length - ARMS_PER_PROFILE + 1)))
+      await disarm(id);
+    const held = await deps.runner.tab(flow.site);
+    const prepare = flow.prepare.bind(flow);
+    try {
+      await deps.runner.run(
+        { ...flow, name: `${flow.name}.prepare`, run: (fp, i) => prepare(fp, i) },
+        input,
+        { page: held.page },
+      );
+    } catch (err) {
+      await held.release();
+      throw err;
+    }
+    const id = randomUUID();
+    const until = (deps.now ?? Date.now)() + ARM_MS;
+    const timer = setTimeout(() => void disarm(id), ARM_MS);
+    timer.unref?.();
+    arms.set(id, { route, profile: flow.site, held, timer });
+    return { armed: id, until: new Date(until).toISOString() };
+  };
+  /**
+   * The armed tab for this path and browser, now the caller's: the one `id` names, or the newest
+   * on the path. Null when lapsed or elsewhere.
+   */
+  const takeArm = (want: string | undefined, route: string, run: Runnable) => {
+    const site = run.flow?.site;
+    const id =
+      want ?? [...arms].reverse().find(([, a]) => a.route === route && a.profile === site)?.[0];
+    const a = id ? arms.get(id) : undefined;
+    if (!a || !id || a.route !== route || a.profile !== site) return null;
+    arms.delete(id);
+    clearTimeout(a.timer);
+    if (!a.held.page.isClosed()) return a.held;
+    void a.held.release();
+    return null;
+  };
   /** The browser leg's runnable, or null when nobody has recorded it yet. */
   const legOf = async (
     leg: Leg,
     profile?: string | null,
     at?: string | null,
-  ): Promise<((input: unknown) => Promise<unknown>) | null> => {
+  ): Promise<Runnable | null> => {
     if ("flow" in leg) {
       const flow = deps.flow(leg.flow) as BrowserFlow<unknown, unknown> | null;
       if (!flow) return null;
@@ -313,7 +400,10 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         : profile !== flow.site
           ? { ...flow, site: profile }
           : { ...flow, profile: flow.profile ?? ("provider" as const) };
-      return (input) => deps.runner.run(sited, input);
+      return Object.assign(
+        (input: unknown, on?: { page: Page }) => deps.runner.run(sited, input, on),
+        { flow: sited },
+      );
     }
     const workflow = await deps.compiled?.get(leg.workflow);
     if (!workflow || !deps.compiled) return null;
@@ -522,6 +612,9 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         );
       }
       async function answer(): Promise<unknown> {
+        // Arming warms a browser leg; an API leg has nothing to warm, a spend is never pre-run.
+        if (from?.arm && (!byBrowser || r.spends || method === "GET" || r.browser?.uploads))
+          return { armed: null } satisfies Armed;
         const amount = r.spends ? r.spends(parsed.data as never) : false;
         if (amount !== false) {
           const what = `${method} ${path} on ${name}, which spends`;
@@ -575,6 +668,16 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           const input = r.browser.input
             ? r.browser.input(parsed.data as never, deps.env)
             : parsed.data;
+          const route = `${s.site} ${method} ${path} ${armKey(input)}`;
+          if (from?.arm) return armLeg(run, input, route);
+          const armed = takeArm(from?.armId, route, run);
+          if (armed)
+            try {
+              const out = await run(input, { page: armed.page });
+              return r.browser.output ? r.browser.output(out) : out;
+            } finally {
+              await armed.release();
+            }
           const out = r.browser.uploads
             ? await withLocalFile(input as Record<string, unknown>, r.browser.uploads, run)
             : await run(input);

@@ -131,15 +131,25 @@ export interface ReplyInput {
   text: string;
 }
 
+/** The post open and its reply box shown: all a reply does before typing. The answer when it can't. */
+async function replyReady(fp: FlowPage, id: string): Promise<ReturnType<typeof notFound> | null> {
+  await openX(fp, `${WEB}/i/status/${id}`);
+  const box = await first(fp, [replyBox]);
+  if (box === "missing") return notFound(`no X post ${id}`);
+  if (box === null)
+    return fp.human(`no reply box under post ${id}: replies may be limited to people it names`);
+  return null;
+}
+
 export const xReply = defineFlow<ReplyInput, unknown>({
   site: "x",
   name: "reply",
+  async prepare(fp, { id }) {
+    await replyReady(fp, id);
+  },
   async run(fp, { id, text }) {
-    await openX(fp, `${WEB}/i/status/${id}`);
-    const box = await first(fp, [replyBox]);
-    if (box === "missing") return notFound(`no X post ${id}`);
-    if (box === null)
-      return fp.human(`no reply box under post ${id}: replies may be limited to people it names`);
+    const no = await replyReady(fp, id);
+    if (no) return no;
     const before = await fp.html();
     const me = meOf(before);
     if (!me) return fp.human("could not tell which X account this profile is signed in as");

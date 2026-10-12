@@ -7,10 +7,14 @@
  * no inbound port, no reachability from the caller's side. A `SiteError` is
  * terminal under its own status; a write runs once (an irreversible post is
  * never retried into a duplicate), a read retries like a browser leg.
+ * `sites/arm` takes a call and runs its browser leg up to the last safe step, answering an arm
+ * id the real call carries (`armId`).
+ * With watchers (the desk), `watch` leases a tab watcher, `unwatch` ends one, `watches` lists them.
  */
 import * as restate from "@restatedev/restate-sdk";
 import { z } from "zod";
 import { withCall } from "../browser/attempt.js";
+import type { Watchers } from "../browser/watchers.js";
 import { lastingRefusal } from "../clients/http.js";
 import type { SiteCalls } from "../runs/calls.js";
 import type { SiteFacade } from "./facade.js";
@@ -39,6 +43,8 @@ const call = site.extend({
   input: z.record(z.string(), z.unknown()).default({}),
   /** Who is asking (`wren:demo`), for the caps ledger; the `x-caller` header says it too. */
   caller: z.string().min(1).max(120).optional(),
+  /** An earlier `arm`'s id: the leg runs in its tab, already on the page. */
+  armId: z.string().uuid().optional(),
 });
 const setup = site.extend({ step: z.string().min(1) });
 
@@ -119,10 +125,41 @@ async function recorded<T>(
  * `name`: `sites` on the box, `desk` on the Mac; one shape, two machines.
  * `calls`: every try of a call, one line each (`src/runs/calls.ts`).
  */
-export function sitesService(facade: SiteFacade, name: string = SITES_SERVICE, calls?: SiteCalls) {
+export function sitesService(
+  facade: SiteFacade,
+  name: string = SITES_SERVICE,
+  calls?: SiteCalls,
+  watchers?: Watchers | null,
+) {
+  const watching = () => {
+    if (!watchers) throw new restate.TerminalError("no watchers here", { errorCode: 501 });
+    return watchers;
+  };
   return restate.service({
     name,
     handlers: {
+      /** Lease (or renew) a tab watcher: `{site, account?, sink: {path, body}, until}`. */
+      watch: async (ctx: restate.Context, raw: unknown) => {
+        const w = watching();
+        return ctx.run("watch", async () => {
+          try {
+            return await w.lease(raw);
+          } catch (err) {
+            if (err instanceof z.ZodError || /no watch spec/.test((err as Error).message))
+              throw new restate.TerminalError((err as Error).message, { errorCode: 400 });
+            throw err;
+          }
+        });
+      },
+      unwatch: async (ctx: restate.Context, raw: unknown) => {
+        const { id } = parse(z.object({ id: z.string().min(1) }), raw);
+        const w = watching();
+        return ctx.run("unwatch", () => w.unwatch(id));
+      },
+      watches: async (ctx: restate.Context) => {
+        const w = watching();
+        return ctx.run("watches", () => w.states());
+      },
       status: async (ctx: restate.Context, raw: unknown) => {
         const { site: which } = parse(site, raw);
         const step = `sites status ${which}`;
@@ -138,6 +175,7 @@ export function sitesService(facade: SiteFacade, name: string = SITES_SERVICE, c
         const from = {
           caller: req.caller ?? ctx.request().headers.get("x-caller") ?? null,
           invocation: ctx.request().id,
+          ...(req.armId ? { armId: req.armId } : {}),
         };
         const step = `sites ${req.site} ${req.method} ${req.path}`;
         const base = {
@@ -158,6 +196,24 @@ export function sitesService(facade: SiteFacade, name: string = SITES_SERVICE, c
           retry,
         );
       }),
+      /** The call's browser leg up to its last safe step, nothing sent: `{armed: id | null, until}`. */
+      arm: async (ctx: restate.Context, raw: unknown) => {
+        const req = parse(call, raw);
+        const from = {
+          caller: req.caller ?? ctx.request().headers.get("x-caller") ?? null,
+          invocation: ctx.request().id,
+          arm: true,
+        };
+        const step = `sites arm ${req.site} ${req.method} ${req.path}`;
+        return ctx.run(
+          step,
+          () =>
+            terminalOnSiteError(`${ctx.request().id} ${step}`, () =>
+              facade.call(req.site, req.method, req.path, req.input, req.account, from),
+            ),
+          WRITE_RETRY,
+        );
+      },
       /** A day's capped reads: each bucket's use and every metered call, who asked, how it went. */
       caps: async (ctx: restate.Context, raw: unknown) => {
         const q = parse(
