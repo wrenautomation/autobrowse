@@ -38,6 +38,12 @@ export const LINKEDIN_PAGES: ReadonlySet<string> = new Set([WREN_PAGE]);
 const PAGE_URN = /^urn:li:organization:(\d+)$/;
 
 /**
+ * The grant acting as a Page through the API needs: Community Management, in review since
+ * 2026-10-09. Until it is granted the browser leg acts as the Page; after, the API does.
+ */
+const asPage = (who: string, scope: string): string[] => (PAGE_URN.test(who) ? [scope] : []);
+
+/**
  * The Page id an author URN posts as, or none for the member.
  * Wren's token holds `w_member_social` only, so a Page's post goes by the browser.
  */
@@ -56,6 +62,10 @@ const headers = (leg: ApiLeg, version = LINKEDIN_VERSION) => ({
 });
 
 const urn = z.string().regex(/^urn:li:[a-zA-Z]+:[A-Za-z0-9_-]+$/, "a LinkedIn URN");
+/** A comment: `urn:li:comment:(urn:li:activity:1,2)`, the post it is on and its own id. */
+const commentUrn = z
+  .string()
+  .regex(/^urn:li:comment:\(urn:li:[a-zA-Z]+:\d+,\d+\)$/, "a LinkedIn comment URN");
 
 const post = z.object({
   author: urn,
@@ -90,9 +100,12 @@ const listPosts = z.object({
   sortBy: z.enum(["LAST_MODIFIED", "CREATED"]).default("LAST_MODIFIED"),
 });
 const byUrn = z.object({ urn });
+/** On a post, or (`urn` a comment) an answer to it: then `object` is the post, `parentComment` the comment. */
 const comment = z.object({
-  urn,
+  urn: z.union([urn, commentUrn]),
   actor: urn,
+  object: urn.optional(),
+  parentComment: commentUrn.optional(),
   message: z.object({ text: z.string().min(1).max(1250) }),
 });
 const comments = z.object({
@@ -379,8 +392,7 @@ export const linkedin: SiteApi = {
         "Publish a post as the member, or as a Page it admins (`author: urn:li:organization:…`, by the browser)",
       request: post,
       irreversible: true,
-      // The token posts only as its member (no w_organization_social): a Page's post is the composer's.
-      prefer: (b) => (composerPage(b.author) ? "browser" : undefined),
+      needs: (b) => asPage(b.author, "w_organization_social"),
       api: async (body, leg) => {
         const res = await leg.http.json<unknown>(`${LINKEDIN_ORIGIN}/rest/posts`, {
           method: "POST",
@@ -405,6 +417,8 @@ export const linkedin: SiteApi = {
       path: "/rest/posts",
       summary: "The member's posts, newest first (`q=author&author=urn:li:person:…&count&start`)",
       request: listPosts,
+      // A member's own posts are r_member_social, which LinkedIn grants to partners only.
+      needs: (q) => [PAGE_URN.test(q.author) ? "r_organization_social" : "r_member_social"],
       api: async (q, leg) => {
         const u = new URL(`${LINKEDIN_ORIGIN}/rest/posts`);
         u.searchParams.set("q", "author");
@@ -438,8 +452,9 @@ export const linkedin: SiteApi = {
     route({
       method: "GET",
       path: "/rest/socialActions/{urn}",
-      summary: "Reaction and comment counts for a post (API leg needs Community Management access)",
+      summary: "Reaction and comment counts for a post",
       request: byUrn,
+      needs: ["r_organization_social"],
       api: async ({ urn }, leg) =>
         must(
           await leg.http.json<unknown>(
@@ -455,6 +470,7 @@ export const linkedin: SiteApi = {
       path: "/rest/socialActions/{urn}/comments",
       summary: "Comments on a post (`count&start`)",
       request: comments,
+      needs: ["r_organization_social"],
       api: async ({ urn, count, start }, leg) =>
         must(
           await leg.http.json<unknown>(
@@ -471,6 +487,7 @@ export const linkedin: SiteApi = {
       summary: "Comment on a post (or reply, when `urn` is a comment)",
       request: comment,
       irreversible: true,
+      needs: (b) => asPage(b.actor, "w_organization_social"),
       api: async ({ urn, ...body }, leg) =>
         must(
           await leg.http.json<unknown>(
@@ -490,6 +507,7 @@ export const linkedin: SiteApi = {
       summary:
         "Start an image upload: answers `uploadUrl` (PUT the bytes there) and the image URN for a post",
       request: initUpload,
+      needs: (b) => asPage(b.initializeUploadRequest.owner, "w_organization_social"),
       api: async (body, leg) =>
         must(
           await leg.http.json<unknown>(`${LINKEDIN_ORIGIN}/rest/images?action=initializeUpload`, {
@@ -506,6 +524,7 @@ export const linkedin: SiteApi = {
       summary:
         "Upload an image, a document (PDF) or a video from an https URL in one call: answers the `urn` a post names",
       request: upload,
+      needs: (b) => asPage(b.owner, "w_organization_social"),
       api: async (body, leg) => {
         if (body.kind === "video") return { urn: await uploadVideo(leg, body.owner, body.file) };
         const rest = body.kind === "image" ? "images" : "documents";

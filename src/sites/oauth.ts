@@ -16,6 +16,7 @@ interface TokenBody {
   access_token?: string;
   refresh_token?: string;
   expires_in?: number;
+  scope?: string;
   error?: string;
   error_description?: string;
 }
@@ -240,7 +241,13 @@ export async function runConsent(
     port?: number;
     timeoutMs?: number;
   },
-): Promise<{ refreshToken: string | null; accessToken: string; expiresIn: number | null }> {
+): Promise<{
+  refreshToken: string | null;
+  accessToken: string;
+  expiresIn: number | null;
+  /** What the platform granted: the answer's `scope` when it says, else what was asked. */
+  scopes: readonly string[];
+}> {
   const id = o.env(spec.clientId);
   const secret = o.env(spec.clientSecret);
   if (!id || !secret)
@@ -311,5 +318,11 @@ export async function runConsent(
     expiresIn = long.expires_in ?? null;
   }
   // How long the access token lives: a site that keeps no refresh token keeps this date with it.
-  return { refreshToken: body.refresh_token ?? null, accessToken, expiresIn };
+  const said = typeof body.scope === "string" ? body.scope.split(/[\s,]+/).filter(Boolean) : [];
+  return {
+    refreshToken: body.refresh_token ?? null,
+    accessToken,
+    expiresIn,
+    scopes: said.length ? said : spec.scopes,
+  };
 }

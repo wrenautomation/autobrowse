@@ -232,6 +232,6 @@ describe("outlook site API", () => {
         );
       },
     });
-    expect(out).toEqual({ refreshToken: "rt", accessToken: "at", expiresIn: 3600 });
+    expect(out).toMatchObject({ refreshToken: "rt", accessToken: "at", expiresIn: 3600 });
   });
 });

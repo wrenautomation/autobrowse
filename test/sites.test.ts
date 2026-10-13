@@ -96,7 +96,11 @@ describe("site facade", () => {
       return { status: 404 };
     });
     const browser = fakeBrowser([]);
-    const env: Record<string, string> = { LINKEDIN_ACCESS_TOKEN: "tok" };
+    // A member's own posts read with r_member_social, a partner grant: granted here by hand.
+    const env: Record<string, string> = {
+      LINKEDIN_ACCESS_TOKEN: "tok",
+      LINKEDIN_GRANTS: "r_member_social",
+    };
     const sites = siteFacade([linkedin], {
       http: httpClient({ fetch: api.fetch }),
       env: (n) => env[n],
@@ -297,7 +301,13 @@ describe("site facade", () => {
     await expect(sites.setup("youtube", "consent")).resolves.toEqual({
       made: ["YOUTUBE_REFRESH_TOKEN"],
     });
-    expect(sink.values).toEqual({ YOUTUBE_REFRESH_TOKEN: "rt" });
+    // What the token may do is kept beside it: the answer named no scope, so what was asked.
+    expect(sink.values).toEqual({
+      YOUTUBE_REFRESH_TOKEN: "rt",
+      YOUTUBE_SCOPES: youtube.setup
+        .flatMap((s) => ("oauth" in s.how ? s.how.oauth.scopes : []))
+        .join(" "),
+    });
     // The client step needs the project first (409); with it, its workflow is not compiled here (501).
     await expect(sites.setup("youtube", "oauth-client")).rejects.toMatchObject({ status: 409 });
     env.YOUTUBE_CLOUD_PROJECT = "p1";

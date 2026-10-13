@@ -309,7 +309,7 @@ describe("meta site", () => {
           return { landed: `${WEB_REDIRECT}?code=c&state=${u.searchParams.get("state")}#_=_` };
         },
       }),
-    ).resolves.toEqual({ refreshToken: null, accessToken: "long", expiresIn: 5_184_000 });
+    ).resolves.toMatchObject({ refreshToken: null, accessToken: "long", expiresIn: 5_184_000 });
     const long = calls.at(-1);
     expect(long?.method).toBe("GET");
     expect(long?.url.searchParams.get("client_id")).toBe("app");

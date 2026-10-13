@@ -33,12 +33,14 @@ import {
   type Leg,
   legName,
   type Method,
+  needsOf,
   type OAuthSpec,
   prefersBrowser,
   type SetupStep,
   type SiteApi,
   SiteError,
   type SiteRoute,
+  siteEnv,
 } from "./types.js";
 import { withLocalFile } from "./upload-file.js";
 
@@ -330,6 +332,24 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       );
     return held(null) || (account !== null && held(account));
   };
+  // What the account's token may do: the scopes its consent got (older tokens: the scopes their
+  // consents ask), plus `<SITE>_GRANTS`, products and reviews passed, set by hand.
+  const granted = (s: SiteApi, account: string | null): Set<string> => {
+    const list = (v: string | undefined) => (v ?? "").split(/[\s,]+/).filter(Boolean);
+    const got = deps.env(accountEnv(siteEnv(s.site, "SCOPES"), account));
+    const asked = s.setup.flatMap((st) => ("oauth" in st.how ? st.how.oauth.scopes : []));
+    return new Set([
+      ...(got === undefined ? asked : list(got)),
+      ...list(deps.env(siteEnv(s.site, "GRANTS"))),
+    ]);
+  };
+  /** The grants this request's API leg needs and the account's token lacks. */
+  const lacking = <I>(s: SiteApi, r: SiteRoute<I>, account: string | null, input?: I) => {
+    const need = needsOf(r, input);
+    if (!need.length) return [];
+    const have = granted(s, account);
+    return need.filter((g) => !have.has(g));
+  };
   const arms = new Map<
     string,
     { route: string; profile: string; held: HeldTab; timer: ReturnType<typeof setTimeout> }
@@ -436,11 +456,15 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       request: jsonSchemaOf(r.request),
     };
     const recorded = r.browser ? Boolean(await legOf(r.browser)) : false;
-    if (r.api && !prefersBrowser(r) && hasToken(s, account)) return { ...base, via: "api" };
+    const lacks = lacking(s, r, account);
+    if (r.api && !prefersBrowser(r) && hasToken(s, account) && !lacks.length)
+      return { ...base, via: "api" };
     if (r.browser) {
       if (!recorded) return { ...base, via: "none", missing: `${legName(r.browser)} not recorded` };
       return { ...base, via: "browser" };
     }
+    if (r.api && lacks.length)
+      return { ...base, via: "none", missing: `waiting on ${lacks.join(", ")}` };
     if (r.api) return { ...base, via: "none", missing: `no token for ${s.site}` };
     return { ...base, via: "none", missing: "no leg" };
   };
@@ -545,9 +569,11 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       const chosen = account ?? (s.signedOut ? null : await deps.accountFor?.(s)) ?? null;
       const oneKey = !s.setup.some((st) => "oauth" in st.how);
       const fallback = !account && chosen && (deps.providerOf?.(s) || oneKey);
-      // A route that prefers the browser never reaches the API, so never pays for a read.
+      // A route that prefers the browser never reaches the API, so never pays for a read; one
+      // whose token lacks a grant (a review still pending) runs as if no token were held.
+      const lacks = lacking(s, r, chosen, parsed.data as never);
       const token =
-        r.api && !prefersBrowser(r, parsed.data as never)
+        r.api && !prefersBrowser(r, parsed.data as never) && !lacks.length
           ? ((await tokenFor(s, chosen)) ?? (fallback ? await tokenFor(s, null) : null))
           : null;
       const byBrowser = !(r.api && token !== null) && Boolean(r.browser);
@@ -683,6 +709,11 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
             : await run(input);
           return r.browser.output ? r.browser.output(out) : out;
         }
+        if (lacks.length)
+          throw new SiteError(
+            501,
+            `${method} ${r.path}: waiting on ${lacks.join(", ")} for ${name}, and no browser leg`,
+          );
         throw new SiteError(501, `${method} ${r.path}: no token for ${name} and no browser leg`);
       }
     },
@@ -773,6 +804,9 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           502,
           "consent gave no refresh token and the site keeps no access token",
         );
+      // What the token may do, so a route whose grant this consent added moves to the API.
+      for (const as of names)
+        await deps.sink.put(accountEnv(siteEnv(name, "SCOPES"), as), got.scopes.join(" "));
       return { made };
     },
   };

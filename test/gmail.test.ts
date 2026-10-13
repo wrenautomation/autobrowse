@@ -165,6 +165,8 @@ describe("gmail site: one consent per account", () => {
     expect(Object.keys(sink.values)).toEqual([
       "GMAIL_REFRESH_TOKEN",
       "GMAIL_REFRESH_TOKEN__JIN_GMAIL_COM",
+      "GMAIL_SCOPES",
+      "GMAIL_SCOPES__JIN_GMAIL_COM",
     ]);
   });
 
@@ -211,7 +213,12 @@ describe("gmail site: one consent per account", () => {
       status: 409,
     });
     expect(ran).toHaveLength(1);
-    expect(sink.values).toEqual({ GMAIL_REFRESH_TOKEN__WILL_WILLIAMJIN_DEV: "rt-will" });
+    expect(sink.values).toEqual({
+      GMAIL_REFRESH_TOKEN__WILL_WILLIAMJIN_DEV: "rt-will",
+      GMAIL_SCOPES__WILL_WILLIAMJIN_DEV: gmail.setup
+        .flatMap((s) => ("oauth" in s.how ? s.how.oauth.scopes : []))
+        .join(" "),
+    });
     // A call as that account carries its token; the site's own has none yet.
     env.GMAIL_REFRESH_TOKEN__WILL_WILLIAMJIN_DEV = "rt-will";
     const seen: string[] = [];

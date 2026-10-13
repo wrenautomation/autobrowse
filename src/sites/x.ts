@@ -82,7 +82,10 @@ const handle = z.string().regex(/^[A-Za-z0-9_]{1,15}$/, "an X handle without the
 const follow = z.object({ username: handle, undo: z.boolean().optional() });
 const like = z.object({ id, undo: z.boolean().optional() });
 
-/** A text-only reply goes through the page: free, and the API's reply limits don't apply. */
+/**
+ * A text-only reply goes through the page until X_GRANTS names `replies` (a paid tier that
+ * lifts the API's reply limits, William's call): free, and the page has no such limits.
+ */
 const pageReply = (b: z.infer<typeof post>) =>
   b.reply && b.text && !b.media && !b.poll && !b.quote_tweet_id && !b.reply_settings;
 
@@ -276,7 +279,7 @@ export const x: SiteApi = {
       summary: "A post: text, a reply (`reply.in_reply_to_tweet_id`), a quote, media ids, a poll",
       request: post,
       irreversible: true,
-      prefer: (b) => (pageReply(b) ? "browser" : undefined),
+      needs: (b) => (pageReply(b) ? ["replies"] : []),
       meter: (b) => (b.reply ? { reply: 1 } : {}),
       browser: {
         flow: "x/reply",

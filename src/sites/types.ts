@@ -87,6 +87,15 @@ export interface SiteRoute<I = unknown, O = unknown> {
    * browser, since the token may post only as its member.
    */
   prefer?: "browser" | ((input: I) => "browser" | undefined);
+  /**
+   * Grants the API leg needs beyond a token: a scope the platform reviews first (LinkedIn's
+   * `w_organization_social`) or a product bought or approved (`replies` on X). One missing,
+   * the request runs as if no token were held: its browser leg, else a 501 naming the grant.
+   * The day a review passes, the grant is recorded (a consent asking the new scope, or
+   * `<SITE>_GRANTS`) and the API answers the same path, with no caller change. A function
+   * decides per request.
+   */
+  needs?: readonly string[] | ((input: I) => readonly string[]);
   summary: string;
 }
 
@@ -95,6 +104,14 @@ export const prefersBrowser = <I>(r: Pick<SiteRoute<I>, "prefer">, input?: I): b
   typeof r.prefer === "function"
     ? input !== undefined && r.prefer(input) === "browser"
     : r.prefer === "browser";
+
+/** The grants this request's API leg needs; with no request (a route listing), only a fixed list. */
+export const needsOf = <I>(r: Pick<SiteRoute<I>, "needs">, input?: I): readonly string[] =>
+  typeof r.needs === "function" ? (input === undefined ? [] : r.needs(input)) : (r.needs ?? []);
+
+/** A site's own env name: `siteEnv("reddit-public", "GRANTS")` is `REDDIT_PUBLIC_GRANTS`. */
+export const siteEnv = (site: string, what: string): string =>
+  `${site.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}_${what}`;
 
 /** One key or token the site needs, and what makes it. */
 /**

@@ -24,7 +24,7 @@ import type { Hints } from "../src/browser/locate.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
 import { instagram } from "../src/sites/instagram.js";
 import { linkedin } from "../src/sites/linkedin.js";
-import { prefersBrowser } from "../src/sites/types.js";
+import { needsOf } from "../src/sites/types.js";
 import { x } from "../src/sites/x.js";
 import { fakePage } from "./auth-fakes.js";
 
@@ -55,15 +55,15 @@ describe("social act routes", () => {
     ).toBe(true);
   });
 
-  it("sends a text-only X reply through the page and anything else to the API", () => {
+  it("sends a text-only X reply through the page until X grants replies; anything else to the API", () => {
     const r = x.routes.find((r) => r.method === "POST" && r.path === "/2/tweets");
     if (!r) throw new Error("no /2/tweets");
     const reply = { text: "good point", reply: { in_reply_to_tweet_id: "123" } };
-    expect(prefersBrowser(r, reply)).toBe(true);
+    expect(needsOf(r, reply)).toEqual(["replies"]);
     expect(r.browser?.input?.(reply, () => undefined)).toEqual({ id: "123", text: "good point" });
     expect(r.meter?.(reply)).toEqual({ reply: 1 });
-    expect(prefersBrowser(r, { text: "a post" })).toBe(false);
-    expect(prefersBrowser(r, { ...reply, media: { media_ids: ["9"] } })).toBe(false);
+    expect(needsOf(r, { text: "a post" })).toEqual([]);
+    expect(needsOf(r, { ...reply, media: { media_ids: ["9"] } })).toEqual([]);
   });
 
   it("never lets William's LinkedIn or the alt like or follow", () => {

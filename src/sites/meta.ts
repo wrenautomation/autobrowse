@@ -254,6 +254,19 @@ const igLookup = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(25),
 });
 const igReply = z.object({ commentId: id, message: z.string().min(1).max(2200) });
+/** A Page's answer under a Facebook comment, by the Page's own token. */
+const pageReply = z.object({ pageId: id, commentId: id, message: z.string().min(1).max(8000) });
+/**
+ * The Send API: a DM from the Page (Facebook or its Instagram), to a person who wrote first
+ * (`recipient.id`) or as the one Private Reply a comment allows (`recipient.comment_id`).
+ */
+const pageMessage = z.object({
+  pageId: id,
+  recipient: z.union([z.object({ id }), z.object({ comment_id: id })]),
+  message: z.object({ text: z.string().min(1).max(2000) }),
+  messaging_type: z.enum(["RESPONSE", "UPDATE", "MESSAGE_TAG"]).optional(),
+  tag: z.string().optional(),
+});
 
 /** A Graph error body: the code and subcode say what failed (never the token). */
 type GraphFailure = {
@@ -740,6 +753,30 @@ export const meta: SiteApi = {
       request: igReply,
       irreversible: true,
       api: ({ commentId, message }, leg) => post(leg, `${commentId}/replies`, { message }),
+    }),
+    route({
+      method: "POST",
+      path: "/{commentId}/comments",
+      summary: "The Page's reply under a Facebook comment",
+      request: pageReply,
+      irreversible: true,
+      // Not asked in the consent yet: it needs App Review, which waits on Business Verification.
+      needs: ["pages_manage_engagement"],
+      api: async ({ pageId, commentId, message }, leg) =>
+        post(await pageLeg(leg, pageId), `${commentId}/comments`, { message }),
+    }),
+    route({
+      method: "POST",
+      path: "/{pageId}/messages",
+      summary:
+        "A DM from the Page (Send API): to someone who wrote first, or a comment's Private Reply",
+      request: pageMessage,
+      irreversible: true,
+      // Without Advanced Access a Page messages only the app's own testers; set META_GRANTS=messaging
+      // when App Review grants pages_messaging and instagram_manage_messages.
+      needs: ["messaging"],
+      api: async ({ pageId, ...body }, leg) =>
+        post(await pageLeg(leg, pageId), `${pageId}/messages`, body),
     }),
   ],
   setup: [

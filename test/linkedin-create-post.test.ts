@@ -32,7 +32,7 @@ describe("linkedin/create-post", () => {
     expect(BROWSER_FLOWS["linkedin/create-post"]).toBe(linkedinCreatePost);
   });
 
-  it("a Page's post goes by the browser even with a token; the member's by the API", async () => {
+  it("a Page's post goes by the browser until the token holds w_organization_social; the member's by the API", async () => {
     const route = linkedin.routes.find((r) => r.path === "/rest/posts" && r.method === "POST");
     expect(prefersBrowser(route as never)).toBe(false);
     const api = fakeFetch(() => ({ status: 201, headers: { "x-restli-id": "urn:li:share:1" } }));
@@ -71,6 +71,34 @@ describe("linkedin/create-post", () => {
 
     await expect(post("urn:li:organization:999")).rejects.toMatchObject({ status: 400 });
     expect(seen).toHaveLength(1);
+
+    // Community Management granted: a consent that asked the scope recorded it, and the API posts.
+    env.LINKEDIN_SCOPES__HELLO_WREN_TEST = "openid profile w_member_social w_organization_social";
+    expect(await post(PAGE)).toEqual({ id: "urn:li:share:1" });
+    expect(api.calls).toHaveLength(2);
+    expect(seen).toHaveLength(1);
+  });
+
+  it("a grant still in review is a 501 naming it when the route has no browser leg", async () => {
+    const env: Record<string, string> = { LINKEDIN_ACCESS_TOKEN__HELLO_WREN_TEST: "tok" };
+    const api = fakeFetch(() => ({ status: 200, body: {} }));
+    const sites = siteFacade([linkedin], {
+      http: httpClient({ fetch: api.fetch }),
+      env: (n) => env[n],
+      sink: memorySink(),
+      flow: () => null,
+      providerOf: () => null,
+      accountFor: async () => "hello@wren.test",
+    });
+    const owner = { kind: "image", owner: PAGE, file: "https://x.test/a.png" };
+    await expect(sites.call("linkedin", "POST", "/upload", owner)).rejects.toMatchObject({
+      status: 501,
+      message: expect.stringContaining("waiting on w_organization_social"),
+    });
+    expect(api.calls).toHaveLength(0);
+    env.LINKEDIN_GRANTS = "w_organization_social";
+    const [row] = await sites.list();
+    expect(row?.routes.find((r) => r.path === "/upload")?.via).toBe("api");
   });
 
   it("reads the Page's name live, switches to it, types the post and answers with its permalink", async () => {
@@ -151,7 +179,7 @@ describe("linkedin upload", () => {
       });
       const out = await sites.call("linkedin", "POST", "/upload", {
         kind: "document",
-        owner: PAGE,
+        owner: MEMBER,
         file: "https://media.test/deck.pdf",
       });
       expect(out).toEqual({ urn: "urn:li:document:D1" });
@@ -160,13 +188,13 @@ describe("linkedin upload", () => {
         "POST /rest/documents?action=initializeUpload",
         "PUT /dms-uploads/d1",
       ]);
-      expect(api.calls[0]?.body).toContain(PAGE);
+      expect(api.calls[0]?.body).toContain(MEMBER);
       expect(api.calls[1]?.headers.get("authorization")).toBe("Bearer tok");
       expect(api.calls[1]?.body).toBe("<bytes>");
       await expect(
         sites.call("linkedin", "POST", "/upload", {
           kind: "image",
-          owner: PAGE,
+          owner: MEMBER,
           file: "/etc/hosts",
         }),
       ).rejects.toMatchObject({ status: 400 });
@@ -210,7 +238,7 @@ describe("linkedin upload", () => {
       });
       const out = await sites.call("linkedin", "POST", "/upload", {
         kind: "video",
-        owner: PAGE,
+        owner: MEMBER,
         file: "https://media.test/clip.mp4",
       });
       expect(out).toEqual({ urn: "urn:li:video:V1" });
