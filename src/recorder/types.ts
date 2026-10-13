@@ -39,6 +39,8 @@ interface Base {
   t: number;
   url: string;
   screenshot?: string;
+  /** Why the person did this, in a clause (autotrack's offline labels); teach reads it as the note. */
+  intent?: string;
 }
 
 export type Action =

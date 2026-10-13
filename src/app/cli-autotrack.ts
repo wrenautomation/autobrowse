@@ -8,11 +8,16 @@ import type { Command } from "commander";
 import { checkDevice, installCommands } from "../autotrack/code.js";
 import { devices, enroll, revoke } from "../autotrack/enroll.js";
 import { importSession } from "../autotrack/import.js";
-import { listSessions, type TrackStore } from "../autotrack/store.js";
+import { labelKey } from "../autotrack/label.js";
+import { listSessions, type TrackWriter } from "../autotrack/store.js";
+import { httpClient } from "../clients/http.js";
 import { expandHome } from "../google-auth.js";
+import type { Llm } from "../llm/index.js";
+import { openaiLlm } from "../llm/openai.js";
 import { isDefaultOwner } from "../owner.js";
 import type { Settings } from "./config.js";
 import { awsFor } from "./owner.js";
+import { llmFor } from "./services.js";
 
 const size = (n: number) =>
   n >= 1e9
@@ -26,6 +31,33 @@ function operator(s: Settings): { bucket: string } {
   if (!s.trackBucket)
     throw new Error("no TRACK_BUCKET (deploy/terraform track.tf output track_bucket)");
   return { bucket: s.trackBucket };
+}
+
+/** The gateway's free vision-capable Flash: cheap, sees the frames, and its keys cost nothing. */
+export const LABEL_MODEL = "gemini/gemini-3.1-flash-lite";
+
+/**
+ * The labelling model: the LLM gateway when `WREN_LLM_GATEWAY_URL` and `WREN_LLM_GATEWAY_TOKEN`
+ * are in the environment, else the configured provider. Null when neither is there.
+ */
+export function labelLlm(settings: Settings, env: NodeJS.ProcessEnv = process.env): Llm | null {
+  const url = env.WREN_LLM_GATEWAY_URL;
+  const apiKey = env.WREN_LLM_GATEWAY_TOKEN;
+  if (url && apiKey)
+    return openaiLlm({
+      apiKey,
+      model: env.AUTOTRACK_LABEL_MODEL || LABEL_MODEL,
+      baseUrl: url,
+      http: httpClient({ timeoutMs: 180_000 }),
+    });
+  return llmFor(settings);
+}
+
+function refOf(ref: string): { device: string; session: string } {
+  const [device, session, ...rest] = ref.split("/");
+  if (!device || !session || rest.length)
+    throw new Error("give <device>/<session> (autobrowse autotrack list)");
+  return { device, session };
 }
 
 export function registerAutotrackCommands(program: Command, settings: Settings): void {
@@ -72,7 +104,7 @@ export function registerAutotrackCommands(program: Command, settings: Settings):
       );
     });
 
-  const store = async (): Promise<TrackStore> => {
+  const store = async (): Promise<TrackWriter> => {
     const { bucket } = operator(settings);
     const { s3TrackStore } = await import("../autotrack/store.js");
     return s3TrackStore({ bucket, aws: awsFor(settings) });
@@ -102,13 +134,57 @@ export function registerAutotrackCommands(program: Command, settings: Settings):
     .option("--name <name>", "recording name (default <device>-<session>)")
     .option("--site <site>", "recording site (default desktop)")
     .action(async (ref: string, o: { name?: string; site?: string }) => {
-      const [device, session, ...rest] = ref.split("/");
-      if (!device || !session || rest.length)
-        throw new Error("give <device>/<session> (autobrowse autotrack list)");
       const root = expandHome(settings.recordingsDir);
-      const r = await importSession(await store(), { device, session }, { root, ...o });
+      const r = await importSession(await store(), refOf(ref), { root, ...o });
       console.log(
         `${r.name}: ${r.actions} actions from ${r.events} events, ${r.frames} frames, in ${join(r.dir, "track")}\nnext: autobrowse compile ${r.name}`,
       );
     });
+  track
+    .command("label [ref]")
+    .description(
+      "Label a session offline: signals, episodes, goal/outcome and an intent per act, written to labels/<device>/<session>.json (and beside the import). --all: every session with no labels yet",
+    )
+    .option("--no-model", "rules only: signals and episodes, no model call")
+    .option("--all", "every session with no labels yet")
+    .option("--device <device>", "with --all: only this device")
+    .action(
+      async (ref: string | undefined, o: { model: boolean; all?: boolean; device?: string }) => {
+        const { labelOne, unlabelled } = await import("../autotrack/label-run.js");
+        const s = await store();
+        const llm = o.model ? labelLlm(settings) : null;
+        if (o.model && !llm)
+          throw new Error("no model (gateway env or an LLM key); --no-model labels by rules only");
+        const root = expandHome(settings.recordingsDir);
+        if (!o.all && !ref) throw new Error("give <device>/<session> or --all");
+        const refs = o.all
+          ? (await unlabelled(s, o.device && checkDevice(o.device))).map((r) => ({
+              device: r.device,
+              session: r.session,
+            }))
+          : [refOf(ref as string)];
+        if (o.all && !refs.length) console.log("every session already has labels");
+        let failed = 0;
+        for (const r of refs) {
+          try {
+            const out = await labelOne(s, r, { root, llm, log: (l) => console.log(l) });
+            const t = out.stats;
+            console.log(
+              `${out.ref}: ${t.episodes} episodes, ${t.acts} acts, ${t.calls} calls (${t.cached} cached), ${t.inputTokens} in / ${t.outputTokens} out tokens, ${t.images} images, ${t.ms} ms${out.written ? `, written to ${labelKey(r.device, r.session)} and ${out.dir}` : ""}`,
+            );
+            for (const f of t.failed) console.log(`  ${f.episode} failed: ${f.error}`);
+            if (!out.written) {
+              failed++;
+              console.log("  not written; rerun to retry (finished calls are cached)");
+            }
+          } catch (err) {
+            failed++;
+            console.log(
+              `${r.device}/${r.session}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+        if (failed) process.exitCode = 1;
+      },
+    );
 }

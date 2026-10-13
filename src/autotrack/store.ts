@@ -17,7 +17,12 @@ export interface TrackStore {
   get(key: string): Promise<Buffer>;
 }
 
-export function s3TrackStore(o: { bucket: string; aws: AwsConfig }): TrackStore {
+/** William's user can also write the labels (`labels/<device>/<session>.json`); a device's key never does. */
+export interface TrackWriter extends TrackStore {
+  put(key: string, body: Buffer, contentType?: string): Promise<void>;
+}
+
+export function s3TrackStore(o: { bucket: string; aws: AwsConfig }): TrackWriter {
   const client = import("@aws-sdk/client-s3").then((sdk) => ({ s3: new sdk.S3Client(o.aws), sdk }));
   return {
     async list(prefix) {
@@ -42,6 +47,17 @@ export function s3TrackStore(o: { bucket: string; aws: AwsConfig }): TrackStore 
       const got = await s3.send(new sdk.GetObjectCommand({ Bucket: o.bucket, Key: key }));
       if (!got.Body) throw new Error(`${key}: empty body`);
       return Buffer.from(await got.Body.transformToByteArray());
+    },
+    async put(key, body, contentType = "application/json") {
+      const { s3, sdk } = await client;
+      await s3.send(
+        new sdk.PutObjectCommand({
+          Bucket: o.bucket,
+          Key: key,
+          Body: body,
+          ContentType: contentType,
+        }),
+      );
     },
   };
 }

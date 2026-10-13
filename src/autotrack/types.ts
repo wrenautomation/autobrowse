@@ -1,7 +1,7 @@
 /**
  * The autotrack session format, copied from the autotrack repo (`src/events.ts`, which follows its
  * designs/2026-10-13-autotrack.md). The repos are separate, so no test can compare them: change
- * both or neither.
+ * both or neither. `Labels` and its parts (end of file) are autobrowse's own: the offline pass writes them.
  */
 
 export interface Base {
@@ -63,6 +63,27 @@ export interface WebEffects {
   /** Origin + path, no query. */
   requests: { method: string; url: string; status: number; ms: number }[];
   dom: { added: number; removed: number; textChanged: number };
+  /** Console errors and unhandled rejections in the 1 s window. */
+  errors?: { message: string; source: string }[];
+}
+
+/** What an act did, written once its after-frame is known (signal section of the design doc). */
+export interface Outcome {
+  /** The frame hash moved. */
+  screen: boolean;
+  /** The front app or window changed. */
+  focus: boolean;
+  /** A dialog appeared. */
+  dialog: boolean;
+  /** A window opened or closed. */
+  window: boolean;
+}
+
+/** The fields every act event (click, drag, scroll, text, key) may carry. */
+interface ActExtras {
+  out?: Outcome;
+  /** The latest accessibility tree before the act (`trees/<n>.json`). */
+  tree?: number;
 }
 
 export type Event = Base &
@@ -70,7 +91,7 @@ export type Event = Base &
   (
     | { kind: "move"; x: number; y: number }
     /** before/after = frame numbers */
-    | {
+    | (ActExtras & {
         kind: "click";
         x: number;
         y: number;
@@ -79,8 +100,8 @@ export type Event = Base &
         element?: Element;
         before?: number;
         after?: number;
-      }
-    | {
+      })
+    | (ActExtras & {
         kind: "drag";
         x0: number;
         y0: number;
@@ -90,9 +111,9 @@ export type Event = Base &
         element?: Element;
         before?: number;
         after?: number;
-      }
+      })
     /** wheel ticks folded per 250 ms */
-    | {
+    | (ActExtras & {
         kind: "scroll";
         x: number;
         y: number;
@@ -101,25 +122,25 @@ export type Event = Base &
         element?: Element;
         before?: number;
         after?: number;
-      }
+      })
     /** printable keys folded, ends at 1 s idle, a click, or a non-text key */
-    | {
+    | (ActExtras & {
         kind: "text";
         text: string;
         redacted: boolean;
         element?: Element;
         before?: number;
         after?: number;
-      }
+      })
     /** enter, tab, arrows, esc, backspace runs, and any combo */
-    | {
+    | (ActExtras & {
         kind: "key";
         key: string;
         mods: ("ctrl" | "alt" | "shift" | "meta")[];
         element?: Element;
         before?: number;
         after?: number;
-      }
+      })
     /** app or window changed (app/window on Base) */
     | { kind: "focus" }
     /** a screen change with no act (idle reading) */
@@ -137,8 +158,37 @@ export type Event = Base &
         y?: number;
         target?: WebTarget;
         effects?: WebEffects;
+        /** `effect` events: the act they describe. */
+        cause?: { act: string; ts: number };
+        button?: string;
+        count?: number;
+        /** `nav`: `from` url and the webNavigation transition (link, typed, reload, form_submit, back_forward…). */
+        from?: string;
+        transition?: string;
+        /** `tab`: open | close | switch, and how many tabs are open. */
+        op?: "open" | "close" | "switch";
+        /** `search`. */
+        engine?: string;
+        query?: string;
+        /** `copy`, `cut`, `paste`, `select`: ≤ 2,000 chars, through redaction. */
+        text?: string;
+        /** `download`: never the file. */
+        ext?: string;
+        mime?: string;
+        bytes?: number;
+        origin?: string;
+        /** `snapshot`: the page's accessibility outline, or `treeFile` when stored as `trees/<n>.txt`. */
+        tree?: string;
+        treeFile?: number;
       }
     | { kind: "app"; url: string; action: string; detail: unknown }
+    /** An accessibility tree was stored as `trees/<tree>.json`. */
+    | { kind: "tree"; tree: number }
+    /** The front window became an alert, sheet or modal dialog. */
+    | { kind: "dialog"; title: string; text: string; buttons: string[] }
+    | { kind: "clipboard"; types: string[]; length: number; text?: string; redacted: boolean }
+    /** The person's own "why"; `goal: ""` with `done` closes the task. */
+    | { kind: "task"; goal: string; done?: boolean }
   );
 
 /**
@@ -164,4 +214,35 @@ export interface SessionMeta {
     scale: number;
     primary: boolean;
   }[];
+}
+
+export type EpisodeOutcome = "done" | "failed" | "abandoned" | "unclear";
+
+/** The rule signals of one act (design doc, "Derived offline"). */
+export interface ActSignals {
+  /** ms since the last act. */
+  dwell: number;
+  /** ms the pointer rested on the target before the act; absent for acts with no pointer. */
+  hover?: number;
+  dead: boolean;
+  rage: boolean;
+  correction: boolean;
+  error: boolean;
+}
+
+/** `labels/<device>/<session>.json`. `model` (not in the doc) says who labelled: null = rules only. */
+export interface Labels {
+  v: 1;
+  session: string;
+  model?: string | null;
+  episodes: {
+    id: string;
+    start: number;
+    end: number;
+    goal: string;
+    goalBy: "person" | "model";
+    outcome: EpisodeOutcome;
+    confidence: number;
+  }[];
+  acts: { t: number; episode: string; intent: string; signals: ActSignals }[];
 }

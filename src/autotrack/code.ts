@@ -10,9 +10,14 @@ import { z } from "zod";
 export const DEVICE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 export const DEVICE_MAX = 40;
 
+/** Top-level prefixes of the bucket that are not a device's: `labels/` holds the offline labels. */
+export const RESERVED_DEVICES = ["labels"];
+
 export function checkDevice(device: string): string {
   if (!DEVICE.test(device) || device.length > DEVICE_MAX)
     throw new Error(`device must be kebab-case, at most ${DEVICE_MAX} chars, got "${device}"`);
+  if (RESERVED_DEVICES.includes(device))
+    throw new Error(`"${device}" is a prefix of the bucket, not a device name`);
   return device;
 }
 
