@@ -505,7 +505,9 @@ export const linkedin: SiteApi = {
       summary: "Comment on a post (or reply, when `urn` is a comment)",
       request: comment,
       irreversible: true,
-      needs: (b) => asPage(b.actor, "w_organization_social"),
+      // Commenting is partner-only for members too (403 partnerApiSocialActions.CREATE on
+      // w_member_social, 2026-10-13): Community Management's feed scope, until then the browser.
+      needs: (b) => [PAGE_URN.test(b.actor) ? "w_organization_social" : "w_member_social_feed"],
       meter: () => ({ comment: 1 }),
       api: async ({ urn, ...body }, leg) =>
         must(
