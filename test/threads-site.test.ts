@@ -34,8 +34,8 @@ describe("threads site", () => {
     let url = "https://www.threads.com/";
     const opened: string[] = [];
     const { fp, acts } = fakePage({
-      text: ["Wren is requesting access to your Threads profile"],
-      present: (h) => /allow/.test(String(h.name)),
+      text: ["Wren is requesting access to: Continue As wrenautomation"],
+      present: (h) => /continue/.test(String(h.name)),
       url: () => url,
       onAct: () => {
         url = `${WEB_REDIRECT}?code=abc&state=s`;
@@ -47,7 +47,7 @@ describe("threads site", () => {
     };
     const out = await threadsOauthConsent.run(fp, { url: authorize });
     expect(opened).toEqual(["https://www.threads.com/", authorize]);
-    expect(acts.map(line)).toEqual(["click /^(allow|continue)$/i"]);
+    expect(acts.map(line)).toEqual(["click /^(allow|continue)( as \\S+)?$/i"]);
     expect(out.landed).toBe(`${WEB_REDIRECT}?code=abc&state=s`);
   });
 
