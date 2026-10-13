@@ -1,16 +1,16 @@
 /**
- * `autobrowse track …`: the storage side of wren-track (designs/2026-10-13-track.md). `enroll` makes
+ * `autobrowse autotrack …`: the storage side of autotrack (autotrack repo designs/2026-10-13-autotrack.md). `enroll` makes
  * a write-only key for one device and prints its install code; `list` and `import` read sessions
  * back and turn one into a recording teach can read.
  */
 import { join } from "node:path";
 import type { Command } from "commander";
+import { checkDevice, installCommands } from "../autotrack/code.js";
+import { devices, enroll, revoke } from "../autotrack/enroll.js";
+import { importSession } from "../autotrack/import.js";
+import { listSessions, type TrackStore } from "../autotrack/store.js";
 import { expandHome } from "../google-auth.js";
 import { isDefaultOwner } from "../owner.js";
-import { checkDevice, installCommands } from "../track/code.js";
-import { devices, enroll, revoke } from "../track/enroll.js";
-import { importSession } from "../track/import.js";
-import { listSessions, type TrackStore } from "../track/store.js";
 import type { Settings } from "./config.js";
 import { awsFor } from "./owner.js";
 
@@ -28,10 +28,10 @@ function operator(s: Settings): { bucket: string } {
   return { bucket: s.trackBucket };
 }
 
-export function registerTrackCommands(program: Command, settings: Settings): void {
+export function registerAutotrackCommands(program: Command, settings: Settings): void {
   const track = program
-    .command("track")
-    .description("wren-track: a device's recorded sessions (every input and screen), in a bucket");
+    .command("autotrack")
+    .description("autotrack: a device's recorded sessions (every input and screen), in a bucket");
   track
     .command("enroll <device>")
     .description(
@@ -40,7 +40,7 @@ export function registerTrackCommands(program: Command, settings: Settings): voi
     .option("--revoke", "delete the device's keys, policy and user")
     .action(async (device: string, o: { revoke?: boolean }) => {
       const { bucket } = operator(settings);
-      const { iamClient } = await import("../track/iam.js");
+      const { iamClient } = await import("../autotrack/iam.js");
       const iam = iamClient(awsFor(settings));
       if (o.revoke) {
         console.log(
@@ -63,18 +63,18 @@ export function registerTrackCommands(program: Command, settings: Settings): voi
     .description("Enrolled devices (IAM users under /track/)")
     .action(async () => {
       operator(settings);
-      const { iamClient } = await import("../track/iam.js");
+      const { iamClient } = await import("../autotrack/iam.js");
       const rows = await devices(iamClient(awsFor(settings)));
       console.log(
         rows.length
           ? rows.map((d) => `${d.device}  ${d.created.slice(0, 10)}  keys ${d.keys}`).join("\n")
-          : "no devices (autobrowse track enroll <device>)",
+          : "no devices (autobrowse autotrack enroll <device>)",
       );
     });
 
   const store = async (): Promise<TrackStore> => {
     const { bucket } = operator(settings);
-    const { s3TrackStore } = await import("../track/store.js");
+    const { s3TrackStore } = await import("../autotrack/store.js");
     return s3TrackStore({ bucket, aws: awsFor(settings) });
   };
   track
@@ -104,7 +104,7 @@ export function registerTrackCommands(program: Command, settings: Settings): voi
     .action(async (ref: string, o: { name?: string; site?: string }) => {
       const [device, session, ...rest] = ref.split("/");
       if (!device || !session || rest.length)
-        throw new Error("give <device>/<session> (autobrowse track list)");
+        throw new Error("give <device>/<session> (autobrowse autotrack list)");
       const root = expandHome(settings.recordingsDir);
       const r = await importSession(await store(), { device, session }, { root, ...o });
       console.log(
