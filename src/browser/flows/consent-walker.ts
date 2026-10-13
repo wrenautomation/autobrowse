@@ -13,6 +13,8 @@ const SETTLE_MS = 1_500;
 
 export interface ConsentWalk {
   site: string;
+  /** The flow's name, when the site's profile walks another app's consent (Threads in Instagram's). */
+  name?: string;
   /** A signed-in page to open first, so the authorize page is the consent, not a login. */
   home: string;
   /** The site's login pages: the authorize URL landing here means the runner must sign in. */
@@ -33,7 +35,7 @@ export interface ConsentWalk {
 export function consentFlow(w: ConsentWalk): BrowserFlow<OauthConsentInput, { landed: string }> {
   return defineFlow<OauthConsentInput, { landed: string }>({
     site: w.site,
-    name: "oauth-consent",
+    name: w.name ?? "oauth-consent",
     async run(fp, input) {
       const redirect = redirectOf(input.url);
       const landed = (u: string) => u.startsWith(redirect);

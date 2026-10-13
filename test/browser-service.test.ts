@@ -68,6 +68,7 @@ describe("browser service", () => {
       "instagram/post",
       "instagram/profile-name",
       "instagram/search",
+      "instagram/threads-consent",
       "intuit/connector-keys",
       "jobber/connector-keys",
       "linkedin/activity",

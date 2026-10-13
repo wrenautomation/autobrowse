@@ -77,6 +77,7 @@ import {
 } from "../browser/flows/profile-name.js";
 import { redditComment, redditMessage, redditRead, redditSubmit } from "../browser/flows/reddit.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
+import { threadsOauthConsent } from "../browser/flows/threads-oauth-consent.js";
 import { tiktokPostComments } from "../browser/flows/tiktok-comments.js";
 import { tiktokOauthConsent } from "../browser/flows/tiktok-oauth-consent.js";
 import { xFollow, xLike, xReply } from "../browser/flows/x-act.js";
@@ -125,6 +126,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     perplexityAsk,
     linkedinOauthConsent,
     instagramOauthConsent,
+    threadsOauthConsent,
     instagramCreatePost,
     instagramFollow,
     instagramLike,

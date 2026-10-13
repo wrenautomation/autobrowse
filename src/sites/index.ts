@@ -30,6 +30,7 @@ export { outlook } from "./outlook.js";
 export { PERPLEXITY_API, perplexity } from "./perplexity.js";
 export { REDDIT_ORIGIN, reddit, redditPublic } from "./reddit.js";
 export { DESK_SERVICE, SITES_SERVICE, type SitesService, sitesService } from "./service.js";
+export { THREADS_MAX, threads, threadsOAuth } from "./threads.js";
 export { tiktok } from "./tiktok.js";
 export * from "./types.js";
 export { web } from "./web.js";
@@ -52,6 +53,7 @@ import { npm } from "./npm.js";
 import { outlook } from "./outlook.js";
 import { perplexity } from "./perplexity.js";
 import { reddit, redditPublic } from "./reddit.js";
+import { threads } from "./threads.js";
 import { tiktok } from "./tiktok.js";
 import type { SiteApi } from "./types.js";
 import { web } from "./web.js";
@@ -63,6 +65,7 @@ export const SITES: readonly SiteApi[] = [
   linkedin,
   youtube,
   instagram,
+  threads,
   tiktok,
   outlook,
   gmail,
