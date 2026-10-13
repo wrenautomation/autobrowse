@@ -1,7 +1,7 @@
 /**
- * The wren-track session format, copied from designs/2026-10-13-track.md ("Session format"). The
- * doc is the source of truth; a test checks these equal `track/src/events.ts`. Change both or
- * neither.
+ * The autotrack session format, copied from the autotrack repo (`src/events.ts`, which follows its
+ * designs/2026-10-13-autotrack.md). The repos are separate, so no test can compare them: change
+ * both or neither.
  */
 
 export interface Base {
@@ -25,6 +25,44 @@ export interface Element {
   width: number;
   height: number;
   secure: boolean;
+  /** Up to 6 ancestors, nearest first. */
+  path?: { role: string; name: string }[];
+  /** AXIdentifier / UIA AutomationId. */
+  id?: string;
+  /** UIA ClassName / AXDOMClassList joined. */
+  cls?: string;
+  /** AXURL, for links. */
+  url?: string;
+  help?: string;
+}
+
+/** What the browser extension saw under the pointer (screen points). */
+export interface WebTarget {
+  tag: string;
+  role?: string;
+  name?: string;
+  /** ≤ 200 chars. */
+  text?: string;
+  id?: string;
+  testId?: string;
+  css?: string;
+  xpath?: string;
+  href?: string;
+  inputType?: string;
+  /** aria-* and data-* names and values, ≤ 80 chars each, no value attrs. */
+  attrs?: Record<string, string>;
+  /** React component names, nearest first, ≤ 12. */
+  react?: string[];
+  rect?: { x: number; y: number; width: number; height: number };
+}
+
+/** What a web act did, on a follow-up `act: "effect"` event 1 s later. */
+export interface WebEffects {
+  /** When it changed. */
+  url?: string;
+  /** Origin + path, no query. */
+  requests: { method: string; url: string; status: number; ms: number }[];
+  dom: { added: number; removed: number; textChanged: number };
 }
 
 export type Event = Base &
@@ -88,6 +126,19 @@ export type Event = Base &
     | { kind: "frame"; frame: number }
     | { kind: "pause"; reason: "hotkey" | "cli" | "excluded" | "locked" }
     | { kind: "resume" }
+    | {
+        kind: "web";
+        act: string;
+        tab: number;
+        frame: number;
+        url: string;
+        title: string;
+        x?: number;
+        y?: number;
+        target?: WebTarget;
+        effects?: WebEffects;
+      }
+    | { kind: "app"; url: string; action: string; detail: unknown }
   );
 
 /**

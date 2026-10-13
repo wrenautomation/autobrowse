@@ -8,8 +8,7 @@
       "!**/drizzle/meta",
       "!designs",
       "!walkthrough/mods",
-      "!.claude/worktrees",
-      "!track/helpers/mac/test.mjs"
+      "!.claude/worktrees"
     ]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },

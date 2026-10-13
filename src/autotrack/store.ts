@@ -1,5 +1,5 @@
 /**
- * Reading the track bucket (deploy/terraform track.tf). Layout, written by `wren-track ship`:
+ * Reading the track bucket (deploy/terraform track.tf). Layout, written by `autotrack ship`:
  *   <device>/<session>/session.json
  *   <device>/<session>/<segment>/events.jsonl.gz
  *   <device>/<session>/<segment>/frames/<n>.jpg      (n = frame number in the session)

@@ -230,7 +230,7 @@ const schema = z.object({
   papersDir: z.string().min(1).default("~/.config/autobrowse/papers"),
   /** The papers backup (deploy/terraform papers.tf): only William's AWS user reaches it. Unset = no backup. */
   papersBucket: z.string().min(1).optional(),
-  /** Where wren-track sessions land (deploy/terraform track.tf): `track enroll|list|import` read it. */
+  /** Where autotrack sessions land (deploy/terraform track.tf): `track enroll|list|import` read it. */
   trackBucket: z.string().min(1).optional(),
   /** Hosts a debit card may pay on (banking, government), comma separated; empty = debit never. */
   walletDebitHosts: z

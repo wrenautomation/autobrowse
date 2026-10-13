@@ -170,12 +170,12 @@ a row; it is work.
   page after one yes per paper and host, from memory. `autobrowse papers add`
   stores one; `papers ask` prints a phone link that seals the photo in the
   phone's browser so only this Mac opens it (designs/2026-10-12-papers.md).
-- **Track.** `wren-track` (`track/`) records every input and screen on a
-  laptop and ships it to a private bucket (`TRACK_BUCKET`). `autobrowse track
+- **Track.** `autotrack` (its own repo) records every input and screen on a
+  laptop and ships it to a private bucket (`TRACK_BUCKET`). `autobrowse autotrack
   enroll <device>` makes that device a write-only key and prints its install
-  code and one-line install (`--revoke` ends it); `track list` shows sessions;
-  `track import <device>/<session>` turns one into a recording of desktop acts
-  for `compile` (designs/2026-10-13-track.md).
+  code and one-line install (`--revoke` ends it); `autotrack list` shows sessions;
+  `autotrack import <device>/<session>` turns one into a recording of desktop acts
+  for `compile` (autotrack repo designs/2026-10-13-autotrack.md).
 - **Env store.** Secrets travel through SSM Parameter Store, one
   SecureString per name under `/autobrowse/config` (KMS at rest, IAM at
   the door, every read in CloudTrail; no extra vendor). `autobrowse env

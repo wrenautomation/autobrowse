@@ -1,4 +1,4 @@
-/** The real IAM client behind `Iam` (src/track/enroll.ts): William's own AWS user, never a machine role. */
+/** The real IAM client behind `Iam` (src/autotrack/enroll.ts): William's own AWS user, never a machine role. */
 import type { AwsConfig } from "../owner.js";
 import type { Iam } from "./enroll.js";
 

@@ -22,6 +22,7 @@ import { localBackend, proofsOf, spentKeysFor, workflowsOf } from "./backend.js"
 import { registerAccessCommands } from "./cli-access.js";
 import { registerAccountsCommands } from "./cli-accounts.js";
 import { registerAuthCommands } from "./cli-auth.js";
+import { registerAutotrackCommands } from "./cli-autotrack.js";
 import { registerAwsCommands } from "./cli-aws.js";
 import { registerConnectorsCommands } from "./cli-connectors.js";
 import { registerDesktopCommands } from "./cli-desktop.js";
@@ -38,7 +39,6 @@ import { registerRunsCommands } from "./cli-runs.js";
 import { registerShotsCommands } from "./cli-shots.js";
 import { registerSiteCommands } from "./cli-site.js";
 import { registerTeachCommand } from "./cli-teach.js";
-import { registerTrackCommands } from "./cli-track.js";
 import { registerUnsubscribe } from "./cli-unsubscribe.js";
 import { registerWalletCommands } from "./cli-wallet.js";
 import {
@@ -794,7 +794,7 @@ registerEnvCommands(program, settings, { store: () => envStoreFor(settings) });
 registerDesktopCommands(program, tmpdir());
 registerWalletCommands(program, settings);
 registerPapersCommands(program, settings);
-registerTrackCommands(program, settings);
+registerAutotrackCommands(program, settings);
 registerAccessCommands(program, settings);
 
 tidyHelp(program);

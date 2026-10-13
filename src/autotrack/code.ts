@@ -1,8 +1,8 @@
 /**
- * The install code `autobrowse track enroll` prints and the installers take (`WREN_TRACK=<code>`):
+ * The install code `autobrowse autotrack enroll` prints and the installers take (`AUTOTRACK=<code>`):
  * base64url of this JSON. It IS a credential: a write-only key for one device prefix. By design.
  *
- * `track/src/config.ts` must accept the same shape: { v: 1, bucket, region, device, keyId, secret }.
+ * `autotrack src/config.ts` must accept the same shape: { v: 1, bucket, region, device, keyId, secret }.
  */
 import { z } from "zod";
 
@@ -48,10 +48,10 @@ export function decodeCode(code: string): TrackCode {
   return parsed.data;
 }
 
-const BASE = "https://raw.githubusercontent.com/wrenautomation/autobrowse/main/track/install";
+const BASE = "https://raw.githubusercontent.com/wrenautomation/autotrack/main/install";
 
 /** The two one-line installs from the design doc, with the code filled in. */
 export const installCommands = (code: string) => ({
-  windows: `powershell -c "$env:WREN_TRACK='${code}'; irm ${BASE}/install.ps1 | iex"`,
-  mac: `WREN_TRACK='${code}' sh -c "$(curl -fsSL ${BASE}/install.sh)"`,
+  windows: `powershell -c "$env:AUTOTRACK='${code}'; irm ${BASE}/install.ps1 | iex"`,
+  mac: `AUTOTRACK='${code}' sh -c "$(curl -fsSL ${BASE}/install.sh)"`,
 });

@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
+import { decodeCode, encodeCode, installCommands, type TrackCode } from "../src/autotrack/code.js";
+import { devices, enroll, type Iam, putOnlyPolicy, revoke } from "../src/autotrack/enroll.js";
+import { comboOf, importSession } from "../src/autotrack/import.js";
+import { listSessions, parseKey, type TrackStore } from "../src/autotrack/store.js";
 import { loadRecording } from "../src/recorder/store.js";
-import { decodeCode, encodeCode, installCommands, type TrackCode } from "../src/track/code.js";
-import { devices, enroll, type Iam, putOnlyPolicy, revoke } from "../src/track/enroll.js";
-import { comboOf, importSession } from "../src/track/import.js";
-import { listSessions, parseKey, type TrackStore } from "../src/track/store.js";
 
 const good: TrackCode = {
   v: 1,
@@ -45,10 +45,10 @@ describe("install code", () => {
   it("fills both install lines", () => {
     const c = installCommands("CODE");
     expect(c.windows).toBe(
-      `powershell -c "$env:WREN_TRACK='CODE'; irm https://raw.githubusercontent.com/wrenautomation/autobrowse/main/track/install/install.ps1 | iex"`,
+      `powershell -c "$env:AUTOTRACK='CODE'; irm https://raw.githubusercontent.com/wrenautomation/autotrack/main/install/install.ps1 | iex"`,
     );
     expect(c.mac).toBe(
-      `WREN_TRACK='CODE' sh -c "$(curl -fsSL https://raw.githubusercontent.com/wrenautomation/autobrowse/main/track/install/install.sh)"`,
+      `AUTOTRACK='CODE' sh -c "$(curl -fsSL https://raw.githubusercontent.com/wrenautomation/autotrack/main/install/install.sh)"`,
     );
   });
 });
@@ -180,7 +180,7 @@ describe("enroll", () => {
   });
 });
 
-// The bucket, as `wren-track ship` lays it out, built from test/fixtures/track.
+// The bucket, as `autotrack ship` lays it out, built from test/fixtures/track.
 const FIXTURE = join(import.meta.dirname, "fixtures", "track");
 function fixtureStore(): TrackStore {
   const objects = new Map<string, Buffer>();
