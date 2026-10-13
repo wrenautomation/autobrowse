@@ -1,0 +1,7 @@
+{"t":0,"ts":1791886500000,"kind":"focus","app":{"name":"Notes","id":"com.apple.Notes","pid":10}}
+{"t":100,"ts":1791886500100,"kind":"move","x":5,"y":5}
+{"t":900,"ts":1791886500900,"kind":"click","x":10,"y":20,"button":"left","count":1,"app":{"name":"Notes","id":"com.apple.Notes","pid":10},"element":{"role":"AXButton","name":"New Note","x":0,"y":0,"width":30,"height":20,"secure":false},"before":1,"after":2}
+{"t":2000,"ts":1791886502000,"kind":"text","text":"hello world","redacted":false,"app":{"name":"Notes","id":"com.apple.Notes","pid":10},"after":2}
+{"t":2500,"ts":1791886502500,"kind":"scroll","x":10,"y":20,"dx":0,"dy":-3}
+{"t":3000,"ts":1791886503000,"kind":"click","x":300,"y":400,"button":"right","count":1,"app":{"name":"Notes","id":"com.apple.Notes","pid":10}}
+{"t":4000,"ts":1791886504000,"kind":"text","text":"","redacted":true,"element":{"role":"AXSecureTextField","name":"Password","x":0,"y":0,"width":100,"height":20,"secure":true}}

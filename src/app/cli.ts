@@ -38,6 +38,7 @@ import { registerRunsCommands } from "./cli-runs.js";
 import { registerShotsCommands } from "./cli-shots.js";
 import { registerSiteCommands } from "./cli-site.js";
 import { registerTeachCommand } from "./cli-teach.js";
+import { registerTrackCommands } from "./cli-track.js";
 import { registerUnsubscribe } from "./cli-unsubscribe.js";
 import { registerWalletCommands } from "./cli-wallet.js";
 import {
@@ -793,6 +794,7 @@ registerEnvCommands(program, settings, { store: () => envStoreFor(settings) });
 registerDesktopCommands(program, tmpdir());
 registerWalletCommands(program, settings);
 registerPapersCommands(program, settings);
+registerTrackCommands(program, settings);
 registerAccessCommands(program, settings);
 
 tidyHelp(program);

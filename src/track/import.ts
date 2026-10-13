@@ -1,0 +1,190 @@
+/**
+ * A track session → an autobrowse `Recording` of desktop acts, so teach and compile read what a
+ * person did on their own machine. Downloads the events and the frames the recording points at.
+ */
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { gunzipSync } from "node:zlib";
+import { looksLikeSecretValue, REDACTED } from "../recorder/redact.js";
+import { recordingDir, saveRecording } from "../recorder/store.js";
+import type { Action, Recording } from "../recorder/types.js";
+import { checkDevice } from "./code.js";
+import { parseKey, type TrackStore } from "./store.js";
+import type { Event, SessionMeta } from "./types.js";
+
+const SESSION = /^[0-9]{8}T[0-9]{6}-[0-9a-f]{4}$/;
+
+/** Parse one segment's lines; a line cut short by a crash is dropped, not fatal. */
+export function parseEvents(text: string): Event[] {
+  const out: Event[] = [];
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const e = JSON.parse(line) as Event;
+      if (typeof e?.kind === "string" && typeof e.t === "number") out.push(e);
+    } catch {}
+  }
+  return out;
+}
+
+const MOD_ORDER = ["ctrl", "alt", "shift", "meta"] as const;
+const MOD_NAME = { ctrl: "ctrl", alt: "alt", shift: "shift", meta: "cmd" } as const;
+
+/** ["meta","shift"] + "4" → "shift+cmd+4", the combos `Desktop.key` takes. */
+export function comboOf(key: string, mods: readonly string[]): string {
+  const have = MOD_ORDER.filter((m) => mods.includes(m)).map((m) => MOD_NAME[m]);
+  return [...have, key].join("+");
+}
+
+/**
+ * Not converted, on purpose: `move` and `scroll` (no desktop op reads them, and a recording is
+ * the chore, not the cursor path), `frame` (idle reading), `focus` (every act already names its
+ * app), `pause`/`resume` (those mean a human/agent hand-off in a recording, not a tracker gap).
+ * Clicks and drags the probe could not name an element for have nothing to address by, so they
+ * become notes: the chore still reads in order.
+ */
+export function eventsToActions(
+  events: readonly Event[],
+  screenshotOf: (frame: number | undefined) => string | undefined,
+): Action[] {
+  const out: Action[] = [];
+  for (const e of events) {
+    const shot = screenshotOf("after" in e ? e.after : undefined);
+    const base = { t: e.t, url: "", ...(shot ? { screenshot: shot } : {}) };
+    const where = e.app?.name ? ` in ${e.app.name}` : "";
+    switch (e.kind) {
+      case "click": {
+        const el = e.element;
+        if (e.button === "left" && el?.name) {
+          const op = {
+            op: "click" as const,
+            ...(e.app?.name ? { app: e.app.name } : {}),
+            ...(el.role ? { role: el.role } : {}),
+            name: el.name,
+          };
+          const times = Math.min(Math.max(Math.round(e.count) || 1, 1), 3);
+          for (let i = 0; i < times; i++)
+            out.push({ ...base, kind: "desktop", op, redacted: false });
+        } else {
+          const what = el?.name ? `${el.role} "${el.name}"` : `(${e.x}, ${e.y}), no element`;
+          out.push({ ...base, kind: "note", text: `${e.button} click on ${what}${where}` });
+        }
+        break;
+      }
+      case "drag":
+        out.push({
+          ...base,
+          kind: "note",
+          text: `drag (${e.x0}, ${e.y0}) to (${e.x}, ${e.y})${e.element?.name ? ` from ${e.element.role} "${e.element.name}"` : ""}${where}`,
+        });
+        break;
+      case "text": {
+        const secret = e.redacted || looksLikeSecretValue(e.text);
+        if (!secret && !e.text) break;
+        out.push({
+          ...base,
+          kind: "desktop",
+          op: secret ? { op: "type", text: REDACTED, secret: true } : { op: "type", text: e.text },
+          redacted: secret,
+        });
+        break;
+      }
+      case "key":
+        out.push({
+          ...base,
+          kind: "desktop",
+          op: { op: "key", combo: comboOf(e.key, e.mods) },
+          redacted: false,
+        });
+        break;
+      default:
+        break;
+    }
+  }
+  return out;
+}
+
+export const isoOf = (v: number | string | null | undefined): string | null =>
+  v === null || v === undefined ? null : new Date(v).toISOString();
+
+export interface ImportResult {
+  name: string;
+  dir: string;
+  actions: number;
+  events: number;
+  frames: number;
+}
+
+export async function importSession(
+  store: TrackStore,
+  ref: { device: string; session: string },
+  o: { root: string; name?: string; site?: string },
+): Promise<ImportResult> {
+  const device = checkDevice(ref.device);
+  if (!SESSION.test(ref.session)) throw new Error(`not a session id: ${ref.session}`);
+  const prefix = `${device}/${ref.session}/`;
+  const objects = (await store.list(prefix)).flatMap((obj) => {
+    const k = parseKey(obj.key);
+    return k ? [{ ...obj, k }] : [];
+  });
+  const segments = objects
+    .flatMap((x) => (x.k.kind === "events" ? [{ key: x.key, segment: x.k.segment }] : []))
+    .sort((a, b) => Number(a.segment) - Number(b.segment));
+  if (!segments.length) throw new Error(`no segments under ${prefix}`);
+
+  const events: Event[] = [];
+  let raw = "";
+  for (const s of segments) {
+    const text = gunzipSync(await store.get(s.key)).toString("utf8");
+    raw += text.endsWith("\n") ? text : `${text}\n`;
+    events.push(...parseEvents(text));
+  }
+
+  const metaKey = objects.find((x) => x.k.kind === "meta")?.key;
+  const meta = metaKey
+    ? (JSON.parse((await store.get(metaKey)).toString("utf8")) as SessionMeta)
+    : null;
+
+  const frameKeys = new Map<number, string>();
+  for (const x of objects) if (x.k.kind === "frame") frameKeys.set(x.k.frame, x.key);
+
+  const name = o.name ?? `${device}-${ref.session.toLowerCase()}`;
+  const dir = recordingDir(o.root, name);
+  const trackDir = join(dir, "track");
+  await mkdir(join(trackDir, "frames"), { recursive: true });
+
+  // Only the frames the recording points at come down; the bucket keeps the rest.
+  const saved = new Set<number>();
+  const screenshotOf = (frame: number | undefined) => {
+    if (frame === undefined || !frameKeys.has(frame)) return undefined;
+    saved.add(frame);
+    return `${name}/track/frames/${frame}.jpg`;
+  };
+  const actions = eventsToActions(events, screenshotOf);
+  for (const n of saved) {
+    await writeFile(
+      join(trackDir, "frames", `${n}.jpg`),
+      await store.get(frameKeys.get(n) as string),
+    );
+  }
+  await writeFile(join(trackDir, "events.jsonl"), raw);
+  if (meta) await writeFile(join(trackDir, "session.json"), `${JSON.stringify(meta, null, 2)}\n`);
+
+  const last = events[events.length - 1];
+  const first = events[0];
+  const startedAt =
+    isoOf(meta?.startedAt) ?? (first ? new Date(first.ts).toISOString() : new Date().toISOString());
+  const finishedAt = isoOf(meta?.endedAt) ?? (last ? new Date(last.ts).toISOString() : startedAt);
+  const rec: Recording = {
+    name,
+    site: o.site ?? "desktop",
+    startedAt,
+    finishedAt,
+    actions,
+    trace: null,
+    terminal: null,
+    commands: [],
+  };
+  await saveRecording(o.root, rec);
+  return { name, dir, actions: actions.length, events: events.length, frames: saved.size };
+}

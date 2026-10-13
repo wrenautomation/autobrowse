@@ -17,3 +17,8 @@ output "papers_bucket" {
   description = "PAPERS_BUCKET: the papers backup (`autobrowse env set PAPERS_BUCKET <it>`); only William's user reaches it."
   value       = aws_s3_bucket.papers.bucket
 }
+
+output "track_bucket" {
+  description = "TRACK_BUCKET: where wren-track sessions land (`autobrowse env set TRACK_BUCKET <it>`); devices write their own prefix only."
+  value       = aws_s3_bucket.track.bucket
+}

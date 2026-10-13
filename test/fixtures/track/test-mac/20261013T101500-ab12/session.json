@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "session": "20261013T101500-ab12",
+  "device": "test-mac",
+  "os": "darwin",
+  "osVersion": "26.0",
+  "arch": "arm64",
+  "trackVersion": "0.1.0",
+  "startedAt": 1791886500000,
+  "endedAt": 1791886560000,
+  "displays": [
+    { "id": "1", "x": 0, "y": 0, "width": 1440, "height": 900, "scale": 2, "primary": true }
+  ]
+}
