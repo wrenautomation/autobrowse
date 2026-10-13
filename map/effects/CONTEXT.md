@@ -31,6 +31,7 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | an env variable | [[settings]] | `compose.yml`, `deploy/prod.env.example`, `README.md` |
 | the backend port | [[backend]] | `src/ui/api.ts`, the SPA client `ui/src/api.ts`, CLI client |
 | `do` routing, the catalog | [[ability]] | [[access-key]] (scope cuts), [[do]] process, wren callers |
+| the track session format, install code, or bucket layout | [[track-session]] | `track/src/events.ts`, `track/src/config.ts`, `track/src/ship.ts`, `track/install/*`, `deploy/terraform/track.tf`, [[recording]] (`desktop` acts), [[settings]] (`TRACK_BUCKET`) |
 | an owner's names, paths, or setting classes | [[owner]] | [[state-files]], [[settings]], [[runs-registry]], `deploy/terraform/owners.tf` (the `owner` tag) |
 
 ## Pointing in (outside this tree; breaks silently)
@@ -46,4 +47,5 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | `deploy/desk/install.sh` (launchd on the Mac) | `src/app/desk.ts`, `node_modules/tsx/dist/cli.mjs` | a moved entry file or tsx's cli path |
 | `deploy/desk/update.mjs` (launchd, every minute) | the `desk up` log line in `src/app/desk.ts`, the desk label | a renamed log line: every deploy pings #ops as failed |
 | `deploy/terraform/` local state (never committed) | the box, CI role, shots bucket | a second machine has no state; read before apply |
+| `track/` (wren-track, own package) | `src/track/types.ts` (copied `Event`), `src/track/code.ts` (install code), the key layout in `src/track/store.ts` | a changed event field, code field or S3 key: import reads nothing or the wrong thing, a device's put is denied |
 | `NEEDS-WILLIAM.md` (hand-kept) | mirrors `autobrowse needs` | drift when a need clears in code but not in prose |
