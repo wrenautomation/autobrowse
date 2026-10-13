@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FlowPage } from "../src/browser/flow.js";
 import {
+  authorsOf,
   metaOf,
   metricsOf,
   type RawTweet,
@@ -95,6 +96,17 @@ describe("x page parsers", () => {
       public_metrics: { followers_count: 900, following_count: 10, tweet_count: 5000 },
     });
     expect(userOf({ "@type": "WebPage" })).toBeNull();
+  });
+
+  it("authors once each, as the API's includes.users", () => {
+    const a = tweetOf(raw({}));
+    const b = tweetOf(raw({ href: "/stripe/status/1972000000000000002" }));
+    const c = tweetOf(raw({ user: "Synth\n@synth\n·\n1h", href: "/synth/status/3" }));
+    if (!a || !b || !c) throw new Error("no tweet");
+    expect(authorsOf([a, b, c])).toEqual([
+      { username: "stripe", name: "Stripe" },
+      { username: "synth", name: "Synth" },
+    ]);
   });
 
   it("search is Latest", () => {

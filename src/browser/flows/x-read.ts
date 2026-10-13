@@ -231,7 +231,19 @@ interface Feed {
   since_id?: string;
   /** "replies", "retweets" (comma-separated), as the API takes it. */
   exclude?: string;
+  /** `author_id` adds `includes.users`, each author once, as the API answers it. */
+  expansions?: string;
 }
+
+/** The authors once each, in the API's `includes.users` (the page has no numeric ids). */
+export const authorsOf = (data: Tweet[]) => [
+  ...new Map(
+    data.map((t) => [
+      t.author_username.toLowerCase(),
+      { username: t.author_username, name: t.author_name ?? t.author_username },
+    ]),
+  ).values(),
+];
 
 async function feed(fp: FlowPage, url: string, i: Feed) {
   const state = await landed(fp, url);
@@ -250,7 +262,11 @@ async function feed(fp: FlowPage, url: string, i: Feed) {
     ...(i.since_id ? { stop: (t: Tweet) => !newer(t.id, i.since_id as string) } : {}),
   });
   const data = i.since_id ? rows.filter((t) => newer(t.id, i.since_id as string)) : rows;
-  return { data, meta: metaOf(data) };
+  return {
+    data,
+    ...(/\bauthor_id\b/.test(i.expansions ?? "") ? { includes: { users: authorsOf(data) } } : {}),
+    meta: metaOf(data),
+  };
 }
 
 export const xProfile = defineFlow<{ username: string }, { data: User } | NotFound>({

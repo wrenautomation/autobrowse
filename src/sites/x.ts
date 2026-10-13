@@ -66,7 +66,7 @@ const search = z.object({
   query: z.string().min(1),
   max_results: z.coerce.number().int().min(10).max(100).default(10),
   "tweet.fields": z.string().default("id,text,created_at,public_metrics,author_id"),
-  /** The authors' usernames in `includes.users`, as the page leg's `author_username`. */
+  /** The authors in `includes.users` (the page leg: username and name, no id). */
   expansions: z.string().default("author_id"),
   "user.fields": z.string().default("username,name"),
   next_token: z.string().optional(),
