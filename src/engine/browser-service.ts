@@ -44,7 +44,11 @@ import { linkedinDashboard } from "../browser/flows/linkedin-dashboard.js";
 import { linkedinNotifications } from "../browser/flows/linkedin-notifications.js";
 import { linkedinOauthConsent } from "../browser/flows/linkedin-oauth-consent.js";
 import { linkedinPostAnalytics } from "../browser/flows/linkedin-post-analytics.js";
-import { linkedinCompanyPosts, linkedinSearchPosts } from "../browser/flows/linkedin-posts.js";
+import {
+  linkedinCompanyPosts,
+  linkedinPost,
+  linkedinSearchPosts,
+} from "../browser/flows/linkedin-posts.js";
 import {
   linkedinCompany,
   linkedinCompanyJobs,
@@ -145,6 +149,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinDashboard,
     linkedinSearchPosts,
     linkedinCompanyPosts,
+    linkedinPost,
     linkedinWithdraw,
     linkedinLike,
     linkedinFollow,

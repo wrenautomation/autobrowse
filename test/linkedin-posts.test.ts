@@ -8,11 +8,13 @@ import {
   companyPostsUrl,
   countOf,
   linkedinCompanyPosts,
+  linkedinPost,
   linkedinSearchPosts,
   postOf,
   postsSearchUrl,
   type RawPost,
   READ_POSTS,
+  restPostOf,
   urnOf,
   urnOfTools,
 } from "../src/browser/flows/linkedin-posts.js";
@@ -351,9 +353,31 @@ describe("linkedin posts: the flows and the routes", () => {
     );
   });
 
-  it("both flows are registered", () => {
+  it("the flows are registered", () => {
     expect(BROWSER_FLOWS["linkedin/search-posts"]).toBe(linkedinSearchPosts);
     expect(BROWSER_FLOWS["linkedin/company-posts"]).toBe(linkedinCompanyPosts);
+    expect(BROWSER_FLOWS["linkedin/post"]).toBe(linkedinPost);
+  });
+
+  it("one post: the API's shape off its page, the urn asked for as its id", () => {
+    const post = postOf(CLASSIC, NOW);
+    if (!post) throw new Error("no post");
+    expect(restPostOf(post, "urn:li:ugcPost:9")).toEqual({
+      id: "urn:li:ugcPost:9",
+      author: `${WEB}/in/test-author/`,
+      commentary: "Hiring is slow in Q4.",
+      lifecycleState: "PUBLISHED",
+      publishedAt: Date.parse("2026-10-07T10:00:00.000Z"),
+      authorName: "Test Author",
+      authorUrl: `${WEB}/in/test-author/`,
+      headline: "Founder at Example Staffing",
+      reactions: 1234,
+      comments: 56,
+      url: `${WEB}/feed/update/urn:li:ugcPost:9/`,
+    });
+    expect(
+      restPostOf({ ...post, authorUrl: `${WEB}/company/42/` }, "urn:li:activity:7001").author,
+    ).toBe("urn:li:organization:42");
   });
 
   const facade = (runner: FlowRunner, caps = memoryCaps(() => NOW.getTime())) =>
@@ -381,9 +405,12 @@ describe("linkedin posts: the flows and the routes", () => {
       await sites.call("linkedin", "GET", "/search/results/content", { keywords: "ria" }, as),
     ).toEqual({ posts: [], dropped: 0 });
     await sites.call("linkedin", "GET", "/company/sample-co/posts", { max: "5" }, as);
+    // One post reads its page until the read grants land, in the API's shape.
+    await sites.call("linkedin", "GET", "/rest/posts/urn:li:activity:7001", {}, as);
     expect(seen).toEqual([
       'search-posts {"keywords":"ria","max":20,"since":"past-week"}',
       'company-posts {"company":"sample-co","max":5}',
+      'post {"urn":"urn:li:activity:7001"}',
     ]);
     await expect(
       sites.call("linkedin", "GET", "/search/results/content", { keywords: "x", max: 51 }, as),

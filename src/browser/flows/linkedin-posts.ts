@@ -426,3 +426,67 @@ export const linkedinCompanyPosts = defineFlow<CompanyPostsInput, Posts>({
   name: "company-posts",
   run: (fp, input) => readPosts(fp, companyPostsUrl(input.company), input.max ?? 20, sortRecent),
 });
+
+/** `GET /rest/posts/{urn}` as the API answers it, plus what the page shows that the API keeps elsewhere. */
+export interface RestPost {
+  id: string;
+  /** The author's URN when the page names a company by number, else their profile URL. */
+  author: string;
+  commentary: string;
+  lifecycleState: "PUBLISHED";
+  publishedAt?: number;
+  authorName: string;
+  authorUrl: string | null;
+  headline?: string;
+  reactions: number;
+  comments: number;
+  url: string;
+}
+
+const MISSING = /this page doesn.t exist|page not found|this post (?:cannot|can.t) be displayed/i;
+const ORG_URL = /\/company\/(\d+)\/?$/;
+const idOf = (urn: string) => /:(\d+)$/.exec(urn)?.[1];
+
+/** A read card in the API's post shape; the urn asked for stays the id. */
+export function restPostOf(p: FeedPost, urn: string): RestPost {
+  const org = p.authorUrl ? ORG_URL.exec(p.authorUrl)?.[1] : undefined;
+  return {
+    id: urn,
+    author: org ? `urn:li:organization:${org}` : (p.authorUrl ?? ""),
+    commentary: p.text,
+    lifecycleState: "PUBLISHED",
+    ...(p.at ? { publishedAt: Date.parse(p.at) } : {}),
+    authorName: p.author,
+    authorUrl: p.authorUrl,
+    ...(p.headline ? { headline: p.headline } : {}),
+    reactions: p.reactions,
+    comments: p.comments,
+    url: `${WEB}/feed/update/${urn}/`,
+  };
+}
+
+/**
+ * One post by its urn, off its own page: the card whose urn has the same number, else the page's
+ * first (a ugcPost's page can key its card by activity). Read only.
+ */
+export const linkedinPost = defineFlow<
+  { urn: string },
+  RestPost | { found: false; reason: string }
+>({
+  site: "linkedin",
+  name: "post",
+  async run(fp, { urn }) {
+    await go(fp, `${WEB}/feed/update/${urn}/`);
+    if (!(await fp.has({ css: CARD }, RENDER_MS))) {
+      if (MISSING.test(await fp.text())) return { found: false, reason: `no LinkedIn post ${urn}` };
+      return fp.human(`no post at ${fp.url()}`);
+    }
+    const now = new Date();
+    const posts = (await fp.page.evaluate<RawPost[]>(READ_POSTS)).flatMap((r) => {
+      const p = postOf(r, now);
+      return p ? [p] : [];
+    });
+    const post = posts.find((p) => idOf(p.urn) === idOf(urn)) ?? posts[0];
+    return post ? restPostOf(post, urn) : fp.human(`the post at ${fp.url()} names no urn`);
+  },
+});

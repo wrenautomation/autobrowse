@@ -87,6 +87,7 @@ describe("browser service", () => {
       "linkedin/message",
       "linkedin/notifications",
       "linkedin/oauth-consent",
+      "linkedin/post",
       "linkedin/post-analytics",
       "linkedin/post-comments",
       "linkedin/profile",

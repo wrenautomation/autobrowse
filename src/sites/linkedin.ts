@@ -448,8 +448,13 @@ export const linkedin: SiteApi = {
     route({
       method: "GET",
       path: "/rest/posts/{urn}",
-      summary: "One post",
+      summary:
+        "One post. Until the read grants land, its page in the API's shape (`commentary`, `author`, `publishedAt`), plus authorName, authorUrl, headline, reactions, comments, url",
       request: byUrn,
+      // Another member's post takes r_member_social, a Page's r_organization_social; the urn says neither.
+      needs: ["r_member_social", "r_organization_social"],
+      meter: () => ({ posts: 1 }),
+      browser: { flow: "linkedin/post" },
       api: async ({ urn }, leg) =>
         must(
           await leg.http.json<unknown>(`${LINKEDIN_ORIGIN}/rest/posts/${encodeURIComponent(urn)}`, {
