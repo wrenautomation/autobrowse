@@ -20,6 +20,14 @@
  */
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
+import {
+  type CommentStat,
+  listingFromAtom,
+  num,
+  type PostStat,
+  type ThreadDom,
+  threadFromAtom,
+} from "./reddit-rss.js";
 
 /** The little of the DOM these page scripts touch; the project compiles without lib dom. */
 interface El {
@@ -29,6 +37,7 @@ interface El {
   id: string;
   getAttribute(name: string): string | null;
   querySelectorAll(sel: string): Iterable<El>;
+  querySelector?(sel: string): El | null;
 }
 declare const document: El;
 
@@ -248,6 +257,112 @@ async function fetchJson(
   }, `${origin}${path}.json?${q}`);
 }
 
+/** GET a page's text from inside the page (www, the session's cookies): the status and, when it answered, the body. */
+async function fetchText(fp: FlowPage, url: string) {
+  return fp.page.evaluate(async (u) => {
+    const res = await fetch(u, { credentials: "include" });
+    return { status: res.status, text: res.ok ? await res.text() : "" };
+  }, url);
+}
+
+/** The signed-out reads a feed can answer, and how: a listing, or a thread (post, then comments). */
+const FEEDS: Array<{ path: RegExp; kind: "listing" | "thread"; sort?: boolean; paged?: boolean }> =
+  [
+    { path: new RegExp(`^/r/${SR}/(new|hot|top)$`), kind: "listing", sort: true },
+    { path: new RegExp(`^/r/${SR}/search$`), kind: "listing" },
+    { path: /^\/search$/, kind: "listing" },
+    { path: /^\/subreddits\/search$/, kind: "listing" },
+    { path: new RegExp(`^/user/${USER}/(submitted|comments)$`), kind: "listing" },
+    { path: /^\/api\/info$/, kind: "listing", paged: false },
+    { path: /^\/comments\/[a-z0-9]{1,12}$/, kind: "thread" },
+  ];
+
+/** Every post on a rendered listing page, with the score and comment count it shows. */
+const readPostStats = (): Array<Record<string, string | null>> =>
+  [...document.querySelectorAll("shreddit-post")].map((p) => ({
+    id: p.getAttribute("id"),
+    score: p.getAttribute("score"),
+    comments: p.getAttribute("comment-count"),
+    ratio: p.getAttribute("upvote-ratio"),
+  }));
+
+/** The rendered thread: the post's numbers and each comment's place in the tree. */
+const readThread = (): {
+  post: Array<Record<string, string | null>>;
+  comments: Array<Record<string, string | null>>;
+} => ({
+  post: [...document.querySelectorAll("shreddit-post")].slice(0, 1).map((p) => ({
+    id: p.getAttribute("id"),
+    score: p.getAttribute("score"),
+    comments: p.getAttribute("comment-count"),
+    ratio: p.getAttribute("upvote-ratio"),
+  })),
+  comments: [...document.querySelectorAll("shreddit-comment")].map((c) => ({
+    id: c.getAttribute("thingid"),
+    parent: c.getAttribute("parentid"),
+    depth: c.getAttribute("depth"),
+    score: c.getAttribute("score"),
+  })),
+});
+
+const postStat = (r: Record<string, string | null> | undefined): PostStat | null =>
+  r?.id ? { id: r.id, score: num(r.score), comments: num(r.comments), ratio: num(r.ratio) } : null;
+
+/**
+ * The page a feed mirrors, read for what the feed lacks. Best effort: a page that will not load
+ * or render leaves those numbers out, never fails the read.
+ */
+async function pageNumbers<T>(fp: FlowPage, url: string, read: () => T): Promise<T | null> {
+  try {
+    await fp.open(url, { allowWall: true });
+    return await fp.page.evaluate(read);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Signed out, `.json` is refused (403, since about 2026-10-13) but the feed and the page answer.
+ * Answers the same shape the `.json` read would, from `<path>/.rss`; the score and comment count
+ * a feed lacks come from the rendered page when it shows them. Undefined: no feed serves this
+ * path. A feed 404 is the read's 404 too.
+ */
+async function readFeed(fp: FlowPage, path: string, q: Record<string, string>) {
+  const feed = FEEDS.find((f) => f.path.test(path));
+  if (!feed) return undefined;
+  const { raw_json: _drop, ...query } = q;
+  const qs = new URLSearchParams(query).toString().replace(/\+/g, "%20");
+  const got = await fetchText(fp, `${WWW}${path}/.rss${qs ? `?${qs}` : ""}`);
+  if (got.status === 404) return { error: 404, message: `no such thing: ${path}` };
+  if (got.status !== 200)
+    throw new Error(`reddit read ${path}: HTTP ${got.status} (feed after a 403 on .json)`);
+  if (feed.kind === "thread") {
+    const id = path.slice("/comments/".length);
+    const raw = await pageNumbers(fp, `${WWW}/comments/${id}/`, readThread);
+    const dom: ThreadDom | null = raw
+      ? {
+          post: postStat(raw.post[0]),
+          comments: raw.comments.flatMap((c): CommentStat[] => {
+            const depth = num(c.depth);
+            return c.id && depth !== undefined
+              ? [{ id: c.id, parent: c.parent ?? undefined, depth, score: num(c.score) }]
+              : [];
+          }),
+        }
+      : null;
+    return threadFromAtom(got.text, dom);
+  }
+  const limit = num(query.limit);
+  let stats: PostStat[] | undefined;
+  if (feed.sort) {
+    // /r/x/new/ renders the posts the feed lists; /top/ takes the same `t`.
+    const page = `${WWW}${path}/${query.t ? `?t=${encodeURIComponent(query.t)}` : ""}`;
+    const rows = await pageNumbers(fp, page, readPostStats);
+    stats = rows?.flatMap((r) => postStat(r) ?? []);
+  }
+  return listingFromAtom(got.text, { limit, paged: feed.paged, stats });
+}
+
 export interface ReadInput {
   /** One of the READS paths, concrete: `/user/WrenAutomation/submitted`. */
   path: string;
@@ -265,6 +380,10 @@ export const redditRead = defineFlow<ReadInput, unknown>({
     const q = Object.fromEntries(Object.entries(query).map(([k, v]) => [k, String(v)]));
     const got = await fetchJson(fp, path, q, signedOut ? WWW : OLD);
     if (got.status === 404) return { error: 404, message: `no such thing: ${path}` };
+    if (got.status === 403 && signedOut) {
+      const viaFeed = await readFeed(fp, path, q);
+      if (viaFeed !== undefined) return viaFeed;
+    }
     if (got.status !== 200) throw new Error(`reddit read ${path}: HTTP ${got.status}`);
     const out = read.slim(got.body);
     if (path === "/api/me" && !(out as Obj).name)
