@@ -183,6 +183,8 @@ const video = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
 });
+const photoStory = z.object({ pageId: id, url: z.string().url() });
+const videoStory = z.object({ pageId: id, file_url: z.string().url() });
 const leadForm = z.object({
   pageId: id,
   name: z.string().min(1),
@@ -676,6 +678,51 @@ export const meta: SiteApi = {
       irreversible: true,
       api: async ({ pageId, ...body }, leg) =>
         post(await pageLeg(leg, pageId), `${pageId}/videos`, body),
+    }),
+    route({
+      method: "POST",
+      path: "/{pageId}/photo_stories",
+      summary:
+        "A photo story on a Page from a public image URL: the photo goes up unpublished, then the story; answers {post_id}",
+      request: photoStory,
+      irreversible: true,
+      api: async ({ pageId, url }, leg) => {
+        const page = await pageLeg(leg, pageId);
+        const photo = (await post(page, `${pageId}/photos`, { url, published: false })) as {
+          id?: string;
+        };
+        if (!photo.id)
+          throw new HttpError("CALL", `${META_ORIGIN}/${pageId}/photos`, 502, "no photo id");
+        return post(page, `${pageId}/photo_stories`, { photo_id: photo.id });
+      },
+    }),
+    route({
+      method: "POST",
+      path: "/{pageId}/video_stories",
+      summary:
+        "A video story on a Page from a public video URL (9:16, 3 to 90 s): start, hosted upload, finish; answers {post_id}",
+      request: videoStory,
+      irreversible: true,
+      api: async ({ pageId, file_url }, leg) => {
+        const page = await pageLeg(leg, pageId);
+        const start = (await post(page, `${pageId}/video_stories`, {
+          upload_phase: "start",
+        })) as { video_id?: string };
+        if (!start.video_id)
+          throw new HttpError("CALL", `${META_ORIGIN}/${pageId}/video_stories`, 502, "no video id");
+        const up = `https://rupload.facebook.com/video-upload/${META_VERSION}/${start.video_id}`;
+        await must(
+          await page.http.json<unknown>(up, {
+            method: "POST",
+            headers: { authorization: `OAuth ${page.token}`, file_url },
+          }),
+          "video-upload",
+        );
+        return post(page, `${pageId}/video_stories`, {
+          upload_phase: "finish",
+          video_id: start.video_id,
+        });
+      },
     }),
     route({
       method: "POST",

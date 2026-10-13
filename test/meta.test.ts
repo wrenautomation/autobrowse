@@ -102,7 +102,13 @@ describe("meta site", () => {
       "POST /act_{adAccountId}/ads",
       "POST /{objectId}",
     ]);
-    for (const p of ["/{pageId}/feed", "/{pageId}/photos", "/{igUserId}/media_publish"])
+    for (const p of [
+      "/{pageId}/feed",
+      "/{pageId}/photos",
+      "/{pageId}/photo_stories",
+      "/{pageId}/video_stories",
+      "/{igUserId}/media_publish",
+    ])
       expect(meta.routes.find((r) => r.path === p)?.irreversible).toBe(true);
   });
 
@@ -122,7 +128,9 @@ describe("meta site", () => {
             ? { access_token: "page-token" }
             : u.searchParams.get("fields") === "page"
               ? { id: "9", page: { id: "111" } }
-              : { id: "9", ok: true };
+              : u.pathname.endsWith("_stories")
+                ? { video_id: "77", post_id: "5", success: true }
+                : { id: "9", ok: true };
         return new Response(JSON.stringify(body), {
           status: 200,
           headers: { "content-type": "application/json" },
@@ -182,6 +190,33 @@ describe("meta site", () => {
     ]);
     await sites.call("meta", "POST", "/9", { status: "ACTIVE" });
     expect(asked.at(-1)).not.toHaveProperty("amount"); // no budget on the request: an unknown amount
+  });
+
+  it("a Page story: a photo goes up unpublished first; a video starts, uploads by URL, finishes", async () => {
+    const { sites, calls } = facade(null);
+    expect(
+      await sites.call("meta", "POST", "/111/photo_stories", { url: "https://f.test/a.jpg" }),
+    ).toMatchObject({ post_id: "5" });
+    const photo = calls.filter((c) => c.method === "POST");
+    expect(photo.map((c) => [c.url.pathname, c.auth])).toEqual([
+      ["/v23.0/111/photos", "Bearer page-token"],
+      ["/v23.0/111/photo_stories", "Bearer page-token"],
+    ]);
+    expect(JSON.parse(photo[0]?.body ?? "{}")).toEqual({
+      url: "https://f.test/a.jpg",
+      published: false,
+    });
+    expect(JSON.parse(photo[1]?.body ?? "{}")).toEqual({ photo_id: "9" });
+    calls.length = 0;
+    await sites.call("meta", "POST", "/111/video_stories", { file_url: "https://f.test/s.mp4" });
+    const video = calls.filter((c) => c.method === "POST");
+    expect(video.map((c) => `${c.url.host}${c.url.pathname}`)).toEqual([
+      "graph.facebook.com/v23.0/111/video_stories",
+      "rupload.facebook.com/video-upload/v23.0/77",
+      "graph.facebook.com/v23.0/111/video_stories",
+    ]);
+    expect(video[1]?.auth).toBe("OAuth page-token");
+    expect(JSON.parse(video[2]?.body ?? "{}")).toEqual({ upload_phase: "finish", video_id: "77" });
   });
 
   it("reads the account, ad sets, ads and pixels an audit needs, never asking", async () => {
