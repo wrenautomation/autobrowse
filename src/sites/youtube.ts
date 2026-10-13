@@ -764,11 +764,12 @@ export const youtube: SiteApi = {
       method: "POST",
       path: "/studio/communityPosts",
       summary:
-        "A community post (no official API; autobrowse-only path, YouTube Studio in the browser)",
+        "! A community post (no official API; YouTube in the browser); image is a path or URL; answers {url} (null when the list didn't show it)",
       request: communityPost,
       irreversible: true,
       browser: {
         flow: "google/youtube-community-post",
+        uploads: "image",
         input: (i, env) => ({ ...i, channel: env(YOUTUBE_CHANNEL) }),
       },
     }),
