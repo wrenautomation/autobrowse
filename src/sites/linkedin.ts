@@ -26,8 +26,11 @@ const UPLOAD_PUT_MS = 10 * 60_000;
 /** A video is ready for a post once LinkedIn has processed it: ask every 5 s, up to 5 minutes. */
 const VIDEO_POLL_MS = 5_000;
 const VIDEO_READY_MS = 5 * 60_000;
-/** LinkedIn versions its REST API by month; a version is honoured for a year. */
-export const LINKEDIN_VERSION = "202508";
+/**
+ * LinkedIn versions its REST API by month; a version is honoured for a year, then every call
+ * answers 426 NONEXISTENT_VERSION (202508 lapsed by 2026-10-13). 202609 runs to about 2027-09.
+ */
+export const LINKEDIN_VERSION = "202609";
 /**
  * Pages Wren's account admins, by numeric id. The API says who posts with an
  * author URN; the browser leg reads the Page's name live and picks it off the
