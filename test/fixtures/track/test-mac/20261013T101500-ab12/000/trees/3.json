@@ -1,0 +1,1 @@
+{ "role": "AXWindow", "name": "Notes", "children": [{ "role": "AXButton", "name": "New Note" }] }

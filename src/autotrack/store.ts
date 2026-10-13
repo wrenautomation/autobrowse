@@ -3,6 +3,7 @@
  *   <device>/<session>/session.json
  *   <device>/<session>/<segment>/events.jsonl.gz
  *   <device>/<session>/<segment>/frames/<n>.jpg      (n = frame number in the session)
+ *   <device>/<session>/<segment>/trees/<n>.json.gz   (accessibility tree; `.txt.gz` for a web page outline)
  * Only William's AWS user lists and reads; a device's own key can only put.
  */
 import type { AwsConfig } from "../owner.js";
@@ -67,13 +68,22 @@ export interface SessionRow {
   session: string;
   segments: number;
   frames: number;
+  trees: number;
   bytes: number;
 }
 
 export type ParsedKey =
   | { device: string; session: string; kind: "meta" }
   | { device: string; session: string; kind: "events"; segment: string }
-  | { device: string; session: string; kind: "frame"; segment: string; frame: number };
+  | { device: string; session: string; kind: "frame"; segment: string; frame: number }
+  | {
+      device: string;
+      session: string;
+      kind: "tree";
+      segment: string;
+      tree: number;
+      ext: "json" | "txt";
+    };
 
 export function parseKey(key: string): ParsedKey | null {
   const p = key.split("/");
@@ -85,6 +95,16 @@ export function parseKey(key: string): ParsedKey | null {
   const m = /^(\d+)\.jpg$/.exec(fifth ?? "");
   if (p.length === 5 && third && fourth === "frames" && m)
     return { device, session, kind: "frame", segment: third, frame: Number(m[1]) };
+  const t = /^(\d+)\.(json|txt)\.gz$/.exec(fifth ?? "");
+  if (p.length === 5 && third && fourth === "trees" && t)
+    return {
+      device,
+      session,
+      kind: "tree",
+      segment: third,
+      tree: Number(t[1]),
+      ext: t[2] as "json" | "txt",
+    };
   return null;
 }
 
@@ -102,6 +122,7 @@ export async function listSessions(store: TrackStore, device?: string): Promise<
         session: k.session,
         segments: 0,
         frames: 0,
+        trees: 0,
         bytes: 0,
         segs: new Set(),
       };
@@ -109,6 +130,7 @@ export async function listSessions(store: TrackStore, device?: string): Promise<
     }
     row.bytes += obj.size;
     if (k.kind === "frame") row.frames += 1;
+    if (k.kind === "tree") row.trees += 1;
     if (k.kind === "events") row.segs.add(k.segment);
   }
   return [...rows.values()]

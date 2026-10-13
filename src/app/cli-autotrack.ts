@@ -111,7 +111,7 @@ export function registerAutotrackCommands(program: Command, settings: Settings):
   };
   track
     .command("list")
-    .description("Sessions in the bucket: device, session, segments, frames, size")
+    .description("Sessions in the bucket: device, session, segments, frames, trees, size")
     .option("--device <device>", "only this device")
     .action(async (o: { device?: string }) => {
       const rows = await listSessions(await store(), o.device && checkDevice(o.device));
@@ -120,7 +120,7 @@ export function registerAutotrackCommands(program: Command, settings: Settings):
           ? rows
               .map(
                 (r) =>
-                  `${r.device}/${r.session}  segments ${r.segments}  frames ${r.frames}  ${size(r.bytes)}`,
+                  `${r.device}/${r.session}  segments ${r.segments}  frames ${r.frames}  trees ${r.trees}  ${size(r.bytes)}`,
               )
               .join("\n")
           : "no sessions",
@@ -137,7 +137,7 @@ export function registerAutotrackCommands(program: Command, settings: Settings):
       const root = expandHome(settings.recordingsDir);
       const r = await importSession(await store(), refOf(ref), { root, ...o });
       console.log(
-        `${r.name}: ${r.actions} actions from ${r.events} events, ${r.frames} frames, in ${join(r.dir, "track")}\nnext: autobrowse compile ${r.name}`,
+        `${r.name}: ${r.actions} actions from ${r.events} events, ${r.frames} frames, ${r.trees} trees, in ${join(r.dir, "track")}\nnext: autobrowse compile ${r.name}`,
       );
     });
   track

@@ -190,10 +190,9 @@ function fixtureStore(): TrackStore {
       if (statSync(p).isDirectory()) walk(p);
       else {
         const key = relative(FIXTURE, p);
-        objects.set(
-          f === "events.jsonl" ? key.replace(/events\.jsonl$/, "events.jsonl.gz") : key,
-          f === "events.jsonl" ? gzipSync(readFileSync(p)) : readFileSync(p),
-        );
+        // events and trees ship gzipped; frames as they are
+        const gz = f === "events.jsonl" || (key.includes("/trees/") && /\.(json|txt)$/.test(f));
+        objects.set(gz ? `${key}.gz` : key, gz ? gzipSync(readFileSync(p)) : readFileSync(p));
       }
     }
   };
@@ -223,6 +222,13 @@ describe("track keys and sessions", () => {
     });
     expect(parseKey("d/s/000/frames/12.jpg")).toMatchObject({ kind: "frame", frame: 12 });
     expect(parseKey("d/s/000/frames/x.jpg")).toBeNull();
+    expect(parseKey("d/s/000/trees/7.json.gz")).toMatchObject({
+      kind: "tree",
+      tree: 7,
+      ext: "json",
+    });
+    expect(parseKey("d/s/000/trees/8.txt.gz")).toMatchObject({ kind: "tree", tree: 8, ext: "txt" });
+    expect(parseKey("d/s/000/trees/8.txt")).toBeNull();
     expect(parseKey("d/s/000/other")).toBeNull();
   });
 
@@ -234,6 +240,7 @@ describe("track keys and sessions", () => {
       session: "20261013T101500-ab12",
       segments: 2,
       frames: 1,
+      trees: 2,
     });
     expect(rows[0]?.bytes).toBeGreaterThan(0);
     expect(await listSessions(fixtureStore(), "other")).toEqual([]);
@@ -259,6 +266,7 @@ describe("import", () => {
       actions: 6,
       events: 10,
       frames: 1,
+      trees: 2,
     });
     const rec = await loadRecording(root, r.name);
     const shot = `${r.name}/track/frames/2.jpg`;
@@ -308,6 +316,10 @@ describe("import", () => {
     });
     // The frame it points at came down, relative to the recordings root.
     expect(statSync(join(root, shot)).size).toBeGreaterThan(0);
+    // Every tree came down, unzipped, under its own extension.
+    const trees = join(r.dir, "track", "trees");
+    expect(JSON.parse(readFileSync(join(trees, "3.json"), "utf8")).role).toBe("AXWindow");
+    expect(readFileSync(join(trees, "4.txt"), "utf8")).toContain('button "New Note"');
   });
 
   it("takes --name and --site, and refuses a bad session or an empty one", async () => {

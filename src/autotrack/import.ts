@@ -1,6 +1,7 @@
 /**
  * A track session → an autobrowse `Recording` of desktop acts, so teach and compile read what a
- * person did on their own machine. Downloads the events and the frames the recording points at.
+ * person did on their own machine. Downloads the events, the frames the recording points at and
+ * every accessibility tree (`track/trees/<n>.json|txt`, named by `tree` and `treeFile` events).
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -122,6 +123,7 @@ export interface ImportResult {
   actions: number;
   events: number;
   frames: number;
+  trees: number;
 }
 
 export interface SessionData {
@@ -132,6 +134,8 @@ export interface SessionData {
   meta: SessionMeta | null;
   /** Frame number → bucket key. */
   frameKeys: Map<number, string>;
+  /** Tree number → bucket key and its kind: `json` (a window's tree) or `txt` (a page outline). */
+  treeKeys: Map<number, { key: string; ext: "json" | "txt" }>;
 }
 
 /** A session's events (every segment, in order), its meta and where its frames are. */
@@ -165,8 +169,12 @@ export async function readSession(
     : null;
 
   const frameKeys = new Map<number, string>();
-  for (const x of objects) if (x.k.kind === "frame") frameKeys.set(x.k.frame, x.key);
-  return { prefix, events, raw, meta, frameKeys };
+  const treeKeys = new Map<number, { key: string; ext: "json" | "txt" }>();
+  for (const x of objects) {
+    if (x.k.kind === "frame") frameKeys.set(x.k.frame, x.key);
+    if (x.k.kind === "tree") treeKeys.set(x.k.tree, { key: x.key, ext: x.k.ext });
+  }
+  return { prefix, events, raw, meta, frameKeys, treeKeys };
 }
 
 /** The labels for a session, if `autotrack label` has run: the bucket's, else the local copy. */
@@ -193,12 +201,13 @@ export async function importSession(
   o: { root: string; name?: string; site?: string },
 ): Promise<ImportResult> {
   const device = checkDevice(ref.device);
-  const { events, raw, meta, frameKeys } = await readSession(store, ref);
+  const { events, raw, meta, frameKeys, treeKeys } = await readSession(store, ref);
 
   const name = o.name ?? `${device}-${ref.session.toLowerCase()}`;
   const dir = recordingDir(o.root, name);
   const trackDir = join(dir, "track");
   await mkdir(join(trackDir, "frames"), { recursive: true });
+  if (treeKeys.size) await mkdir(join(trackDir, "trees"), { recursive: true });
 
   // Only the frames the recording points at come down; the bucket keeps the rest.
   const saved = new Set<number>();
@@ -217,6 +226,8 @@ export async function importSession(
       await store.get(frameKeys.get(n) as string),
     );
   }
+  for (const [n, { key, ext }] of treeKeys)
+    await writeFile(join(trackDir, "trees", `${n}.${ext}`), gunzipSync(await store.get(key)));
   await writeFile(join(trackDir, "events.jsonl"), raw);
   if (labels)
     await writeFile(join(trackDir, "labels.json"), `${JSON.stringify(labels, null, 2)}\n`);
@@ -238,5 +249,12 @@ export async function importSession(
     commands: [],
   };
   await saveRecording(o.root, rec);
-  return { name, dir, actions: actions.length, events: events.length, frames: saved.size };
+  return {
+    name,
+    dir,
+    actions: actions.length,
+    events: events.length,
+    frames: saved.size,
+    trees: treeKeys.size,
+  };
 }
