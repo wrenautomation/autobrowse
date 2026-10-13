@@ -134,6 +134,8 @@ describe("a named account", () => {
       analytics: 0,
       like: 0,
       follow: 0,
+      comment: 0,
+      comments: 0,
       total: 20,
     });
     expect(linkedin.caps).toMatchObject({ company: 40 });

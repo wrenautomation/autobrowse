@@ -38,6 +38,7 @@ import { instagramOauthConsent } from "../browser/flows/instagram-oauth-consent.
 import { linkedinFollow, linkedinLike } from "../browser/flows/linkedin-act.js";
 import { linkedinActivity } from "../browser/flows/linkedin-activity.js";
 import { linkedinAudience } from "../browser/flows/linkedin-audience.js";
+import { linkedinComment, linkedinPostComments } from "../browser/flows/linkedin-comment.js";
 import { linkedinCreatePost } from "../browser/flows/linkedin-create-post.js";
 import { linkedinDashboard } from "../browser/flows/linkedin-dashboard.js";
 import { linkedinNotifications } from "../browser/flows/linkedin-notifications.js";
@@ -147,6 +148,8 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinWithdraw,
     linkedinLike,
     linkedinFollow,
+    linkedinComment,
+    linkedinPostComments,
     resetMailProbe,
     npmCreateOrg,
     npmGranularToken,

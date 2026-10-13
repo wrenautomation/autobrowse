@@ -187,6 +187,7 @@ describe("linkedin reach: routes", () => {
     const sends = reach.filter((r) => r.irreversible).map((r) => r.path);
     expect(sends).toEqual([
       "/rest/posts",
+      "/rest/socialActions/{urn}/comments",
       "/in/{vanity}/connect",
       "/in/{vanity}/withdraw",
       "/in/{vanity}/message",

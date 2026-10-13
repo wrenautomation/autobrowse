@@ -34,6 +34,8 @@ export const LINKEDIN_VERSION = "202508";
  * composer's author list, so a rename needs no change here.
  */
 export const LINKEDIN_PAGES: ReadonlySet<string> = new Set([WREN_PAGE]);
+/** Their handles (`/company/<handle>/`), so a comment the page shows by link names the Page's URN. */
+const PAGE_HANDLES: Record<string, string> = { wrenautomation: WREN_PAGE };
 
 const PAGE_URN = /^urn:li:organization:(\d+)$/;
 
@@ -323,6 +325,9 @@ export const linkedin: SiteApi = {
     // Likes on others' posts and follows: wren's reach loop, as linkedin@wren only.
     like: 30,
     follow: 20,
+    // Comments as the Page on others' posts (wren's reach loop) and reads of a post's comments.
+    comment: 15,
+    comments: 60,
   },
   // William's own profile (shown as "Will Jin"): research reads since 2026-10-06, when the alt was
   // restricted ("just use my main ... unless alt still works"); the alt's pace, nothing sent, never
@@ -344,6 +349,8 @@ export const linkedin: SiteApi = {
       analytics: 0,
       like: 0,
       follow: 0,
+      comment: 0,
+      comments: 0,
       // Research reads in all, search first in wren (designs 2026-10-07-linkedin-search-first): 20 a day.
       total: 20,
     },
@@ -365,6 +372,8 @@ export const linkedin: SiteApi = {
       analytics: 0,
       like: 0,
       follow: 0,
+      comment: 0,
+      comments: 0,
       total: 20,
     },
   },
@@ -471,6 +480,7 @@ export const linkedin: SiteApi = {
       summary: "Comments on a post (`count&start`)",
       request: comments,
       needs: ["r_organization_social"],
+      meter: () => ({ comments: 1 }),
       api: async ({ urn, count, start }, leg) =>
         must(
           await leg.http.json<unknown>(
@@ -479,7 +489,7 @@ export const linkedin: SiteApi = {
           ),
           "rest/socialActions/{urn}/comments",
         ),
-      browser: { workflow: "linkedin-post-comments" },
+      browser: { flow: "linkedin/post-comments", input: (q) => ({ ...q, pages: PAGE_HANDLES }) },
     }),
     route({
       method: "POST",
@@ -488,6 +498,7 @@ export const linkedin: SiteApi = {
       request: comment,
       irreversible: true,
       needs: (b) => asPage(b.actor, "w_organization_social"),
+      meter: () => ({ comment: 1 }),
       api: async ({ urn, ...body }, leg) =>
         must(
           await leg.http.json<unknown>(
@@ -497,8 +508,13 @@ export const linkedin: SiteApi = {
           "rest/socialActions/{urn}/comments",
         ),
       browser: {
-        workflow: "linkedin-comment",
-        input: (b) => ({ urn: b.urn, text: b.message.text }),
+        flow: "linkedin/comment",
+        input: (b) => ({
+          urn: b.urn,
+          text: b.message.text,
+          actor: b.actor,
+          page: composerPage(b.actor),
+        }),
       },
     }),
     route({
