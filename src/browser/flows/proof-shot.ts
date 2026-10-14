@@ -9,6 +9,7 @@
  * element holding the first words of `text`, widened to its comment box. Not found, the shot is
  * the top of the page: what a stranger sees there.
  */
+import type { Page } from "playwright";
 import { defineFlow, type FlowPage } from "../flow.js";
 
 const LAND_MS = 12_000;
@@ -87,7 +88,7 @@ export function clipOf(
   return { x, y, w: Math.max(1, r - x), h: Math.max(1, b - y) };
 }
 
-interface Found {
+export interface Found {
   comment: Box | null;
   title: Box | null;
   titleText: string | null;
@@ -158,9 +159,15 @@ const UNCOVER = `(() => {
   document.body.style.setProperty("overflow", "auto", "important");
 })()`;
 
+/**
+ * The comment's and title's boxes on the page as it is now. A string is evaluated as an
+ * expression, never called with an argument, so the script is called in place.
+ */
+export const findOn = (page: Pick<Page, "evaluate">, ref: string | null, snippet: string | null) =>
+  page.evaluate<Found>(`${FIND_SCRIPT}(${JSON.stringify([ref, snippet])})`);
+
 async function find(fp: FlowPage, ref: string | null, snippet: string | null): Promise<Found> {
-  const run = () =>
-    fp.page.evaluate<Found, [string | null, string | null]>(`${FIND_SCRIPT}`, [ref, snippet]);
+  const run = () => findOn(fp.page, ref, snippet);
   let found = await run();
   for (let t = 0; !found.comment && t < LAND_MS; t += SETTLE_MS) {
     await fp.wait(SETTLE_MS);
