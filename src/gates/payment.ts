@@ -18,11 +18,24 @@ export const PAYMENT_FIELD =
 
 /** A button that spends or commits to spend. */
 export const PAYMENT_ACTION =
-  /\b(buy|pay(ment)? now|pay|purchase|subscribe|checkout|check out|place (your )?order|complete (your )?(order|purchase|payment|checkout)|submit (order|payment)|finish (order|purchase)|order now|add funds|add credits|top up|confirm (payment|purchase|order)|confirm and pay|start (free |your )?trial|add (a )?(payment method|card))\b/i;
+  /\b(buy|pay(ment)? now|pay|purchase|subscribe|checkout|check out|place (your )?order|complete (your )?(order|purchase|payment|checkout)|submit (order|payment)|finish (order|purchase)|order now|add funds|add credits|top up|confirm (payment|purchase|order)|confirm and pay|confirm (the )?upgrade|upgrade now|upgrade (my |your |the )?plan|start (free |your )?trial|add (a )?(payment method|card))\b/i;
 
 /** The gated clicks that take money now; the rest (checkout, add a card, a trial) only lead to one. */
 export const CHARGE_ACTION =
-  /\b(buy|pay(ment)? now|pay|purchase|subscribe|place (your )?order|complete (your )?(order|purchase|payment|checkout)|submit (order|payment)|finish (order|purchase)|order now|add funds|add credits|top up|confirm (payment|purchase|order)|confirm and pay)\b/i;
+  /\b(buy|pay(ment)? now|pay|purchase|subscribe|place (your )?order|complete (your )?(order|purchase|payment|checkout)|submit (order|payment)|finish (order|purchase)|order now|add funds|add credits|top up|confirm (payment|purchase|order)|confirm and pay|confirm (the )?upgrade|upgrade now|upgrade (my |your |the )?plan)\b/i;
+
+/** A key that presses whatever has focus: Enter or Space, alone or with modifiers. */
+export function activates(key: string): boolean {
+  const last = key.split("+").pop()?.trim() ?? "";
+  return /^(enter|numpadenter|space| )$/i.test(last) || key === " ";
+}
+
+/** Script that clicks or submits, which a click's gate would never see. */
+export function scriptActs(js: string): boolean {
+  return /\.(click|submit|requestSubmit)\s*\(|new\s+(Mouse|Pointer)Event\b|Event\(\s*["'`](click|submit)["'`]/.test(
+    js,
+  );
+}
 
 /** Whether this click charges (a receipt follows) rather than leads to a charge. */
 export function chargesNow(hints: Hints): boolean {

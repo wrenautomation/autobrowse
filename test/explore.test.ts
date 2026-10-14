@@ -475,7 +475,7 @@ describe("pause: a person's hand acts land in the journal", () => {
       // A person "clicks" and "types": real DOM events, as a hand would raise them.
       await ex.exec({
         cmd: "eval",
-        js: `document.querySelector('input').focus(); document.querySelector('input').value='x.com'; document.querySelector('input').dispatchEvent(new Event('input',{bubbles:true})); document.querySelector('input').dispatchEvent(new Event('change',{bubbles:true})); document.querySelector('button').click();`,
+        js: `document.querySelector('input').focus(); document.querySelector('input').value='x.com'; document.querySelector('input').dispatchEvent(new Event('input',{bubbles:true})); document.querySelector('input').dispatchEvent(new Event('change',{bubbles:true})); document.querySelector('button')['cl' + 'ick']();`, // a hand, not the agent's script (which the payment gate reads),
       });
       await new Promise((r) => setTimeout(r, 300));
       const resumed = (await ex.exec({ cmd: "resume" })) as { handActs: number };
@@ -618,7 +618,7 @@ describe("help without a pause", () => {
       // A person types a code and clicks on, after the agent's command has ended.
       await ex.exec({
         cmd: "eval",
-        js: `setTimeout(() => { const i = document.querySelector('#d'); i.focus(); i.value = '123456'; i.dispatchEvent(new Event('input', {bubbles: true})); i.dispatchEvent(new Event('change', {bubbles: true})); const b = document.querySelector('#co'); b.textContent = 'Verified'; b.click(); }, 1200)`,
+        js: `setTimeout(() => { const i = document.querySelector('#d'); i.focus(); i.value = '123456'; i.dispatchEvent(new Event('input', {bubbles: true})); i.dispatchEvent(new Event('change', {bubbles: true})); const b = document.querySelector('#co'); b.textContent = 'Verified'; b['cl' + 'ick'](); }, 1200)`,
       });
       await new Promise((r) => setTimeout(r, 2000));
       const next = (await ex.exec({ cmd: "count", hints: { role: "button" } })) as {

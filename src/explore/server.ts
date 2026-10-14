@@ -72,6 +72,7 @@ import {
 } from "../desktop/types.js";
 import {
   type Approver,
+  activates,
   amountNear,
   chargesNow,
   PaymentFlowYes,
@@ -80,6 +81,7 @@ import {
   paymentAmount,
   paymentFlowOf,
   paymentGate,
+  scriptActs,
 } from "../gates/payment.js";
 import type { Amount } from "../gates/spend.js";
 import type { Llm } from "../llm/types.js";
@@ -614,6 +616,12 @@ const DOM_QUIET = `() => new Promise((done) => {
  * wall on `open` is signed through, popups are tracked, and the profile
  * is the same one the compiled flow will use.
  */
+/** Every button's words on the page (in the page, as a string: no DOM types here). */
+const BUTTON_LABELS = `[...document.querySelectorAll("button,[role=button],input[type=submit],input[type=button]")]
+  .map((e) => e.innerText || e.value || e.getAttribute("aria-label") || "")
+  .filter(Boolean)
+  .slice(0, 300)`;
+
 export async function startExplore(opts: ExploreOptions): Promise<Explorer> {
   const ready = new Promise<{ fp: FlowPage; finish: () => void }>((resolve, reject) => {
     const flow = defineFlow<undefined, void>({
@@ -1500,19 +1508,29 @@ async function serve(
         return { url: page.url() };
       }
       case "press": {
+        // Enter or Space on a button is a click: the same gate, the same receipt.
+        const spent = activates(c.key) ? await gate("click", c, wait) : null;
+        const billing = spent ? await fillBilling() : [];
         await hands.think(page);
         await hands.press(find(c), c.key, { timeout: 10_000 });
         await settle(page);
         journalAct(c, (target) => ({ kind: "press", target, key: c.key }));
-        return { url: page.url() };
+        const set = billing.length ? { billing } : {};
+        if (spent?.charges) return { url: page.url(), ...set, told: await reportSpend(spent) };
+        return { url: page.url(), ...set };
       }
       case "type":
         await hands.type(page, c.text, { timeout: 10_000 });
         return { ok: true };
-      case "key":
+      case "key": {
+        // Enter or Space presses whatever has focus: judged as a click on it.
+        const focused = { ...c, hints: { css: "*:focus" } } as unknown as Target;
+        const spent = activates(c.key) ? await gate("click", focused, wait) : null;
         await hands.press(page, c.key, { timeout: 10_000 });
         await settle(page);
+        if (spent?.charges) return { url: page.url(), told: await reportSpend(spent) };
         return { url: page.url() };
+      }
       case "aria": {
         const tree = await (c.hints
           ? locate(page, c.hints as Hints).ariaSnapshot()
@@ -1563,6 +1581,21 @@ async function serve(
       case "html":
         return html(c);
       case "eval": {
+        // A click by script never meets the click's gate: on a page that shows a spending button,
+        // it needs the same yes first.
+        if (scriptActs(c.js)) {
+          const labels = await page.evaluate<string[]>(BUTTON_LABELS).catch(() => [] as string[]);
+          const spend = labels
+            .map((text) => paymentGate("click", { text: text.trim().slice(0, 200) }))
+            .find((w) => w !== null);
+          if (spend)
+            await decide(
+              `eval ${c.js.slice(0, 80)}`,
+              `run a script on a page where it can ${spend.replace(/^press /, "press ")}`,
+              page.url(),
+              wait,
+            );
+        }
         const result: unknown = c.hints
           ? await locate(page, c.hints as Hints)
               .first()

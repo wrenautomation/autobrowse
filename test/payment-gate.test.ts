@@ -4,11 +4,13 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { askLine, askOverChannel } from "../src/gates/ask.js";
 import {
+  activates,
   amountNear,
   chargesNow,
   PaymentFlowYes,
   paymentFlowOf,
   paymentGate,
+  scriptActs,
   totalIn,
 } from "../src/gates/payment.js";
 
@@ -27,6 +29,25 @@ describe("paymentGate", () => {
     expect(paymentGate("click", { role: "link", name: "Upgrade" })).toBeNull(); // a page, not a charge
     expect(paymentGate("fill", { role: "textbox", name: "Name" })).toBeNull();
     expect(paymentGate("fill", { role: "textbox", name: "Project name" })).toBeNull();
+  });
+
+  it("gates a plan upgrade's confirm, not the link to plans", () => {
+    expect(paymentGate("click", { role: "button", name: "Confirm upgrade" })).toMatch(/spends/);
+    expect(paymentGate("click", { role: "button", name: "Upgrade plan" })).toMatch(/spends/);
+    expect(chargesNow({ role: "button", name: "Upgrade now" })).toBe(true);
+    expect(paymentGate("click", { role: "link", name: "Upgrade" })).toBeNull();
+  });
+
+  it("knows the other ways a button gets pressed", () => {
+    for (const k of ["Enter", "NumpadEnter", "Space", " ", "Shift+Enter"])
+      expect(activates(k)).toBe(true);
+    for (const k of ["Tab", "Escape", "ArrowDown", "a"]) expect(activates(k)).toBe(false);
+    expect(scriptActs("(el) => el.click()")).toBe(true);
+    expect(scriptActs("document.querySelector('form').requestSubmit()")).toBe(true);
+    expect(scriptActs("el.dispatchEvent(new MouseEvent('click'))")).toBe(true);
+    expect(scriptActs("el.dispatchEvent(new Event('submit'))")).toBe(true);
+    expect(scriptActs("i.dispatchEvent(new Event('input', {bubbles: true}))")).toBe(false);
+    expect(scriptActs("document.title")).toBe(false);
   });
 
   it("a selector counts only when the element says nothing", () => {
