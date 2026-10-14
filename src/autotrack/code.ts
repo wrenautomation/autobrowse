@@ -10,8 +10,11 @@ import { z } from "zod";
 export const DEVICE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 export const DEVICE_MAX = 40;
 
-/** Top-level prefixes of the bucket that are not a device's: `labels/` holds the offline labels. */
-export const RESERVED_DEVICES = ["labels"];
+/**
+ * Top-level prefixes of the bucket that are not a device's: `labels/` holds the offline labels,
+ * `steps/` the RL view and its quality report.
+ */
+export const RESERVED_DEVICES = ["labels", "steps"];
 
 export function checkDevice(device: string): string {
   if (!DEVICE.test(device) || device.length > DEVICE_MAX)

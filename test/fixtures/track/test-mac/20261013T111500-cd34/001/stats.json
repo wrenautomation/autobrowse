@@ -1,0 +1,13 @@
+{
+  "events": { "key": 1 },
+  "movesDropped": 0,
+  "probe": { "answers": 0, "timeouts": 1 },
+  "nullElement": 1,
+  "frames": { "saved": 0, "failed": 0, "slotReused": 0 },
+  "trees": 0,
+  "crops": 0,
+  "ocr": { "done": 0, "same": 0, "failed": 0, "skipped": 0 },
+  "levels": { "full": 0, "normal": 0, "lean": 11 },
+  "restarts": { "probe": 1 },
+  "recovered": true
+}

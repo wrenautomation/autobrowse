@@ -1,0 +1,15 @@
+{"t":0,"ts":1791890100000,"kind":"level","level":"full","why":"ac power, system calm"}
+{"t":0,"ts":1791890100000,"kind":"focus","app":{"name":"Notes","id":"com.apple.Notes","pid":10},"display":"1"}
+{"t":100,"ts":1791890100100,"kind":"task","goal":"write a note"}
+{"t":900,"ts":1791890100900,"kind":"tree","tree":5}
+{"t":1000,"ts":1791890101000,"kind":"shot","frame":3,"at":950,"x":10,"y":20,"display":"1"}
+{"t":1000,"ts":1791890101000,"kind":"click","x":10,"y":20,"button":"left","count":1,"app":{"name":"Notes","id":"com.apple.Notes","pid":10},"display":"1","element":{"role":"AXButton","name":"New Note","x":0,"y":0,"width":30,"height":20,"secure":false},"before":3,"after":4,"tree":5,"crop":1,"path":[[-900,300,300],[-500,100,100],[-100,12,22]],"settle":240,"settled":true,"out":{"screen":true,"focus":false,"dialog":false,"window":false}}
+{"t":1600,"ts":1791890101600,"kind":"tree","tree":6}
+{"t":2500,"ts":1791890102500,"kind":"text","text":"hello","redacted":false,"app":{"name":"Notes","id":"com.apple.Notes","pid":10},"display":"1","element":{"role":"AXTextArea","name":"Note body","x":40,"y":40,"width":600,"height":400,"secure":false},"before":4,"after":7,"tree":6,"settle":150,"settled":true,"out":{"screen":true,"focus":false,"dialog":false,"window":false}}
+{"t":3200,"ts":1791890103200,"kind":"key","key":"enter","mods":[],"app":{"name":"Notes","id":"com.apple.Notes","pid":10},"display":"1","before":7,"after":8,"settle":3000,"settled":false}
+{"t":4000,"ts":1791890104000,"kind":"task","goal":"","done":true}
+{"t":299000,"ts":1791890399000,"kind":"level","level":"lean","why":"battery 15%"}
+{"t":300000,"ts":1791890400000,"kind":"click","x":2400,"y":540,"button":"left","count":1,"app":{"name":"Notes","id":"com.apple.Notes","pid":10},"display":"2","before":9,"after":10}
+{"t":300600,"ts":1791890400600,"kind":"scroll","x":2400,"y":540,"dx":0,"dy":-3,"app":{"name":"Notes","id":"com.apple.Notes","pid":10},"display":"2","before":10,"after":10}
+{"t":301000,"ts":1791890401000,"kind":"scroll","x":2400,"y":540,"dx":0,"dy":-2,"app":{"name":"Notes","id":"com.apple.Notes","pid":10},"display":"2","before":10,"after":11}
+{"t":302000,"ts":1791890402000,"kind":"pause","reason":"hotkey"}

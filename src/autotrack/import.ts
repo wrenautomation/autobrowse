@@ -1,7 +1,9 @@
 /**
  * A track session → an autobrowse `Recording` of desktop acts, so teach and compile read what a
- * person did on their own machine. Downloads the events, the frames the recording points at and
- * every accessibility tree (`track/trees/<n>.json|txt`, named by `tree` and `treeFile` events).
+ * person did on their own machine. Downloads the events, the frames the recording points at, every
+ * accessibility tree (`track/trees/<n>.json|txt`, named by `tree` and `treeFile` events), every
+ * crop (`track/crops/<n>.jpg`), every OCR file (`track/ocr/<n>.json`, `c<n>.json` for a crop) and
+ * each segment's stats (`track/stats/<segment>.json`).
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -11,8 +13,9 @@ import { recordingDir, saveRecording } from "../recorder/store.js";
 import type { Action, Recording } from "../recorder/types.js";
 import { checkDevice } from "./code.js";
 import { labelKey } from "./label.js";
+import { pool } from "./pool.js";
 import { parseKey, type TrackStore } from "./store.js";
-import type { Event, Labels, SessionMeta } from "./types.js";
+import type { Event, Labels, SessionMeta, Stats } from "./types.js";
 
 const SESSION = /^[0-9]{8}T[0-9]{6}-[0-9a-f]{4}$/;
 
@@ -124,7 +127,13 @@ export interface ImportResult {
   events: number;
   frames: number;
   trees: number;
+  crops: number;
+  ocr: number;
+  stats: number;
 }
+
+/** Files pulled at once. */
+const PULL = 8;
 
 export interface SessionData {
   prefix: string;
@@ -136,6 +145,13 @@ export interface SessionData {
   frameKeys: Map<number, string>;
   /** Tree number → bucket key and its kind: `json` (a window's tree) or `txt` (a page outline). */
   treeKeys: Map<number, { key: string; ext: "json" | "txt" }>;
+  /** Crop number → bucket key. */
+  cropKeys: Map<number, string>;
+  /** Frame number → the key of its OCR file; the crops' are in `ocrCropKeys`. */
+  ocrKeys: Map<number, string>;
+  ocrCropKeys: Map<number, string>;
+  /** Each segment's `stats.json.gz`, in segment order. */
+  statsKeys: { segment: string; key: string }[];
 }
 
 /** A session's events (every segment, in order), its meta and where its frames are. */
@@ -170,11 +186,48 @@ export async function readSession(
 
   const frameKeys = new Map<number, string>();
   const treeKeys = new Map<number, { key: string; ext: "json" | "txt" }>();
+  const cropKeys = new Map<number, string>();
+  const ocrKeys = new Map<number, string>();
+  const ocrCropKeys = new Map<number, string>();
+  const statsKeys: { segment: string; key: string }[] = [];
   for (const x of objects) {
     if (x.k.kind === "frame") frameKeys.set(x.k.frame, x.key);
     if (x.k.kind === "tree") treeKeys.set(x.k.tree, { key: x.key, ext: x.k.ext });
+    if (x.k.kind === "crop") cropKeys.set(x.k.crop, x.key);
+    if (x.k.kind === "ocr") (x.k.of === "crop" ? ocrCropKeys : ocrKeys).set(x.k.n, x.key);
+    if (x.k.kind === "stats") statsKeys.push({ segment: x.k.segment, key: x.key });
   }
-  return { prefix, events, raw, meta, frameKeys, treeKeys };
+  statsKeys.sort((a, b) => Number(a.segment) - Number(b.segment));
+  return {
+    prefix,
+    events,
+    raw,
+    meta,
+    frameKeys,
+    treeKeys,
+    cropKeys,
+    ocrKeys,
+    ocrCropKeys,
+    statsKeys,
+  };
+}
+
+/** The segments' `stats.json`, in segment order; one that cannot be read is skipped. */
+export async function readStats(
+  store: TrackStore,
+  data: Pick<SessionData, "statsKeys">,
+): Promise<{ segment: string; stats: Stats }[]> {
+  const got = await pool(data.statsKeys, PULL, async ({ segment, key }) => {
+    try {
+      const stats = JSON.parse(gunzipSync(await store.get(key)).toString("utf8")) as unknown;
+      return stats && typeof stats === "object" && !Array.isArray(stats)
+        ? { segment, stats: stats as Stats }
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  });
+  return got.filter((g): g is { segment: string; stats: Stats } => g !== undefined);
 }
 
 /** The labels for a session, if `autotrack label` has run: the bucket's, else the local copy. */
@@ -201,13 +254,20 @@ export async function importSession(
   o: { root: string; name?: string; site?: string },
 ): Promise<ImportResult> {
   const device = checkDevice(ref.device);
-  const { events, raw, meta, frameKeys, treeKeys } = await readSession(store, ref);
+  const data = await readSession(store, ref);
+  const { events, raw, meta, frameKeys, treeKeys } = data;
 
   const name = o.name ?? `${device}-${ref.session.toLowerCase()}`;
   const dir = recordingDir(o.root, name);
   const trackDir = join(dir, "track");
   await mkdir(join(trackDir, "frames"), { recursive: true });
-  if (treeKeys.size) await mkdir(join(trackDir, "trees"), { recursive: true });
+  const dirs = [
+    ["trees", treeKeys.size],
+    ["crops", data.cropKeys.size],
+    ["ocr", data.ocrKeys.size + data.ocrCropKeys.size],
+    ["stats", data.statsKeys.length],
+  ] as const;
+  for (const [sub, n] of dirs) if (n) await mkdir(join(trackDir, sub), { recursive: true });
 
   // Only the frames the recording points at come down; the bucket keeps the rest.
   const saved = new Set<number>();
@@ -220,14 +280,28 @@ export async function importSession(
   const intents = new Map<number, string>();
   for (const a of labels?.acts ?? []) if (a.intent) intents.set(a.t, a.intent);
   const actions = eventsToActions(events, screenshotOf, intents);
-  for (const n of saved) {
-    await writeFile(
-      join(trackDir, "frames", `${n}.jpg`),
-      await store.get(frameKeys.get(n) as string),
-    );
-  }
-  for (const [n, { key, ext }] of treeKeys)
-    await writeFile(join(trackDir, "trees", `${n}.${ext}`), gunzipSync(await store.get(key)));
+  await pool([...saved], PULL, async (n) =>
+    writeFile(join(trackDir, "frames", `${n}.jpg`), await store.get(frameKeys.get(n) as string)),
+  );
+  await pool([...treeKeys], PULL, async ([n, { key, ext }]) =>
+    writeFile(join(trackDir, "trees", `${n}.${ext}`), gunzipSync(await store.get(key))),
+  );
+  // Crops are JPEGs as shipped; OCR and stats are gzipped JSON.
+  await pool([...data.cropKeys], PULL, async ([n, key]) =>
+    writeFile(join(trackDir, "crops", `${n}.jpg`), await store.get(key)),
+  );
+  await pool(
+    [
+      ...[...data.ocrKeys].map(([n, key]) => [`${n}`, key] as const),
+      ...[...data.ocrCropKeys].map(([n, key]) => [`c${n}`, key] as const),
+    ],
+    PULL,
+    async ([name, key]) =>
+      writeFile(join(trackDir, "ocr", `${name}.json`), gunzipSync(await store.get(key))),
+  );
+  await pool(data.statsKeys, PULL, async ({ segment, key }) =>
+    writeFile(join(trackDir, "stats", `${segment}.json`), gunzipSync(await store.get(key))),
+  );
   await writeFile(join(trackDir, "events.jsonl"), raw);
   if (labels)
     await writeFile(join(trackDir, "labels.json"), `${JSON.stringify(labels, null, 2)}\n`);
@@ -256,5 +330,8 @@ export async function importSession(
     events: events.length,
     frames: saved.size,
     trees: treeKeys.size,
+    crops: data.cropKeys.size,
+    ocr: data.ocrKeys.size + data.ocrCropKeys.size,
+    stats: data.statsKeys.length,
   };
 }

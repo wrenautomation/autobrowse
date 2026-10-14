@@ -1,0 +1,68 @@
+{
+  "v": 1,
+  "session": "20261013T111500-cd34",
+  "device": "test-mac",
+  "os": "darwin",
+  "osVersion": "26.0",
+  "arch": "arm64",
+  "trackVersion": "0.2.0",
+  "startedAt": 1791890100000,
+  "endedAt": 1791890500000,
+  "displays": [
+    {
+      "id": "1",
+      "x": 0,
+      "y": 0,
+      "width": 1440,
+      "height": 900,
+      "scale": 2,
+      "primary": true
+    },
+    {
+      "id": "2",
+      "x": 1440,
+      "y": 0,
+      "width": 1920,
+      "height": 1080,
+      "scale": 1,
+      "primary": false
+    }
+  ],
+  "totals": {
+    "events": {
+      "click": 2,
+      "text": 1,
+      "key": 2,
+      "scroll": 2,
+      "level": 2,
+      "shot": 5
+    },
+    "movesDropped": 0,
+    "probe": {
+      "answers": 4,
+      "timeouts": 1
+    },
+    "nullElement": 3,
+    "frames": {
+      "saved": 5,
+      "failed": 0,
+      "slotReused": 0
+    },
+    "trees": 2,
+    "crops": 1,
+    "ocr": {
+      "done": 2,
+      "same": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "levels": {
+      "full": 299,
+      "normal": 0,
+      "lean": 14
+    },
+    "restarts": {
+      "probe": 1
+    }
+  }
+}

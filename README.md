@@ -173,9 +173,12 @@ a row; it is work.
 - **Track.** `autotrack` (its own repo) records every input and screen on a
   laptop and ships it to a private bucket (`TRACK_BUCKET`). `autobrowse autotrack
   enroll <device>` makes that device a write-only key and prints its install
-  code and one-line install (`--revoke` ends it); `autotrack list` shows sessions;
-  `autotrack import <device>/<session>` turns one into a recording of desktop acts
-  for `compile` (autotrack repo designs/2026-10-13-autotrack.md).
+  code and one-line install (`--revoke` ends it); `autotrack list` shows sessions
+  and their quality; `autotrack import <device>/<session>` turns one into a
+  recording of desktop acts for `compile`; `autotrack label` writes the offline
+  labels; `autotrack steps <device>/<session> [--min-quality n]` writes the RL
+  view, one line per act, with a quality report beside it (autotrack repo
+  designs/2026-10-13-autotrack.md).
 - **Env store.** Secrets travel through SSM Parameter Store, one
   SecureString per name under `/autobrowse/config` (KMS at rest, IAM at
   the door, every read in CloudTrail; no extra vendor). `autobrowse env

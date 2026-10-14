@@ -4,6 +4,9 @@
  *   <device>/<session>/<segment>/events.jsonl.gz
  *   <device>/<session>/<segment>/frames/<n>.jpg      (n = frame number in the session)
  *   <device>/<session>/<segment>/trees/<n>.json.gz   (accessibility tree; `.txt.gz` for a web page outline)
+ *   <device>/<session>/<segment>/crops/<n>.jpg       (native-pixel crop at a pointer act; not gzipped)
+ *   <device>/<session>/<segment>/ocr/<n>.json.gz     (text of frame n); `ocr/c<n>.json.gz` (of crop n)
+ *   <device>/<session>/<segment>/stats.json.gz       (what the recorder did in the segment)
  * Only William's AWS user lists and reads; a device's own key can only put.
  */
 import type { AwsConfig } from "../owner.js";
@@ -18,7 +21,10 @@ export interface TrackStore {
   get(key: string): Promise<Buffer>;
 }
 
-/** William's user can also write the labels (`labels/<device>/<session>.json`); a device's key never does. */
+/**
+ * William's user can also write the labels (`labels/<device>/<session>.json`) and the RL steps
+ * (`steps/<device>/<session>.jsonl.gz`, `….quality.json`); a device's key never does.
+ */
 export interface TrackWriter extends TrackStore {
   put(key: string, body: Buffer, contentType?: string): Promise<void>;
 }
@@ -69,6 +75,8 @@ export interface SessionRow {
   segments: number;
   frames: number;
   trees: number;
+  crops: number;
+  ocr: number;
   bytes: number;
 }
 
@@ -83,7 +91,18 @@ export type ParsedKey =
       segment: string;
       tree: number;
       ext: "json" | "txt";
-    };
+    }
+  | { device: string; session: string; kind: "crop"; segment: string; crop: number }
+  /** `ocr/<n>.json.gz` reads frame n; `ocr/c<n>.json.gz` reads crop n. */
+  | {
+      device: string;
+      session: string;
+      kind: "ocr";
+      segment: string;
+      of: "frame" | "crop";
+      n: number;
+    }
+  | { device: string; session: string; kind: "stats"; segment: string };
 
 export function parseKey(key: string): ParsedKey | null {
   const p = key.split("/");
@@ -105,6 +124,21 @@ export function parseKey(key: string): ParsedKey | null {
       tree: Number(t[1]),
       ext: t[2] as "json" | "txt",
     };
+  const c = /^(\d+)\.jpg$/.exec(fifth ?? "");
+  if (p.length === 5 && third && fourth === "crops" && c)
+    return { device, session, kind: "crop", segment: third, crop: Number(c[1]) };
+  const o = /^(c?)(\d+)\.json\.gz$/.exec(fifth ?? "");
+  if (p.length === 5 && third && fourth === "ocr" && o)
+    return {
+      device,
+      session,
+      kind: "ocr",
+      segment: third,
+      of: o[1] ? "crop" : "frame",
+      n: Number(o[2]),
+    };
+  if (p.length === 4 && third && fourth === "stats.json.gz")
+    return { device, session, kind: "stats", segment: third };
   return null;
 }
 
@@ -123,6 +157,8 @@ export async function listSessions(store: TrackStore, device?: string): Promise<
         segments: 0,
         frames: 0,
         trees: 0,
+        crops: 0,
+        ocr: 0,
         bytes: 0,
         segs: new Set(),
       };
@@ -131,6 +167,8 @@ export async function listSessions(store: TrackStore, device?: string): Promise<
     row.bytes += obj.size;
     if (k.kind === "frame") row.frames += 1;
     if (k.kind === "tree") row.trees += 1;
+    if (k.kind === "crop") row.crops += 1;
+    if (k.kind === "ocr") row.ocr += 1;
     if (k.kind === "events") row.segs.add(k.segment);
   }
   return [...rows.values()]

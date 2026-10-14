@@ -1,7 +1,8 @@
 /**
  * The autotrack session format, copied from the autotrack repo (`src/events.ts`, which follows its
  * designs/2026-10-13-autotrack.md). The repos are separate, so no test can compare them: change
- * both or neither. `Labels` and its parts (end of file) are autobrowse's own: the offline pass writes them.
+ * both or neither. `OcrFile` and `Labels` with its parts (end of file) are autobrowse's own: the first is
+ * how it reads a shipped file, the last is what the offline pass writes.
  */
 
 export interface Base {
@@ -79,11 +80,26 @@ export interface Outcome {
   window: boolean;
 }
 
+/** The recorder's quality level (quality section of the design doc): how hard it was capturing. */
+export type Level = "full" | "normal" | "lean";
+
 /** The fields every act event (click, drag, scroll, text, key) may carry. */
 interface ActExtras {
   out?: Outcome;
   /** The latest accessibility tree before the act (`trees/<n>.json`). */
   tree?: number;
+  /** ms from the act's end until two grabs in a row hashed the same (the after frame). */
+  settle?: number;
+  /** False when 3 s ran out before the screen settled (a spinner, a video). */
+  settled?: boolean;
+}
+
+/** What a click, drag or scroll adds: the cursor's approach and a native-pixel crop. */
+interface PointerExtras {
+  /** `[dt, x, y]`: the last 1 s before button-down, dt in ms (negative), global points; ≤ 60. */
+  path?: [number, number, number][];
+  /** `crops/<n>.jpg`: 256x256 points around the pointer at the display's native pixels. */
+  crop?: number;
 }
 
 export type Event = Base &
@@ -91,38 +107,41 @@ export type Event = Base &
   (
     | { kind: "move"; x: number; y: number }
     /** before/after = frame numbers */
-    | (ActExtras & {
-        kind: "click";
-        x: number;
-        y: number;
-        button: "left" | "right" | "middle";
-        count: number;
-        element?: Element;
-        before?: number;
-        after?: number;
-      })
-    | (ActExtras & {
-        kind: "drag";
-        x0: number;
-        y0: number;
-        x: number;
-        y: number;
-        button: "left" | "right" | "middle";
-        element?: Element;
-        before?: number;
-        after?: number;
-      })
+    | (ActExtras &
+        PointerExtras & {
+          kind: "click";
+          x: number;
+          y: number;
+          button: "left" | "right" | "middle";
+          count: number;
+          element?: Element;
+          before?: number;
+          after?: number;
+        })
+    | (ActExtras &
+        PointerExtras & {
+          kind: "drag";
+          x0: number;
+          y0: number;
+          x: number;
+          y: number;
+          button: "left" | "right" | "middle";
+          element?: Element;
+          before?: number;
+          after?: number;
+        })
     /** wheel ticks folded per 250 ms */
-    | (ActExtras & {
-        kind: "scroll";
-        x: number;
-        y: number;
-        dx: number;
-        dy: number;
-        element?: Element;
-        before?: number;
-        after?: number;
-      })
+    | (ActExtras &
+        PointerExtras & {
+          kind: "scroll";
+          x: number;
+          y: number;
+          dx: number;
+          dy: number;
+          element?: Element;
+          before?: number;
+          after?: number;
+        })
     /** printable keys folded, ends at 1 s idle, a click, or a non-text key */
     | (ActExtras & {
         kind: "text";
@@ -189,6 +208,13 @@ export type Event = Base &
     | { kind: "clipboard"; types: string[]; length: number; text?: string; redacted: boolean }
     /** The person's own "why"; `goal: ""` with `done` closes the task. */
     | { kind: "task"; goal: string; done?: boolean }
+    /** The quality level changed; every act after it was captured at `level`. `why` names the input. */
+    | { kind: "level"; level: Level; why: string }
+    /**
+     * One per written frame: `at` is the grab's `t` (a ring frame can be older than the act), `x, y`
+     * the cursor then (screenshots carry no cursor), `display` the display it was grabbed from.
+     */
+    | { kind: "shot"; frame: number; at: number; x: number; y: number; display: string }
   );
 
 /**
@@ -214,7 +240,48 @@ export interface SessionMeta {
     scale: number;
     primary: boolean;
   }[];
+  /** Running totals over the session's closed segments (`Stats` summed). */
+  totals?: Stats;
 }
+
+/**
+ * `<segment>/stats.json` (shipped as `.gz`), written when a segment closes: what the recorder did,
+ * so a trainer can filter on integrity. `session.json` `totals` is the sum over the session.
+ * `recovered`: closed by the next start after a crash, so only what the files show is counted.
+ */
+export interface Stats {
+  /** Events written, by kind. */
+  events: Record<string, number>;
+  /** Raw pointer moves the 20 Hz / 4 px fold dropped. */
+  movesDropped: number;
+  /** Probe asks (at, focused, front, tree) that answered, and that timed out or had no helper. */
+  probe: { answers: number; timeouts: number };
+  /** Acts written with no element. */
+  nullElement: number;
+  frames: { saved: number; failed: number; slotReused: number };
+  trees: number;
+  crops: number;
+  /** Images read; `same`: a frame whose hash matched one already read; `skipped`: not read in time. */
+  ocr: { done: number; same: number; failed: number; skipped: number };
+  /** Seconds at each level. */
+  levels: Record<Level, number>;
+  /** Helper (re)starts after the first, by helper. */
+  restarts: Record<string, number>;
+  recovered?: boolean;
+}
+
+/** One line of recognised text, in the image's own pixels (`ocr/<n>.json.gz`, `ocr/c<n>.json.gz`). */
+export interface OcrLine {
+  text: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  conf: number;
+}
+
+/** An OCR file: the lines, or `{same: m}` when frame `m` (same hash) was already read. */
+export type OcrFile = { lines: OcrLine[] } | { same: number };
 
 export type EpisodeOutcome = "done" | "failed" | "abandoned" | "unclear";
 

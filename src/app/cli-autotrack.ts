@@ -1,7 +1,7 @@
 /**
  * `autobrowse autotrack …`: the storage side of autotrack (autotrack repo designs/2026-10-13-autotrack.md). `enroll` makes
  * a write-only key for one device and prints its install code; `list` and `import` read sessions
- * back and turn one into a recording teach can read.
+ * back and turn one into a recording teach can read; `label` and `steps` derive the offline views.
  */
 import { join } from "node:path";
 import type { Command } from "commander";
@@ -111,17 +111,22 @@ export function registerAutotrackCommands(program: Command, settings: Settings):
   };
   track
     .command("list")
-    .description("Sessions in the bucket: device, session, segments, frames, trees, size")
+    .description(
+      "Sessions in the bucket: device, session, segments, frames, trees, crops, OCR files, size, and the quality `steps` found",
+    )
     .option("--device <device>", "only this device")
     .action(async (o: { device?: string }) => {
-      const rows = await listSessions(await store(), o.device && checkDevice(o.device));
+      const s = await store();
+      const rows = await listSessions(s, o.device && checkDevice(o.device));
+      const { readQualities, qualityLine } = await import("../autotrack/steps-run.js");
+      const quality = await readQualities(s, rows);
       console.log(
         rows.length
           ? rows
-              .map(
-                (r) =>
-                  `${r.device}/${r.session}  segments ${r.segments}  frames ${r.frames}  trees ${r.trees}  ${size(r.bytes)}`,
-              )
+              .map((r) => {
+                const q = quality.get(`${r.device}/${r.session}`);
+                return `${r.device}/${r.session}  segments ${r.segments}  frames ${r.frames}  trees ${r.trees}  crops ${r.crops}  ocr ${r.ocr}  ${size(r.bytes)}${q ? `  ${qualityLine(q)}` : ""}`;
+              })
               .join("\n")
           : "no sessions",
       );
@@ -137,7 +142,7 @@ export function registerAutotrackCommands(program: Command, settings: Settings):
       const root = expandHome(settings.recordingsDir);
       const r = await importSession(await store(), refOf(ref), { root, ...o });
       console.log(
-        `${r.name}: ${r.actions} actions from ${r.events} events, ${r.frames} frames, ${r.trees} trees, in ${join(r.dir, "track")}\nnext: autobrowse compile ${r.name}`,
+        `${r.name}: ${r.actions} actions from ${r.events} events, ${r.frames} frames, ${r.trees} trees, ${r.crops} crops, ${r.ocr} OCR files, ${r.stats} stats, in ${join(r.dir, "track")}\nnext: autobrowse compile ${r.name}`,
       );
     });
   track
@@ -187,4 +192,33 @@ export function registerAutotrackCommands(program: Command, settings: Settings):
         if (failed) process.exitCode = 1;
       },
     );
+  track
+    .command("steps <ref> [session]")
+    .description(
+      "Build the RL view of a session: one line per act (screen before, action in frame pixels, screen after, tree diff, signals, intent, level), written to steps/<device>/<session>.jsonl.gz with a quality report beside it (and beside the import). <ref> is <device>/<session>, or a device with the session after it",
+    )
+    .option(
+      "--min-quality <n>",
+      "leave out episodes whose quality score (0 to 1) is lower; the report still lists them",
+    )
+    .action(async (ref: string, session: string | undefined, o: { minQuality?: string }) => {
+      const min = o.minQuality === undefined ? undefined : Number(o.minQuality);
+      if (min !== undefined && !(min >= 0 && min <= 1))
+        throw new Error("--min-quality is a number from 0 to 1");
+      const { stepsOne, stepsKey, qualityKey } = await import("../autotrack/steps-run.js");
+      const r = refOf(session ? `${ref}/${session}` : ref);
+      const out = await stepsOne(await store(), r, {
+        root: expandHome(settings.recordingsDir),
+        ...(min !== undefined ? { minQuality: min } : {}),
+      });
+      const { episodes, score } = out.report;
+      const kept = episodes.filter((e) => e.kept).length;
+      console.log(
+        `${out.ref}: ${out.steps} steps, ${kept}/${episodes.length} episodes, quality ${score.toFixed(2)}, written to ${stepsKey(r.device, r.session)}, ${qualityKey(r.device, r.session)} and ${out.dir}`,
+      );
+      for (const e of episodes)
+        console.log(
+          `  ${e.id}  ${e.kept ? "kept" : "left out"}  quality ${e.score.toFixed(2)}  steps ${e.steps}${e.goal ? `  ${e.goal}` : ""}`,
+        );
+    });
 }

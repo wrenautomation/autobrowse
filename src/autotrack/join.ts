@@ -242,8 +242,23 @@ export function buildActs(events: readonly Event[]): Act[] {
           prev.app?.id === a.app?.id &&
           e.ts - prev.ts <= SCROLL_MERGE_MS
         ) {
-          // One scroll act per run: the first event stands for it, the distance adds up.
-          prev.event = { ...prev.event, dx: prev.event.dx + e.dx, dy: prev.event.dy + e.dy };
+          // One scroll act per run: the first event stands for it (its before frame, crop, tree and
+          // cursor path), the distance adds up, and what came of the run is the last event's.
+          const run = {
+            ...prev.event,
+            dx: prev.event.dx + e.dx,
+            dy: prev.event.dy + e.dy,
+            ...(e.after !== undefined ? { after: e.after } : {}),
+            ...(e.out ? { out: e.out } : {}),
+          };
+          if (e.settle !== undefined || e.settled !== undefined) {
+            // The settle numbers belong together: the last event's, never a mix.
+            delete run.settle;
+            delete run.settled;
+            if (e.settle !== undefined) run.settle = e.settle;
+            if (e.settled !== undefined) run.settled = e.settled;
+          }
+          prev.event = run;
           prev.end = e.ts;
           break;
         }

@@ -1,0 +1,12 @@
+{
+  "events": { "click": 2, "text": 1, "key": 1, "scroll": 2, "level": 2, "shot": 5 },
+  "movesDropped": 0,
+  "probe": { "answers": 4, "timeouts": 0 },
+  "nullElement": 2,
+  "frames": { "saved": 5, "failed": 0, "slotReused": 0 },
+  "trees": 2,
+  "crops": 1,
+  "ocr": { "done": 2, "same": 1, "failed": 0, "skipped": 0 },
+  "levels": { "full": 299, "normal": 0, "lean": 3 },
+  "restarts": {}
+}

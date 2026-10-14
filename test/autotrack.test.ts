@@ -1,13 +1,19 @@
-import { mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
-import { gzipSync } from "node:zlib";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { decodeCode, encodeCode, installCommands, type TrackCode } from "../src/autotrack/code.js";
+import {
+  checkDevice,
+  decodeCode,
+  encodeCode,
+  installCommands,
+  type TrackCode,
+} from "../src/autotrack/code.js";
 import { devices, enroll, type Iam, putOnlyPolicy, revoke } from "../src/autotrack/enroll.js";
 import { comboOf, importSession } from "../src/autotrack/import.js";
-import { listSessions, parseKey, type TrackStore } from "../src/autotrack/store.js";
+import { listSessions, parseKey } from "../src/autotrack/store.js";
 import { loadRecording } from "../src/recorder/store.js";
+import { fixtureStore, NEW, OLD } from "./autotrack-fixture.js";
 
 const good: TrackCode = {
   v: 1,
@@ -180,37 +186,6 @@ describe("enroll", () => {
   });
 });
 
-// The bucket, as `autotrack ship` lays it out, built from test/fixtures/track.
-const FIXTURE = join(import.meta.dirname, "fixtures", "track");
-function fixtureStore(): TrackStore {
-  const objects = new Map<string, Buffer>();
-  const walk = (dir: string) => {
-    for (const f of readdirSync(dir)) {
-      const p = join(dir, f);
-      if (statSync(p).isDirectory()) walk(p);
-      else {
-        const key = relative(FIXTURE, p);
-        // events and trees ship gzipped; frames as they are
-        const gz = f === "events.jsonl" || (key.includes("/trees/") && /\.(json|txt)$/.test(f));
-        objects.set(gz ? `${key}.gz` : key, gz ? gzipSync(readFileSync(p)) : readFileSync(p));
-      }
-    }
-  };
-  walk(FIXTURE);
-  return {
-    async list(prefix) {
-      return [...objects]
-        .filter(([k]) => k.startsWith(prefix))
-        .map(([key, b]) => ({ key, size: b.length }));
-    },
-    async get(key) {
-      const b = objects.get(key);
-      if (!b) throw new Error(`NoSuchKey ${key}`);
-      return b;
-    },
-  };
-}
-
 describe("track keys and sessions", () => {
   it("parses the bucket layout", () => {
     expect(parseKey("d/20261013T101500-ab12/session.json")).toMatchObject({ kind: "meta" });
@@ -232,17 +207,61 @@ describe("track keys and sessions", () => {
     expect(parseKey("d/s/000/other")).toBeNull();
   });
 
-  it("lists sessions with segments, frames and size", async () => {
+  it("parses crops, OCR and stats keys", () => {
+    expect(parseKey("d/s/000/crops/4.jpg")).toEqual({
+      device: "d",
+      session: "s",
+      kind: "crop",
+      segment: "000",
+      crop: 4,
+    });
+    expect(parseKey("d/s/000/ocr/12.json.gz")).toMatchObject({ kind: "ocr", of: "frame", n: 12 });
+    expect(parseKey("d/s/000/ocr/c3.json.gz")).toMatchObject({ kind: "ocr", of: "crop", n: 3 });
+    expect(parseKey("d/s/001/stats.json.gz")).toEqual({
+      device: "d",
+      session: "s",
+      kind: "stats",
+      segment: "001",
+    });
+    // Not gzipped, or not a number: not ours.
+    for (const k of [
+      "d/s/000/crops/4.jpg.gz",
+      "d/s/000/crops/x.jpg",
+      "d/s/000/ocr/12.json",
+      "d/s/000/ocr/cx.json.gz",
+      "d/s/000/ocr/c.json.gz",
+      "d/s/000/stats.json",
+      "d/s/000/x/stats.json.gz",
+    ])
+      expect(parseKey(k), k).toBeNull();
+  });
+
+  it("leaves the labels and steps prefixes out of the session list", async () => {
+    const store = fixtureStore();
+    await store.put("labels/test-mac/20261013T111500-cd34.json", Buffer.from("{}"));
+    await store.put("steps/test-mac/20261013T111500-cd34.jsonl.gz", Buffer.from("x"));
+    await store.put("steps/test-mac/20261013T111500-cd34.quality.json", Buffer.from("{}"));
+    expect((await listSessions(store)).map((r) => r.device)).toEqual(["test-mac", "test-mac"]);
+    expect(() => checkDevice("steps")).toThrow(/prefix/);
+    expect(() => checkDevice("labels")).toThrow(/prefix/);
+  });
+
+  it("lists sessions with segments, frames, crops, OCR files and size, newest first", async () => {
     const rows = await listSessions(fixtureStore());
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ device: "test-mac", session: NEW.session, segments: 2 });
+    expect(rows[0]).toMatchObject({ frames: 5, trees: 2, crops: 1, ocr: 3 });
+    // The older recorder's session has none of the quality files, and still lists.
+    expect(rows[1]).toMatchObject({
       device: "test-mac",
-      session: "20261013T101500-ab12",
+      session: OLD.session,
       segments: 2,
       frames: 1,
       trees: 2,
+      crops: 0,
+      ocr: 0,
     });
-    expect(rows[0]?.bytes).toBeGreaterThan(0);
+    expect(rows[1]?.bytes).toBeGreaterThan(0);
     expect(await listSessions(fixtureStore(), "other")).toEqual([]);
   });
 });
@@ -267,6 +286,9 @@ describe("import", () => {
       events: 10,
       frames: 1,
       trees: 2,
+      crops: 0,
+      ocr: 0,
+      stats: 0,
     });
     const rec = await loadRecording(root, r.name);
     const shot = `${r.name}/track/frames/2.jpg`;
@@ -320,6 +342,31 @@ describe("import", () => {
     const trees = join(r.dir, "track", "trees");
     expect(JSON.parse(readFileSync(join(trees, "3.json"), "utf8")).role).toBe("AXWindow");
     expect(readFileSync(join(trees, "4.txt"), "utf8")).toContain('button "New Note"');
+  });
+
+  it("pulls crops, OCR and stats next to frames and trees", async () => {
+    const root = mkdtempSync(join(tmpdir(), "track-import-"));
+    const r = await importSession(fixtureStore(), NEW, { root });
+    expect(r).toMatchObject({ frames: 3, trees: 2, crops: 1, ocr: 3, stats: 2 });
+    const track = join(r.dir, "track");
+    // The crop is a JPEG as shipped.
+    expect(
+      readFileSync(join(track, "crops", "1.jpg"))
+        .subarray(0, 2)
+        .toString("hex"),
+    ).toBe("ffd8");
+    // OCR is unzipped: a frame's, a crop's (`c1`), and the `{same}` pointer as it was written.
+    expect(JSON.parse(readFileSync(join(track, "ocr", "3.json"), "utf8")).lines[0].text).toBe(
+      "New Note",
+    );
+    expect(JSON.parse(readFileSync(join(track, "ocr", "c1.json"), "utf8")).lines[0].w).toBe(120);
+    expect(JSON.parse(readFileSync(join(track, "ocr", "4.json"), "utf8"))).toEqual({ same: 3 });
+    // Stats come down per segment; trees, as before.
+    expect(JSON.parse(readFileSync(join(track, "stats", "000.json"), "utf8")).crops).toBe(1);
+    expect(JSON.parse(readFileSync(join(track, "stats", "001.json"), "utf8")).restarts).toEqual({
+      probe: 1,
+    });
+    expect(JSON.parse(readFileSync(join(track, "trees", "6.json"), "utf8")).nodes).toHaveLength(4);
   });
 
   it("takes --name and --site, and refuses a bad session or an empty one", async () => {
