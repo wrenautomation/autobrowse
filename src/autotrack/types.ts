@@ -245,7 +245,7 @@ export interface SessionMeta {
 }
 
 /**
- * `<segment>/stats.json` (shipped as `.gz`), written when a segment closes: what the recorder did,
+ * `<segment>/stats.json` (shipped as is, like `session.json`), written when a segment closes: what the recorder did,
  * so a trainer can filter on integrity. `session.json` `totals` is the sum over the session.
  * `recovered`: closed by the next start after a crash, so only what the files show is counted.
  */

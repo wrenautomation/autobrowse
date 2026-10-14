@@ -217,7 +217,7 @@ describe("track keys and sessions", () => {
     });
     expect(parseKey("d/s/000/ocr/12.json.gz")).toMatchObject({ kind: "ocr", of: "frame", n: 12 });
     expect(parseKey("d/s/000/ocr/c3.json.gz")).toMatchObject({ kind: "ocr", of: "crop", n: 3 });
-    expect(parseKey("d/s/001/stats.json.gz")).toEqual({
+    expect(parseKey("d/s/001/stats.json")).toEqual({
       device: "d",
       session: "s",
       kind: "stats",
@@ -230,8 +230,8 @@ describe("track keys and sessions", () => {
       "d/s/000/ocr/12.json",
       "d/s/000/ocr/cx.json.gz",
       "d/s/000/ocr/c.json.gz",
-      "d/s/000/stats.json",
-      "d/s/000/x/stats.json.gz",
+      "d/s/000/stats.json.gz",
+      "d/s/000/x/stats.json",
     ])
       expect(parseKey(k), k).toBeNull();
   });

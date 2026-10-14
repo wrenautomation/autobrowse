@@ -6,7 +6,7 @@
  *   <device>/<session>/<segment>/trees/<n>.json.gz   (accessibility tree; `.txt.gz` for a web page outline)
  *   <device>/<session>/<segment>/crops/<n>.jpg       (native-pixel crop at a pointer act; not gzipped)
  *   <device>/<session>/<segment>/ocr/<n>.json.gz     (text of frame n); `ocr/c<n>.json.gz` (of crop n)
- *   <device>/<session>/<segment>/stats.json.gz       (what the recorder did in the segment)
+ *   <device>/<session>/<segment>/stats.json          (what the recorder did in the segment)
  * Only William's AWS user lists and reads; a device's own key can only put.
  */
 import type { AwsConfig } from "../owner.js";
@@ -137,7 +137,7 @@ export function parseKey(key: string): ParsedKey | null {
       of: o[1] ? "crop" : "frame",
       n: Number(o[2]),
     };
-  if (p.length === 4 && third && fourth === "stats.json.gz")
+  if (p.length === 4 && third && fourth === "stats.json")
     return { device, session, kind: "stats", segment: third };
   return null;
 }

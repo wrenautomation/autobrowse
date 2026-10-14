@@ -150,7 +150,7 @@ export interface SessionData {
   /** Frame number → the key of its OCR file; the crops' are in `ocrCropKeys`. */
   ocrKeys: Map<number, string>;
   ocrCropKeys: Map<number, string>;
-  /** Each segment's `stats.json.gz`, in segment order. */
+  /** Each segment's `stats.json`, in segment order. */
   statsKeys: { segment: string; key: string }[];
 }
 
@@ -219,7 +219,7 @@ export async function readStats(
 ): Promise<{ segment: string; stats: Stats }[]> {
   const got = await pool(data.statsKeys, PULL, async ({ segment, key }) => {
     try {
-      const stats = JSON.parse(gunzipSync(await store.get(key)).toString("utf8")) as unknown;
+      const stats = JSON.parse((await store.get(key)).toString("utf8")) as unknown;
       return stats && typeof stats === "object" && !Array.isArray(stats)
         ? { segment, stats: stats as Stats }
         : undefined;
@@ -300,7 +300,7 @@ export async function importSession(
       writeFile(join(trackDir, "ocr", `${name}.json`), gunzipSync(await store.get(key))),
   );
   await pool(data.statsKeys, PULL, async ({ segment, key }) =>
-    writeFile(join(trackDir, "stats", `${segment}.json`), gunzipSync(await store.get(key))),
+    writeFile(join(trackDir, "stats", `${segment}.json`), await store.get(key)),
   );
   await writeFile(join(trackDir, "events.jsonl"), raw);
   if (labels)

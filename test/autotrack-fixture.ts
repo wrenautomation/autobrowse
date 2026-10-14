@@ -24,7 +24,6 @@ export function fixtureObjects(): Map<string, Buffer> {
         const key = relative(FIXTURE, p);
         const gz =
           f === "events.jsonl" ||
-          f === "stats.json" ||
           (key.includes("/trees/") && /\.(json|txt)$/.test(f)) ||
           (key.includes("/ocr/") && f.endsWith(".json"));
         objects.set(gz ? `${key}.gz` : key, gz ? gzipSync(readFileSync(p)) : readFileSync(p));
