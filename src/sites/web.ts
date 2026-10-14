@@ -34,6 +34,7 @@ import {
   search,
   WebMiss,
 } from "../reach/web.js";
+import { proofShotRoute } from "./proof.js";
 import { route, type SiteApi, SiteError } from "./types.js";
 
 /** No backend answering is the caller's to read, not a retry: Restate would replay it forever. */
@@ -249,6 +250,7 @@ export const web: SiteApi = {
       meter: () => ({ google: 1 }),
       browser: { flow: "google/maps-reviews", signedIn: true },
     }),
+    proofShotRoute(),
   ],
   setup: [],
 };

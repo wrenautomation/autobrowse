@@ -75,6 +75,7 @@ import {
   tiktokProfileName,
   xProfileName,
 } from "../browser/flows/profile-name.js";
+import { proofShot } from "../browser/flows/proof-shot.js";
 import { redditComment, redditMessage, redditRead, redditSubmit } from "../browser/flows/reddit.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { threadsOauthConsent } from "../browser/flows/threads-oauth-consent.js";
@@ -123,6 +124,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     googleSearch,
     googlePlace,
     googleReviews,
+    proofShot,
     perplexityAsk,
     linkedinOauthConsent,
     instagramOauthConsent,
