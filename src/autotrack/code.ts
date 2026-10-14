@@ -58,8 +58,11 @@ export function decodeCode(code: string): TrackCode {
 
 const BASE = "https://raw.githubusercontent.com/wrenautomation/autotrack/main/install";
 
-/** The two one-line installs from the design doc, with the code filled in. */
+/**
+ * The two one-line installs, with the code filled in. Windows is for a PowerShell window: wrapped
+ * in `powershell -c "..."`, PowerShell itself would expand `$env:AUTOTRACK` to nothing first.
+ */
 export const installCommands = (code: string) => ({
-  windows: `powershell -c "$env:AUTOTRACK='${code}'; irm ${BASE}/install.ps1 | iex"`,
+  windows: `$env:AUTOTRACK='${code}'; irm ${BASE}/install.ps1 | iex`,
   mac: `AUTOTRACK='${code}' sh -c "$(curl -fsSL ${BASE}/install.sh)"`,
 });

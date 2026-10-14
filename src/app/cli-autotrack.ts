@@ -93,7 +93,9 @@ export function registerAutotrackCommands(program: Command, settings: Settings):
       console.log(
         "The code below is a credential: it can write to this device's prefix, nothing else.",
       );
-      console.log(`\ncode\n${r.code}\n\nWindows\n${cmds.windows}\n\nMac\n${cmds.mac}`);
+      console.log(
+        `\ncode\n${r.code}\n\nWindows (in PowerShell)\n${cmds.windows}\n\nMac\n${cmds.mac}`,
+      );
     });
   track
     .command("devices")

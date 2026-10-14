@@ -51,7 +51,7 @@ describe("install code", () => {
   it("fills both install lines", () => {
     const c = installCommands("CODE");
     expect(c.windows).toBe(
-      `powershell -c "$env:AUTOTRACK='CODE'; irm https://raw.githubusercontent.com/wrenautomation/autotrack/main/install/install.ps1 | iex"`,
+      `$env:AUTOTRACK='CODE'; irm https://raw.githubusercontent.com/wrenautomation/autotrack/main/install/install.ps1 | iex`,
     );
     expect(c.mac).toBe(
       `AUTOTRACK='CODE' sh -c "$(curl -fsSL https://raw.githubusercontent.com/wrenautomation/autotrack/main/install/install.sh)"`,
