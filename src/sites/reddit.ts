@@ -29,7 +29,8 @@ const submitted = z.object({
 const info = z.object({ id: z.string().regex(/^(t[1-6]_[a-z0-9]+)(,t[1-6]_[a-z0-9]+)*$/) });
 const comments = z.object({
   article: z.string().regex(/^[a-z0-9]{1,12}$/, "a post id without t3_"),
-  limit,
+  // A thread's comments go to 500, not a listing's 100: the send guard reads them all.
+  limit: z.coerce.number().int().min(1).max(500).default(25),
   depth: z.coerce.number().int().min(1).max(10).default(1),
   sort: z.enum(["confidence", "top", "new", "controversial", "old", "qa"]).default("new"),
 });
