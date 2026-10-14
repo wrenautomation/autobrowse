@@ -17,6 +17,7 @@ import http2 from "node:http2";
 import { resolve } from "node:path";
 import { createEndpointHandler } from "@restatedev/restate-sdk";
 import pino from "pino";
+import { awsCliLoginChore } from "../chores/aws-login.js";
 import { CLAUDE_SERVICE, claudeService } from "../claude/service.js";
 import { httpClient } from "../clients/http.js";
 import { isDefaultOwner, named } from "../owner.js";
@@ -83,7 +84,16 @@ if (plan.mode === "tunnel") {
     authToken: settings.restateAuthToken ?? null,
   });
 } else {
-  reg = await registerOnBox(awsFor(settings));
+  reg = await registerOnBox(awsFor(settings)).catch(async (err: unknown) => {
+    // The console session lapses every ~12 h; a restart past that crash-looped the desk for two
+    // hours (2026-10-14). William's own desk renews it from the aws profile and tries once more.
+    if ((err as Error).name !== "CredentialsProviderError" || !isDefaultOwner(settings.owner))
+      throw err;
+    log.warn("aws session expired: renewing it");
+    const r = await awsCliLoginChore(app.browser, { user: "william" });
+    if (!r.ok) throw new Error(`aws-login failed: ${r.detail}`);
+    return registerOnBox(awsFor(settings));
+  });
 }
 if (wren) watchRecordings(wren, (msg) => log.info({ watch: msg }, "recordings"));
 watchers?.start();
