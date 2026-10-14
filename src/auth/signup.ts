@@ -12,7 +12,7 @@ import type { HttpClient } from "../clients/http.js";
 import { gmailOAuth } from "../sites/gmail.js";
 import { createRegistryUser, NPM_TOKEN } from "../sites/npm.js";
 import { accountEnv } from "../sites/oauth.js";
-import type { CodeSource } from "./codes.js";
+import { type CodeSource, totpSource } from "./codes.js";
 
 /** Values a page gets by name and the model never sees; null when there is no such secret. */
 export type SecretValues = (name: string) => Promise<string | null>;
@@ -137,6 +137,7 @@ export function signupSecrets(o: SignupSecretsOptions): SecretValues {
  * "Connect Instagram" popup in a Facebook one): `<site>.username`,
  * `<site>.password`, `<site>.code` (the newest code its credential's
  * codes inbox or our phone got after `since`, when `codes` is given) and
+ * `<site>.code` is the stored authenticator's code when there is one, else the newest mailed one.
  * `<site>.phone` / `.phoneLocal` (our phone, for a site that asks one to
  * text), each placed only on that site's own hosts. Names this does not own
  * fall through to `rest`.
@@ -145,7 +146,12 @@ export function loginSecrets(
   store: CredentialStore,
   sites: readonly string[],
   rest?: { secrets?: SecretValues; hosts?: (host: string) => boolean },
-  o: { codes?: { source: CodeSource; since: Date }; phone?: string | null } = {},
+  o: {
+    codes?: { source: CodeSource; since: Date };
+    phone?: string | null;
+    /** Where an authenticator code comes from (tests pass a fixed clock). */
+    totp?: CodeSource;
+  } = {},
 ): { secrets: SecretValues; hosts: (host: string, secret: string) => boolean } {
   const { codes, phone } = o;
   const fields = ["username", "password", "code", "phone", "phoneLocal"];
@@ -166,6 +172,14 @@ export function loginSecrets(
       const cred = await store.get(hit.site);
       if (hit.field !== "code")
         return (hit.field === "username" ? cred?.username : cred?.password) ?? null;
+      // An authenticator the store holds answers first; a mailed code is the fallback.
+      if (cred?.totpSecret)
+        return (
+          (await (o.totp ?? totpSource()).get(
+            { site: hit.site, kind: "totp", since: new Date() },
+            cred,
+          )) ?? null
+        );
       const inbox = cred?.codesInbox;
       if (!codes || !inbox) return null;
       // One reader per inbox, so a resend is a new code rather than the one already placed.

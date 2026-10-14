@@ -219,6 +219,31 @@ describe("loginSecrets", () => {
     expect(await l.secrets("instagram.phoneLocal")).toBe("5875550100");
     expect(asked[0]).toBe("ig@wren.test");
   });
+
+  it("<site>.code: a stored authenticator answers before any inbox", async () => {
+    const store = memoryCredentials();
+    await store.put("google@wren", {
+      username: "w@wren.test",
+      password: "p",
+      totpSecret: "JBSWY3DPEHPK3PXP",
+      codesInbox: "w@wren.test",
+    });
+    const mailed: CodeSource = {
+      get: async () => "999999",
+      offers: () => true,
+      inbox: () => null,
+    };
+    const totp: CodeSource = {
+      get: async (q, cred) => (q.kind === "totp" && cred.totpSecret ? "123456" : null),
+      offers: (kind) => kind === "totp",
+      inbox: () => null,
+    };
+    const l = loginSecrets(store, ["google@wren"], undefined, {
+      codes: { source: mailed, since: new Date(0) },
+      totp,
+    });
+    expect(await l.secrets("google@wren.code")).toBe("123456");
+  });
 });
 
 describe("signupHosts", () => {
