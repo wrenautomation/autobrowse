@@ -62,6 +62,11 @@ describe("heartbeat reader", () => {
     const r = parseHeartbeat(JSON.stringify({ v: 1, version: "0.2.9", at: full.at }));
     expect(r).toEqual({ kind: "ok", beat: { v: 1, version: "0.2.9", at: full.at } });
     expect(problems(r)).toEqual([]);
+    // What the recorder sends before its first upload.
+    const fresh = parseHeartbeat(
+      JSON.stringify({ ...full, ship: null, update: null, level: null }),
+    );
+    expect(fresh.kind).toBe("ok");
   });
 
   it("says why a body is not a heartbeat", () => {

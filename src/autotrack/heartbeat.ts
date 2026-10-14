@@ -20,11 +20,11 @@ const heartbeatSchema = z.object({
   os: z.string().optional(),
   startedAt: iso.optional(),
   paused: z.string().nullish(),
-  level: z.string().optional(),
+  level: z.string().nullish(),
   waiting: z.object({ segments: z.number().optional(), bytes: z.number().optional() }).optional(),
   ship: z
     .object({ at: z.string().nullish(), ok: z.boolean().nullish(), error: z.string().nullish() })
-    .optional(),
+    .nullish(), // null until the first upload
   update: z
     .object({
       checkedAt: z.string().nullish(),
@@ -32,7 +32,7 @@ const heartbeatSchema = z.object({
       state: z.string().nullish(),
       error: z.string().nullish(),
     })
-    .optional(),
+    .nullish(),
 });
 export type Heartbeat = z.infer<typeof heartbeatSchema>;
 
