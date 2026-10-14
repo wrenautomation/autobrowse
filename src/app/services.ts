@@ -576,19 +576,20 @@ export function ledgerPath(
 }
 
 /** The owner's state folder: where the credentials file lives, and every ledger beside it. */
-const stateDir = (settings: Settings): string => dirname(expandHome(settings.credentialsFile));
+export const stateDirFor = (settings: Settings): string =>
+  dirname(expandHome(settings.credentialsFile));
 
 /** Run history (src/runs/log.ts): one folder per site, kept for good. */
-export const runsDirFor = (settings: Settings): string => join(stateDir(settings), "runs");
+export const runsDirFor = (settings: Settings): string => join(stateDirFor(settings), "runs");
 
 /** Walks built from runs (src/walks): `walks/<site>/<name>.json`. */
-export const walksDirFor = (settings: Settings): string => join(stateDir(settings), "walks");
+export const walksDirFor = (settings: Settings): string => join(stateDirFor(settings), "walks");
 
 /** Installed mods (src/mods): `mods/<dir>/`, beside the owner's own walks. */
-export const modsDirFor = (settings: Settings): string => join(stateDir(settings), "mods");
+export const modsDirFor = (settings: Settings): string => join(stateDirFor(settings), "mods");
 
 /** The owner's own sign-ins as data (src/mods/login.ts): `logins/<site>.json`. */
-export const loginsDirFor = (settings: Settings): string => join(stateDir(settings), "logins");
+export const loginsDirFor = (settings: Settings): string => join(stateDirFor(settings), "logins");
 
 /** Add the owner's data logins, then installed mods', to `SITE_LOGINS`; every entry point, after `boot()`. */
 export const loadDataLogins = (settings: Settings): void =>
@@ -603,10 +604,10 @@ export const fixesFor = (settings: Settings): Fixes =>
   withModFixes(fileFixes(expandHome(settings.fixesFile)), modFixes(modsDirFor(settings)));
 
 /** Every model call, one file per month (src/llm/ledger.ts). */
-export const llmCallsDirFor = (settings: Settings): string => join(stateDir(settings), "llm");
+export const llmCallsDirFor = (settings: Settings): string => join(stateDirFor(settings), "llm");
 
 /** Every try of a `sites`/`desk` call (src/runs/calls.ts): `calls/calls-YYYY-MM.jsonl`, kept for good. */
-export const siteCallsDirFor = (settings: Settings): string => join(stateDir(settings), "calls");
+export const siteCallsDirFor = (settings: Settings): string => join(stateDirFor(settings), "calls");
 
 /**
  * Tab watchers on this worker's browser (`browser/watchers.ts`): leases kept in `watchers.json`,
@@ -618,7 +619,7 @@ export function watchersFor(settings: Settings, runner: FlowRunner, log: Logger)
   const base = settings.restateIngressUrl.replace(/\/$/, "");
   return new Watchers({
     runner,
-    file: join(stateDir(settings), "watchers.json"),
+    file: join(stateDirFor(settings), "watchers.json"),
     log: (msg, extra) => log.info(extra ?? {}, msg),
     send: async (path, body, key) => {
       const r = await http.json(`${base}${path}`, {

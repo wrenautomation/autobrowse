@@ -32,6 +32,7 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | the backend port | [[backend]] | `src/ui/api.ts`, the SPA client `ui/src/api.ts`, CLI client |
 | `do` routing, the catalog | [[ability]] | [[access-key]] (scope cuts), [[do]] process, wren callers |
 | the track session format, install code, or bucket layout | [[autotrack-session]] | `autotrack src/events.ts`, `autotrack src/config.ts`, `autotrack src/ship.ts`, autotrack `install/*`, `deploy/terraform/track.tf`, [[recording]] (`desktop` acts, `intent`), [[settings]] (`TRACK_BUCKET`) |
+| the heartbeat body or fleet health (silent rule, Discord post, `autotrack-health.json`) | [[autotrack-session]] | the recorder (writes it), `src/autotrack/{heartbeat,health}.ts`, `src/app/cli-autotrack.ts` (`devices`), `src/app/main.ts` (desk timer), `test/autotrack-heartbeat.test.ts` |
 | the offline labels and RL steps (join, signals, episodes, label prompt, `labels/` and `steps/` keys, quality score) | [[autotrack-session]] | `src/autotrack/{join,signals,episodes,label,label-run,steps,steps-run,tree,quality,pool}.ts`, `src/autotrack/import.ts` (`intent` on actions), `src/app/cli-autotrack.ts`, `test/autotrack-signals.test.ts`, `test/autotrack-label.test.ts`, `test/autotrack-steps.test.ts` |
 | an owner's names, paths, or setting classes | [[owner]] | [[state-files]], [[settings]], [[runs-registry]], `deploy/terraform/owners.tf` (the `owner` tag) |
 

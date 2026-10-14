@@ -3,7 +3,7 @@ type: object
 cluster: build
 universe: live
 status: verified
-verified: 2026-10-13 @ 308dc11
+verified: 2026-10-14 @ cc14456
 entity: src/autotrack/types.ts
 ---
 
@@ -35,6 +35,8 @@ The RL view (`steps`) is a second pure pass over the same acts. It points at fil
 - `parseTree` (the recorder's node list, a nested tree, or a `.txt` outline), `diffTrees` (lists capped at 40, `counts` full) — `src/autotrack/tree.ts:62`, `:123`
 - `contextOf`, `qualityOf` (level timeline, pauses, helper restarts from `Stats.restarts`; shares rounded to 3 places) — `src/autotrack/quality.ts:101`, `:111`
 - `stepsOne` (writes `steps/…jsonl.gz`, then `….quality.json`, then the same beside the import), `readQualities` (what `list` shows), `qualityLine` — `src/autotrack/steps-run.ts:37`, `:81`, `:103`
+- Heartbeat `<device>/heartbeat.json` (two parts, so `parseKey` skips it): `parseHeartbeat` (zod; only `v`, `version`, `at` required; bad JSON = `bad` with a reason), `readHeartbeat` (NoSuchKey = `none`), `problems` (paused, ship error, update error, backlog ≥ 10 segments or 1 GB), `deviceLine` — `src/autotrack/heartbeat.ts:45`, `:60`, `:85`, `:101`
+- Fleet health: `healthTransitions` (silent = last beat over 24 h old, or none and enrolled over 24 h ago; an unreadable beat keeps the last state), `checkHealth` (posts each transition; a failed post keeps the old state so the next hour retries) — `src/autotrack/health.ts:43`, `:100`; the desk runs it 1 min after start, then hourly, default owner only, posting to `WREN_DISCORD_WEBHOOK_URL` (no pings) and keeping `<state>/autotrack-health.json` — `src/app/main.ts:181`
 - CLI `track enroll|devices|list|import|label|steps` — `src/app/cli-autotrack.ts`; the model is the gateway's `gemini/gemini-3.1-flash-lite` (`labelLlm`, `LABEL_MODEL`, `src/app/cli-autotrack.ts:37`, `:43`)
 
 ## Connected to
@@ -45,7 +47,7 @@ The RL view (`steps`) is a second pure pass over the same acts. It points at fil
 
 ## If you change this
 
-- **Hits:** `autotrack src/events.ts`, `autotrack src/config.ts`, `autotrack src/ship.ts` and the installers (the format, the code, the key layout), `deploy/terraform/track.tf`, the IAM users under `/track/`, `test/autotrack.test.ts`, `test/autotrack-signals.test.ts`, `test/autotrack-label.test.ts`, `test/autotrack-steps.test.ts`, `test/autotrack-fixture.ts` and `test/fixtures/track/`. `Stats` and the quality fields are read here by name: a renamed counter in `autotrack src/stats.ts` reads as zero, not as an error. A new event kind or field the labeller reads (`join.ts`, `signals.ts`, `label.ts` prompt) needs `PROMPT_VERSION` bumped or old cache entries stay.
+- **Hits:** the recorder's heartbeat writer (the body), `autotrack src/events.ts`, `autotrack src/config.ts`, `autotrack src/ship.ts` and the installers (the format, the code, the key layout), `deploy/terraform/track.tf`, the IAM users under `/track/`, `test/autotrack.test.ts`, `test/autotrack-signals.test.ts`, `test/autotrack-label.test.ts`, `test/autotrack-steps.test.ts`, `test/autotrack-heartbeat.test.ts`, `test/autotrack-fixture.ts` and `test/fixtures/track/`. `Stats` and the quality fields are read here by name: a renamed counter in `autotrack src/stats.ts` reads as zero, not as an error. A new event kind or field the labeller reads (`join.ts`, `signals.ts`, `label.ts` prompt) needs `PROMPT_VERSION` bumped or old cache entries stay.
 - **Does not hit:** the shots bucket; the papers bucket.
 
 ## Surfaces
@@ -54,6 +56,8 @@ The RL view (`steps`) is a second pure pass over the same acts. It points at fil
 |---|---|
 | `autotrack ship` | writes (put only) |
 | `autobrowse autotrack enroll` | mints and revokes the write key |
+| `autobrowse autotrack devices` | IAM users plus each heartbeat: version, last seen, problems |
+| the desk (`src/app/main.ts`) | reads heartbeats hourly; posts silent / back to the ops Discord lane |
 | `autobrowse autotrack list`, `import` | read (William's AWS user); `list` also shows the quality `steps` stored |
 | `autobrowse autotrack label <device>/<session> [--no-model]`, `label --all [--device d]` | reads, then writes `labels/<device>/<session>.json` and `<recordings>/<name>/track/labels.json` (`--all`: sessions with no labels yet) |
 | `autobrowse autotrack steps <device>/<session> [--min-quality n]` | reads, then writes `steps/<device>/<session>.jsonl.gz`, `steps/<device>/<session>.quality.json` and both beside the import |

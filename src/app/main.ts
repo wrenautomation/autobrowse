@@ -177,6 +177,42 @@ const shipShots = (why: string): Promise<void> => {
 };
 if (ship && settings.shotsEveryMinutes > 0)
   setInterval(() => void shipShots("timer"), settings.shotsEveryMinutes * 60_000).unref();
+// autotrack fleet health: the operator's worker checks each device's heartbeat hourly.
+if (isDefaultOwner(settings.owner) && settings.trackBucket) {
+  const webhook = process.env.WREN_DISCORD_WEBHOOK_URL;
+  if (!webhook) log.info("autotrack health off: no WREN_DISCORD_WEBHOOK_URL");
+  else {
+    const { join } = await import("node:path");
+    const { checkHealth } = await import("../autotrack/health.js");
+    const { iamClient } = await import("../autotrack/iam.js");
+    const { s3TrackStore } = await import("../autotrack/store.js");
+    const { stateDirFor } = await import("./services.js");
+    const http = httpClient();
+    const warn = (msg: string) => log.warn({ err: msg }, "autotrack health");
+    const check = () =>
+      void checkHealth({
+        iam: iamClient(awsFor(settings)),
+        store: s3TrackStore({ bucket: settings.trackBucket as string, aws: awsFor(settings) }),
+        file: join(stateDirFor(settings), "autotrack-health.json"),
+        post: async (content) => {
+          // No pings: the ops lane is read, not alerted.
+          const r = await http.json(webhook, {
+            method: "POST",
+            body: { content, allowed_mentions: { parse: [] } },
+          });
+          if (!r.ok) throw new Error(`discord webhook: HTTP ${r.status}`);
+        },
+        warn,
+      })
+        .then((sent) => {
+          for (const t of sent)
+            log.info({ device: t.device, silent: t.silent }, "autotrack health");
+        })
+        .catch((err) => warn(err instanceof Error ? err.message : String(err)));
+    setTimeout(check, 60_000).unref();
+    setInterval(check, 3_600_000).unref();
+  }
+}
 // The box is the operator's: only the default owner's worker may stop it.
 if (settings.idleStopMinutes > 0 && !isDefaultOwner(settings.owner))
   log.info({ owner: settings.owner }, "idle stop is the operator's worker's; off here");

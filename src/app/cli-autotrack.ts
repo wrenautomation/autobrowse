@@ -61,6 +61,11 @@ function refOf(ref: string): { device: string; session: string } {
 }
 
 export function registerAutotrackCommands(program: Command, settings: Settings): void {
+  const store = async (): Promise<TrackWriter> => {
+    const { bucket } = operator(settings);
+    const { s3TrackStore } = await import("../autotrack/store.js");
+    return s3TrackStore({ bucket, aws: awsFor(settings) });
+  };
   const track = program
     .command("autotrack")
     .description("autotrack: a device's recorded sessions (every input and screen), in a bucket");
@@ -92,23 +97,23 @@ export function registerAutotrackCommands(program: Command, settings: Settings):
     });
   track
     .command("devices")
-    .description("Enrolled devices (IAM users under /track/)")
+    .description(
+      "Enrolled devices (IAM users under /track/), with each one's version, last heartbeat and problems",
+    )
     .action(async () => {
       operator(settings);
       const { iamClient } = await import("../autotrack/iam.js");
+      const { deviceLine, readHeartbeat } = await import("../autotrack/heartbeat.js");
       const rows = await devices(iamClient(awsFor(settings)));
+      const s = await store();
+      const now = new Date();
+      const lines = await Promise.all(
+        rows.map(async (d) => deviceLine(d, await readHeartbeat(s, d.device), now)),
+      );
       console.log(
-        rows.length
-          ? rows.map((d) => `${d.device}  ${d.created.slice(0, 10)}  keys ${d.keys}`).join("\n")
-          : "no devices (autobrowse autotrack enroll <device>)",
+        lines.length ? lines.join("\n") : "no devices (autobrowse autotrack enroll <device>)",
       );
     });
-
-  const store = async (): Promise<TrackWriter> => {
-    const { bucket } = operator(settings);
-    const { s3TrackStore } = await import("../autotrack/store.js");
-    return s3TrackStore({ bucket, aws: awsFor(settings) });
-  };
   track
     .command("list")
     .description(
