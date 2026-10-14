@@ -286,6 +286,33 @@ describe("x site", () => {
     });
   });
 
+  it("retries a video segment after a dropped connection", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "x-media-"));
+    const video = join(dir, "clip.mp4");
+    await writeFile(video, new Uint8Array(1024).fill(7));
+    let dropped = false;
+    const { http, calls } = fakeApi((u) => {
+      if (u.pathname === "/2/media/upload/initialize") return { data: { id: "m2" } };
+      if (u.pathname.endsWith("/append") && !dropped) {
+        dropped = true;
+        throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET" } });
+      }
+      if (u.pathname.endsWith("/finalize")) return { data: { id: "m2" } };
+      return {};
+    });
+    const sites = siteFacade([x], {
+      http,
+      env: (n) => ({ X_ACCESS_TOKEN: "t" })[n],
+      sink: memorySink(),
+      runner: { run: async () => ({}) as never },
+      flow: () => null,
+    });
+    await expect(sites.call("x", "POST", "/2/media/upload", { file: video })).resolves.toEqual({
+      data: { id: "m2" },
+    });
+    expect(calls.filter((c) => c.url.pathname.endsWith("/append"))).toHaveLength(2);
+  });
+
   it("a post lookup reads the page, unless it asks for media fields: then the API, with both params", async () => {
     const { http, calls } = fakeApi(() => ({ data: { id: "7" } }));
     const flows: string[] = [];

@@ -159,6 +159,10 @@ export function backoff(attempt: number, retryAfter: string | null, random = Mat
 }
 
 function describe(err: unknown): string {
-  if (err instanceof Error) return err.name === "TimeoutError" ? "timeout" : err.name;
-  return "network error";
+  if (!(err instanceof Error)) return "network error";
+  if (err.name === "TimeoutError") return "timeout";
+  // Node's fetch says only "TypeError: fetch failed"; the reason (ECONNRESET, a socket closed) is its cause.
+  const cause = (err as { cause?: { code?: string; message?: string } }).cause;
+  const why = cause?.code ?? cause?.message?.split("\n")[0]?.slice(0, 80);
+  return why ? `${err.name} (${why})` : err.name;
 }

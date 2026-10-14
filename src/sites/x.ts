@@ -16,6 +16,8 @@ import { bytesOf } from "./youtube.js";
 
 export const X_ORIGIN = "https://api.x.com";
 const CHUNK = 4 * 1024 * 1024;
+/** Tries per segment before the upload gives up. */
+const APPEND_TRIES = 4;
 
 const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 const id = z.string().regex(/^[0-9]+$/, "a numeric X id");
@@ -207,14 +209,25 @@ async function uploadMedia(
       { segment_index: String(seg) },
       { name, type, bytes: bytes.subarray(i, Math.min(i + CHUNK, bytes.byteLength)) },
     );
-    must(
-      await leg.http.json<unknown>(`${X_ORIGIN}/2/media/upload/${mediaId}/append`, {
-        method: "POST",
-        headers: { ...bearer(leg), "content-type": form.type },
-        raw: form.body,
-      }),
-      `2/media/upload/${mediaId}/append`,
-    );
+    // A segment sent twice is the same segment: a dropped connection or an X 5xx retries it.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        must(
+          await leg.http.json<unknown>(`${X_ORIGIN}/2/media/upload/${mediaId}/append`, {
+            method: "POST",
+            headers: { ...bearer(leg), "content-type": form.type },
+            raw: form.body,
+            timeoutMs: 120_000,
+          }),
+          `2/media/upload/${mediaId}/append`,
+        );
+        break;
+      } catch (err) {
+        const status = err instanceof HttpError ? err.status : -1;
+        if (attempt >= APPEND_TRIES || !(status === 0 || status >= 500)) throw err;
+        await sleep(attempt * 1_000);
+      }
+    }
   }
   let state = (await send(leg, "POST", `/2/media/upload/${mediaId}/finalize`)) as {
     data?: { processing_info?: { state?: string; check_after_secs?: number } };
