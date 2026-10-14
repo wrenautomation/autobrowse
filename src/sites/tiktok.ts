@@ -67,6 +67,14 @@ const webPost = z.object({
   caption: z.string().max(2200).default(""),
   /** The video the browser leg uploads: a path on the box, or a URL it downloads. */
   file: z.string().min(1),
+  /** Who can see it, as Studio names them: Everyone, Friends, Only you. */
+  privacy: z.enum(["everyone", "friends", "only-me"]).default("everyone"),
+  /** "Allow users to: Comment". */
+  comments: z.boolean().default(true),
+  /** "Allow users to: Reuse of content" (duet and stitch together). */
+  reuse: z.boolean().default(true),
+  /** The "AI-generated content" label. */
+  aiGenerated: z.boolean().default(false),
 });
 const postComments = z.object({
   videoId: z.string().regex(/^\d+$/, "a video id"),
@@ -205,10 +213,10 @@ export const tiktok: SiteApi = {
       method: "POST",
       path: "/web/posts",
       summary:
-        "A post from a local video file with a caption, public (no official path for that: the browser leg uploads on tiktok.com)",
+        "A post from a video file (a path, or a URL it downloads) with a caption, on TikTok Studio (an unaudited app's API posts only SELF_ONLY): `privacy` everyone|friends|only-me (default everyone), `comments`, `reuse` (default on), `aiGenerated`; answers `{ id, url, profile, note? }`, id null when the post went out but the profile does not list it yet",
       request: webPost,
       irreversible: true,
-      browser: { workflow: "tiktok-create-post", uploads: "file" },
+      browser: { flow: "tiktok/create-post", uploads: "file" },
     }),
     route({
       method: "GET",

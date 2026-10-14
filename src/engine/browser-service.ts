@@ -80,6 +80,7 @@ import { redditComment, redditMessage, redditRead, redditSubmit } from "../brows
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { threadsOauthConsent } from "../browser/flows/threads-oauth-consent.js";
 import { tiktokPostComments } from "../browser/flows/tiktok-comments.js";
+import { tiktokCreatePost } from "../browser/flows/tiktok-create-post.js";
 import { tiktokOauthConsent } from "../browser/flows/tiktok-oauth-consent.js";
 import { xFollow, xLike, xReply } from "../browser/flows/x-act.js";
 import { xOauthConsent } from "../browser/flows/x-oauth-consent.js";
@@ -172,6 +173,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     facebookOauthConsent,
     tiktokOauthConsent,
     tiktokPostComments,
+    tiktokCreatePost,
     xOauthConsent,
     xPost,
     xPosts,

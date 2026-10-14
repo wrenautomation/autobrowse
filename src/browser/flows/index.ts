@@ -115,6 +115,11 @@ export {
 } from "./reddit.js";
 export { type ResetProbeInput, resetMailProbe } from "./reset-mail-probe.js";
 export { threadsOauthConsent } from "./threads-oauth-consent.js";
+export {
+  type TikTokPost,
+  type TikTokPostInput,
+  tiktokCreatePost,
+} from "./tiktok-create-post.js";
 export { tiktokOauthConsent } from "./tiktok-oauth-consent.js";
 export { xFollow, xLike, xReply } from "./x-act.js";
 export { xOauthConsent } from "./x-oauth-consent.js";

@@ -109,6 +109,7 @@ describe("browser service", () => {
       "reddit/profile-name",
       "reddit/read",
       "reddit/submit",
+      "tiktok/create-post",
       "tiktok/oauth-consent",
       "tiktok/post-comments",
       "tiktok/profile-name",
