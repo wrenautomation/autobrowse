@@ -16,6 +16,7 @@ describe("studio", () => {
       "shorts",
     ]);
     expect(RENDER_PARTS).toContain("long");
+    expect(renderArgs(12, undefined, true)).toEqual(["video", "render", "12", "--cut", "--again"]);
   });
 
   it("says why a run failed, from its last lines", async () => {
