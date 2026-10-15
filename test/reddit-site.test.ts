@@ -437,7 +437,6 @@ describe("reddit-public", () => {
     expect(meter("/comments/{article}")).toEqual({ threads: 1 });
     for (const path of [
       "/user/{username}/overview",
-      "/user/{username}/about",
       "/api/user_data_by_account_ids",
       "/api/info",
       "/r/{subreddit}/new",
@@ -477,6 +476,34 @@ describe("reddit-public", () => {
         input: { path: "/subreddits/search", query: { q: "agency", limit: 25 }, signedOut: true },
       },
     ]);
+  });
+
+  it("a user's card signed out is refused at once: no read spent, no page loaded", async () => {
+    expect(redditPublic.routes.find((r) => r.path === "/user/{username}/about")?.meter).toBe(
+      undefined,
+    );
+    const ran: unknown[] = [];
+    const caps = memoryCaps();
+    const sites = siteFacade([{ ...redditPublic, pace: { gapMs: 0 } }], {
+      http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+      env: () => undefined,
+      sink: memorySink(),
+      caps,
+      runner: {
+        run: async (_flow, input) => {
+          ran.push(input);
+          return {} as never;
+        },
+      },
+      flow: (n) => BROWSER_FLOWS[n] ?? null,
+    });
+    await expect(
+      sites.call("reddit-public", "GET", "/user/someone/about", {}),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(ran).toEqual([]);
+    expect(caps.today()).toEqual({});
+    // Signed in, the card is still a read.
+    expect(routeOf("GET", "/user/{username}/about").meter?.({} as never)).toEqual({ reads: 1 });
   });
 
   it("the read flow fetches www when signed out, old Reddit otherwise, spaces as %20", async () => {

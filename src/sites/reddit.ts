@@ -9,7 +9,7 @@
  * capped per account like a person posting.
  */
 import { z } from "zod";
-import { route, type SiteApi } from "./types.js";
+import { route, type SiteApi, SiteError } from "./types.js";
 
 export const REDDIT_ORIGIN = "https://oauth.reddit.com";
 
@@ -406,6 +406,13 @@ const OWN = new Set([
 ]);
 
 /**
+ * Signed out, Reddit refuses a user's card (`/user/{name}/about.json`, 403 since 2026-10-13) and
+ * no feed carries it: the route answers 403 at once, spending no read and no page load (174
+ * reads a day went on it, 2026-10-15). The signed-in `reddit` site still reads it.
+ */
+const CLOSED_SIGNED_OUT = new Set(["/user/{username}/about"]);
+
+/**
  * Reddit's public reads, signed out in a profile of their own: finding places, threads and
  * people (designs/2026-10-06-reddit-discovery.md). Read volume on a signed-in account is what
  * Reddit flags; signed out, the only cost is the rate limit. Same flow as `reddit`, never its profile.
@@ -422,6 +429,19 @@ export const redditPublic: SiteApi = {
   routes: reddit.routes
     .filter((r) => r.method === "GET" && !OWN.has(r.path))
     .map((r) => {
+      if (CLOSED_SIGNED_OUT.has(r.path)) {
+        const { meter: _spends, browser: _loads, ...rest } = r;
+        return {
+          ...rest,
+          summary: `${r.summary}. Signed out: refused at once (403), no read spent; use the signed-in \`reddit\` site`,
+          api: async () => {
+            throw new SiteError(
+              403,
+              `reddit-public ${r.path}: Reddit refuses a user's card signed out (403 since 2026-10-13); no read spent`,
+            );
+          },
+        };
+      }
       const leg = r.browser;
       if (!leg) return r;
       const input = leg.input;
