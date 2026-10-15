@@ -417,6 +417,7 @@ export const youtube: SiteApi = {
         "Upload a video (resumable): `snippet`, `status`, and `file` (path or URL); answers the video resource",
       request: upload,
       irreversible: true,
+      resumes: true,
       api: async (body, leg) => {
         await onTheRightChannel(leg);
         const { file, contentType, part, uploadType, notifySubscribers, ...meta } = body;

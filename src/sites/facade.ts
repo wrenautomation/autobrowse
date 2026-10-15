@@ -14,6 +14,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { Page } from "playwright";
+import { currentCall, type DoneActs } from "../browser/attempt.js";
 import type { BrowserFlow, FlowRunner, HeldTab } from "../browser/flow.js";
 import { type HttpClient, lastingRefusal } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
@@ -89,6 +90,8 @@ export interface SiteFacadeDeps {
   spent?: SpentKeys;
   /** Resumable upload sessions by durable call, so a rerun call resumes its bytes. */
   uploads?: UploadSessions;
+  /** Irreversible API calls already started, by durable call: a rerun of one is refused. */
+  started?: DoneActs;
   /** How a paced call waits for its slot (tests pass a fake). */
   sleep?: (ms: number) => Promise<void>;
   /**
@@ -153,6 +156,11 @@ export interface Armed {
 
 /** An armed tab lives this long; a profile holds at most `ARMS_PER_PROFILE` (the oldest goes). */
 export const ARM_MS = 20 * 60_000;
+/** The act a started irreversible API call is kept under. */
+const STARTED = "api started";
+/** Why a rerun of a started publish is refused: a person checks the account, then sends again. */
+export const MAY_HAVE_GONE =
+  "an earlier try may have gone through before its answer was saved; check the account before sending again";
 export const ARMS_PER_PROFILE = 3;
 
 /** The words a call types: left out of the key an arm is matched by, since the yes may edit them. */
@@ -657,7 +665,15 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           });
           if (!ok) throw new SiteError(403, `${what}: refused`);
         }
-        if (r.api && token !== null)
+        if (r.api && token !== null) {
+          // A rerun of a durable call (Restate after a crash or a redeploy mid-call) must not
+          // publish twice: the first try may have gone through before its answer was saved.
+          const call = currentCall();
+          if (r.irreversible && !r.resumes && call && deps.started) {
+            if (deps.started.has(call, STARTED))
+              throw new SiteError(409, `${method} ${r.path}: ${MAY_HAVE_GONE}`);
+            deps.started.add(call, STARTED);
+          }
           return r.api(parsed.data as never, {
             token,
             http: deps.http,
@@ -666,6 +682,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
             ...(deps.spent ? { spent: deps.spent } : {}),
             ...(deps.uploads ? { uploads: deps.uploads } : {}),
           });
+        }
         if (r.browser) {
           // The same account the API leg would have used: its profile, so a browser
           // leg posts as the site's own identity and never as whoever the default

@@ -1598,6 +1598,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       caps: fileCaps(expandHome(settings.capsFile)),
       spent: fileSpent(join(dirname(expandHome(settings.capsFile)), "spent-keys.json")),
       uploads: fileUploadSessions(join(expandHome(settings.artifactsDir), "uploads")),
+      started: fileDoneActs(join(expandHome(settings.artifactsDir), "started-calls")),
       walks: (name) => walkFor(settings, name, sink),
     }),
   );

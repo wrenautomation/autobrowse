@@ -69,6 +69,12 @@ export interface SiteRoute<I = unknown, O = unknown> {
   /** Publishes something: said in the route listing so an orchestrator gates it. */
   irreversible?: boolean;
   /**
+   * The API leg picks up its own earlier try when Restate reruns the call (a resumable upload
+   * keyed on the call): a rerun may go ahead. Any other irreversible API call that started once
+   * is refused on a rerun, since it may have gone through.
+   */
+  resumes?: boolean;
+  /**
    * Commits money: the facade asks the person (through the spend policy)
    * before the API leg runs. `false` when this particular request does not
    * (a paused campaign), `null` when it does but the amount is not on it.

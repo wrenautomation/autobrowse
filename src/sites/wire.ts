@@ -13,6 +13,7 @@ import {
   identityAt,
   identityFor,
 } from "../auth/identities.js";
+import type { DoneActs } from "../browser/attempt.js";
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import { type HttpClient, httpClient } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
@@ -68,6 +69,8 @@ export interface SiteParts {
   spent?: SpentKeys;
   /** Resumable upload sessions by durable call (`uploads.ts`); absent: a rerun upload starts over. */
   uploads?: UploadSessions;
+  /** Irreversible API calls already started, by durable call: a rerun of one is refused. */
+  started?: DoneActs;
 }
 
 /** How long a store read on a token miss stands before a miss reads again. */
@@ -182,6 +185,7 @@ export function sitesFor(p: SiteParts): SiteFacade {
     ...(p.caps ? { caps: p.caps } : {}),
     ...(p.spent ? { spent: p.spent } : {}),
     ...(p.uploads ? { uploads: p.uploads } : {}),
+    ...(p.started ? { started: p.started } : {}),
     ...(p.credentials
       ? {
           profileFor: (site, account) => profileOf(p.credentials as CredentialStore, site, account),
