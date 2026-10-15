@@ -85,6 +85,37 @@ describe("gmail site: one consent per account", () => {
     expect(err.message).not.toContain("rt-own");
   });
 
+  it("a refused refresh token is not sent again for a few minutes; a new one is tried at once", async () => {
+    const api = fakeFetch(({ body }) =>
+      body.includes("rt-new")
+        ? { body: { access_token: "at-new", expires_in: 3600 } }
+        : { status: 400, body: { error: "invalid_grant" } },
+    );
+    const env: Record<string, string> = {
+      GOOGLE_OAUTH_CLIENT_ID: "cid",
+      GOOGLE_OAUTH_CLIENT_SECRET: "cs",
+      GMAIL_REFRESH_TOKEN: "rt-old",
+    };
+    let clock = 1_000_000;
+    const spec = "oauth" in gmail.auth ? gmail.auth.oauth : (null as never);
+    const tokens = accessTokens(
+      httpClient({ fetch: api.fetch }),
+      (n) => env[n],
+      () => clock,
+    );
+    await expect(tokens(spec)).rejects.toMatchObject({ status: 409 });
+    await expect(tokens(spec)).rejects.toMatchObject({ status: 409 });
+    await expect(tokens(spec)).rejects.toMatchObject({ status: 409 });
+    // Before: one call to the token endpoint per attempt (3).
+    expect(api.calls.length).toBe(1);
+    clock += 6 * 60_000;
+    await expect(tokens(spec)).rejects.toMatchObject({ status: 409 });
+    expect(api.calls.length).toBe(2);
+    env.GMAIL_REFRESH_TOKEN = "rt-new";
+    expect(await tokens(spec)).toBe("at-new");
+    expect(api.calls.length).toBe(3);
+  });
+
   it("googleTokens acts as a consented account through its token for Gmail, the service account for the rest", async () => {
     const api = fakeFetch(() => ({ body: { access_token: "at-will", expires_in: 3600 } }));
     const env: Record<string, string> = {

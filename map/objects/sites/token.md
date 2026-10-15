@@ -13,7 +13,7 @@ A site API key or OAuth token kept in the env store under a name, per account: m
 
 ## Why this shape
 
-Access tokens are minted on demand from the refresh token and cached until they expire; a rolled refresh token is kept back under the same name. A token minted on the laptop is seen on the box by a one-time reload on a miss, because every SSM read is a KMS decrypt (`src/sites/wire.ts:54-69`).
+Access tokens are minted on demand from the refresh token and cached until they expire; a rolled refresh token is kept back under the same name. A refresh token the platform refused is not sent again for 5 minutes (by name and value, so a re-consented one is tried at once). A token minted on the laptop is seen on the box by a one-time reload on a miss, because every SSM read is a KMS decrypt (`src/sites/wire.ts:54-69`).
 
 ## Shape
 

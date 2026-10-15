@@ -107,6 +107,9 @@ export class TokenRefused extends SiteError {
   }
 }
 
+/** How long a refused refresh token is believed before the platform is asked again. */
+const REFUSED_MS = 5 * 60_000;
+
 /**
  * An access token: minted from the refresh token when there is one (cached
  * until a minute before it expires), else the kept access token itself.
@@ -120,6 +123,9 @@ export function accessTokens(
   keep?: (name: string, value: string) => Promise<void>,
 ): (spec: OAuthSpec, account?: string | null) => Promise<string | null> {
   const cache = new Map<string, { token: string; until: number }>();
+  // A refresh token the platform refused, by name and value: not asked again for a few minutes.
+  // A rolled or re-consented token is another value, so it is tried at once.
+  const refused = new Map<string, { err: TokenRefused; until: number }>();
   return async (spec, account) => {
     const asked = accountEnv(spec.refreshToken, account);
     // An alias names the real copy (`pointTo`): mint from it and keep the new one there.
@@ -131,6 +137,8 @@ export function accessTokens(
       return (spec.accessToken && env(accountEnv(spec.accessToken, account))) || null;
     const hit = cache.get(refreshName);
     if (hit && hit.until > now()) return hit.token;
+    const no = refused.get(`${refreshName}\n${refresh}`);
+    if (no && no.until > now()) throw no.err;
     const client = clientFields(spec, id, secret);
     const body = await tokenCall(
       http,
@@ -145,8 +153,11 @@ export function accessTokens(
         err instanceof HttpError &&
         err.status < 500 &&
         /invalid_grant|invalid_request/.test(err.message)
-      )
-        throw new TokenRefused(refreshName, err.message);
+      ) {
+        const no = new TokenRefused(refreshName, err.message);
+        refused.set(`${refreshName}\n${refresh}`, { err: no, until: now() + REFUSED_MS });
+        throw no;
+      }
       throw err;
     });
     const token = body.access_token as string;
