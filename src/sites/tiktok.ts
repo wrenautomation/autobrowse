@@ -9,7 +9,6 @@
 import { z } from "zod";
 import { MAX_COMMENTS } from "../browser/flows/tiktok-comments.js";
 import { HttpError } from "../clients/http.js";
-import { WEB_REDIRECT } from "./oauth.js";
 import { pollWaits } from "./poll.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 
@@ -99,6 +98,13 @@ async function must<T>(res: { ok: boolean; status: number; body: T | null }, wha
 const withFields = (path: string, fields: string) =>
   `${TIKTOK_ORIGIN}${path}?fields=${encodeURIComponent(fields)}`;
 
+/**
+ * The Wren app's one registered redirect: wren's portal callback, since the app is shared with the
+ * portal's TikTok connect (2026-10-15, the stale wrenautomation.com/oauth/callback was removed for
+ * review). The consent walker answers it in the browser, so the portal never sees the code.
+ */
+export const TIKTOK_REDIRECT = "https://app.wrenautomation.com/oauth/social/tiktok";
+
 export const tiktokOAuth: OAuthSpec = {
   authorizeUrl: "https://www.tiktok.com/v2/auth/authorize/",
   tokenUrl: `${TIKTOK_ORIGIN}/v2/oauth/token/`,
@@ -108,7 +114,7 @@ export const tiktokOAuth: OAuthSpec = {
   clientId: "TIKTOK_CLIENT_KEY",
   clientSecret: "TIKTOK_CLIENT_SECRET",
   refreshToken: "TIKTOK_REFRESH_TOKEN",
-  redirect: WEB_REDIRECT,
+  redirect: TIKTOK_REDIRECT,
   consent: { flow: "tiktok/oauth-consent" },
 };
 
@@ -252,7 +258,7 @@ export const tiktok: SiteApi = {
       makes: ["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"],
       how: {
         workflow: "tiktok-developer-app",
-        input: { redirectUri: WEB_REDIRECT },
+        input: { redirectUri: TIKTOK_REDIRECT },
       },
       summary:
         "On developers.tiktok.com: an app with Login Kit + Content Posting API, the redirect URI, the account as a target user; keep the client key and secret",

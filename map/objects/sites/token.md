@@ -17,7 +17,7 @@ Access tokens are minted on demand from the refresh token and cached until they 
 
 ## Shape
 
-- `accountEnv(name, account)` = the per-account name — `src/sites/oauth.ts:80`; `accessTokens(http, env, now, keep)` — `:102-135`; `runConsent` — `:203`; `pkcePair`, `codeFrom` — `:74,148`; `WEB_REDIRECT` (the https redirect Meta, Instagram and TikTok register) — `:71`
+- `accountEnv(name, account)` = the per-account name — `src/sites/oauth.ts:80`; `accessTokens(http, env, now, keep)` — `:102-135`; `runConsent` — `:203`; `pkcePair`, `codeFrom` — `:74,148`; `WEB_REDIRECT` (the https redirect Meta and Instagram register; TikTok registers wren's portal callback, `TIKTOK_REDIRECT` in `src/sites/tiktok.ts`) — `:71`
 - Renewal: `RENEW_WITHIN_MS` 14 days, `Renewal`, `RenewalPlan`, `renewals`, `renewDue`, `nextLapse` — `src/sites/renew.ts:18-144`
 - Store: `SecretSink.put(name, value, o)` — `src/deps/sink.ts:9-12`; `envStoreFor` / `sinkFor` (SSM `/autobrowse/config` via credvault `EnvStore`, `.env` locally) — `src/app/services.ts:958,769`; `autobrowse env` (`src/app/cli-env.ts`)
 - Loopback redirect `OAUTH_PORT` 9400; a `keep` op in a recording lands here too

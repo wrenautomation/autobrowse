@@ -11,7 +11,7 @@ import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
 import { SITES } from "../src/sites/index.js";
 import { instagram, instagramOAuth } from "../src/sites/instagram.js";
 import { accessTokens, runConsent, WEB_REDIRECT } from "../src/sites/oauth.js";
-import { tiktok, tiktokOAuth } from "../src/sites/tiktok.js";
+import { TIKTOK_REDIRECT, tiktok, tiktokOAuth } from "../src/sites/tiktok.js";
 import type { ApiLeg } from "../src/sites/types.js";
 import { fakePage } from "./auth-fakes.js";
 import { fakeFetch } from "./fakes.js";
@@ -305,8 +305,9 @@ describe("instagram and tiktok consents and OAuth shapes", () => {
           }
           const state = u.searchParams.get("state");
           // Both, like Meta, refuse loopback: the browser lands on the https redirect.
-          expect(u.searchParams.get("redirect_uri")).toBe(WEB_REDIRECT);
-          return { landed: `${WEB_REDIRECT}?code=c&state=${state}` };
+          const redirect = spec === tiktokOAuth ? TIKTOK_REDIRECT : WEB_REDIRECT;
+          expect(u.searchParams.get("redirect_uri")).toBe(redirect);
+          return { landed: `${redirect}?code=c&state=${state}` };
         },
       });
     await expect(consent(tiktokOAuth, 9421)).resolves.toMatchObject({
