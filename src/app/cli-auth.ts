@@ -614,6 +614,51 @@ export function registerAuthCommands(program: Command, settings: Settings): void
       console.log("an import never overwrites a login already there");
     });
   creds
+    .command("to-bitwarden [sites...]")
+    .description(
+      "Copy the accounts (all when none named) into Bitwarden, the break-glass copy outside AWS: login, password, authenticator, recovery codes; updated in place, nothing shown. Needs `bw` logged in once",
+    )
+    .action(async (siteArgs: string[]) => {
+      const { syncBitwarden } = await import("./bitwarden.js");
+      const { otpauthUri } = await import("./apple-passwords.js");
+      const store = credentialsFor(settings, { armed: false });
+      const master = (await store.get("bitwarden"))?.password;
+      if (!master)
+        throw new Error("no bitwarden master password stored (`autobrowse signup bitwarden`)");
+      const keys = siteArgs.length ? siteArgs.map((a) => accountSite(a)) : await store.list();
+      const rows = [];
+      for (const key of keys) {
+        const cred = await store.get(key);
+        // Canaries stay put; the vault's own key never goes inside it.
+        if (!cred || cred.canary || key === "bitwarden") continue;
+        const provider = key.split("@")[0] ?? key;
+        const issuer = provider.replace(/^./, (c) => c.toUpperCase());
+        rows.push({
+          key,
+          url: resolveLogin(SITE_LOGINS, key)?.home ?? cred.url ?? `https://${provider}.com/`,
+          username: cred.username,
+          ...(cred.password ? { password: cred.password } : {}),
+          ...(cred.totpSecret
+            ? { otpauth: otpauthUri(issuer, cred.username, cred.totpSecret) }
+            : {}),
+          notes: [
+            cred.roles?.length ? `roles: ${cred.roles.join(", ")}` : "",
+            cred.via ? `signs in via ${cred.via}` : "",
+            cred.codesInbox ? `codes to ${cred.codesInbox}` : "",
+            cred.passkeys.length ? "passkey: in credvault only" : "",
+            cred.recoveryCodes.length ? `recovery codes:\n${cred.recoveryCodes.join("\n")}` : "",
+            "synced by autobrowse creds to-bitwarden",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        });
+      }
+      const r = await syncBitwarden(rows, master);
+      console.log(
+        `Bitwarden: ${r.created.length} added, ${r.updated.length} updated, ${r.kept.length} unchanged`,
+      );
+    });
+  creds
     .command("list [platform]")
     .description(
       "Every stored account by platform: who it is (username), what it is for (roles: `creds role`), how it signs in; one platform when named",

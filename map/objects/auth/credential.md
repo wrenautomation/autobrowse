@@ -23,6 +23,7 @@ The vault is its own repo and npm package (public). Changing a name in `src/auth
 - Named by `<site>` (main or only), `<site>@<role>` or `<site>@<username>`: `resolveAccount` `src/auth/roles.ts:66`; `namedStore` `src/auth/roles.ts:120` wraps the store and names the browser profile (`profileName`, `src/browser/session.ts:135`); `giveRole`/`dropRole` `src/auth/roles.ts:160-201` behind `creds role` (`src/app/cli-auth.ts:542`)
 - Minted on signup: `accountKey`, `mintCredential`, `mintPassword` — `src/auth/signup.ts:225-313`
 - `creds link [logins...] [--keys] [--open] [--ttl]` (`src/app/cli-auth.ts:375`): `mintCredentialLink` (`src/auth/link.ts`) seals `{label, fields: [{name, value}]}` (stored logins and env keys) with AES-GCM, posts only the ciphertext to wren's phone Worker signed with `CRED_LINK_SECRET` (`credLinkUrl`, `credLinkSecret` in `src/app/config.ts`), and prints `<url>/c/<id>#<key>`; `--open` drops the sign-in for someone outside Wren; one audit line per login or key
+- `creds to-bitwarden [sites...]` (`src/app/cli-auth.ts`, `src/app/bitwarden.ts`): every account (canaries and the vault's own `bitwarden` key left out) upserted into Bitwarden as `autobrowse · <key>`: the break-glass copy outside AWS. `bw` CLI logged in once on the Mac; each run unlocks with the master password stored under `bitwarden`, then locks. Secrets go by env and stdin only
 - Every typed secret is audited (`SecretAudit`, `auditFor` `src/app/services.ts:620`; window read by `ledgerSince` `src/auth/ledger.ts:18`)
 
 ## Connected to
@@ -43,6 +44,7 @@ The vault is its own repo and npm package (public). Changing a name in `src/auth
 | `autobrowse creds`, `accounts`, UI Accounts page | write (never shows values) |
 | `autobrowse creds link` → wren phone Worker | read, sealed for one reveal on the phone |
 | sign-ins | read |
+| `autobrowse creds to-bitwarden` → Bitwarden (William's personal Gmail) | read, copied out sealed by the master password |
 
 ## See
 
