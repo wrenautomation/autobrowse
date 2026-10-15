@@ -15,7 +15,7 @@ import * as restate from "@restatedev/restate-sdk";
 import { z } from "zod";
 import { withCall } from "../browser/attempt.js";
 import type { Watchers } from "../browser/watchers.js";
-import { lastingRefusal } from "../clients/http.js";
+import { HttpError, lastingRefusal } from "../clients/http.js";
 import type { SiteCalls } from "../runs/calls.js";
 import type { SiteFacade } from "./facade.js";
 import { SiteError } from "./types.js";
@@ -34,6 +34,12 @@ const READ_RETRY = {
   maxRetryInterval: 300_000,
 };
 const WRITE_RETRY = { maxRetryAttempts: 1 };
+/**
+ * Tries of a read before a platform's 429, 5xx or timeout on the API leg goes back to the
+ * caller (wren pauses and asks again a few times): 300 tries a day, each up to three HTTP
+ * calls, only pile on a platform that is already saying no. A browser leg keeps waiting.
+ */
+const API_READ_TRIES = 4;
 
 /** `account`: which identity's token (a consented address); the site's own when absent. */
 const site = z.object({ site: z.string().min(1), account: z.string().min(1).optional() });
@@ -61,12 +67,21 @@ function parse<T>(schema: z.ZodType<T>, raw: unknown): T {
  * Runs as the durable call `key`: a browser leg's irreversible act (a post) that went
  * through before a crash or a lost connection is not done again when Restate reruns it.
  */
-async function terminalOnSiteError<T>(key: string, fn: () => Promise<T>): Promise<T> {
+async function terminalOnSiteError<T>(
+  key: string,
+  fn: () => Promise<T>,
+  /** Which try this is, for a read: past `API_READ_TRIES` a platform's HTTP failure is terminal too. */
+  attempt?: number,
+): Promise<T> {
   try {
     return await withCall(key, fn);
   } catch (err) {
     if (err instanceof SiteError || lastingRefusal(err))
       throw new restate.TerminalError(err.message, { errorCode: err.status });
+    if (attempt !== undefined && attempt >= API_READ_TRIES && err instanceof HttpError)
+      throw new restate.TerminalError(err.message, {
+        errorCode: err.status >= 400 ? err.status : 502,
+      });
     throw err;
   }
 }
@@ -189,8 +204,11 @@ export function sitesService(
           step,
           () =>
             recorded(calls, base, ++attempt, () =>
-              terminalOnSiteError(`${ctx.request().id} ${step}`, () =>
-                facade.call(req.site, req.method, req.path, req.input, req.account, from),
+              terminalOnSiteError(
+                `${ctx.request().id} ${step}`,
+                () => facade.call(req.site, req.method, req.path, req.input, req.account, from),
+                // Writes run once; this bounds a read's retries.
+                req.method === "GET" ? attempt : undefined,
               ),
             ),
           retry,

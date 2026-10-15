@@ -40,6 +40,20 @@ describe("httpClient", () => {
     expect(calls).toHaveLength(3);
   });
 
+  it("a Retry-After past the wait cap is not asked again: the 429 goes back at once", async () => {
+    // Before: waited 10 s and asked twice more (3 calls) while the server said 10 minutes.
+    const long = fakeFetch([
+      { status: 429, headers: { "retry-after": "600" } },
+      { status: 200 },
+      { status: 200 },
+    ]);
+    expect((await client(long.fetch).json("https://x.test/p")).status).toBe(429);
+    expect(long.calls).toHaveLength(1);
+    const short = fakeFetch([{ status: 429, headers: { "retry-after": "2" } }, { status: 200 }]);
+    expect((await client(short.fetch).json("https://x.test/p")).status).toBe(200);
+    expect(short.calls).toHaveLength(2);
+  });
+
   it("retries a POST only on 429", async () => {
     const a = fakeFetch([{ status: 429 }, { status: 201, body: "{}" }]);
     expect(

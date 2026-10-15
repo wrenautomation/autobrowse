@@ -35,6 +35,7 @@ const facade: SiteFacade = {
     if (path === "/rest/flaky") throw new Error("socket hang up");
     if (path === "/rest/broke") throw new HttpError("CALL", "https://x.test/rest/broke", 402);
     if (path === "/rest/busy") throw new HttpError("CALL", "https://x.test/rest/busy", 429);
+    if (path === "/rest/down") throw new HttpError("CALL", "https://x.test/rest/down", 503);
     return { id: "urn:li:share:1" };
   },
   setup: async () => ({ made: ["LINKEDIN_ACCESS_TOKEN"] }),
@@ -110,6 +111,39 @@ describe("sites service", () => {
     await expect(
       h.call?.(ctx, { site: "linkedin", method: "GET", path: "/rest/busy" }),
     ).rejects.toMatchObject({ name: "HttpError", status: 429 });
+  });
+
+  it("a read the platform keeps failing goes back after 4 tries, not 300; a browser leg's error keeps waiting", async () => {
+    // Restate retrying a step: the closure runs again until it returns, turns terminal or runs out.
+    const retrying = {
+      request: () => ({ id: "inv_r", headers: new Map() }),
+      run: async <T>(
+        _n: string,
+        fn: () => Promise<T>,
+        opts?: { maxRetryAttempts?: number },
+      ): Promise<T> => {
+        for (let n = 1; ; n++) {
+          try {
+            return await fn();
+          } catch (err) {
+            if ((err as Error).name === "TerminalError" || n >= (opts?.maxRetryAttempts ?? 1))
+              throw err;
+          }
+        }
+      },
+    } as never;
+    const tried = (path: string) =>
+      calls.filter((c) => (c as { path: string }).path === path).length;
+    // Before: 300 tries (up to 900 HTTP calls) for a read of a platform that is down.
+    await expect(
+      h.call?.(retrying, { site: "linkedin", method: "GET", path: "/rest/down" }),
+    ).rejects.toMatchObject({ name: "TerminalError", code: 503 });
+    expect(tried("/rest/down")).toBe(4);
+    // Not an HTTP failure of the API leg (a browser flow, a dropped socket): retried as before.
+    await expect(
+      h.call?.(retrying, { site: "linkedin", method: "GET", path: "/rest/flaky" }),
+    ).rejects.toThrow("socket hang up");
+    expect(tried("/rest/flaky")).toBeGreaterThanOrEqual(300);
   });
 
   it("a bad request never reaches the facade", async () => {

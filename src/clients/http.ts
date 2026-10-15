@@ -122,8 +122,13 @@ export function httpClient(opts: HttpOptions = {}): HttpClient {
           await sleep(backoff(attempt, null, random));
           continue;
         }
+        // A Retry-After past what we wait is the server saying "not yet": asking again after our
+        // cap would be a call it refuses, so the answer goes back to the caller as it is.
+        const named = hintOf(response.headers.get("retry-after"));
         const retry =
-          RETRY_STATUSES.has(response.status) && (retryOnServer || response.status === 429);
+          RETRY_STATUSES.has(response.status) &&
+          (retryOnServer || response.status === 429) &&
+          (named === null || named <= MAX_BACKOFF_MS);
         if (!retry || last) {
           const text = await response.text();
           return {
@@ -150,10 +155,16 @@ function parseJson<T>(text: string): T | null {
   }
 }
 
+/** The wait a Retry-After header names, in ms; null when absent or not a number of seconds. */
+function hintOf(retryAfter: string | null): number | null {
+  const seconds = retryAfter === null ? Number.NaN : Number(retryAfter);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
+}
+
 /** Retry-After (seconds) when given; else exponential with full jitter, capped. */
 export function backoff(attempt: number, retryAfter: string | null, random = Math.random): number {
-  const hinted = retryAfter === null ? Number.NaN : Number(retryAfter);
-  if (Number.isFinite(hinted) && hinted >= 0) return Math.min(hinted * 1000, MAX_BACKOFF_MS);
+  const hinted = hintOf(retryAfter);
+  if (hinted !== null) return Math.min(hinted, MAX_BACKOFF_MS);
   const ceiling = Math.min(500 * 2 ** (attempt - 1), MAX_BACKOFF_MS);
   return Math.floor(random() * ceiling);
 }
