@@ -130,7 +130,17 @@ export function httpClient(opts: HttpOptions = {}): HttpClient {
           (retryOnServer || response.status === 429) &&
           (named === null || named <= MAX_BACKOFF_MS);
         if (!retry || last) {
-          const text = await response.text();
+          let text: string;
+          try {
+            text = await response.text();
+          } catch (err) {
+            // The timeout covers the body too: an answer that stalls mid-body is no answer, and a
+            // bare "The operation was aborted due to timeout" named no call (meta's Instagram
+            // lookups, 2026-10-15). Asked again like a dropped connection.
+            if (last || !retryOnServer) throw new HttpError(method, url, 0, describe(err));
+            await sleep(backoff(attempt, null, random));
+            continue;
+          }
           return {
             status: response.status,
             ok: response.ok,

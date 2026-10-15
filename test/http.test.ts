@@ -54,6 +54,28 @@ describe("httpClient", () => {
     expect(short.calls).toHaveLength(2);
   });
 
+  it("a body that times out is asked again on a GET, and named when it stays stuck", async () => {
+    const stalled = () => {
+      const body = new ReadableStream({
+        start(c) {
+          c.error(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
+        },
+      });
+      return new Response(body, { status: 200 });
+    };
+    let n = 0;
+    const once = async () => (n++ === 0 ? stalled() : new Response('{"a":1}', { status: 200 }));
+    expect((await client(once).json("https://x.test/p")).body).toEqual({ a: 1 });
+    expect(n).toBe(2);
+    const always = async () => stalled();
+    await expect(client(always).json("https://x.test/p?access_token=secret")).rejects.toThrow(
+      "GET https://x.test/p: HTTP 0 timeout",
+    );
+    await expect(
+      client(always).json("https://x.test/c", { method: "POST", body: {} }),
+    ).rejects.toThrow("POST https://x.test/c: HTTP 0 timeout");
+  });
+
   it("retries a POST only on 429", async () => {
     const a = fakeFetch([{ status: 429 }, { status: 201, body: "{}" }]);
     expect(
