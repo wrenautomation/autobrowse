@@ -102,6 +102,35 @@ describe("policedApprover", () => {
     expect(asked).toHaveLength(1);
   });
 
+  it("a grant covers the paying page's domain under any profile, and * covers every site", async () => {
+    const grants = memoryGrants();
+    const now = new Date(Date.UTC(2026, 9, 15, 12));
+    const until = new Date(now.getTime() + 3_600_000).toISOString();
+    await grants.add({
+      site: "posthog.com",
+      max: null,
+      until,
+      note: "William",
+      at: now.toISOString(),
+    });
+    const at = (site: string, url: string) => ({ what: "press Upgrade", url, site });
+    const asked: string[] = [];
+    const approve = policedApprover(
+      async (a) => {
+        asked.push(a.site);
+        return false;
+      },
+      { policy, ledger: memorySpendLedger(), grants, now: () => now },
+    );
+    expect(await approve(at("google@wren", "https://us.posthog.com/organization/billing"))).toBe(
+      true,
+    );
+    expect(await approve(at("google@wren", "https://evilposthog.com/billing"))).toBe(false);
+    await grants.add({ site: "*", max: null, until, note: "William: all", at: now.toISOString() });
+    expect(await approve(at("npm", "https://www.npmjs.com/settings/billing"))).toBe(true);
+    expect(asked).toEqual(["google@wren"]);
+  });
+
   it("a yes given ahead covers the site's asks until it lapses; the hard cap still refuses", async () => {
     const grants = memoryGrants();
     const now = new Date(Date.UTC(2026, 8, 27, 12));

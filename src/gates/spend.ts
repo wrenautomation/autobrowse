@@ -7,6 +7,7 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { chainedFile } from "credvault";
+import { registrable } from "../auth/guard.js";
 import type { Approval, Approver } from "./payment.js";
 
 export interface Amount {
@@ -125,8 +126,11 @@ export interface Grant {
 }
 
 export interface Grants {
-  /** The live grant that covers this site, or null. `x@wren` is covered by a grant on `x`. */
-  live(site: string, now: Date): Grant | null;
+  /**
+   * The live grant that covers this ask, or null. `x@wren` is covered by a grant on `x`;
+   * the paying page's registrable domain (`posthog.com`) and `*` (every site) cover it too.
+   */
+  live(site: string, now: Date, url?: string | null): Grant | null;
   add(g: Grant): Promise<void>;
   /** Grants not yet lapsed. */
   list(now: Date): Grant[];
@@ -136,13 +140,27 @@ export interface Grants {
 
 const base = (site: string) => site.split("@")[0] ?? site;
 
+const hostOf = (url: string): string | null => {
+  try {
+    return new URL(url).hostname || null;
+  } catch {
+    return null;
+  }
+};
+
 function grantsOver(load: () => Grant[], save: (g: Grant[]) => Promise<void>): Grants {
   const live = (now: Date) => load().filter((g) => Date.parse(g.until) > now.getTime());
   return {
-    live: (site, now) =>
-      live(now)
-        .filter((g) => g.site === site || g.site === base(site))
-        .at(-1) ?? null,
+    live: (site, now, url) => {
+      const names = new Set(["*", site, base(site)]);
+      const host = url ? hostOf(url) : null;
+      if (host) names.add(registrable(host));
+      return (
+        live(now)
+          .filter((g) => names.has(g.site))
+          .at(-1) ?? null
+      );
+    },
     async add(g) {
       await save([...live(new Date(g.at)), g]);
     },
@@ -212,7 +230,7 @@ export function policedApprover(ask: Approver, o: PolicedOptions): Approver {
       await write("cap", false);
       return false;
     }
-    const grant = o.grants?.live(a.site, now()) ?? null;
+    const grant = o.grants?.live(a.site, now(), a.url) ?? null;
     if (grant && (grant.max === null || (amount && amount.value <= grant.max))) {
       await write("granted", true);
       return true;

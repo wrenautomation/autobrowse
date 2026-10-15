@@ -774,7 +774,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     .option("--last <n>", "how many lines", "50")
     .option(
       "--grant <site>",
-      "a yes given ahead: the site's payment asks go through without a text until it lapses",
+      "a yes given ahead: a site, its paying domain (posthog.com) or * for every site; its payment asks go through without a text until it lapses",
     )
     .option("--hours <n>", "how long the grant lasts", "2")
     .option("--max <amount>", "per purchase; an ask with no amount on it still texts you")
