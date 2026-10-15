@@ -1,8 +1,8 @@
 /**
  * `studio` on the desk: wren's video editor work that needs this Mac (designs/2026-10-06-video-
  * editor.md in wren, step 4). `studio/render` is one render the Videos page asked for:
- * `wren video render <id> --cut` against prod, which writes its own state on the row. While the
- * Mac is off the call waits in Restate. `watchRecordings` runs `wren video watch` every minute:
+ * `wren video render <id> --cut [--only <part>]` against prod, which writes its own state on the
+ * row. While the Mac is off the call waits in Restate. `watchRecordings` runs `wren video watch` every minute:
  * each finished OBS or Cap recording becomes a video, once.
  */
 import { execFile } from "node:child_process";
@@ -36,19 +36,32 @@ export const wrenIn =
       ),
     );
 
-export const renderArgs = (id: number) => ["video", "render", String(id), "--cut"];
+/** What `render --only` takes: one format, or the Shorts or thumbnails alone (wren's RENDER_PARTS). */
+export const RENDER_PARTS = ["long", "vertical", "square", "portrait", "shorts", "thumbs"] as const;
+export type RenderPart = (typeof RENDER_PARTS)[number];
+
+/** A render narrowed to one part (`only`) draws just that; with none it draws what changed. */
+export const renderArgs = (id: number, only?: RenderPart) => [
+  "video",
+  "render",
+  String(id),
+  "--cut",
+  ...(only ? ["--only", only] : []),
+];
 
 export function studioService(wren: Wren, name: string = STUDIO_SERVICE) {
   return restate.service({
     name,
     handlers: {
       render: async (ctx: restate.Context, raw: unknown): Promise<{ ms: number }> => {
-        const r = z.object({ id: z.number().int().positive() }).safeParse(raw);
+        const r = z
+          .object({ id: z.number().int().positive(), only: z.enum(RENDER_PARTS).optional() })
+          .safeParse(raw);
         if (!r.success) throw new restate.TerminalError(r.error.message, { errorCode: 400 });
         return ctx.run("render", async () => {
           const t0 = Date.now();
           // A failed render is reported, not retried: the page shows why, and Render again.
-          await wren(renderArgs(r.data.id), RENDER_MS).catch((err: Error) => {
+          await wren(renderArgs(r.data.id, r.data.only), RENDER_MS).catch((err: Error) => {
             throw new restate.TerminalError(`render: ${err.message}`);
           });
           return { ms: Date.now() - t0 };

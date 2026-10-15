@@ -1,9 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { renderArgs, wrenIn } from "./service.js";
+import { RENDER_PARTS, renderArgs, wrenIn } from "./service.js";
 
 describe("studio", () => {
   it("renders with the cut pass first", () => {
     expect(renderArgs(12)).toEqual(["video", "render", "12", "--cut"]);
+  });
+
+  it("narrows a render to one part", () => {
+    expect(renderArgs(12, "shorts")).toEqual([
+      "video",
+      "render",
+      "12",
+      "--cut",
+      "--only",
+      "shorts",
+    ]);
+    expect(RENDER_PARTS).toContain("long");
   });
 
   it("says why a run failed, from its last lines", async () => {
