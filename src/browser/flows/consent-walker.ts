@@ -30,6 +30,13 @@ export interface ConsentWalk {
   /** Page text that means the site refused the request (bad client, bad redirect). */
   refused: RegExp;
   rounds?: number;
+  /**
+   * A page whose allow button starts disabled and whose own grant request can stall (TikTok,
+   * 2026-10-14: the passport POST after Continue aborts now and then and the button spins for
+   * good): wait for `css` to enable, let it sit `settleMs`, press once, and when nothing lands in
+   * `spinMs` reload the authorize page instead of pressing again. Never signs in again.
+   */
+  ready?: { css: string; settleMs: number; spinMs: number };
 }
 
 export function consentFlow(w: ConsentWalk): BrowserFlow<OauthConsentInput, { landed: string }> {
@@ -60,6 +67,18 @@ export function consentFlow(w: ConsentWalk): BrowserFlow<OauthConsentInput, { la
           }
           if (w.confirm && (await fp.has(w.confirm.unticked)))
             return fp.human(`${w.site}: the acknowledgement box would not tick`);
+          if (w.ready) {
+            const { css, settleMs, spinMs } = w.ready;
+            const button = fp.page.locator(css).first();
+            for (let t = 0; t < 30 && !(await button.isEnabled().catch(() => false)); t++)
+              await fp.wait(1_000);
+            await fp.wait(settleMs);
+            await fp.act({ kind: "click" }, w.allow, { goal: "consent" });
+            if (await fp.waitForUrl(landed, spinMs)) return { landed: fp.url() };
+            // Spinning: the page's own request died. A reload asks again; another press would not.
+            await fp.page.reload().catch(() => null);
+            continue;
+          }
           await fp.act({ kind: "click" }, w.allow, { goal: "consent" });
           await fp.waitForUrl(landed, 10_000);
           continue;
