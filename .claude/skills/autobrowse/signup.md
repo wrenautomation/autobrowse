@@ -35,6 +35,7 @@ gives it (flags go after the port in `start.sh`):
 | `password` | `--new-password <address>` |
 | `<site>.username`, `.password`, `.code`, `.phone`, `.phoneLocal` | `--login <site>[,<site>…]` |
 | `card.number`, `.exp`, `.expMonth`, `.expYear`, `.cvc`, `.name`, `.postal` (`card@<label>.…`) | none: payment-gated |
+| `card.code` (`card@<label>.code`) | none: the bank's 3-D Secure text, from the paired phone's Messages. Only after a `place card.*` this session, inside the payment yes (or a live `spend --grant`), within 10 min of the card. Any host or frame |
 | `profile.taxId`, `.name`, `.email`, `.phone`, `.address1` … `.countryName` (`profile@<id>.…` picks one) | none: the Mac's wallet profiles; any host |
 
 A missing secret's error names the flag.

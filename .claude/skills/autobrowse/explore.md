@@ -95,7 +95,12 @@ Every look costs tokens. Look once, then let the acts tell you what changed.
 The payment gate: a billing field (card, CVC, tax id, billing address) or a
 spending button (Buy, Pay, Subscribe, Add funds, Start trial) texts William and
 `cmd.sh` holds until he answers (up to ~45 min); the act runs on a yes. No `eval`
-or `type` around it.
+or `type` around it. The bank's 3-D Secure challenge (a code texted to his phone,
+usually in an iframe on the bank's domain, often nested) is answered with
+`place{hints:{role:"textbox",name:"…"},secret:"card.code"}`: no `frame` hint, the
+search finds the field; `aria` shows the frames. It works only after `place card.*`
+in this session, inside the payment yes or a live `spend --grant`, within 10 min.
+It waits up to 90 s for the text and types the newest one; a resend needs a second `place`.
 
 ## After: a workflow
 

@@ -141,6 +141,7 @@ import {
   withModFixes,
   withModScreens,
 } from "../mods/mod.js";
+import { bankCodeReader } from "../money/bank-code.js";
 import { type Charge, type ChargeRow, reportCharge } from "../money/charges.js";
 import type { Profile } from "../money/profile.js";
 import { isDefaultOwner, named, ownerKeys } from "../owner.js";
@@ -1014,6 +1015,19 @@ export function cardsFor(settings: Settings): ExploreOptions["cards"] {
       ...(owner?.taxId ? { taxId: owner.taxId } : {}),
     };
   };
+}
+
+/** The bank's confirmation text for `place{secret:"card.code"}`: the paired phone's Messages, on the Mac only, like the wallet. */
+export function cardCodeFor(settings: Settings): ExploreOptions["cardCode"] {
+  if (process.platform !== "darwin" || !isDefaultOwner(settings.owner)) return undefined;
+  const phone = phoneFor(settings);
+  return phone ? bankCodeReader(phoneReader(phone), phone.number) : undefined;
+}
+
+/** Whether a yes given ahead (`spend --grant`) is live for a site: it stands for the payment yes. */
+export function grantedAheadFor(settings: Settings): NonNullable<ExploreOptions["grantedAhead"]> {
+  const grants = spendGrantsFor(settings);
+  return (site) => grants.live(site, new Date()) !== null;
 }
 
 /** The owner's profiles for `place{secret:"profile.<field>"}`: on the Mac only, like the wallet. */

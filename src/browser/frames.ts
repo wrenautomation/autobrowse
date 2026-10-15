@@ -30,8 +30,12 @@ interface FrameElement {
   };
 }
 
-/** Frames nested deeper than this are left out (ads nest; controls do not). */
-const MAX_DEPTH = 3;
+/**
+ * Frames nested deeper than this are left out (ads nest; controls do not). A
+ * 3-D Secure challenge sits several down: the payment provider's frame, the
+ * bank's, the bank's own challenge.
+ */
+const MAX_DEPTH = 5;
 
 /**
  * How the parent finds this frame's element: id, title, name, then src
@@ -105,27 +109,36 @@ export async function ariaWithFrames(page: Page): Promise<string> {
 /**
  * Hints that name no frame and match nothing on the page, pointed at the
  * first visible frame that holds a match: a card field in a payment
- * provider's iframe (Braintree, Stripe) is found without the caller
- * reading the frame chain off the outline. Unchanged otherwise.
+ * provider's iframe (Braintree, Stripe), a bank's code box in a 3-D Secure
+ * challenge nested below it, is found without the caller reading the frame
+ * chain off the outline. Unchanged otherwise.
+ *
+ * `waitMs`: a page that has frames may still be loading them (a challenge
+ * opens a moment after the pay click), so the search repeats that long
+ * before it gives up. A page with no frame never waits.
  */
-export async function withFrame(page: Page, hints: Hints): Promise<Hints> {
-  if (
-    hints.frame ||
-    (await locateAll(page, hints)
-      .count()
-      .catch(() => 0))
-  )
-    return hints;
-  for (const { chain } of await visibleFrames(page.mainFrame(), null, 1, [])) {
-    const inside = { ...hints, frame: chain };
+export async function withFrame(page: Page, hints: Hints, waitMs = 0): Promise<Hints> {
+  if (hints.frame) return hints;
+  const deadline = Date.now() + waitMs;
+  for (;;) {
     if (
-      await locateAll(page, inside)
+      await locateAll(page, hints)
         .count()
         .catch(() => 0)
     )
-      return inside;
+      return hints;
+    for (const { chain } of await visibleFrames(page.mainFrame(), null, 1, [])) {
+      const inside = { ...hints, frame: chain };
+      if (
+        await locateAll(page, inside)
+          .count()
+          .catch(() => 0)
+      )
+        return inside;
+    }
+    if (page.frames().length < 2 || Date.now() >= deadline) return hints;
+    await page.waitForTimeout(250);
   }
-  return hints;
 }
 
 /** The frame chain an outline section names: `- iframe "<chain>":` → chain. */

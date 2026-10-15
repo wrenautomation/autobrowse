@@ -85,6 +85,7 @@ import {
 } from "../gates/payment.js";
 import type { Amount } from "../gates/spend.js";
 import type { Llm } from "../llm/types.js";
+import { bankCodeSecret, codeWindowOpen } from "../money/bank-code.js";
 import { type Charge, type Receipt, receiptOutcome, stillAsking } from "../money/charges.js";
 import { describePaper, type Paper, paperPayload, paperRef } from "../money/papers.js";
 import {
@@ -340,6 +341,10 @@ const LOOKED_AT = new Set<Command["cmd"]>([
   "keep",
   "captcha",
 ]);
+/** Acts that type into a control that may sit in a frame still loading (a bank's challenge opens a moment after the pay click). */
+const WAITS_FOR_CONTROL = new Set<Command["cmd"]>(["fill", "place"]);
+/** How long they look for a control in frames that have not finished loading. */
+const FRAME_MS = 5_000;
 /** Answers a caller that reads the whole page each time would get instead: measured for the token report. */
 const WHOLE_PAGE = new Set<Command["cmd"]>([...LOOKS, "aria", "snapshot", "text", "batch"]);
 /** How long the whole-page measure may take before the row goes without it. */
@@ -363,7 +368,7 @@ export function placeHint(secret: string): string {
     case "code":
       return "code needs --codes <inbox> or --signup <address>";
     default:
-      return `no flag gives "${secret}": names are phone, phoneLocal, publicPhone, publicPhoneLocal, email, password, code, <site>.username|password|code|phone|phoneLocal, card.*`;
+      return `no flag gives "${secret}": names are phone, phoneLocal, publicPhone, publicPhoneLocal, email, password, code, <site>.username|password|code|phone|phoneLocal, card.*, card.code (the bank's text)`;
   }
 }
 
@@ -457,6 +462,18 @@ export interface ExploreOptions {
     label: string | null;
     subscription: boolean;
   }) => Promise<Card & { billing?: Address; tell?: Contacts; taxId?: string }>;
+  /**
+   * The code the card's bank texted to confirm a payment (3-D Secure), newest
+   * numeric text received at or after `since`, from the paired phone (the Mac).
+   * `place{secret:"card.code"}` uses it, only on a flow a person said yes to
+   * and within 10 min of the card landing. Absent: refused.
+   */
+  cardCode?: (since: Date) => Promise<string | null>;
+  /**
+   * A yes given ahead (`spend --grant <site>`) that covers this site's payments
+   * now: counts as the payment yes for `card.code`, as it answers the card's ask.
+   */
+  grantedAhead?: (site: string) => boolean;
   /**
    * The owner's profiles, where they live (the Mac): `place{secret:"profile.<field>"}`
    * (or `profile@<id>.<field>`) fills one of its fields, such as `taxId` on a
@@ -1150,6 +1167,8 @@ async function serve(
     tell?: Contacts;
     contacts: BillingContacts;
   } | null = null;
+  /** When and where the card last landed: the bank's code is only for the payment it confirms. */
+  let cardLanded: { at: number; flow: string; label: string } | null = null;
   const pageText = async () => (await page.innerText("body").catch(() => "")).slice(0, 20_000);
   /**
    * William (2026-10-04): a billing form's email, phone and tax id are always the
@@ -1239,6 +1258,7 @@ async function serve(
       await opts.cardsOnFile
         ?.placed({ at: new Date().toISOString(), site: opts.site, host, card: cardEnding(card) })
         .catch(() => undefined);
+    cardLanded = { at: now(), flow: paymentFlowOf(page.url()), label: card.label };
     placedCard = {
       line: cardEnding(card),
       recurring,
@@ -1247,6 +1267,64 @@ async function serve(
     };
     const billing = await fillBilling();
     return { ok: true, secret: c.secret, ...(billing.length ? { billing } : {}) };
+  };
+  /**
+   * The bank's confirmation code (3-D Secure, often in an iframe on the bank's
+   * domain): any host and frame, but only for a card this session placed, on a
+   * flow that still has a payment yes (the session's, or a `spend --grant`),
+   * within the code window of the card landing, and only a text that came after.
+   */
+  const placeBankCode = async (
+    c: Extract<Command, { cmd: "place" }>,
+    want: { label: string | null },
+  ) => {
+    const audit = (allowed: boolean) =>
+      opts.audit?.record({
+        at: new Date().toISOString(),
+        credential: "wallet",
+        field: "secret",
+        site: opts.site,
+        url: urlWithoutQuery(page.url()),
+        by: `place ${c.secret}`,
+        allowed,
+      });
+    const refuse = async (why: string): Promise<never> => {
+      await audit(false);
+      throw new Error(`place: ${c.secret}: ${why}`);
+    };
+    if (!opts.cardCode)
+      throw new Error(
+        "place: no phone here to read the bank's code (it lives on the Mac: PHONE_NUMBER, Text Message Forwarding)",
+      );
+    const landed = cardLanded;
+    if (!landed) return refuse("no card was placed in this session; place the card first");
+    if (want.label && want.label !== landed.label)
+      return refuse(`the card placed here is ${landed.label}, not ${want.label}`);
+    if (!codeWindowOpen(landed.at, now()))
+      return refuse("the card landed over 10 min ago; place it again for a new payment");
+    const yes =
+      flowYes.covers(landed.flow) ||
+      [opts.site, landed.flow].some((site) => opts.grantedAhead?.(site) === true);
+    if (!yes)
+      return refuse(
+        `no payment yes for ${landed.flow} is live; a person must say yes to the payment first (press the pay button, or spend --grant)`,
+      );
+    const code = await opts.cardCode(new Date(landed.at));
+    if (!code)
+      throw new Error(
+        `place: ${c.secret} is not available now (the bank's text has not arrived on the phone yet, wait and retry)`,
+      );
+    await audit(true);
+    await hands.think(page);
+    await hands.paste(find(c), code, { timeout: 10_000 });
+    journalAct(c, (target) => ({
+      kind: "input",
+      target,
+      value: REDACTED,
+      redacted: true,
+      secret: c.secret,
+    }));
+    return { ok: true, secret: c.secret };
   };
   /** After a yes and the click: the page it landed on is the receipt. A failed report never fails the click. */
   const reportSpend = async (spent: { what: string; amount: Amount | null }) => {
@@ -1400,10 +1478,18 @@ async function serve(
   };
   const act = async (cmd: Command, wait: boolean): Promise<unknown> => {
     page = fp.page;
-    // A target on no frame that the page lacks is looked for in its iframes (card fields).
+    // A target on no frame that the page lacks is looked for in its iframes (card fields, a
+    // bank's challenge). A fill or place gives frames still loading a moment.
     const c =
       "hints" in cmd && cmd.hints && !cmd.hints.frame
-        ? ({ ...cmd, hints: await withFrame(page, cmd.hints as Hints) } as Command)
+        ? ({
+            ...cmd,
+            hints: await withFrame(
+              page,
+              cmd.hints as Hints,
+              WAITS_FOR_CONTROL.has(cmd.cmd) ? FRAME_MS : 0,
+            ),
+          } as Command)
         : cmd;
     switch (c.cmd) {
       case "open": {
@@ -1451,6 +1537,8 @@ async function serve(
         return { ok: true };
       }
       case "place": {
+        const bank = bankCodeSecret(c.secret);
+        if (bank) return placeBankCode(c, bank);
         const card = cardSecret(c.secret);
         if (card) return placeCard(c, card, wait);
         const own = profileSecret(c.secret);

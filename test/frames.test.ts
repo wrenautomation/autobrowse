@@ -79,4 +79,35 @@ describe("iframes in the outline", () => {
       srv.close();
     }
   });
+  it("a 3-D Secure code box four cross-origin frames down is found, and found while the frames still load", async () => {
+    let port = 0;
+    const srv = createServer((req, res) => {
+      res.setHeader("content-type", "text/html");
+      const frame = (host: string, path: string, title: string) =>
+        `<iframe title="${title}" width="360" height="200" src="http://${host}:${port}${path}"></iframe>`;
+      // Each frame sits on the other host: two sites, so out of process like a bank's ACS.
+      if (req.url === "/pay") res.end(`<h1>Checkout</h1>${frame("127.0.0.1", "/a", "3ds")}`);
+      else if (req.url === "/a") res.end(frame("localhost", "/b", "acs"));
+      else if (req.url === "/b") res.end(frame("127.0.0.1", "/c", "bank"));
+      else if (req.url === "/c") res.end(frame("localhost", "/d", "challenge"));
+      else res.end(`<label>Confirmation code <input></label>`);
+    }).listen(0);
+    port = (srv.address() as AddressInfo).port;
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      await page.goto(`http://localhost:${port}/pay`);
+      // No wait for the frames: the search gives them the time it is told to.
+      const box = await withFrame(page, { role: "textbox", name: "Confirmation code" }, 5_000);
+      expect(box.frame?.split(">> internal:control=enter-frame >>")).toHaveLength(4);
+      await locate(page, box).fill("123456");
+      expect(await locate(page, box).inputValue()).toBe("123456");
+      // No wait asked, nothing found yet: the hints come back as they were.
+      const none = await withFrame(page, { role: "button", name: "Pay" });
+      expect(none).toEqual({ role: "button", name: "Pay" });
+    } finally {
+      await browser.close();
+      srv.close();
+    }
+  });
 });

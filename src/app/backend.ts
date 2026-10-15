@@ -74,11 +74,13 @@ import {
   COMPILED_DIR,
   COMPILED_LIB,
   captchaFor,
+  cardCodeFor,
   cardsFor,
   cardsOnFileFor,
   chargesFor,
   credentialsFor,
   gmailFor,
+  grantedAheadFor,
   identitiesFor,
   llmFor,
   loginFor,
@@ -276,6 +278,7 @@ export function explorerOpener(
 ) => Promise<Explorer> {
   const approver: Approver | null = approverFor(settings, gmailFor(settings));
   const cards = cardsFor(settings);
+  const cardCode = cardCodeFor(settings);
   const profiles = profilesForPlace(settings);
   const papers = papersForUpload(settings);
   return async (site, port, { signIn = true, ...extra } = {}) =>
@@ -288,6 +291,8 @@ export function explorerOpener(
       captcha: captchaFor(settings),
       audit: auditFor(settings),
       ...(cards ? { cards, cardsOnFile: cardsOnFileFor(settings) } : {}),
+      ...(cardCode ? { cardCode } : {}),
+      grantedAhead: grantedAheadFor(settings),
       ...(profiles ? { profiles } : {}),
       ...(papers ? { papers } : {}),
       charges: chargesFor(settings, gmailFor(settings)),
