@@ -214,6 +214,7 @@ const igContainer = z.object({
   media_type: z.enum(["IMAGE", "REELS", "STORIES", "CAROUSEL"]).optional(),
   caption: z.string().max(2200).optional(),
   children: z.array(id).optional(),
+  is_carousel_item: z.boolean().optional(),
   cover_url: z.string().url().optional(),
   share_to_feed: z.boolean().optional(),
   /** A Reel's cover frame, in ms from the start (ignored when `cover_url` is set). */

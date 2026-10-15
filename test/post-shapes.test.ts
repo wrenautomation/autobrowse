@@ -203,6 +203,23 @@ describe("instagram container shape", () => {
       });
     });
 
+    it(`${site.site}: a carousel item keeps its flag; the parent sends its children as a list`, async () => {
+      const { calls, leg } = recorder(() => Response.json({ id: "c1" }));
+      await container.call(
+        { igUserId: "17", image_url: "https://cdn.test/s.jpg", is_carousel_item: true },
+        leg,
+      );
+      expect(json(calls.at(-1))).toMatchObject({ is_carousel_item: true });
+      await container.call(
+        { igUserId: "17", media_type: "CAROUSEL", children: ["1", "2"], caption: "x" },
+        leg,
+      );
+      expect(json(calls.at(-1))).toMatchObject({ children: ["1", "2"] });
+      expect(container.r.request.safeParse({ igUserId: "17", children: "1,2" }).success).toBe(
+        false,
+      );
+    });
+
     it(`${site.site}: refuses a negative offset, four collaborators, or a bad username`, () => {
       const bad = [
         { thumb_offset: -1 },
