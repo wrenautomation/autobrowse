@@ -97,6 +97,13 @@ const inbox = z.object({
   /** `true` marks what the listing shows as read, as the inbox page does. */
   mark: flag.default(false),
 });
+const mine = z.object({ limit, after: z.string().optional() });
+const subscribe = z.object({
+  action: z.enum(["sub", "unsub"]).default("sub"),
+  sr_name: z.string().regex(/^(r\/)?[A-Za-z0-9_]{2,21}$/, "a subreddit"),
+  /** Read whether the account is in, press nothing. */
+  dry: flag.optional(),
+});
 const profileName = z.object({
   /** The new display name; the handle and profile link stay as they are. */
   name: z.string().trim().min(1).max(30),
@@ -117,7 +124,7 @@ export const reddit: SiteApi = {
   // No client: every route is a browser leg, signed in as the account's own profile.
   auth: { open: true },
   // Messages the lowest: the first thing Reddit shadowbans is an account messaging strangers fast.
-  caps: { reads: 300, posts: 3, comments: 20, messages: 5 },
+  caps: { reads: 300, posts: 3, comments: 20, messages: 5, joins: 10 },
   pace: { gapMs: 20_000, jitterMs: 40_000 },
   routes: [
     route({
@@ -211,6 +218,40 @@ export const reddit: SiteApi = {
     }),
     route({
       method: "GET",
+      path: "/subreddits/mine/subscriber",
+      request: mine,
+      meter: () => ({ reads: 1 }),
+      browser: {
+        flow: read,
+        input: (q) => ({ path: "/subreddits/mine/subscriber", query: query(q) }),
+      },
+      summary: "The subreddits the account has joined (t5 cards; `limit`, `after`)",
+    }),
+    route({
+      method: "GET",
+      path: "/api/v1/{subreddit}/post_requirements",
+      request: sr,
+      meter: () => ({ reads: 1 }),
+      browser: {
+        flow: read,
+        input: ({ subreddit }) => ({ path: `/api/v1/${subreddit}/post_requirements` }),
+      },
+      summary:
+        "What a sub asks of a post: is_flair_required, title rules (regexes, required and blacklisted strings, lengths), body and link policy, guidelines_text",
+    }),
+    route({
+      method: "GET",
+      path: "/r/{subreddit}/api/link_flair_v2",
+      request: sr,
+      meter: () => ({ reads: 1 }),
+      browser: {
+        flow: read,
+        input: ({ subreddit }) => ({ path: `/r/${subreddit}/api/link_flair_v2` }),
+      },
+      summary: "The post flairs a sub offers: `{flairs:[{id, text, text_editable, mod_only}]}`",
+    }),
+    route({
+      method: "GET",
       path: "/search",
       request: search,
       meter: () => ({ reads: 1 }),
@@ -301,6 +342,19 @@ export const reddit: SiteApi = {
     }),
     route({
       method: "POST",
+      path: "/api/subscribe",
+      request: subscribe,
+      irreversible: true,
+      meter: (s) => (s.dry ? {} : { joins: 1 }),
+      browser: {
+        flow: "reddit/subscribe",
+        input: (s) => ({ ...s, sr_name: s.sr_name.replace(/^r\//, "") }),
+      },
+      summary:
+        "! Join (`action=sub`, the default) or leave (`unsub`) a subreddit; `dry` reads whether the account is in; answers {json:{errors,data:{subscribed,changed}}}; 10 a day",
+    }),
+    route({
+      method: "POST",
       path: "/web/profile/name",
       summary:
         "The profile's display name (new Reddit settings in the browser): `name`; answers `{ before, name }`. The username never changes",
@@ -313,7 +367,13 @@ export const reddit: SiteApi = {
 };
 
 /** The account's own reads: never under the signed-out site. */
-const OWN = new Set(["/api/v1/me", "/message/{where}"]);
+const OWN = new Set([
+  "/api/v1/me",
+  "/message/{where}",
+  "/subreddits/mine/subscriber",
+  "/api/v1/{subreddit}/post_requirements",
+  "/r/{subreddit}/api/link_flair_v2",
+]);
 
 /**
  * Reddit's public reads, signed out in a profile of their own: finding places, threads and

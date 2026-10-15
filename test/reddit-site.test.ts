@@ -5,6 +5,7 @@ import {
   redditMessage,
   redditRead,
   redditSubmit,
+  redditSubscribe,
 } from "../src/browser/flows/reddit.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
@@ -58,6 +59,9 @@ describe("reddit site", () => {
       "GET /r/{subreddit}/top",
       "GET /r/{subreddit}/about",
       "GET /subreddits/search",
+      "GET /subreddits/mine/subscriber",
+      "GET /api/v1/{subreddit}/post_requirements",
+      "GET /r/{subreddit}/api/link_flair_v2",
       "GET /search",
       "GET /message/{where}",
       "GET /api/info",
@@ -66,6 +70,7 @@ describe("reddit site", () => {
       "POST /api/submit",
       "POST /api/comment",
       "POST /api/compose",
+      "POST /api/subscribe",
       "POST /web/profile/name",
     ]);
     for (const r of reddit.routes) {
@@ -79,13 +84,16 @@ describe("reddit site", () => {
               ? "reddit/message"
               : r.path === "/web/profile/name"
                 ? "reddit/profile-name"
-                : "reddit/comment",
+                : r.path === "/api/subscribe"
+                  ? "reddit/subscribe"
+                  : "reddit/comment",
       );
     }
     expect(BROWSER_FLOWS["reddit/read"]).toBe(redditRead);
     expect(BROWSER_FLOWS["reddit/submit"]).toBe(redditSubmit);
     expect(BROWSER_FLOWS["reddit/comment"]).toBe(redditComment);
     expect(BROWSER_FLOWS["reddit/message"]).toBe(redditMessage);
+    expect(BROWSER_FLOWS["reddit/subscribe"]).toBe(redditSubscribe);
   });
 
   it("writes are irreversible and metered per bucket; reads are one read each", () => {
@@ -102,12 +110,16 @@ describe("reddit site", () => {
         parsed("POST", "/api/compose", { to: "someone", subject: "hi", text: "hello" }) as never,
       ),
     ).toEqual({ messages: 1 });
+    const join = (b: object) =>
+      routeOf("POST", "/api/subscribe").meter?.(parsed("POST", "/api/subscribe", b) as never);
+    expect(join({ sr_name: "startups" })).toEqual({ joins: 1 });
+    expect(join({ sr_name: "startups", dry: "true" })).toEqual({});
     for (const r of reddit.routes.filter((x) => x.method === "GET"))
       expect(r.meter?.({} as never)).toEqual({ reads: 1 });
   });
 
   it("is capped and paced like a person", () => {
-    expect(reddit.caps).toEqual({ reads: 300, posts: 3, comments: 20, messages: 5 });
+    expect(reddit.caps).toEqual({ reads: 300, posts: 3, comments: 20, messages: 5, joins: 10 });
     expect(reddit.pace).toEqual({ gapMs: 20_000, jitterMs: 40_000 });
   });
 });
@@ -240,6 +252,9 @@ describe("reddit browser leg inputs", () => {
       "/r/{subreddit}/top": { subreddit: "startups" },
       "/r/{subreddit}/about": { subreddit: "startups" },
       "/subreddits/search": { q: "agency owners" },
+      "/subreddits/mine/subscriber": {},
+      "/api/v1/{subreddit}/post_requirements": { subreddit: "startups" },
+      "/r/{subreddit}/api/link_flair_v2": { subreddit: "startups" },
       "/search": { q: "recruiting agency" },
       "/message/{where}": { where: "unread" },
       "/api/info": { id: "t3_a" },
@@ -327,6 +342,7 @@ describe("reddit through the facade", () => {
       "/api/submit",
       "/api/comment",
       "/api/compose",
+      "/api/subscribe",
       "/web/profile/name",
     ]);
   });
@@ -389,6 +405,8 @@ describe("reddit-public", () => {
     const paths = redditPublic.routes.map((r) => r.path);
     expect(paths).not.toContain("/api/v1/me");
     expect(paths).not.toContain("/message/{where}");
+    expect(paths).not.toContain("/subreddits/mine/subscriber");
+    expect(paths).not.toContain("/api/v1/{subreddit}/post_requirements");
     expect(redditPublic.routes.every((r) => r.method === "GET")).toBe(true);
     const ran: { site: string; input: unknown }[] = [];
     const sites = siteFacade([{ ...redditPublic, pace: { gapMs: 0 } }], {

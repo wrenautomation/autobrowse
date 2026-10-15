@@ -111,7 +111,9 @@ export {
   redditMessage,
   redditRead,
   redditSubmit,
+  redditSubscribe,
   type SubmitInput as RedditSubmitInput,
+  type SubscribeInput as RedditSubscribeInput,
 } from "./reddit.js";
 export { type ResetProbeInput, resetMailProbe } from "./reset-mail-probe.js";
 export { threadsOauthConsent } from "./threads-oauth-consent.js";

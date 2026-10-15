@@ -119,6 +119,27 @@ const ME_FIELDS = [
   "is_suspended",
   "icon_img",
 ] as const;
+/** What a sub asks of a post (`/api/v1/{sr}/post_requirements`): title rules, flair, body and link policy. */
+const POST_REQUIREMENT_FIELDS = [
+  "title_regexes",
+  "title_required_strings",
+  "title_blacklisted_strings",
+  "title_text_min_length",
+  "title_text_max_length",
+  "body_restriction_policy",
+  "body_text_min_length",
+  "body_text_max_length",
+  "body_required_strings",
+  "body_blacklisted_strings",
+  "is_flair_required",
+  "link_restriction_policy",
+  "domain_blacklist",
+  "domain_whitelist",
+  "link_repost_age",
+  "guidelines_text",
+] as const;
+/** A post flair a sub offers (`/r/{sr}/api/link_flair_v2`). */
+const FLAIR_FIELDS = ["id", "text", "text_editable", "mod_only", "type"] as const;
 /** A subreddit rule as `/r/{sr}/about/rules` lists it. */
 const RULE_FIELDS = ["short_name", "description", "kind", "violation_reason", "priority"] as const;
 /** Another account as `/user/{name}/about` shows it: age and karma (the warmup reads these), whether it takes messages. */
@@ -201,8 +222,11 @@ export function slimMessages(l: unknown): Obj {
 const USER = "[A-Za-z0-9_-]{3,20}";
 const SR = "[A-Za-z0-9_]{2,21}";
 
-/** The reads the routes send here, and how each answer is slimmed. */
-const READS: Array<{ path: RegExp; slim: (body: unknown) => unknown }> = [
+/**
+ * The reads the routes send here, and how each answer is slimmed. `bare`: an API path read as
+ * is, with no `.json` twin (`/api/v1/{sr}/post_requirements`).
+ */
+const READS: Array<{ path: RegExp; slim: (body: unknown) => unknown; bare?: boolean }> = [
   { path: /^\/api\/me$/, slim: (b) => pick(isObj(b) ? b.data : null, ME_FIELDS) },
   { path: /^\/api\/info$/, slim: slimListing },
   { path: new RegExp(`^/user/${USER}/(submitted|comments)$`), slim: slimListing },
@@ -222,6 +246,17 @@ const READS: Array<{ path: RegExp; slim: (body: unknown) => unknown }> = [
   },
   { path: /^\/search$/, slim: slimListing },
   { path: /^\/subreddits\/search$/, slim: slimListing },
+  { path: /^\/subreddits\/mine\/subscriber$/, slim: slimListing },
+  {
+    path: new RegExp(`^/api/v1/${SR}/post_requirements$`),
+    bare: true,
+    slim: (b) => pick(b, POST_REQUIREMENT_FIELDS),
+  },
+  {
+    path: new RegExp(`^/r/${SR}/api/link_flair_v2$`),
+    bare: true,
+    slim: (b) => ({ flairs: (Array.isArray(b) ? b : []).map((f) => pick(f, FLAIR_FIELDS)) }),
+  },
   { path: /^\/message\/(inbox|unread|sent)$/, slim: slimMessages },
   {
     path: /^\/comments\/[a-z0-9]{1,12}$/,
@@ -241,6 +276,7 @@ async function fetchJson(
   path: string,
   query: Record<string, string> = {},
   origin = OLD,
+  bare = false,
 ) {
   // Signed out on www, the home page carries a "Continue with Google" sign-up rail that reads as a
   // login wall; nobody signs in there, so only the fetch's own status says whether the read worked.
@@ -248,13 +284,16 @@ async function fetchJson(
     await fp.open(`${origin}/`, origin === WWW ? { allowWall: true } : undefined);
   // %20, not +: Reddit's search reads a + as part of the word ("agency+owners" finds nothing).
   const q = new URLSearchParams({ ...query, raw_json: "1" }).toString().replace(/\+/g, "%20");
-  return fp.page.evaluate(async (url) => {
-    const res = await fetch(url, {
-      credentials: "include",
-      headers: { accept: "application/json" },
-    });
-    return { status: res.status, body: res.ok ? ((await res.json()) as unknown) : null };
-  }, `${origin}${path}.json?${q}`);
+  return fp.page.evaluate(
+    async (url) => {
+      const res = await fetch(url, {
+        credentials: "include",
+        headers: { accept: "application/json" },
+      });
+      return { status: res.status, body: res.ok ? ((await res.json()) as unknown) : null };
+    },
+    `${origin}${path}${bare ? "" : ".json"}?${q}`,
+  );
 }
 
 /** GET a page's text from inside the page (www, the session's cookies): the status and, when it answered, the body. */
@@ -378,7 +417,7 @@ export const redditRead = defineFlow<ReadInput, unknown>({
     const read = READS.find((r) => r.path.test(path));
     if (!read) throw new Error(`reddit read: ${path} is not a read this flow serves`);
     const q = Object.fromEntries(Object.entries(query).map(([k, v]) => [k, String(v)]));
-    const got = await fetchJson(fp, path, q, signedOut ? WWW : OLD);
+    const got = await fetchJson(fp, path, q, signedOut ? WWW : OLD, read.bare);
     if (got.status === 404) return { error: 404, message: `no such thing: ${path}` };
     if (got.status === 403 && signedOut) {
       const viaFeed = await readFeed(fp, path, q);
@@ -786,5 +825,61 @@ export const redditMessage = defineFlow<MessageInput, JsonAnswer<{ delivered: tr
       await fp.wait(1_000);
     }
     return fp.human(`reddit: the message neither said delivered nor why not (${fp.url()})`);
+  },
+});
+
+export interface SubscribeInput {
+  /** The subreddit, without r/. */
+  sr_name: string;
+  /** `sub` joins, `unsub` leaves. */
+  action: "sub" | "unsub";
+  /** Read the sub's state, press nothing. */
+  dry?: boolean;
+}
+
+/** Old Reddit's join toggle in the sidebar: the visible half is `.active` (`add` = join, `remove` = leave). */
+const JOINED: Hints = { css: ".side .subscribe-button .remove.active" };
+const JOIN: Hints = { css: ".side .subscribe-button .add.active" };
+const LEAVE: Hints = { css: ".side .subscribe-button .remove.active" };
+
+/**
+ * Join (or leave) a subreddit with the sidebar's toggle on old Reddit, as a person does. Mapped
+ * 2026-10-15: `/r/<sr>/` shows `span.subscribe-button` with two `a.option`s, the active one the
+ * button a visitor sees. Already in that state answers without a press; `dry` only reads it.
+ * Answers `{json:{errors,data:{subscribed, changed, dry?}}}`.
+ */
+export const redditSubscribe = defineFlow<
+  SubscribeInput,
+  JsonAnswer<{ subscribed: boolean; changed: boolean; dry?: boolean }>
+>({
+  site: "reddit",
+  name: "subscribe",
+  async run(fp, { sr_name, action, dry = false }) {
+    const sr = sr_name.replace(/^\/?r\//i, "");
+    if (!/^[A-Za-z0-9_]{2,21}$/.test(sr))
+      return refused("BAD_SR_NAME", `${sr_name} is not a subreddit`, "sr_name");
+    await fp.open(`${OLD}/r/${sr}/`);
+    const toggle: Hints = { css: ".side .subscribe-button .option.active" };
+    if (!(await fp.has(toggle, RENDER_MS))) {
+      if (/\/subreddits\/search|\/login/.test(fp.url()))
+        return refused("SUBREDDIT_NOEXIST", `no r/${sr} on Reddit`, "sr_name");
+      return fp.human(`reddit: no join button on r/${sr} (${fp.url()})`);
+    }
+    if (!(await signedIn(fp))) return fp.human("reddit: signed out on this profile");
+    const joined = await fp.has(JOINED, 1_000);
+    const want = action === "sub";
+    if (joined === want || dry)
+      return {
+        json: { errors: [], data: { subscribed: joined, changed: false, ...(dry ? { dry } : {}) } },
+      };
+    await fp.act({ kind: "click" }, want ? JOIN : LEAVE, {
+      goal: `${want ? "join" : "leave"} r/${sr}`,
+      irreversible: true,
+    });
+    if (await fp.has(want ? JOINED : JOIN, LAND_MS))
+      return { json: { errors: [], data: { subscribed: want, changed: true } } };
+    return fp.human(
+      `reddit: pressed ${want ? "join" : "leave"} on r/${sr}, the button never turned`,
+    );
   },
 });

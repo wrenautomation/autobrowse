@@ -5,6 +5,7 @@ import {
   redditComment,
   redditRead,
   redditSubmit,
+  redditSubscribe,
   slimListing,
 } from "../src/browser/flows/reddit.js";
 import type { Hints } from "../src/browser/locate.js";
@@ -210,6 +211,51 @@ describe("reddit/read", () => {
     await redditRead.run(p.fp, { path: "/api/info", query: { id: "t3_a" } });
     expect(p.opens).toEqual([]);
     expect(p.fetched[0]?.url).toBe(`${OLD}/api/info.json?id=t3_a&raw_json=1`);
+  });
+
+  it("a sub's post requirements and flairs: API paths read as is, slimmed", async () => {
+    const p = redditPage({
+      url: `${OLD}/`,
+      fetch: (u) =>
+        u.includes("post_requirements")
+          ? {
+              status: 200,
+              body: { is_flair_required: true, title_text_min_length: 10, secret: "x" },
+            }
+          : { status: 200, body: [{ id: "f1", text: "Question", mod_only: false, css: "q" }] },
+    });
+    expect(await redditRead.run(p.fp, { path: "/api/v1/startups/post_requirements" })).toEqual({
+      is_flair_required: true,
+      title_text_min_length: 10,
+    });
+    expect(await redditRead.run(p.fp, { path: "/r/startups/api/link_flair_v2" })).toEqual({
+      flairs: [{ id: "f1", text: "Question", mod_only: false }],
+    });
+    expect(p.fetched.map((f) => f.url)).toEqual([
+      `${OLD}/api/v1/startups/post_requirements?raw_json=1`,
+      `${OLD}/r/startups/api/link_flair_v2?raw_json=1`,
+    ]);
+  });
+
+  it("the joined subs: a t5 listing", async () => {
+    const p = redditPage({
+      url: `${OLD}/`,
+      fetch: () => ({
+        status: 200,
+        body: {
+          data: {
+            modhash: "m",
+            children: [{ kind: "t5", data: { display_name: "startups", subscribers: 9, x: 1 } }],
+          },
+        },
+      }),
+    });
+    const got = (await redditRead.run(p.fp, { path: "/subreddits/mine/subscriber" })) as {
+      data: { children: unknown[] };
+    };
+    expect(got.data.children).toEqual([
+      { kind: "t5", data: { display_name: "startups", subscribers: 9 } },
+    ]);
   });
 
   it("refuses a path it does not serve, before any fetch", async () => {
@@ -870,5 +916,76 @@ describe("reddit/comment", () => {
     });
     const out = await redditComment.run(p.fp, { thing_id: "t3_abc", text: "hi" });
     expect(out.json.errors).toEqual([]);
+  });
+});
+
+describe("reddit/subscribe", () => {
+  const signedInDom = (sel: string) =>
+    sel === "#header .user a" ? [el({ text: "WrenAutomation" })] : [];
+
+  it("joins: opens the sub, presses the active join, waits for leave to show", async () => {
+    let joined = false;
+    const p = redditPage({
+      dom: signedInDom,
+      present: (h) =>
+        h.css === ".side .subscribe-button .option.active" ||
+        (h.css === ".side .subscribe-button .remove.active" && joined),
+      onAct: () => {
+        joined = true;
+      },
+    });
+    const got = await redditSubscribe.run(p.fp, { sr_name: "startups", action: "sub" });
+    expect(p.opens).toEqual([`${OLD}/r/startups/`]);
+    expect(p.acts.map(line)).toEqual(["click .side .subscribe-button .add.active"]);
+    expect(p.acts[0]?.opts.irreversible).toBe(true);
+    expect(got).toEqual({ json: { errors: [], data: { subscribed: true, changed: true } } });
+  });
+
+  it("already in: answers without a press; dry only reads", async () => {
+    for (const [joined, dry] of [
+      [true, false],
+      [false, true],
+    ] as const) {
+      const p = redditPage({
+        dom: signedInDom,
+        present: (h) =>
+          h.css === ".side .subscribe-button .option.active" ||
+          (h.css === ".side .subscribe-button .remove.active" && joined),
+      });
+      const got = await redditSubscribe.run(p.fp, { sr_name: "startups", action: "sub", dry });
+      expect(p.acts).toEqual([]);
+      expect(got.json.data).toEqual({
+        subscribed: joined,
+        changed: false,
+        ...(dry ? { dry } : {}),
+      });
+    }
+  });
+
+  it("a bad name is refused before the page opens; signed out goes to a person", async () => {
+    const bad = redditPage({});
+    expect(
+      (await redditSubscribe.run(bad.fp, { sr_name: "no such", action: "sub" })).json
+        .errors[0]?.[0],
+    ).toBe("BAD_SR_NAME");
+    expect(bad.opens).toEqual([]);
+    const out = redditPage({
+      present: (h) => h.css === ".side .subscribe-button .option.active",
+    });
+    await expect(
+      redditSubscribe.run(out.fp, { sr_name: "startups", action: "sub" }),
+    ).rejects.toBeInstanceOf(NeedsHuman);
+    expect(out.acts).toEqual([]);
+  });
+
+  it("a press that never turns the button goes to a person", async () => {
+    const p = redditPage({
+      dom: signedInDom,
+      present: (h) => h.css === ".side .subscribe-button .option.active",
+    });
+    await expect(
+      redditSubscribe.run(p.fp, { sr_name: "startups", action: "sub" }),
+    ).rejects.toBeInstanceOf(NeedsHuman);
+    expect(p.acts).toHaveLength(1);
   });
 });
