@@ -15,8 +15,13 @@
  *   follows, so the editor took it.
  * - "Who can see this post" is a combobox (Everyone by default). "Show
  *   more" reveals "Allow users to: Comment | Reuse of content" (both on by
- *   default) and the "AI-generated content" switch. Their inputs carry
- *   random ids, so they are found by the label beside them.
+ *   default) and the "AI-generated content" switch. Until then the whole
+ *   panel is `<div hidden>`: its inputs are in the page but cannot be
+ *   clicked. Their ids are random, so they are found by the label beside
+ *   them. A checkbox's input is not visible itself (its `<label>` is the
+ *   control); a switch's input is `aria-hidden` inside `.Switch__content`.
+ *   Mapped from a failed run's trace 2026-10-14: the first off-click went
+ *   straight to the hidden input and timed out.
  * - Post is `button[data-e2e=post_video_button]`, enabled once uploaded.
  *
  * Read back: the account's profile grid before and after; the new
@@ -37,6 +42,8 @@ const UPLOAD_MS = 15 * 60_000;
 const CONFIRM_MS = 3 * 60_000;
 const READBACK_MS = 8 * 60_000;
 const POLL_MS = 3_000;
+/** "Show more" opens its panel at once; this is the wait for the page to show it. */
+const OPEN_MS = 3_000;
 
 export const TIKTOK_AUDIENCE = { everyone: "Everyone", friends: "Friends", "only-me": "Only you" };
 export type TikTokAudience = keyof typeof TIKTOK_AUDIENCE;
@@ -77,16 +84,28 @@ const showMore: Hints = { text: "Show more" };
 /** Every `/video/<id>` link on the page, in page order. */
 const VIDEO_LINKS = `Array.from(document.querySelectorAll('a[href*="/video/"]')).map((a) => a.href)`;
 
-/** The form's checkboxes and switches by the label beside each: ids are random per load. */
-const TOGGLES = `Array.from(document.querySelectorAll('input[type=checkbox]')).map((i) => {
+/**
+ * The form's checkboxes and switches by the label beside each: ids are random per load. `press` is
+ * the control a person clicks (a checkbox's `<label>`, a switch's `.Switch__content`; the input
+ * itself is hidden), `shown` whether it is on screen now (the panel starts `hidden`).
+ */
+export const TOGGLES = `Array.from(document.querySelectorAll('input[type=checkbox]')).map((i) => {
   let e = i;
   for (let k = 0; k < 6 && e && !(e.innerText || '').trim(); k++) e = e.parentElement;
-  return { id: i.id, checked: i.checked, label: ((e && e.innerText) || '').replace(/\\s+/g, ' ').trim() };
+  const press = i.closest('label') || i.closest('[aria-checked]');
+  const on = (i.closest('[aria-checked]') || i).getAttribute('aria-checked');
+  return {
+    id: i.id,
+    checked: on === 'true' || on === 'false' ? on === 'true' : i.checked,
+    shown: !!press && press.getClientRects().length > 0,
+    label: ((e && e.innerText) || '').replace(/\\s+/g, ' ').trim(),
+  };
 })`;
 
-interface Toggle {
+export interface Toggle {
   id: string;
   checked: boolean;
+  shown: boolean;
   label: string;
 }
 
@@ -136,19 +155,54 @@ async function toggles(fp: FlowPage): Promise<Toggle[]> {
   return (await fp.page.evaluate(TOGGLES)) as Toggle[];
 }
 
-/** Set one labelled checkbox or switch to `on`; null when done, else why not. */
-async function setToggle(fp: FlowPage, label: string, on: boolean): Promise<string | null> {
-  const t = (await toggles(fp)).find((x) => x.label === label);
+/** The control a person clicks for a toggle: its label (checkbox) or switch body, never the hidden input. */
+const pressOf = (t: Toggle): Hints => ({
+  css: `:is(label, [aria-checked]):has([id="${t.id}"])`,
+});
+
+/** "Show more" opens the panel the interaction toggles sit in; once it shows, a no-op. */
+async function showMoreSettings(fp: FlowPage, label: string): Promise<void> {
+  if (!(await fp.has(showMore))) return;
+  await fp.act({ kind: "click" }, showMore, { goal: "show the interaction settings" });
+  for (let t = 0; t < OPEN_MS; t += 250) {
+    if ((await toggles(fp)).some((x) => x.label === label && x.shown)) return;
+    await fp.wait(250);
+  }
+}
+
+/**
+ * Set one labelled checkbox or switch to `on`; null when done, else why not. Already right is left
+ * alone. A row still hidden under "Show more" is opened first, and the click goes to the row's
+ * visible control: the input itself is not clickable.
+ */
+export async function setToggle(fp: FlowPage, label: string, on: boolean): Promise<string | null> {
+  const find = async () => (await toggles(fp)).find((x) => x.label === label);
+  let t = await find();
+  if (t?.checked === on) return null;
+  if (!t?.shown) {
+    await showMoreSettings(fp, label);
+    t = await find();
+  }
   if (!t) return `no "${label}" on the form`;
   if (t.checked === on) return null;
-  await fp.act(
-    { kind: "click" },
-    { css: `[id="${t.id}"]` },
-    { goal: `turn ${label} ${on ? "on" : "off"}` },
-  );
-  await fp.wait(500);
-  const after = (await toggles(fp)).find((x) => x.label === label);
-  return after?.checked === on ? null : `"${label}" did not turn ${on ? "on" : "off"}`;
+  if (!t.shown) return `"${label}" stayed hidden under Show more`;
+  await fp.act({ kind: "click" }, pressOf(t), { goal: `turn ${label} ${on ? "on" : "off"}` });
+  if (!(await settled(fp, label, on))) {
+    // The body took the click but not the page: the input's own click, hidden or not, is the toggle.
+    await fp.page.evaluate(`document.getElementById(${JSON.stringify(t.id)})?.click()`);
+    if (await settled(fp, label, on)) return null;
+    return `"${label}" did not turn ${on ? "on" : "off"}`;
+  }
+  return null;
+}
+
+/** The toggle reads `on` within a moment of a click. */
+async function settled(fp: FlowPage, label: string, on: boolean): Promise<boolean> {
+  for (let t = 0; t < 1_500; t += 250) {
+    await fp.wait(250);
+    if ((await toggles(fp)).find((x) => x.label === label)?.checked === on) return true;
+  }
+  return false;
 }
 
 const isEnabled = (fp: FlowPage) =>
@@ -212,9 +266,7 @@ export const tiktokCreatePost = defineFlow<TikTokPostInput, TikTokPost>({
       );
     }
 
-    // Comment and reuse sit under "Show more".
-    if (!(await toggles(fp)).some((t) => t.label === "Comment") && (await fp.has(showMore)))
-      await fp.act({ kind: "click" }, showMore, { goal: "show the interaction settings" });
+    // Comment, reuse and the AI label sit under "Show more"; a toggle already right is not touched.
     for (const [label, on] of [
       ["Comment", input.comments ?? true],
       ["Reuse of content", input.reuse ?? true],
