@@ -440,6 +440,8 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     // Under another profile the workflow's flows at that provider sign in as that account.
     const as = profile && at && profile !== at ? { site: at, profile } : undefined;
     return async (input) => {
+      // A recorded workflow marks no act as its send: once it runs, a failure may have gone through.
+      markSubmitted();
       const out = await run(workflow, (input ?? {}) as Record<string, unknown>, as);
       if (out.status !== "done") {
         const failed = out.steps.find((x) => x.status !== "done" && x.status !== "skipped");
