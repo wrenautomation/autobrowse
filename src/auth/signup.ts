@@ -218,7 +218,8 @@ export const SIGNUP_ALSO_HOSTS: Readonly<Record<string, readonly string[]>> = {
   trello: ["id.atlassian.com"],
   jira: ["id.atlassian.com"],
   confluence: ["id.atlassian.com"],
-  microsoft: ["login.live.com", "account.live.com", "account.microsoft.com"],
+  // app.clowdey.ai: William approved 10-15 giving Clowdey the clowdey mailbox password.
+  microsoft: ["login.live.com", "account.live.com", "account.microsoft.com", "app.clowdey.ai"],
   outlook: ["login.live.com", "account.live.com", "account.microsoft.com"],
 };
 
