@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FACEBOOK_LOGIN_URL, signInToFacebook } from "../src/auth/facebook.js";
 import type { CodeKind, SignInContext } from "../src/auth/login.js";
 import { passwordDomains } from "../src/auth/login.js";
@@ -266,6 +266,25 @@ describe("meta site", () => {
     expect(calls[0]?.url.searchParams.get("fields")).toBe("access_token");
   });
 
+  it("asks Graph for the Page's token once for a run of writes, again after an hour", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const { sites, calls } = facade(async () => true);
+      await sites.call("meta", "POST", "/111/feed", { message: "one" });
+      await sites.call("meta", "POST", "/111/feed", { message: "two" });
+      await sites.call("meta", "POST", "/111/photos", { url: "https://f.test/a.jpg" });
+      // Before: a token read ahead of every write (3 reads, 3 writes).
+      expect(calls.map((c) => c.method)).toEqual(["GET", "POST", "POST", "POST"]);
+      expect(calls.slice(1).every((c) => c.auth === "Bearer page-token")).toBe(true);
+      vi.setSystemTime(Date.now() + 61 * 60_000);
+      calls.length = 0;
+      await sites.call("meta", "POST", "/111/feed", { message: "three" });
+      expect(calls.map((c) => c.method)).toEqual(["GET", "POST"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("subscribes a Page to the app's webhooks with its own token", async () => {
     const { sites, calls } = facade(null);
     await sites.call("meta", "POST", "/111/subscribed_apps", {});
@@ -305,11 +324,10 @@ describe("meta site", () => {
     expect(calls.at(-1)?.auth).toBe("Bearer page-token");
     expect(JSON.parse(calls.at(-1)?.body ?? "{}")).toMatchObject({ locale: "EN_US" });
     calls.length = 0;
-    // The form's Page is looked up, then the Page's token, then the leads with it.
+    // The form's Page is looked up, then the leads read with the Page's token (kept from the form).
     await sites.call("meta", "GET", "/9/leads", {});
     expect(calls.map((c) => [c.url.pathname, c.auth])).toEqual([
       ["/v23.0/9", "Bearer user-token"],
-      ["/v23.0/111", "Bearer user-token"],
       ["/v23.0/9/leads", "Bearer page-token"],
     ]);
   });

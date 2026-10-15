@@ -305,17 +305,42 @@ const get = async (leg: ApiLeg, path: string, q: Record<string, string | number 
 const post = async (leg: ApiLeg, path: string, body: Record<string, unknown>) =>
   must(await leg.http.json<unknown>(v(path), { method: "POST", headers: bearer(leg), body }), path);
 
-/** A Page write needs the Page's own token: read with the user's, never kept. */
+/**
+ * A Page's own token, per Page and user token, held in memory for an hour (never written out,
+ * never logged): a run of Page writes asks Graph for it once. One map per HTTP client, so the
+ * facade that made it is the one that forgets it.
+ */
+const PAGE_TOKEN_MS = 60 * 60_000;
+const PAGE_TOKENS_KEPT = 16;
+const pageTokens = new WeakMap<object, Map<string, { token: Promise<string>; until: number }>>();
+
+/** A Page write needs the Page's own token: read with the user's, kept an hour. */
 async function pageLeg(leg: ApiLeg, pageId: string): Promise<ApiLeg> {
-  const got = (await get(leg, pageId, { fields: "access_token" })) as { access_token?: string };
-  if (!got.access_token)
-    throw new HttpError(
-      "CALL",
-      `${META_ORIGIN}/${pageId}`,
-      403,
-      "no page token: not an admin of this page",
-    );
-  return { ...leg, token: got.access_token };
+  const kept = pageTokens.get(leg.http) ?? new Map();
+  pageTokens.set(leg.http, kept);
+  const key = `${pageId}\n${leg.token}`;
+  let hit = kept.get(key);
+  if (!hit || hit.until <= Date.now()) {
+    const token = (async () => {
+      const got = (await get(leg, pageId, { fields: "access_token" })) as {
+        access_token?: string;
+      };
+      if (!got.access_token)
+        throw new HttpError(
+          "CALL",
+          `${META_ORIGIN}/${pageId}`,
+          403,
+          "no page token: not an admin of this page",
+        );
+      return got.access_token;
+    })();
+    if (kept.size >= PAGE_TOKENS_KEPT) kept.clear();
+    hit = { token, until: Date.now() + PAGE_TOKEN_MS };
+    kept.set(key, hit);
+    // A refused read is not kept: the next write asks again.
+    token.catch(() => kept.get(key) === hit && kept.delete(key));
+  }
+  return { ...leg, token: await hit.token };
 }
 
 /** The app's id, from the consent's client id. */
