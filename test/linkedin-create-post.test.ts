@@ -260,4 +260,55 @@ describe("linkedin upload", () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it("a video LinkedIn never finishes is asked about 18 times in 5 minutes, not 61", async () => {
+    let asked = 0;
+    const api = fakeFetch((req) => {
+      const at = `${req.method} ${req.url.pathname}${req.url.search}`;
+      if (at === "POST /rest/videos?action=initializeUpload")
+        return {
+          body: {
+            value: {
+              video: "urn:li:video:V2",
+              uploadToken: "t2",
+              uploadInstructions: [
+                { uploadUrl: "https://www.linkedin.com/dms-uploads/p1", firstByte: 0, lastByte: 4 },
+              ],
+            },
+          },
+        };
+      if (req.method === "PUT") return { headers: { etag: "e-p1" } };
+      if (at === "POST /rest/videos?action=finalizeUpload") return {};
+      asked += 1;
+      return { body: { status: "PROCESSING" } };
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(new Uint8Array([1, 2, 3, 4, 5]))),
+    );
+    vi.useFakeTimers();
+    try {
+      const env: Record<string, string> = { LINKEDIN_ACCESS_TOKEN__HELLO_WREN_TEST: "tok" };
+      const sites = siteFacade([linkedin], {
+        http: httpClient({ fetch: api.fetch }),
+        env: (n) => env[n],
+        sink: memorySink(),
+        providerOf: () => null,
+        accountFor: async () => "hello@wren.test",
+      });
+      const out = sites
+        .call("linkedin", "POST", "/upload", {
+          kind: "video",
+          owner: MEMBER,
+          file: "https://media.test/clip.mp4",
+        })
+        .catch((e) => e);
+      await vi.runAllTimersAsync();
+      expect(await out).toMatchObject({ status: 504 });
+      expect(asked).toBe(18);
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
 });

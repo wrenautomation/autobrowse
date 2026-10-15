@@ -331,6 +331,13 @@ describe("tiktok publish status", () => {
       await vi.runAllTimersAsync();
       expect((await b).data?.status).toBe("PUBLISH_COMPLETE");
       expect(waits.f.calls).toHaveLength(3);
+
+      // A publish that never lands, asked about for the longest wait: 9 reads (a flat 5 s was 25).
+      const stuck = legOf(Array(40).fill("PROCESSING_UPLOAD"));
+      const c = status.api(status.request.parse({ publish_id: "p1", wait: 120 }), stuck.leg);
+      await vi.runAllTimersAsync();
+      expect((await c).data?.status).toBe("PROCESSING_UPLOAD");
+      expect(stuck.f.calls).toHaveLength(9);
     } finally {
       vi.useRealTimers();
     }

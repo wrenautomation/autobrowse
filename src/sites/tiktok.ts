@@ -10,6 +10,7 @@ import { z } from "zod";
 import { MAX_COMMENTS } from "../browser/flows/tiktok-comments.js";
 import { HttpError } from "../clients/http.js";
 import { WEB_REDIRECT } from "./oauth.js";
+import { pollWaits } from "./poll.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 
 export const TIKTOK_ORIGIN = "https://open.tiktokapis.com";
@@ -62,7 +63,6 @@ const publishStatus = z.object({
   publish_id: z.string().min(1),
   wait: z.number().int().min(0).max(120).optional(),
 });
-const STATUS_POLL_MS = 5_000;
 const webPost = z.object({
   caption: z.string().max(2200).default(""),
   /** The video the browser leg uploads: a path on the box, or a URL it downloads. */
@@ -193,8 +193,8 @@ export const tiktok: SiteApi = {
       summary: "Where a publish stands (`publish_id`)",
       request: publishStatus,
       api: async ({ wait, ...body }, leg) => {
-        const until = (wait ?? 0) * 1000;
-        for (let waited = 0; ; waited += STATUS_POLL_MS) {
+        const waits = pollWaits((wait ?? 0) * 1000);
+        for (let n = 0; ; n++) {
           const b = (await must(
             await leg.http.json<unknown>(`${TIKTOK_ORIGIN}/v2/post/publish/status/fetch/`, {
               method: "POST",
@@ -204,8 +204,9 @@ export const tiktok: SiteApi = {
             "v2/post/publish/status/fetch/",
           )) as { data?: { status?: string } };
           const status = b.data?.status;
-          if (status === "PUBLISH_COMPLETE" || status === "FAILED" || waited >= until) return b;
-          await new Promise((ok) => setTimeout(ok, STATUS_POLL_MS));
+          const pause = waits[n];
+          if (status === "PUBLISH_COMPLETE" || status === "FAILED" || pause === undefined) return b;
+          await new Promise((ok) => setTimeout(ok, pause));
         }
       },
     }),

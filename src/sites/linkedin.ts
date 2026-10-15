@@ -10,6 +10,7 @@ import { z } from "zod";
 import { WREN_PAGE } from "../browser/flows/linkedin-audience.js";
 import { POST_URN } from "../browser/flows/linkedin-post-analytics.js";
 import { HttpError } from "../clients/http.js";
+import { pollWaits } from "./poll.js";
 import {
   type ApiLeg,
   type OAuthSpec,
@@ -23,8 +24,7 @@ import { bytesOf } from "./youtube.js";
 export const LINKEDIN_ORIGIN = "https://api.linkedin.com";
 /** A PDF runs to 100 MB; its PUT gets this long. */
 const UPLOAD_PUT_MS = 10 * 60_000;
-/** A video is ready for a post once LinkedIn has processed it: ask every 5 s, up to 5 minutes. */
-const VIDEO_POLL_MS = 5_000;
+/** A video is ready for a post once LinkedIn has processed it: ask with growing pauses, up to 5 minutes. */
 const VIDEO_READY_MS = 5 * 60_000;
 /**
  * LinkedIn versions its REST API by month; a version is honoured for a year, then every call
@@ -246,7 +246,8 @@ async function uploadVideo(leg: ApiLeg, owner: string, file: string): Promise<st
     }),
     "rest/videos (finalize)",
   );
-  for (let waited = 0; ; waited += VIDEO_POLL_MS) {
+  const waits = pollWaits(VIDEO_READY_MS);
+  for (let n = 0; ; n++) {
     const v = await must(
       await leg.http.json<{ status?: string }>(
         `${LINKEDIN_ORIGIN}/rest/videos/${encodeURIComponent(video)}`,
@@ -257,12 +258,13 @@ async function uploadVideo(leg: ApiLeg, owner: string, file: string): Promise<st
     if (v?.status === "AVAILABLE") return video;
     if (v?.status === "PROCESSING_FAILED")
       throw new SiteError(422, `rest/videos: LinkedIn could not process ${video}`);
-    if (waited >= VIDEO_READY_MS)
+    const wait = waits[n];
+    if (wait === undefined)
       throw new SiteError(
         504,
         `rest/videos: ${video} still ${v?.status ?? "unknown"} after 5 minutes`,
       );
-    await new Promise((ok) => setTimeout(ok, VIDEO_POLL_MS));
+    await new Promise((ok) => setTimeout(ok, wait));
   }
 }
 
