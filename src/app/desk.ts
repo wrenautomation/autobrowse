@@ -42,6 +42,8 @@ const desk = sitesService(
   named(DESK_SERVICE, settings.owner),
   fileSiteCalls(siteCallsDirFor(settings)),
   watchers,
+  // A busy profile: who waited, and which idle explore a write took it from.
+  { wait: { log: (msg, extra) => log.info(extra ?? {}, msg) } },
 );
 // Claude Code reads the workspace holding this checkout (wren's `Ask`).
 const claude = claudeService(resolve(".."), named(CLAUDE_SERVICE, settings.owner));

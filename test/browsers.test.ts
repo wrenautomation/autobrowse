@@ -47,6 +47,7 @@ const ex9090 = {
   held: false,
   startedAt: "",
   idleMinutes: 0,
+  idleMs: 0,
 };
 const explorers = [ex9090];
 

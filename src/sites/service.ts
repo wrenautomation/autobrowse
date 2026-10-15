@@ -10,10 +10,20 @@
  * `sites/arm` takes a call and runs its browser leg up to the last safe step, answering an arm
  * id the real call carries (`armId`).
  * With watchers (the desk), `watch` leases a tab watcher, `unwatch` ends one, `watches` lists them.
+ * A busy browser profile is waited for, durably, never a failure (`browser/profile-wait`); a
+ * write that fails says whether it was sent: `not sent: …` before its submit step, `…; may have
+ * gone through` after it.
  */
 import * as restate from "@restatedev/restate-sdk";
 import { z } from "zod";
-import { withCall } from "../browser/attempt.js";
+import { type CallTry, withCall } from "../browser/attempt.js";
+import { profileBusyOf } from "../browser/browsers.js";
+import {
+  MAY_HAVE_GONE_THROUGH,
+  NOT_SENT,
+  type ProfileWait,
+  waitForProfile,
+} from "../browser/profile-wait.js";
 import type { Watchers } from "../browser/watchers.js";
 import { HttpError, lastingRefusal } from "../clients/http.js";
 import type { SiteCalls } from "../runs/calls.js";
@@ -62,20 +72,43 @@ function parse<T>(schema: z.ZodType<T>, raw: unknown): T {
 }
 
 /**
+ * A failed write's words say whether it left: `not sent: …` when its submit step never started,
+ * `…; may have gone through` when it did. Words that already say either stay as they are.
+ */
+export function sentWords(message: string, submitted: boolean): string {
+  if (message.startsWith(NOT_SENT) || message.includes(MAY_HAVE_GONE_THROUGH)) return message;
+  return submitted ? `${message}; ${MAY_HAVE_GONE_THROUGH}` : `${NOT_SENT}${message}`;
+}
+
+/**
  * A SiteError is the caller's to read (404 route, 400 request, 501 no leg, 409 blocked, 502 failed),
  * and so is a platform's lasting refusal; nothing else is.
  * Runs as the durable call `key`: a browser leg's irreversible act (a post) that went
  * through before a crash or a lost connection is not done again when Restate reruns it.
+ * A busy profile goes on as it is: `waitForProfile` waits it out.
+ * `write`: a write runs once, so whatever ends it is terminal here, its words saying whether
+ * it was sent (`sentWords`); a refusal before any page (a SiteError under 500) as it is.
  */
 async function terminalOnSiteError<T>(
   key: string,
   fn: () => Promise<T>,
   /** Which try this is, for a read: past `API_READ_TRIES` a platform's HTTP failure is terminal too. */
   attempt?: number,
+  write = false,
 ): Promise<T> {
+  const t: CallTry = { key, submitted: false };
   try {
-    return await withCall(key, fn);
+    return await withCall(key, fn, t);
   } catch (err) {
+    if (profileBusyOf(err)) throw err;
+    if (write && !(err instanceof restate.TerminalError)) {
+      const status =
+        err instanceof SiteError || lastingRefusal(err) ? (err as SiteError).status : 500;
+      const message = err instanceof Error ? err.message : String(err);
+      throw new restate.TerminalError(status < 500 ? message : sentWords(message, t.submitted), {
+        errorCode: status,
+      });
+    }
     if (err instanceof SiteError || lastingRefusal(err))
       throw new restate.TerminalError(err.message, { errorCode: err.status });
     if (attempt !== undefined && attempt >= API_READ_TRIES && err instanceof HttpError)
@@ -145,6 +178,8 @@ export function sitesService(
   name: string = SITES_SERVICE,
   calls?: SiteCalls,
   watchers?: Watchers | null,
+  /** How a call waits for a busy browser profile; the defaults when absent. */
+  o: { wait?: ProfileWait } = {},
 ) {
   const watching = () => {
     if (!watchers) throw new restate.TerminalError("no watchers here", { errorCode: 501 });
@@ -186,7 +221,8 @@ export function sitesService(
       },
       call: restate.handlers.handler(CALL_OPTS, async (ctx: restate.Context, raw: unknown) => {
         const req = parse(call, raw);
-        const retry = req.method === "GET" ? READ_RETRY : WRITE_RETRY;
+        const write = req.method !== "GET";
+        const retry = write ? WRITE_RETRY : READ_RETRY;
         const from = {
           caller: req.caller ?? ctx.request().headers.get("x-caller") ?? null,
           invocation: ctx.request().id,
@@ -200,7 +236,8 @@ export function sitesService(
           ...from,
         };
         let attempt = 0;
-        return ctx.run(
+        return waitForProfile(
+          ctx,
           step,
           () =>
             recorded(calls, base, ++attempt, () =>
@@ -208,10 +245,12 @@ export function sitesService(
                 `${ctx.request().id} ${step}`,
                 () => facade.call(req.site, req.method, req.path, req.input, req.account, from),
                 // Writes run once; this bounds a read's retries.
-                req.method === "GET" ? attempt : undefined,
+                write ? undefined : attempt,
+                write,
               ),
             ),
-          retry,
+          // A write may take its profile from an explore session nobody is driving.
+          { retry, take: write, ...(o.wait ? { wait: o.wait } : {}) },
         );
       }),
       /** The call's browser leg up to its last safe step, nothing sent: `{armed: id | null, until}`. */
@@ -223,13 +262,14 @@ export function sitesService(
           arm: true,
         };
         const step = `sites arm ${req.site} ${req.method} ${req.path}`;
-        return ctx.run(
+        return waitForProfile(
+          ctx,
           step,
           () =>
             terminalOnSiteError(`${ctx.request().id} ${step}`, () =>
               facade.call(req.site, req.method, req.path, req.input, req.account, from),
             ),
-          WRITE_RETRY,
+          { retry: WRITE_RETRY, ...(o.wait ? { wait: o.wait } : {}) },
         );
       },
       /** A day's capped reads: each bucket's use and every metered call, who asked, how it went. */
@@ -262,13 +302,14 @@ export function sitesService(
       setup: async (ctx: restate.Context, raw: unknown) => {
         const req = parse(setup, raw);
         const step = `sites setup ${req.site} ${req.step}`;
-        return ctx.run(
+        return waitForProfile(
+          ctx,
           step,
           () =>
             terminalOnSiteError(`${ctx.request().id} ${step}`, () =>
               facade.setup(req.site, req.step, req.account),
             ),
-          WRITE_RETRY,
+          { retry: WRITE_RETRY, ...(o.wait ? { wait: o.wait } : {}) },
         );
       },
     },

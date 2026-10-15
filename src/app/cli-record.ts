@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Command } from "commander";
 import { urlWithoutQuery } from "../auth/guard.js";
 import type { SecretValues } from "../auth/signup.js";
+import { DEFAULT_IDLE_MINUTES } from "../explore/lease.js";
 import { expandHome } from "../google-auth.js";
 import { explorerOpener, type LocalBackend } from "./backend.js";
 import type { Settings } from "./config.js";
@@ -31,7 +32,11 @@ export function registerRecordCommands(
     .option("--url <url>", "start here")
     .option("--port <port>", "loopback port", "9090")
     .option("--headed", "show the browser (default: BROWSER_HEADLESS)")
-    .option("--idle <minutes>", "close after this long with no command; 0 = never", "30")
+    .option(
+      "--idle <minutes>",
+      "close after this long with no command (journal kept); 0 = never",
+      String(DEFAULT_IDLE_MINUTES),
+    )
     .option(
       "--hold",
       "never idle-close (multi-loop or long human-in-the-loop work): you stop it; `doctor` flags one held over 12 h",

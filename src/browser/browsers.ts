@@ -36,6 +36,8 @@ export interface BrowserRow {
 
 export interface ExplorerRow extends ExploreInfo {
   idleMinutes: number;
+  /** Since its last command or page load (the info file's mtime). */
+  idleMs: number;
 }
 
 /** A profile whose `SingletonLock` names a live browser that is none of the rows. */
@@ -92,7 +94,8 @@ export function readExplorers(
     const info = safe(() => JSON.parse(readFileSync(file, "utf8")) as ExploreInfo, null);
     if (!info || !live.has(info.pid)) continue;
     const touched = safe(() => statSync(file).mtimeMs, now);
-    out.push({ ...info, idleMinutes: Math.floor((now - touched) / 60_000) });
+    const idleMs = Math.max(0, now - touched);
+    out.push({ ...info, idleMinutes: Math.floor(idleMs / 60_000), idleMs });
   }
   return out.sort((a, b) => a.port - b.port);
 }
@@ -187,8 +190,41 @@ export function warnings(v: BrowsersView): string[] {
 }
 
 /**
+ * A live browser holds the profile: nothing was opened, nothing done. A caller waits for it
+ * (`browser/profile-wait`), never calls it a failure of the act it was about to do.
+ */
+export class ProfileBusy extends Error {
+  constructor(
+    readonly profile: string,
+    readonly pid: number,
+    /** `explore:<port>`, `desk`, `cli`, … (`ownerOf`). */
+    readonly owner: Owner,
+    /** The profile's directory: where its `SingletonLock` is. */
+    readonly profileDir: string,
+  ) {
+    super(`profile ${profile} is open in pid ${pid} (${owner})`);
+    this.name = "ProfileBusy";
+  }
+}
+
+const BUSY_TEXT = /profile (\S+) is open in pid (\d+) \(([^)]+)\)/;
+
+/**
+ * The `ProfileBusy` behind `err`: itself, a cause down its chain, or (a wrapper that kept only
+ * the words) its message. Null for anything else.
+ */
+export function profileBusyOf(err: unknown): ProfileBusy | null {
+  for (let e: unknown = err, hops = 0; e && hops < 6; hops++) {
+    if (e instanceof ProfileBusy) return e;
+    e = (e as { cause?: unknown }).cause;
+  }
+  const m = BUSY_TEXT.exec(err instanceof Error ? err.message : String(err ?? ""));
+  return m ? new ProfileBusy(m[1] as string, Number(m[2]), m[3] as string, "") : null;
+}
+
+/**
  * Before a launch into `profileDir`: a live browser holding it fails here
- * with who holds it, not later with Chrome's own error. `reaped` were just
+ * with who holds it (`ProfileBusy`), not later with Chrome's own error. `reaped` were just
  * told to stop and get a few seconds to let go.
  */
 export async function assertProfileFree(
@@ -205,8 +241,11 @@ export async function assertProfileFree(
   const procs = await listProcs().catch(() => []);
   const holder = procs.find((p) => p.pid === pid);
   if (!holder || !/chrom/i.test(holder.command)) return; // a reused pid: the lock is stale
-  throw new Error(
-    `profile ${profile} is open in pid ${pid} (${ownerOf(pid, profile, procs, readExplorers(procs))})`,
+  throw new ProfileBusy(
+    profile,
+    pid,
+    ownerOf(pid, profile, procs, readExplorers(procs)),
+    profileDir,
   );
 }
 

@@ -1,7 +1,7 @@
 ---
 type: process
 status: verified
-verified: 2026-10-09 @ eca4223
+verified: 2026-10-15 @ 807dbb0
 consumes: [site-api, token, account, spend-policy]
 produces: [approval, site-call-ledger]
 ---
@@ -28,7 +28,8 @@ One shape for everyone (CLI, HTTP, Restate `sites`, wren): the caller never know
 6. Browser leg: `{ flow }` → `flow(name, input)` on the worker's runner, `{ workflow }` → `compiled.run(name, plan)` (gates approved by the caller) — `src/sites/types.ts:37-49`, `src/workflows/proof.ts:49`
 7. `setup(site, step, …)` mints a token the same way and keeps it through the sink under the account's name — `src/sites/facade.ts:151`, `src/sites/oauth.ts:212`; an OAuth consent opens in the account's provider profile for a `via` site (TikTok), like its browser legs — `src/sites/facade.ts:607-611`
 8. Restate face: `sites/call`, `sites/status`, `sites/setup`, `sites/renew` — `src/sites/service.ts:61-121`; the same handlers as `desk/*` from the Mac (`src/app/desk.ts`) for legs a site refuses from the box's IP (Reddit). A read retries without a bound (300 tries) only when it is not the API leg failing: the API leg's 429, 5xx or timeout turns terminal on the 4th try (`API_READ_TRIES`) and goes back to the caller, and `http` does not re-ask a 429 whose Retry-After is past its 10 s wait cap
-9. Every try, retries included, is a line in the [[site-call-ledger]] inside the `ctx.run` — `src/sites/service.ts:122,153`
+9. A busy browser profile waits, durably, then runs once (`waitForProfile`, `src/browser/profile-wait.ts`); past 5 min: `not sent: profile … is busy …` under 503, the caller's "try next tick". A busy try spends no cap (`giveBack`, `src/sites/caps.ts`). A write that fails says whether it left (`sentWords`, `src/sites/service.ts`): `not sent: …` before its submit step (`markSubmitted`: an irreversible act, or the API leg), `…; may have gone through` after it; a refusal under 500 stays as it is
+10. Every try, retries included, is a line in the [[site-call-ledger]] inside the `ctx.run` — `src/sites/service.ts:122,153`
 
 ## If you change this
 

@@ -1631,6 +1631,8 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
         sites,
         named(SITES_SERVICE, settings.owner),
         fileSiteCalls(siteCallsDirFor(settings)),
+        null,
+        { wait: { log: (msg, extra) => log.info(extra ?? {}, msg) } },
       ),
       // One verb for the same orchestrator; the backend wires the doer in after the model exists.
       doService(

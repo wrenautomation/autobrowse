@@ -25,9 +25,13 @@ pnpm -s autobrowse browsers [--json]           # every browser of ours: owner, a
 pnpm -s autobrowse browsers stop <port>        # close a session, journal kept (--forget drops it)
 ```
 
-A session closes itself after 30 minutes with no command. `--hold`
-(`start.sh <site> "" <port> --hold`) turns that off: only for multi-loop work
-or a long wait on a person. You stop a held session yourself (`stop.sh`);
+A session is a lease: it closes itself after 10 minutes with no command,
+journal kept. A scheduled write on the desk (a post) that needs the same
+profile takes it sooner: after 3 minutes with no command it closes the
+session (journal kept) and runs; while you drive it, the write waits.
+`--hold` (`start.sh <site> "" <port> --hold`) turns both off: only for
+multi-loop work or a long wait on a person, and scheduled posts on that
+profile wait meanwhile. You stop a held session yourself (`stop.sh`);
 `doctor` flags one held over 12 hours.
 
 `<site>` is a profile name (`google`, `cloudflare`, `aws`, `scratch` = no login;

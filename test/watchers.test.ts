@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ProfileBusy } from "../src/browser/browsers.js";
 import type { FlowRunner, HeldTab } from "../src/browser/flow.js";
 import { SessionPark } from "../src/browser/park.js";
 import type { Session } from "../src/browser/session.js";
@@ -74,7 +75,7 @@ function fakeTab(titles: { now: string; url: string }) {
   return page;
 }
 
-function harness(o: { shared?: boolean } = {}) {
+function harness(o: { shared?: boolean; busy?: { left: number } } = {}) {
   const titles = { now: "Feed | LinkedIn", url: "https://www.linkedin.com/my-items/saved-posts/" };
   const tabs: ReturnType<typeof fakeTab>[] = [];
   const released: string[] = [];
@@ -83,6 +84,8 @@ function harness(o: { shared?: boolean } = {}) {
       throw new Error("no runs here");
     },
     tab: async (site: string): Promise<HeldTab> => {
+      if (o.busy && o.busy.left-- > 0)
+        throw new ProfileBusy("linkedin@wren", 4242, "explore:9195", "/profiles/linkedin@wren");
       const page = fakeTab(titles);
       tabs.push(page);
       return {
@@ -98,19 +101,20 @@ function harness(o: { shared?: boolean } = {}) {
   const sent: Array<{ path: string; body: Record<string, unknown>; key: string }> = [];
   let now = Date.parse("2026-10-12T15:00:00Z");
   const file = join(mkdtempSync(join(tmpdir(), "autobrowse-watch-")), "watchers.json");
-  const make = () =>
-    new Watchers({
-      runner,
-      file,
-      now: () => now,
-      everyMs: 1_000,
-      quietMs: 10_000,
-      beatMs: 60_000,
-      send: async (path, body, key) => {
-        sent.push({ path, body, key });
-      },
-    });
+  const deps = () => ({
+    runner,
+    file,
+    now: () => now,
+    everyMs: 1_000,
+    quietMs: 10_000,
+    beatMs: 60_000,
+    send: async (path: string, body: Record<string, unknown>, key: string) => {
+      sent.push({ path, body, key });
+    },
+  });
+  const make = () => new Watchers(deps());
   return {
+    deps,
     titles,
     tabs,
     released,
@@ -227,6 +231,30 @@ describe("Watchers", () => {
     await h.tick(10 * 60_000);
     expect(w.states()).toEqual([]);
     expect(h.tabs[1]?.gone).toBe(true);
+    await w.stop();
+  });
+
+  it("pauses on a busy profile, never closes, and opens once it frees", async () => {
+    vi.useFakeTimers();
+    const busy = { left: 3 };
+    const h = harness({ busy });
+    const logs: string[] = [];
+    const w = new Watchers({ ...h.deps(), log: (msg) => logs.push(msg) });
+    w.start();
+    const state = await w.lease(lease());
+    expect(state).toMatchObject({
+      open: false,
+      error: null,
+      paused: "profile linkedin@wren is open in explore:9195",
+    });
+    // A minute apart, never doubled; logged once.
+    await h.tick(61_000);
+    await h.tick(61_000);
+    expect(busy.left).toBe(0);
+    expect(w.states()[0]?.open).toBe(false);
+    await h.tick(61_000);
+    expect(w.states()[0]).toMatchObject({ open: true, paused: null, error: null });
+    expect(logs).toEqual(["watch paused", "watch resumed"]);
     await w.stop();
   });
 

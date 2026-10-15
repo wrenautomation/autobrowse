@@ -3,7 +3,7 @@ type: object
 cluster: build
 universe: live
 status: verified
-verified: 2026-10-09 @ eca4223
+verified: 2026-10-15 @ 807dbb0
 entity: src/runs/log.ts
 ---
 
@@ -20,6 +20,7 @@ The journal is resume state and goes on `close`; history has to outlive it so wa
 - `RunRow`: `start` (driver, goal, machine, viewport), `goal`, `cmd` (answer chars and tokens, whole-page size; a failed act's `target` and `miss`, `MissCause` `:39`), `act` (the journaled act, the look before it, `hand`), `end` (outcome, summary, last look) — `src/runs/log.ts:41-95`
 - `RunOutcome`: achieved, failed, saved, closed, idle — `:33`; `RunSummary` (one line per ended life in `index.jsonl`) — `:102-116`
 - `runLog(dir, site, {id})` writes rows synchronously and chains them (credvault `rowHash`) — `:172-253`; `readRun`, `listRuns`, `openRuns` (the last life died without `end`) — `:256-328`
+- The session is a lease on its profile: 10 min with no command or page load closes it, journal kept (`DEFAULT_IDLE_MINUTES`, `src/explore/lease.ts`); a scheduled write takes it after 3 min (`TAKE_IDLE_MINUTES`; `close` with `why`, ended `idle`); `--hold` turns both off
 - The explore server opens a run on the first command or a `goal`, ends it on `done`, `save`, `close` or idle — `openRun` `src/explore/server.ts:766`, `endRun` `:793`; the `goal`/`done` commands; `done` takes `outcome` achieved or failed, the run's verdict (`stop.sh <port> achieved|failed`) — `:274-277`, `:1581`
 - Dir: `runsDirFor` — `src/app/services.ts:581`
 

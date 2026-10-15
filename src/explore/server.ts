@@ -122,6 +122,7 @@ import { saveRecording } from "../recorder/store.js";
 import type { Action, LocatorHints, Recording } from "../recorder/types.js";
 import { machine, type RunLog, type RunOutcome, runLog } from "../runs/log.js";
 import { missCause, targetOf } from "../runs/success.js";
+import { DEFAULT_IDLE_MINUTES } from "./lease.js";
 
 const hintsSchema = z.object({
   tag: z.string().nullable().optional(),
@@ -292,7 +293,12 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   /** An act on the desktop, outside the browser: apps, menus, keys, a root command. */
   z.object({ cmd: z.literal("os"), act: desktopOpSchema }),
   /** End the session; `keep`: the journal stays, the next session on this port resumes it (`browsers stop`). */
-  z.object({ cmd: z.literal("close"), keep: z.boolean().optional() }),
+  z.object({
+    cmd: z.literal("close"),
+    keep: z.boolean().optional(),
+    /** Who closed it and why, for the run's history (a write took the idle session's profile). */
+    why: z.string().max(300).optional(),
+  }),
   /**
    * Several commands in one call, in order, stopping at the first that fails.
    * All are validated before any runs. One page diff for the lot.
@@ -555,7 +561,7 @@ export function readJournal(file: string): Action[] {
   return out;
 }
 
-export const DEFAULT_IDLE_MINUTES = 30;
+export { DEFAULT_IDLE_MINUTES };
 
 /** The token file the CLI uses for a port: `$TMPDIR/autobrowse/explore-<port>.token`. */
 export const tokenFileFor = (port: number): string =>
@@ -766,6 +772,8 @@ async function serve(
   let saved = false;
   /** How the session ended when no `done` said: an idle close, else closed. */
   let endedBy: RunOutcome | null = null;
+  /** What a `close` with `why` said: the run's summary. */
+  let closedWhy: string | null = null;
   /** `close` was sent: nothing of this run is left to resume. */
   let closing = false;
   /** The page the command in flight acts on, as it was before the act. */
@@ -1844,6 +1852,10 @@ async function serve(
       case "close":
         // Closed on purpose: nothing left to resume, unless asked to keep it.
         closing = !c.keep;
+        if (c.why) {
+          endedBy = "idle";
+          closedWhy = c.why;
+        }
         if (opts.journalFile && closing) rmSync(opts.journalFile, { force: true });
         queueMicrotask(() => finish());
         return { ok: true };
@@ -1942,7 +1954,7 @@ async function serve(
     // A recording saved and then closed is a run that did its job; an idle close or a lost browser resumes.
     // A person teaching ends by closing the browser: that run did its job too.
     const closedAs = saved ? "saved" : opts.driver === "person" ? "achieved" : "closed";
-    await endRun(endedBy ?? closedAs, null, !closing).catch(() => undefined);
+    await endRun(endedBy ?? closedAs, closedWhy, !closing).catch(() => undefined);
     finishFlow();
   });
   openRun();

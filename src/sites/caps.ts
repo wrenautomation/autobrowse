@@ -56,6 +56,8 @@ export interface DailyCaps {
     use: Record<string, number>,
     caps: Record<string, number>,
   ): Taken;
+  /** Undo a `take` whose call never reached the site (its browser profile was busy). */
+  giveBack(site: string, account: string, use: Record<string, number>): void;
   /** Book the next slot for `site|account` under `pace`; nothing is booked when refused. */
   slot(site: string, account: string, pace: Pace): Slot;
   /** What each bucket has used today, by `site|account|bucket`. */
@@ -132,6 +134,13 @@ function capsOn(
         d.used[key(bucket)] = (d.used[key(bucket)] ?? 0) + n;
       save(d);
       return { ok: true };
+    },
+    giveBack(site, account, use) {
+      const d = current();
+      const key = (b: string) => `${site}|${account.trim().toLowerCase()}|${b}`;
+      for (const [bucket, n] of Object.entries(use))
+        d.used[key(bucket)] = Math.max(0, (d.used[key(bucket)] ?? 0) - n);
+      save(d);
     },
     slot(site, account, pace) {
       const d = current();

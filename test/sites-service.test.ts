@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { currentCall } from "../src/browser/attempt.js";
+import { currentCall, markSubmitted } from "../src/browser/attempt.js";
+import { ProfileBusy } from "../src/browser/browsers.js";
 import { HttpError } from "../src/clients/http.js";
 import { memorySiteCalls } from "../src/runs/calls.js";
 import type { SiteFacade } from "../src/sites/facade.js";
 import { DESK_SERVICE, SITES_SERVICE, SiteError, sitesService } from "../src/sites/index.js";
+import { sentWords } from "../src/sites/service.js";
 
 /** A stand-in Context: `run` calls through and keeps each step's name and retry policy. */
 function ctxOf(headers: Record<string, string> = {}) {
@@ -23,6 +25,8 @@ function ctxOf(headers: Record<string, string> = {}) {
 }
 
 const calls: unknown[] = [];
+/** How many more tries `/rest/held` finds its profile open elsewhere. */
+const held = { left: 0 };
 const facade: SiteFacade = {
   list: async () => [],
   status: async (site) => {
@@ -32,6 +36,12 @@ const facade: SiteFacade = {
   call: async (site, method, path, input, _account, from) => {
     calls.push({ site, method, path, input, from, call: currentCall() });
     if (path === "/rest/boom") throw new SiteError(502, "workflow failed");
+    if (path === "/rest/half") {
+      markSubmitted();
+      throw new Error("page closed after Post");
+    }
+    if (path === "/rest/held" && held.left-- > 0)
+      throw new ProfileBusy("google@test", 4242, "cli", ""); // never an explore: no real session is looked up
     if (path === "/rest/flaky") throw new Error("socket hang up");
     if (path === "/rest/broke") throw new HttpError("CALL", "https://x.test/rest/broke", 402);
     if (path === "/rest/busy") throw new HttpError("CALL", "https://x.test/rest/busy", 429);
@@ -211,5 +221,58 @@ describe("sites service", () => {
   it("a call runs as the durable call, so a rerun never repeats a browser leg's post", async () => {
     await h.call?.(ctxOf().ctx, { site: "linkedin", method: "POST", path: "/rest/posts" });
     expect(calls.at(-1)).toMatchObject({ call: "inv_1 sites linkedin POST /rest/posts" });
+  });
+
+  it("a failed write says whether it was sent: before its submit step, or after it", async () => {
+    const { ctx } = ctxOf();
+    await expect(
+      h.call?.(ctx, { site: "linkedin", method: "POST", path: "/rest/flaky" }),
+    ).rejects.toMatchObject({
+      name: "TerminalError",
+      code: 500,
+      message: "not sent: socket hang up",
+    });
+    await expect(
+      h.call?.(ctx, { site: "linkedin", method: "POST", path: "/rest/half" }),
+    ).rejects.toMatchObject({
+      code: 500,
+      message: "page closed after Post; may have gone through",
+    });
+    await expect(
+      h.call?.(ctx, { site: "linkedin", method: "POST", path: "/rest/boom" }),
+    ).rejects.toMatchObject({ code: 502, message: "not sent: workflow failed" });
+    // A refusal under 500 is the caller's to read as it is.
+    await expect(
+      h.call?.(ctx, { site: "linkedin", method: "POST", path: "/rest/broke" }),
+    ).rejects.toMatchObject({ code: 402, message: expect.not.stringMatching(/not sent/) });
+    expect(sentWords("not sent: x", true)).toBe("not sent: x");
+    expect(sentWords("x; may have gone through", false)).toBe("x; may have gone through");
+  });
+
+  it("a busy profile waits, durably, then the write runs once", async () => {
+    held.left = 2;
+    const steps: string[] = [];
+    const slept: number[] = [];
+    const ctx = {
+      request: () => ({ id: "inv_b", headers: new Map() }),
+      run: async <T>(name: string, fn: () => Promise<T>): Promise<T> => {
+        steps.push(name);
+        return fn();
+      },
+      sleep: async (ms: number) => {
+        slept.push(ms);
+      },
+    } as never;
+    const before = calls.length;
+    expect(await h.call?.(ctx, { site: "linkedin", method: "POST", path: "/rest/held" })).toEqual({
+      id: "urn:li:share:1",
+    });
+    expect(steps).toEqual([
+      "sites linkedin POST /rest/held",
+      "sites linkedin POST /rest/held (try 2)",
+      "sites linkedin POST /rest/held (try 3)",
+    ]);
+    expect(slept).toEqual([15_000, 30_000]);
+    expect(calls.length - before).toBe(3);
   });
 });

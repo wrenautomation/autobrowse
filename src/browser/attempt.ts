@@ -20,13 +20,36 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-const calls = new AsyncLocalStorage<string>();
+/** One try of a durable call: its key, and whether its submit step started. */
+export interface CallTry {
+  key: string;
+  /**
+   * The act that sends started (an irreversible click, a write's HTTP request): a failure
+   * after it may have gone through. Before it, nothing left this machine.
+   */
+  submitted: boolean;
+}
 
-/** Run `fn` as part of the durable call `key` (invocation id + step name). */
-export const withCall = <T>(key: string, fn: () => Promise<T>): Promise<T> => calls.run(key, fn);
+const calls = new AsyncLocalStorage<CallTry>();
+
+/**
+ * Run `fn` as part of the durable call `key` (invocation id + step name). Pass `t` to read
+ * afterwards whether its submit step started.
+ */
+export const withCall = <T>(
+  key: string,
+  fn: () => Promise<T>,
+  t: CallTry = { key, submitted: false },
+): Promise<T> => calls.run(t, fn);
 
 /** The durable call this code runs under, or null (a local run: nothing retries it). */
-export const currentCall = (): string | null => calls.getStore() ?? null;
+export const currentCall = (): string | null => calls.getStore()?.key ?? null;
+
+/** The step that sends starts now: from here a failure may have gone through. */
+export const markSubmitted = (): void => {
+  const t = calls.getStore();
+  if (t) t.submitted = true;
+};
 
 export interface DoneActs {
   /** Whether this call already did this irreversible act on an earlier try. */

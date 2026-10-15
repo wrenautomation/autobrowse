@@ -19,6 +19,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Page, Route } from "playwright";
 import { z } from "zod";
+import { type ProfileBusy, profileBusyOf } from "./browsers.js";
 import type { FlowRunner, HeldTab } from "./flow.js";
 
 /** Where a site's watcher sits: a page that never marks anything read, and its title's count. */
@@ -72,6 +73,8 @@ export interface WatchState {
   /** The title, when it carries no count: shows a spec gone stale. */
   title: string | null;
   error: string | null;
+  /** Another process holds the profile (an explore session): the watch waits, then opens. */
+  paused: string | null;
 }
 
 export interface WatchersDeps {
@@ -215,6 +218,7 @@ export class Watchers {
         fires: 0,
         title: null,
         error: null,
+        paused: null,
       },
     };
     this.live.set(id, l);
@@ -265,13 +269,29 @@ export class Watchers {
       l.misses = 0;
       l.state.open = true;
       l.state.error = null;
+      if (l.state.paused) this.d.log?.("watch resumed", { id: l.state.id });
+      l.state.paused = null;
       l.state.count = null;
       l.timer = setInterval(() => void this.check(l, page, spec), this.everyMs);
       l.timer.unref?.();
       await this.check(l, page, spec);
     } catch (err) {
-      this.closed(l, (err as Error).message);
+      const busy = profileBusyOf(err);
+      if (busy) this.paused(l, busy);
+      else this.closed(l, (err as Error).message);
     }
+  }
+
+  /**
+   * The profile is open elsewhere (an explore session): nothing failed. Look again at the next
+   * sweep, a minute on, without the closed tab's doubling: it opens once the profile frees.
+   */
+  private paused(l: Live, busy: ProfileBusy): void {
+    const first = l.state.paused === null;
+    l.state.open = false;
+    l.state.paused = `profile ${busy.profile} is open in ${busy.owner}`;
+    l.retryAt = this.now() + 60_000;
+    if (first) this.d.log?.("watch paused", { id: l.state.id, owner: busy.owner });
   }
 
   /** The tab or its browser went: try again later, a minute first, doubling to half an hour. */

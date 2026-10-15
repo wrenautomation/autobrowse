@@ -17,7 +17,7 @@ import { join } from "node:path";
 import type { FileChooser, Locator, Page } from "playwright";
 import { expandHome } from "../google-auth.js";
 import { redactAria, redactText } from "../recorder/redact.js";
-import { currentCall, type DoneActs } from "./attempt.js";
+import { currentCall, type DoneActs, markSubmitted } from "./attempt.js";
 import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js";
 import { type Fixes, flowKey } from "./fixes.js";
 import {
@@ -602,6 +602,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               a.irreversible && call && runner.done
                 ? `${flow.site}/${flow.name} ${actsBefore} ${a.goal}`
                 : null;
+            // The send starts here: a failure from now on may have gone through (`attempt.ts`).
+            if (a.irreversible) markSubmitted();
             if (once && runner.done?.has(call as string, once))
               throw new NeedsHuman(
                 `${flow.site}: "${a.goal}" already went through on an earlier try of this step; check it before running again`,

@@ -14,7 +14,8 @@
 
 import { randomUUID } from "node:crypto";
 import type { Page } from "playwright";
-import { currentCall, type DoneActs } from "../browser/attempt.js";
+import { currentCall, type DoneActs, markSubmitted } from "../browser/attempt.js";
+import { profileBusyOf } from "../browser/browsers.js";
 import type { BrowserFlow, FlowRunner, HeldTab } from "../browser/flow.js";
 import { type HttpClient, lastingRefusal } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
@@ -610,6 +611,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           `${s.site} pace for ${chosen ?? "the default account"}: too many calls queued; retry after ${slot.retryAfter}s`,
           slot.retryAfter,
         );
+      let taken = false;
       if (use && s.caps && deps.caps) {
         const limits = {
           ...s.caps,
@@ -628,12 +630,18 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
             t.retryAfter,
           );
         }
+        taken = true;
       }
       try {
         const out = await answer();
         note("ok");
         return out;
       } catch (e) {
+        // The profile was open elsewhere: nothing was asked of the site, so nothing is spent.
+        if (profileBusyOf(e)) {
+          if (taken && use) deps.caps?.giveBack(s.site, chosen ?? s.site, use);
+          throw e;
+        }
         note("failed");
         if (!use || !s.caps || e instanceof SiteError) throw e;
         // The slot is spent whatever broke: a durable retry would spend one per try, so
@@ -669,6 +677,8 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           // A rerun of a durable call (Restate after a crash or a redeploy mid-call) must not
           // publish twice: the first try may have gone through before its answer was saved.
           const call = currentCall();
+          // A write's request is its submit step: a failure from here may have gone through.
+          if (method !== "GET") markSubmitted();
           if (r.irreversible && !r.resumes && call && deps.started) {
             if (deps.started.has(call, STARTED))
               throw new SiteError(409, `${method} ${r.path}: ${MAY_HAVE_GONE}`);
