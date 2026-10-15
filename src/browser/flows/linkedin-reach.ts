@@ -664,18 +664,36 @@ const sendInvite: Hints = { role: "button", name: "/^send( invitation)?$/i" };
 const NOTES_LEFT = /(\d+)\s+personalized invitations? remaining/i;
 const NO_NOTES = /no personalized invitations|out of personalized|0 personalized invitations/i;
 
+/** Why the invite page offered no invite, read from the profile's buttons. */
+export type NoInvite = "connected" | "pending" | "follow-only";
+
+/**
+ * An invite from the invite page, with a note when given. No invite offered sends nothing and
+ * says why from the profile's top card: `connected`, `pending` (an invite is already out), or
+ * `follow-only` (no Connect, Message or Pending on the card; Connect hidden or not offered). A
+ * card that shows Connect anyway is a person's call.
+ */
 export const linkedinConnect = defineFlow<
   ConnectInput,
-  { sent: true; note: boolean; notesLeft?: number }
+  { sent: true; note: boolean; notesLeft?: number } | { sent: false; relationship: NoInvite }
 >({
   site: "linkedin",
   name: "connect",
   async run(fp, input) {
     await go(fp, `${WEB}/preload/custom-invite/?vanityName=${encodeURIComponent(input.vanity)}`);
-    if (!(await fp.has(sendBare, RENDER_MS)) && !(await fp.has(addNote, 1_000)))
-      return fp.human(
-        `no invite dialog for ${input.vanity}: already connected, invite pending, or Follow only`,
-      );
+    if (!(await fp.has(sendBare, RENDER_MS)) && !(await fp.has(addNote, 1_000))) {
+      const none = `no invite dialog for ${input.vanity}`;
+      await go(fp, `${WEB}/in/${encodeURIComponent(input.vanity)}/`);
+      if (!(await fp.has({ css: "main section" }, RENDER_MS)))
+        return fp.human(`${none}, and no profile at ${fp.url()}`);
+      await fp.wait(SETTLE_MS);
+      const { relationship } = await relationshipOnPage(fp);
+      if (relationship === "none") return fp.human(`${none}, yet the profile shows Connect`);
+      return {
+        sent: false,
+        relationship: relationship === "unknown" ? "follow-only" : relationship,
+      };
+    }
     let notesLeft: number | undefined;
     if (input.note) {
       await fp.act({ kind: "click" }, addNote, { goal: "add a note" });

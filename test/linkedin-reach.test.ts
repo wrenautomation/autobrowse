@@ -111,10 +111,41 @@ describe("linkedin reach: connect", () => {
     expect(out).toEqual({ sent: true, note: true, notesLeft: 3 });
   });
 
-  it("no invite dialog (pending, connected, Follow only): a person decides, nothing sent", async () => {
-    const { fp, acts } = fakePage({ text: [""], present: () => false });
-    await expect(linkedinConnect.run(fp, { vanity: "x-y" })).rejects.toThrow(/no invite dialog/);
-    expect(acts).toEqual([]);
+  /** No invite dialog; the profile's card shows `buttons`. */
+  const noDialog = (buttons: string[] | null) => {
+    const { fp, acts } = fakePage({
+      text: [""],
+      present: (h) => buttons !== null && h.css === "main section",
+    });
+    fp.page = {
+      ...fp.page,
+      evaluate: async () => ({ buttons, degree: null }),
+    } as unknown as typeof fp.page;
+    return { fp, acts };
+  };
+
+  it("no invite dialog: says why from the profile, sends nothing", async () => {
+    for (const [buttons, relationship] of [
+      [["Message", "More"], "connected"],
+      [["Pending, click to withdraw invitation sent to X Y"], "pending"],
+      [["Follow", "More"], "follow-only"],
+    ] as const) {
+      const { fp, acts } = noDialog([...buttons]);
+      expect(await linkedinConnect.run(fp, { vanity: "x-y" })).toEqual({
+        sent: false,
+        relationship,
+      });
+      expect(acts).toEqual([]);
+    }
+  });
+
+  it("no invite dialog and Connect on the card, or no profile: a person decides", async () => {
+    await expect(linkedinConnect.run(noDialog(["Connect"]).fp, { vanity: "x-y" })).rejects.toThrow(
+      /no invite dialog for x-y, yet the profile shows Connect/,
+    );
+    await expect(linkedinConnect.run(noDialog(null).fp, { vanity: "x-y" })).rejects.toThrow(
+      /no invite dialog for x-y, and no profile/,
+    );
   });
 });
 

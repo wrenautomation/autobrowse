@@ -632,7 +632,8 @@ export const linkedin: SiteApi = {
     route({
       method: "POST",
       path: "/in/{vanity}/connect",
-      summary: "Invite to connect, with an optional note (200 characters; five notes a month free)",
+      summary:
+        "Invite to connect, with an optional note (200 characters; five notes a month free): `{ sent: true, note }`, or `{ sent: false, relationship }` when no invite is offered (connected, pending, follow-only)",
       request: connect,
       irreversible: true,
       meter: () => ({ connect: 1 }),
