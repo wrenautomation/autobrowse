@@ -69,7 +69,8 @@ const about = z.object({
   username: z.string().regex(/^[A-Za-z0-9_-]{3,20}$/, "a Reddit username"),
 });
 const listing = z.object({
-  subreddit: z.string().regex(/^[A-Za-z0-9_]{2,21}$/),
+  /** One subreddit, or several joined by `+`: one read lists them all. */
+  subreddit: z.string().regex(/^[A-Za-z0-9_]{2,21}(\+[A-Za-z0-9_]{2,21}){0,49}$/),
   limit,
   after: z.string().optional(),
 });
@@ -175,7 +176,7 @@ export const reddit: SiteApi = {
         flow: read,
         input: ({ subreddit, ...q }) => ({ path: `/r/${subreddit}/new`, query: query(q) }),
       },
-      summary: "A subreddit's newest posts (`limit`, `after`)",
+      summary: "A subreddit's newest posts, or several subs' as `a+b+c` in one read (`limit`, `after`)",
     }),
     route({
       method: "GET",

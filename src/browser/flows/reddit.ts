@@ -221,6 +221,8 @@ export function slimMessages(l: unknown): Obj {
 
 const USER = "[A-Za-z0-9_-]{3,20}";
 const SR = "[A-Za-z0-9_]{2,21}";
+/** Several subreddits in one listing (`a+b+c`): one fetch reads them all, newest first. */
+const SRS = `${SR}(?:\\+${SR})*`;
 
 /**
  * The reads the routes send here, and how each answer is slimmed. `bare`: an API path read as
@@ -239,7 +241,8 @@ const READS: Array<{ path: RegExp; slim: (body: unknown) => unknown; bare?: bool
       return { ...pick(d, USER_FIELDS), ...(typeof sub === "number" ? { followers: sub } : {}) };
     },
   },
-  { path: new RegExp(`^/r/${SR}/(new|hot|top|search)$`), slim: slimListing },
+  { path: new RegExp(`^/r/${SRS}/(new|hot|top)$`), slim: slimListing },
+  { path: new RegExp(`^/r/${SR}/search$`), slim: slimListing },
   {
     path: new RegExp(`^/r/${SR}/about$`),
     slim: (b) => pick(isObj(b) ? b.data : null, SUBREDDIT_FIELDS),
@@ -307,7 +310,7 @@ async function fetchText(fp: FlowPage, url: string) {
 /** The signed-out reads a feed can answer, and how: a listing, or a thread (post, then comments). */
 const FEEDS: Array<{ path: RegExp; kind: "listing" | "thread"; sort?: boolean; paged?: boolean }> =
   [
-    { path: new RegExp(`^/r/${SR}/(new|hot|top)$`), kind: "listing", sort: true },
+    { path: new RegExp(`^/r/${SRS}/(new|hot|top)$`), kind: "listing", sort: true },
     { path: new RegExp(`^/r/${SR}/search$`), kind: "listing" },
     { path: /^\/search$/, kind: "listing" },
     { path: /^\/subreddits\/search$/, kind: "listing" },
