@@ -176,7 +176,8 @@ export const reddit: SiteApi = {
         flow: read,
         input: ({ subreddit, ...q }) => ({ path: `/r/${subreddit}/new`, query: query(q) }),
       },
-      summary: "A subreddit's newest posts, or several subs' as `a+b+c` in one read (`limit`, `after`)",
+      summary:
+        "A subreddit's newest posts, or several subs' as `a+b+c` in one read (`limit`, `after`)",
     }),
     route({
       method: "GET",
