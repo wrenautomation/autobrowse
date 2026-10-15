@@ -41,6 +41,28 @@ const BELOW = [
   "Post impressions",
   "980",
 ].join("\n");
+/** The Overview page as LinkedIn showed it 2026-10-15: window on the label's line, a change under it. */
+const OVERVIEW = [
+  "Overview",
+  "Track performance",
+  "Learn more",
+  "321",
+  "Post impressions in 7 days",
+  "7",
+  "Total followers",
+  "0%",
+  "vs. prior 7 days",
+  "14",
+  "Profile viewers in 90 days",
+  "100%",
+  "vs. prior 7 days",
+  "3",
+  "Search appearances Oct 6–12",
+  "-25%",
+  "vs. Sep 29–Oct 5",
+  "Weekly progress",
+  "Oct 9–Oct 15",
+].join("\n");
 const noon = Date.UTC(2026, 8, 29, 12);
 
 describe("linkedin dashboard: the page text", () => {
@@ -69,6 +91,21 @@ describe("linkedin dashboard: the page text", () => {
         profileViewers: "Past 90 days",
         searchAppearances: "Previous week",
         postImpressions: null,
+        followers: null,
+      },
+    });
+  });
+
+  it("reads the Overview page: the window on the label's line, the change skipped", () => {
+    expect(dashboardOf(OVERVIEW)).toEqual({
+      profileViewers: 14,
+      searchAppearances: 3,
+      postImpressions: 321,
+      followers: 7,
+      windows: {
+        profileViewers: "in 90 days",
+        searchAppearances: "Oct 6–12",
+        postImpressions: "in 7 days",
         followers: null,
       },
     });

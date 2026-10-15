@@ -7,7 +7,10 @@
  * (`countsOf`): a count before its label, after it, or on its line. Each
  * count may carry its window ("Past 90 days", "Previous week") on a line
  * near its label; those lines are kept and left out of the pairing.
- * Unproven live: no live read was made.
+ * Live 2026-10-15: the Overview page puts the window on the label's line
+ * ("Profile viewers in 90 days", "Search appearances Oct 6–12") and a change
+ * under it ("100%", "vs. prior 7 days"); the label and its window are split
+ * and the change lines skipped.
  */
 import { defineFlow, type FlowPage } from "../flow.js";
 import { countsOf, RAW_CAP } from "./linkedin-post-analytics.js";
@@ -42,7 +45,14 @@ const LABELS: Record<keyof DashboardStats, string[]> = {
   followers: ["total followers", "followers"],
 };
 const KEYS = Object.keys(LABELS) as Array<keyof DashboardStats>;
-const WINDOW = /^(past \d+ days|last \d+ days|past week|previous week|past year)$/i;
+/** A date span as the page writes it: "Oct 6–12", "Sep 29–Oct 5". */
+const SPAN = "[a-z]{3} \\d{1,2}\\s*[–-]\\s*(?:[a-z]{3} )?\\d{1,2}";
+const WINDOW = new RegExp(
+  `^(past \\d+ days|last \\d+ days|in \\d+ days|past week|previous week|past year|${SPAN})$`,
+  "i",
+);
+/** A count's change against the window before: "100%", "-3%", "vs. prior 7 days". */
+const CHANGE = /^([+-]?\d[\d,.]*%|vs\.? .+)$/i;
 /** How far past its label a count's window may sit. */
 const WINDOW_REACH = 2;
 
@@ -74,13 +84,28 @@ function windowsOf(lines: string[]): Record<keyof DashboardStats, string | null>
   return out;
 }
 
+/** "Profile viewers in 90 days" → "Profile viewers", "in 90 days": a label and its window on one line, split. */
+function splitWindow(line: string): string[] {
+  for (const k of KEYS)
+    for (const label of LABELS[k]) {
+      if (!line.toLowerCase().startsWith(`${label} `)) continue;
+      const rest = line.slice(label.length).trim();
+      if (WINDOW.test(rest)) return [line.slice(0, label.length), rest];
+    }
+  return [line];
+}
+
 /** The dashboard's counts and their windows; a missing label is null. */
 export function dashboardOf(text: string): DashboardStats & Pick<Dashboard, "windows"> {
   const lines = text
     .split("\n")
     .map((l) => l.trim())
-    .filter(Boolean);
-  return { ...countsOf(text, LABELS, (l) => WINDOW.test(l)), windows: windowsOf(lines) };
+    .filter(Boolean)
+    .flatMap(splitWindow);
+  return {
+    ...countsOf(lines.join("\n"), LABELS, (l) => WINDOW.test(l) || CHANGE.test(l)),
+    windows: windowsOf(lines),
+  };
 }
 
 const shows = (s: DashboardStats) => s.profileViewers !== null || s.searchAppearances !== null;
