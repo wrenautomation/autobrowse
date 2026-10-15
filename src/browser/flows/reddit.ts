@@ -63,10 +63,12 @@ const THING_FIELDS = [
   "selftext",
   "body",
   "author",
+  "author_fullname",
   "permalink",
   "url",
   "subreddit",
   "link_id",
+  "link_title",
   "parent_id",
   "created_utc",
   "score",
@@ -157,6 +159,16 @@ const USER_FIELDS = [
   "accept_followers",
   "icon_img",
 ] as const;
+/** One account as `/api/user_data_by_account_ids` shows it: a card's age and karma, nothing else. */
+const USER_DATA_FIELDS = [
+  "name",
+  "created_utc",
+  "link_karma",
+  "comment_karma",
+  "total_karma",
+  "profile_img",
+  "profile_over_18",
+] as const;
 /** A private message (t4) or a comment reply in the inbox (t1), as the inbox listings show them. */
 const MESSAGE_FIELDS = [
   "id",
@@ -182,6 +194,15 @@ const pick = (o: unknown, keys: readonly string[]): Obj => {
   if (isObj(o)) for (const k of keys) if (k in o) out[k] = o[k];
   return out;
 };
+
+/** Accounts by `t2_` id, as Reddit keys them, each slimmed to its card's age and karma. */
+export function slimUserData(b: unknown): Obj {
+  const out: Obj = {};
+  if (isObj(b))
+    for (const [id, v] of Object.entries(b))
+      if (/^t2_/.test(id)) out[id] = pick(v, USER_DATA_FIELDS);
+  return out;
+}
 
 /** A listing with its things slimmed and its modhash dropped. */
 export function slimListing(l: unknown): Obj {
@@ -231,7 +252,10 @@ const SRS = `${SR}(?:\\+${SR})*`;
 const READS: Array<{ path: RegExp; slim: (body: unknown) => unknown; bare?: boolean }> = [
   { path: /^\/api\/me$/, slim: (b) => pick(isObj(b) ? b.data : null, ME_FIELDS) },
   { path: /^\/api\/info$/, slim: slimListing },
-  { path: new RegExp(`^/user/${USER}/(submitted|comments)$`), slim: slimListing },
+  // `overview`: a user's posts and comments in one listing (t3 and t1 mixed, newest first).
+  { path: new RegExp(`^/user/${USER}/(submitted|comments|overview)$`), slim: slimListing },
+  // Up to 100 `t2_` ids a read: the cards of many accounts for the price of one.
+  { path: /^\/api\/user_data_by_account_ids$/, bare: true, slim: slimUserData },
   {
     path: new RegExp(`^/user/${USER}/about$`),
     // `followers`: the profile's subscriber count, which is how many follow the account.
@@ -308,16 +332,28 @@ async function fetchText(fp: FlowPage, url: string) {
 }
 
 /** The signed-out reads a feed can answer, and how: a listing, or a thread (post, then comments). */
-const FEEDS: Array<{ path: RegExp; kind: "listing" | "thread"; sort?: boolean; paged?: boolean }> =
-  [
-    { path: new RegExp(`^/r/${SRS}/(new|hot|top)$`), kind: "listing", sort: true },
-    { path: new RegExp(`^/r/${SR}/search$`), kind: "listing" },
-    { path: /^\/search$/, kind: "listing" },
-    { path: /^\/subreddits\/search$/, kind: "listing" },
-    { path: new RegExp(`^/user/${USER}/(submitted|comments)$`), kind: "listing" },
-    { path: /^\/api\/info$/, kind: "listing", paged: false },
-    { path: /^\/comments\/[a-z0-9]{1,12}$/, kind: "thread" },
-  ];
+const FEEDS: Array<{
+  path: RegExp;
+  kind: "listing" | "thread";
+  sort?: boolean;
+  paged?: boolean;
+  /** The path whose `/.rss` is the feed, when it is not the read's own. */
+  feed?: (path: string) => string;
+}> = [
+  { path: new RegExp(`^/r/${SRS}/(new|hot|top)$`), kind: "listing", sort: true },
+  { path: new RegExp(`^/r/${SR}/search$`), kind: "listing" },
+  { path: /^\/search$/, kind: "listing" },
+  { path: /^\/subreddits\/search$/, kind: "listing" },
+  { path: new RegExp(`^/user/${USER}/(submitted|comments)$`), kind: "listing" },
+  // A user's own feed is their overview: posts and comments together.
+  {
+    path: new RegExp(`^/user/${USER}/overview$`),
+    kind: "listing",
+    feed: (p) => p.replace(/\/overview$/, ""),
+  },
+  { path: /^\/api\/info$/, kind: "listing", paged: false },
+  { path: /^\/comments\/[a-z0-9]{1,12}$/, kind: "thread" },
+];
 
 /** Every post on a rendered listing page, with the score and comment count it shows. */
 const readPostStats = (): Array<Record<string, string | null>> =>
@@ -374,7 +410,7 @@ async function readFeed(fp: FlowPage, path: string, q: Record<string, string>) {
   if (!feed) return undefined;
   const { raw_json: _drop, ...query } = q;
   const qs = new URLSearchParams(query).toString().replace(/\+/g, "%20");
-  const got = await fetchText(fp, `${WWW}${path}/.rss${qs ? `?${qs}` : ""}`);
+  const got = await fetchText(fp, `${WWW}${feed.feed?.(path) ?? path}/.rss${qs ? `?${qs}` : ""}`);
   if (got.status === 404) return { error: 404, message: `no such thing: ${path}` };
   if (got.status !== 200)
     throw new Error(`reddit read ${path}: HTTP ${got.status} (feed after a 403 on .json)`);

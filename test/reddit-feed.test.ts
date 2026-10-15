@@ -382,6 +382,20 @@ describe("reddit/read signed out, `.json` refused", () => {
     expect(p.opens).toEqual([`${WWW}/`]);
   });
 
+  it("a user's overview is their own feed: posts and comments together, one fetch", async () => {
+    const p = wwwPage({ feeds: { "/user/example_user/.rss": { status: 200, text: THREAD } } });
+    const out = (await redditRead.run(p.fp, {
+      path: "/user/example_user/overview",
+      query: { limit: 20, sort: "new" },
+      signedOut: true,
+    })) as ReturnType<typeof listingFromAtom>;
+    expect(p.fetched[1]).toBe(`${WWW}/user/example_user/.rss?limit=20&sort=new`);
+    const kinds = out.data.children.map((c) => c.kind);
+    expect(kinds).toContain("t3");
+    expect(kinds).toContain("t1");
+    expect(p.fetched).toHaveLength(2);
+  });
+
   it("a feed 404 is the read's 404", async () => {
     const p = wwwPage({ feeds: { "/r/nosuchsub/new/.rss": { status: 404 } } });
     expect(await redditRead.run(p.fp, { path: "/r/nosuchsub/new", signedOut: true })).toMatchObject(

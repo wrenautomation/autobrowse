@@ -26,6 +26,10 @@ const submitted = z.object({
   sort: z.enum(["new", "hot", "top", "controversial"]).default("new"),
   after: z.string().optional(),
 });
+/** Up to 100 `t2_` account ids, comma-joined. */
+const userData = z.object({
+  ids: z.string().regex(/^t2_[a-z0-9]+(,t2_[a-z0-9]+){0,99}$/, "t2_ account ids, up to 100"),
+});
 const info = z.object({ id: z.string().regex(/^(t[1-6]_[a-z0-9]+)(,t[1-6]_[a-z0-9]+)*$/) });
 const comments = z.object({
   article: z.string().regex(/^[a-z0-9]{1,12}$/, "a post id without t3_"),
@@ -157,6 +161,30 @@ export const reddit: SiteApi = {
         input: ({ username, ...q }) => ({ path: `/user/${username}/comments`, query: query(q) }),
       },
       summary: "An account's comments (`limit`, `sort`, `after`)",
+    }),
+    route({
+      method: "GET",
+      path: "/user/{username}/overview",
+      request: submitted,
+      meter: () => ({ reads: 1 }),
+      browser: {
+        flow: read,
+        input: ({ username, ...q }) => ({ path: `/user/${username}/overview`, query: query(q) }),
+      },
+      summary:
+        "A user's posts and comments in one listing (t3 and t1 mixed, newest first): one read where submitted + comments take two",
+    }),
+    route({
+      method: "GET",
+      path: "/api/user_data_by_account_ids",
+      request: userData,
+      meter: () => ({ reads: 1 }),
+      browser: {
+        flow: read,
+        input: ({ ids }) => ({ path: "/api/user_data_by_account_ids", query: { ids } }),
+      },
+      summary:
+        "Up to 100 accounts' cards by `t2_` id (`ids=t2_a,t2_b`), keyed by id: name, created_utc, link/comment karma. One read where /about takes one per account",
     }),
     route({
       method: "GET",
@@ -387,7 +415,9 @@ export const redditPublic: SiteApi = {
   origin: REDDIT_ORIGIN,
   auth: { open: true },
   signedOut: true,
-  caps: { reads: 400 },
+  // 400 a day in two buckets: profile, listing and search reads stop at 240 so a thread read
+  // (drafting a reply, proving a comment) always has room. `threads` is `/comments/{article}`.
+  caps: { reads: 240, threads: 160 },
   pace: { gapMs: 6_000, jitterMs: 3_000 },
   routes: reddit.routes
     .filter((r) => r.method === "GET" && !OWN.has(r.path))
@@ -397,6 +427,7 @@ export const redditPublic: SiteApi = {
       const input = leg.input;
       return {
         ...r,
+        ...(r.path === "/comments/{article}" ? { meter: () => ({ threads: 1 }) } : {}),
         browser: {
           ...leg,
           input: (q: never, env: (name: string) => string | undefined) => ({

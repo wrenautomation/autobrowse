@@ -53,6 +53,8 @@ describe("reddit site", () => {
       "GET /api/v1/me",
       "GET /user/{username}/submitted",
       "GET /user/{username}/comments",
+      "GET /user/{username}/overview",
+      "GET /api/user_data_by_account_ids",
       "GET /user/{username}/about",
       "GET /r/{subreddit}/new",
       "GET /r/{subreddit}/search",
@@ -196,6 +198,30 @@ describe("reddit request shapes", () => {
     expect(ok(...sub, { username: "Wren", limit: "0" })).toBe(false);
     expect(ok(...sub, { username: "Wren", sort: "rising" })).toBe(false);
 
+    // overview takes submitted's shape and reads the user's page of posts and comments mixed.
+    const overview = ["GET", "/user/{username}/overview"] as const;
+    expect(parsed(...overview, { username: "WrenAutomation", limit: "20" })).toEqual({
+      username: "WrenAutomation",
+      limit: 20,
+      sort: "new",
+    });
+    expect(legInput(...overview, { username: "WrenAutomation", limit: "20" })).toEqual({
+      path: "/user/WrenAutomation/overview",
+      query: { limit: 20, sort: "new" },
+    });
+
+    // user_data_by_account_ids: 1 to 100 t2_ ids in one read.
+    const cards = ["GET", "/api/user_data_by_account_ids"] as const;
+    const ids = (n: number) => Array.from({ length: n }, (_, i) => `t2_a${i}`).join(",");
+    expect(ok(...cards, { ids: "t2_abc" })).toBe(true);
+    expect(ok(...cards, { ids: ids(100) })).toBe(true);
+    for (const bad of [ids(101), "", "abc", "t3_abc", "t2_abc,", "t2_abc,t3_def", "t2_ABC"])
+      expect(ok(...cards, { ids: bad }), bad).toBe(false);
+    expect(legInput(...cards, { ids: "t2_a,t2_b" })).toEqual({
+      path: "/api/user_data_by_account_ids",
+      query: { ids: "t2_a,t2_b" },
+    });
+
     const info = ["GET", "/api/info"] as const;
     expect(ok(...info, { id: "t3_abc,t1_def" })).toBe(true);
     for (const id of ["t3_abc,", "abc", "t7_abc", "t3_abc t1_def", ""])
@@ -246,6 +272,8 @@ describe("reddit browser leg inputs", () => {
       "/api/v1/me": {},
       "/user/{username}/submitted": { username: "WrenAutomation" },
       "/user/{username}/comments": { username: "WrenAutomation" },
+      "/user/{username}/overview": { username: "WrenAutomation" },
+      "/api/user_data_by_account_ids": { ids: "t2_abc,t2_def" },
       "/user/{username}/about": { username: "WrenAutomation" },
       "/r/{subreddit}/new": { subreddit: "startups" },
       "/r/{subreddit}/search": { subreddit: "startups", q: "hiring" },
@@ -399,6 +427,27 @@ describe("reddit through the facade", () => {
 });
 
 describe("reddit-public", () => {
+  it("keeps 160 of the day's 400 reads for threads: profile and listing reads cannot spend them", () => {
+    expect(redditPublic.caps).toEqual({ reads: 240, threads: 160 });
+    const meter = (path: string) => {
+      const r = redditPublic.routes.find((x) => x.path === path);
+      if (!r) throw new Error(`no route ${path}`);
+      return r.meter?.({} as never);
+    };
+    expect(meter("/comments/{article}")).toEqual({ threads: 1 });
+    for (const path of [
+      "/user/{username}/overview",
+      "/user/{username}/about",
+      "/api/user_data_by_account_ids",
+      "/api/info",
+      "/r/{subreddit}/new",
+      "/search",
+    ])
+      expect(meter(path), path).toEqual({ reads: 1 });
+    // The signed-in site has no thread bucket: its caps stay as they were.
+    expect(routeOf("GET", "/comments/{article}").meter?.({} as never)).toEqual({ reads: 1 });
+  });
+
   it("serves the public reads only, signed out in its own profile, on www", async () => {
     expect(SITES).toContain(redditPublic);
     expect(redditPublic.signedOut).toBe(true);
