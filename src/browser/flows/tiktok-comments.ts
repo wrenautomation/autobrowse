@@ -9,8 +9,12 @@
  * comment panel a few times for more, and clicks at most ten "View N replies"
  * buttons. Clicking to expand is the only act: it never likes, replies or
  * types. The page's own item data names the video's author, so the author's
- * comments come back marked `creator`. Bounded in time. Unproven live: no live
- * read was made.
+ * comments come back marked `creator`. Bounded in time.
+ *
+ * Live 2026-10-15: the side panel can open on "You may like", which makes no
+ * comment call, so with no call after a few seconds the flow clicks the
+ * panel's Comments tab once. A video whose comment button reads 0 comments
+ * answers an empty list (our new videos failed nine reads that way).
  */
 import type { Response } from "playwright";
 import { defineFlow, type FlowPage } from "../flow.js";
@@ -25,6 +29,8 @@ const SCROLLS = 6;
 const STILL_SCROLLS = 2;
 const REPLY_CLICKS = 10;
 const CLICK_MS = 3_000;
+/** No comment call by now: the panel may be on "You may like"; its Comments tab is clicked. */
+const TAB_AFTER_MS = 3_000;
 export const MAX_COMMENTS = 100;
 
 const LIST = "/api/comment/list/";
@@ -180,6 +186,19 @@ const SCROLL_SCRIPT = `(() => {
   box.scrollTop = box.scrollHeight;
   return true;
 })()`;
+/** The video's comment button label ("Read or add comments 12 comments"); the video's comes first. */
+const COUNT_SCRIPT = `document.querySelector('[aria-label^="Read or add comments"]')?.getAttribute("aria-label") ?? null`;
+
+/** The count in a "Read or add comments N comments" label (`1.2K` reads 1200); null when unread. */
+export function commentCountOf(label: string | null): number | null {
+  const m = /read or add comments\s+([\d.,]+)\s*([KM])?\s+comments?/i.exec(label ?? "");
+  if (!m?.[1]) return null;
+  const n = Number(m[1].replace(/,/g, ""));
+  if (!Number.isFinite(n)) return null;
+  const unit = m[2]?.toUpperCase();
+  return Math.round(n * (unit === "K" ? 1_000 : unit === "M" ? 1_000_000 : 1));
+}
+
 /** The page's own item data, as text. */
 const DATA_SCRIPT = `document.getElementById("__UNIVERSAL_DATA_FOR_REHYDRATION__")?.textContent ?? null`;
 
@@ -223,12 +242,27 @@ export const tiktokPostComments = defineFlow<PostCommentsInput, PostComments>({
       const started = Date.now();
       const left = () => TOTAL_MS - (Date.now() - started);
       await fp.open(videoUrl(videoId, username));
+      let count: number | null = null;
+      let tabbed = false;
       for (let waited = 0; !bodies.length && waited < FIRST_MS; waited += POLL_MS) {
         await Promise.all(pending);
         if (bodies.length) break;
+        count = commentCountOf(
+          await fp.page.evaluate<string | null>(COUNT_SCRIPT).catch(() => null),
+        );
+        if (count === 0) break;
+        if (!tabbed && waited >= TAB_AFTER_MS) {
+          tabbed = true;
+          await fp.page
+            .getByRole("button", { name: /^comments$/i })
+            .first()
+            .click({ timeout: CLICK_MS })
+            .catch(() => undefined);
+        }
         await fp.wait(POLL_MS);
       }
       if (!bodies.length) {
+        if (count === 0) return { videoId, url: fp.url(), comments: [] };
         if (GONE.test(await fp.text())) return fp.human(`${fp.url()}: the video is not there`);
         return fp.human(`${fp.url()} made no comment call: the page may not show its comments`);
       }

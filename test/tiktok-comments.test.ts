@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FlowPage } from "../src/browser/flow.js";
 import {
+  commentCountOf,
   commentRows,
   isCreator,
   mergeComments,
@@ -182,7 +183,15 @@ describe("tiktok comments: the flow and the route", () => {
   type Handler = (r: { url(): string; json(): Promise<unknown> }) => void;
 
   /** A video page that answers its comment calls as the fake is driven. */
-  const videoPage = (opts: { onOpen?: unknown[]; onScroll?: unknown[]; text?: string }) => {
+  const videoPage = (opts: {
+    onOpen?: unknown[];
+    onScroll?: unknown[];
+    text?: string;
+    /** The comment button's label. */
+    label?: string;
+    /** What the panel's Comments tab brings when clicked. */
+    onTab?: unknown[];
+  }) => {
     const { fp, acts } = fakePage({ text: [opts.text ?? "Video"], present: () => true });
     const handlers = new Set<Handler>();
     const emit = (url: string, body: unknown) => {
@@ -194,17 +203,28 @@ describe("tiktok comments: the flow and the route", () => {
     let replyButtons = 1;
     let clicks = 0;
     const evaluated: string[] = [];
+    let tabs = 0;
     fp.page = {
       on: (_e: string, h: Handler) => handlers.add(h),
       off: (_e: string, h: Handler) => handlers.delete(h),
       evaluate: async (fn: unknown) => {
         const src = String(fn);
         if (src.includes("getElementById")) return DATA;
+        if (src.includes("Read or add comments")) return opts.label ?? null;
         evaluated.push("scroll");
         const body = scrolls.shift();
         if (body) emit(list, body);
         return true;
       },
+      getByRole: (_role: string, o: { name: RegExp }) => ({
+        first: () => ({
+          click: async () => {
+            if (!o.name.test("Comments")) return;
+            tabs++;
+            for (const body of opts.onTab ?? []) emit(list, body);
+          },
+        }),
+      }),
       getByText: (re: RegExp) => ({
         first: () => ({
           isVisible: async () => re.test("View 2 replies") && replyButtons > 0,
@@ -225,7 +245,7 @@ describe("tiktok comments: the flow and the route", () => {
     };
     fp.url = () => opened.at(-1) ?? "";
     fp.scroll = async () => {};
-    return { fp, acts, opened, evaluated, clicks: () => clicks, handlers };
+    return { fp, acts, opened, evaluated, clicks: () => clicks, tabs: () => tabs, handlers };
   };
 
   it("reads comments, more by scrolling and replies by one click; never types or likes", async () => {
@@ -246,6 +266,30 @@ describe("tiktok comments: the flow and the route", () => {
     // Two scrolls with nothing new end the scrolling: one that brought MORE, then two empty.
     expect(page.evaluated).toHaveLength(3);
     expect(page.handlers.size).toBe(0);
+  });
+
+  it("a video with 0 comments answers none; a panel on You may like gets its Comments tab", async () => {
+    const none = videoPage({ label: "Read or add comments 0 comments" });
+    expect(await tiktokPostComments.run(none.fp, { videoId: VIDEO })).toEqual({
+      videoId: VIDEO,
+      url: `https://www.tiktok.com/@_/video/${VIDEO}`,
+      comments: [],
+    });
+    expect(none.tabs()).toBe(0);
+    const tab = videoPage({ label: "Read or add comments 5 comments", onTab: [TOP] });
+    const out = await tiktokPostComments.run(tab.fp, { videoId: VIDEO });
+    expect(tab.tabs()).toBe(1);
+    expect(out.comments.map((c) => c.id)).toContain("101");
+    expect(tab.acts).toEqual([]);
+  });
+
+  it("reads the comment count off the button label", () => {
+    expect(commentCountOf("Read or add comments 0 comments")).toBe(0);
+    expect(commentCountOf("Read or add comments 1 comment")).toBe(1);
+    expect(commentCountOf("Read or add comments 2002 comments")).toBe(2002);
+    expect(commentCountOf("Read or add comments 1.2K comments")).toBe(1200);
+    expect(commentCountOf("Share video")).toBeNull();
+    expect(commentCountOf(null)).toBeNull();
   });
 
   it("stops at max", async () => {
