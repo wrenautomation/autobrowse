@@ -70,8 +70,18 @@ export function consentFlow(w: ConsentWalk): BrowserFlow<OauthConsentInput, { la
           if (w.ready) {
             const { css, settleMs, spinMs } = w.ready;
             const button = fp.page.locator(css).first();
-            for (let t = 0; t < 30 && !(await button.isEnabled().catch(() => false)); t++)
-              await fp.wait(1_000);
+            // Each check is bounded: a page that never draws the button would wait out Playwright's default.
+            let enabled = false;
+            for (let t = 0; t < 30 && !enabled; t++) {
+              enabled = await button.isEnabled({ timeout: 1_000 }).catch(() => false);
+              if (landed(fp.url())) return { landed: fp.url() };
+              if (!enabled) await fp.wait(1_000);
+            }
+            if (!enabled) {
+              // Never drawn (TikTok hangs here for an app the account already allowed): one reload, no press.
+              await fp.page.reload().catch(() => null);
+              continue;
+            }
             await fp.wait(settleMs);
             await fp.act({ kind: "click" }, w.allow, { goal: "consent" });
             if (await fp.waitForUrl(landed, spinMs)) return { landed: fp.url() };

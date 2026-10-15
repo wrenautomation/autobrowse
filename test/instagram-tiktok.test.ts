@@ -215,6 +215,32 @@ describe("instagram and tiktok consents and OAuth shapes", () => {
     );
   });
 
+  it("reloads, never presses, when TikTok never draws #auth-btn (an app already allowed)", async () => {
+    const authorize =
+      "https://www.tiktok.com/v2/auth/authorize/?client_key=k&redirect_uri=http%3A%2F%2F127.0.0.1%3A9876%2Fcb&state=s";
+    let url = "https://www.tiktok.com/foryou";
+    const { fp, acts } = fakePage({
+      text: ["wren wants to access your TikTok account"],
+      present: (h) => /authorize/.test(String(h.name)),
+      url: () => url,
+    });
+    fp.open = async (u) => {
+      url = u;
+    };
+    let reloads = 0;
+    fp.page = {
+      locator: () => ({ first: () => ({ isEnabled: async () => false }) }),
+      reload: async () => {
+        reloads++;
+        url = "http://127.0.0.1:9876/cb?code=abc&state=s";
+      },
+    } as unknown as typeof fp.page;
+    const out = await tiktokOauthConsent.run(fp, { url: authorize });
+    expect(reloads).toBe(1);
+    expect(acts).toEqual([]);
+    expect(out.landed).toMatch(/code=abc/);
+  });
+
   it("walks the TikTok consent: home, authorize, Authorize, land", async () => {
     const authorize =
       "https://www.tiktok.com/v2/auth/authorize/?client_key=k&redirect_uri=http%3A%2F%2F127.0.0.1%3A9876%2Fcb&state=s";
@@ -232,6 +258,11 @@ describe("instagram and tiktok consents and OAuth shapes", () => {
       opened.push(u);
       url = u;
     };
+    // #auth-btn is drawn and enabled; the walk waits for it, then presses once.
+    fp.page = {
+      locator: () => ({ first: () => ({ isEnabled: async () => true }) }),
+      reload: async () => null,
+    } as unknown as typeof fp.page;
     const out = await tiktokOauthConsent.run(fp, { url: authorize });
     expect(opened).toEqual(["https://www.tiktok.com/foryou", authorize]);
     expect(acts.map(line)).toEqual(["click /^(authorize|continue|allow)$/i"]);
