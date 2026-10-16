@@ -9,6 +9,8 @@
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import type { Seen, VerifyGet, VerifyRead } from "./verdict.js";
+import { arr, isoOf, rec, sameName, str, text, unclear } from "./verify-kit.js";
 
 export const OUTLOOK_ORIGIN = "https://graph.microsoft.com";
 const V1 = `${OUTLOOK_ORIGIN}/v1.0`;
@@ -61,6 +63,47 @@ const event = z.object({
   location: z.object({ displayName: z.string() }).optional(),
   isOnlineMeeting: z.boolean().optional(),
 });
+
+const SENT_READ = 25;
+
+/**
+ * The newest mail in the mailbox by send time, as verify rows: ours (`from` is the account) and,
+ * when asked, in that conversation and to that person. Others' mail stays in the list as not ours,
+ * so the list still shows how far back it reaches.
+ */
+async function outlookSent(
+  look: VerifyGet,
+  want: { to?: string | undefined; conversation?: string | undefined },
+): Promise<VerifyRead | Seen> {
+  const me = rec(await look("/me"));
+  const self = str(me.mail) ?? str(me.userPrincipalName);
+  if (!self) return unclear("the account's address did not come back");
+  const r = rec(
+    await look("/me/messages", {
+      $select: "id,subject,bodyPreview,from,toRecipients,sentDateTime,conversationId,webLink",
+      $orderby: "sentDateTime desc",
+      $top: SENT_READ,
+    }),
+  );
+  const items = arr(r.value).map(rec);
+  return {
+    rows: items.map((m) => {
+      const to = arr(m.toRecipients).map((t) => rec(rec(t).emailAddress).address);
+      return {
+        words: want.conversation ? text(m.bodyPreview) : text(m.subject),
+        at: isoOf(m.sentDateTime),
+        id: str(m.id),
+        url: str(m.webLink),
+        mine:
+          sameName(rec(rec(m.from).emailAddress).address, self) &&
+          (!want.to || to.some((a) => sameName(a, want.to))) &&
+          (!want.conversation || m.conversationId === want.conversation),
+      };
+    }),
+    order: "newest",
+    complete: items.length < SENT_READ && !str(r["@odata.nextLink"]),
+  };
+}
 
 const query = (base: string, q: Record<string, unknown>) => {
   const u = new URL(base);
@@ -127,6 +170,13 @@ export const outlook: SiteApi = {
       summary: "Send a message (subject, body, toRecipients); saved to Sent",
       request: sendMail,
       irreversible: true,
+      verify: {
+        words: (b) => b.message.subject,
+        read: async (b, look) =>
+          b.saveToSentItems
+            ? outlookSent(look, { to: b.message.toRecipients[0]?.emailAddress.address })
+            : unclear("the message was not saved to Sent, so no read shows it"),
+      },
       api: async (body, leg) => {
         await post(leg, "/me/sendMail", body);
         return { sent: true };
@@ -139,6 +189,18 @@ export const outlook: SiteApi = {
       summary: "Reply to a message with a comment",
       request: reply,
       irreversible: true,
+      verify: {
+        // A reply's preview opens with the comment, then the quoted mail.
+        words: (b) => b.comment,
+        read: async (b, look) => {
+          const first = rec(
+            await look(`/me/messages/${encodeURIComponent(b.id)}`, { $select: "conversationId" }),
+          );
+          const conversation = str(first.conversationId);
+          if (!conversation) return unclear("the mail's conversation did not come back");
+          return outlookSent(look, { conversation });
+        },
+      },
       api: async ({ id, comment }, leg) => {
         await post(leg, `/me/messages/${encodeURIComponent(id)}/reply`, { comment });
         return { sent: true };
@@ -160,6 +222,9 @@ export const outlook: SiteApi = {
       summary: "Create an event (subject, start, end, attendees); invitations go out",
       request: event,
       irreversible: true,
+      verify: {
+        none: "the events list orders by start time, not by when an event was made, so a new event cannot be told from an old one with the same subject",
+      },
       api: (body, leg) => post(leg, "/me/events", body),
       browser: { workflow: "outlook-create-event" },
     }),

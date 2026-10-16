@@ -12,12 +12,35 @@ import { basename, extname } from "node:path";
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import type { VerifyRead, VerifyRow } from "./verdict.js";
+import { arr, isoOf, rec, str, text, unclear, withoutLinks } from "./verify-kit.js";
 import { bytesOf } from "./youtube.js";
 
 export const X_ORIGIN = "https://api.x.com";
 const CHUNK = 4 * 1024 * 1024;
 /** Tries per segment before the upload gives up. */
 const APPEND_TRIES = 4;
+
+/** Posts seen by a verify read. */
+const VERIFY_MAX = 10;
+const statusUrl = (id: string) => `https://x.com/i/status/${id}`;
+/** A list of `{ id, text, created_at }` as rows. The search and the timeline cut at a limit and may lag. */
+const xRows = (body: unknown, skip?: string): VerifyRead => ({
+  rows: arr(rec(body).data).map((t): VerifyRow => {
+    const r = rec(t);
+    const id = str(r.id);
+    return {
+      words: withoutLinks(text(r.text)),
+      at: isoOf(r.created_at),
+      id,
+      url: id ? statusUrl(id) : null,
+      // The post replied to sits in its own thread: it is not our reply.
+      ...(skip && id === skip ? { mine: false } : {}),
+    };
+  }),
+  order: "newest",
+  complete: false,
+});
 
 const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 const id = z.string().regex(/^[0-9]+$/, "a numeric X id");
@@ -292,6 +315,36 @@ export const x: SiteApi = {
       summary: "A post: text, a reply (`reply.in_reply_to_tweet_id`), a quote, media ids, a poll",
       request: post,
       irreversible: true,
+      verify: {
+        words: (b) => withoutLinks(b.text ?? ""),
+        read: async (b, get) => {
+          // A post of media or a link alone has no words to find it by.
+          if (!withoutLinks(b.text ?? "")) return unclear("the post has no words to look for");
+          const to = b.reply?.in_reply_to_tweet_id;
+          // Search lists our reply in its thread. It may show a fresh one late, so no absent.
+          if (to) {
+            const found = await get("/2/tweets/search/recent", {
+              query: `from:me conversation_id:${to}`,
+              max_results: VERIFY_MAX,
+            });
+            return { ...xRows(found, to), order: "ranked" };
+          }
+          const me = str(rec(rec(await get("/2/users/me")).data).id);
+          if (!me) return unclear("the account's id did not come back");
+          return xRows(
+            await get(`/2/users/${me}/tweets`, {
+              max_results: VERIFY_MAX,
+              exclude: "replies,retweets",
+              "tweet.fields": "id,text,created_at",
+            }),
+          );
+        },
+        lags: (b) => (b.reply ? "X search may not list a fresh reply yet" : null),
+      },
+      sentAs: (o) => {
+        const id = str(rec(rec(o).data).id);
+        return { id, url: id ? statusUrl(id) : null };
+      },
       needs: (b) => (pageReply(b) ? ["replies"] : []),
       meter: (b) => (b.reply ? { reply: 1 } : {}),
       browser: {
@@ -324,6 +377,7 @@ export const x: SiteApi = {
       summary: "Delete a post",
       request: one,
       irreversible: true,
+      verify: { none: "a delete is idempotent: a repeat finds the post gone and changes nothing" },
       api: ({ id: tweetId }, leg) => send(leg, "DELETE", `/2/tweets/${tweetId}`),
     }),
     route({
@@ -374,6 +428,7 @@ export const x: SiteApi = {
         "The account's display name (v1.1 wants OAuth 1.0a, so the Edit profile dialog in the browser): `name`; answers `{ before, name }`. The handle never changes",
       request: profileName,
       irreversible: true,
+      verify: { none: "a name set is idempotent: a repeat sets the same name" },
       browser: { flow: "x/profile-name" },
     }),
   ],

@@ -18,6 +18,8 @@ import { currentCall } from "../browser/attempt.js";
 import { HttpError, safeUrls } from "../clients/http.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi, SiteError } from "./types.js";
 import { once } from "./uploads.js";
+import type { Seen, VerifyGet, VerifyRead } from "./verdict.js";
+import { arr, isoOf, rec, str, text, unclear } from "./verify-kit.js";
 
 export const YOUTUBE_ORIGIN = "https://www.googleapis.com";
 export const YOUTUBE_ANALYTICS_ORIGIN = "https://youtubeanalytics.googleapis.com";
@@ -71,6 +73,21 @@ export async function onTheRightChannel(leg: ApiLeg): Promise<void> {
       `this token is on channel ${mine}, not ${YOUTUBE_CHANNEL}=${want}: consent again as the account that owns it (\`site setup youtube consent --account <address>\`)`,
     );
 }
+
+const watchUrl = (video: string, comment?: string) =>
+  `https://www.youtube.com/watch?v=${video}${comment ? `&lc=${comment}` : ""}`;
+
+/** The channel the account acts as: its id, and the playlist that lists its uploads. */
+async function ownChannel(get: VerifyGet): Promise<{ id: string; uploads: string | null } | null> {
+  const r = await get("/youtube/v3/channels", { part: "id,contentDetails", mine: true });
+  const c = rec(arr(rec(r).items)[0]);
+  const id = str(c.id);
+  return id ? { id, uploads: str(rec(rec(c.contentDetails).relatedPlaylists).uploads) } : null;
+}
+
+/** A comment's words as its author sees them; `textDisplay` is HTML, so tags go. */
+const commentText = (snippet: Record<string, unknown>): string =>
+  str(snippet.textOriginal) ?? text(snippet.textDisplay).replace(/<[^>]+>/g, " ");
 
 const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 
@@ -417,6 +434,40 @@ export const youtube: SiteApi = {
         "Upload a video (resumable): `snippet`, `status`, and `file` (path or URL); answers the video resource",
       request: upload,
       irreversible: true,
+      verify: {
+        words: (b) => b.snippet.title,
+        read: async (_b, get): Promise<VerifyRead | Seen> => {
+          const own = await ownChannel(get);
+          if (!own?.uploads) return unclear("the channel's uploads list did not come back");
+          const r = rec(
+            await get("/youtube/v3/playlistItems", {
+              part: "snippet",
+              playlistId: own.uploads,
+              maxResults: 50,
+            }),
+          );
+          const items = arr(r.items);
+          return {
+            rows: items.map((e) => {
+              const sn = rec(rec(e).snippet);
+              const id = str(rec(sn.resourceId).videoId);
+              return {
+                words: text(sn.title),
+                at: isoOf(sn.publishedAt),
+                id,
+                url: id ? watchUrl(id) : null,
+              };
+            }),
+            order: "newest",
+            complete: items.length < 50 && !str(r.nextPageToken),
+          };
+        },
+        lags: () => "YouTube's uploads list shows a new video late",
+      },
+      sentAs: (o) => {
+        const id = str(rec(o).id);
+        return { id, url: id ? watchUrl(id) : null };
+      },
       resumes: true,
       api: async (body, leg) => {
         await onTheRightChannel(leg);
@@ -527,6 +578,7 @@ export const youtube: SiteApi = {
       summary: "Delete a video (`id`) for good; answers `{ deleted: id }`",
       request: z.object({ id: z.string().min(1) }),
       irreversible: true,
+      verify: { none: "a delete is idempotent: a repeat finds the video gone and changes nothing" },
       api: async ({ id }, leg) => {
         await onTheRightChannel(leg);
         const r = await leg.http.json<unknown>(
@@ -627,6 +679,42 @@ export const youtube: SiteApi = {
       summary: "A top-level comment on a video",
       request: commentThread,
       irreversible: true,
+      verify: {
+        words: (b) => b.snippet.topLevelComment.snippet.textOriginal,
+        read: async (b, get): Promise<VerifyRead | Seen> => {
+          const own = await ownChannel(get);
+          if (!own) return unclear("the channel's id did not come back");
+          const r = rec(
+            await get("/youtube/v3/commentThreads", {
+              part: "snippet",
+              videoId: b.snippet.videoId,
+              order: "time",
+              maxResults: 100,
+            }),
+          );
+          return {
+            rows: arr(r.items).map((e) => {
+              const top = rec(rec(rec(e).snippet).topLevelComment);
+              const sn = rec(top.snippet);
+              const id = str(top.id) ?? str(rec(e).id);
+              return {
+                words: commentText(sn),
+                at: isoOf(sn.publishedAt),
+                id,
+                url: id ? watchUrl(b.snippet.videoId, id) : null,
+                mine: str(rec(sn.authorChannelId).value) === own.id,
+              };
+            }),
+            order: "newest",
+            complete: !str(r.nextPageToken),
+          };
+        },
+      },
+      sentAs: (o) => {
+        const id = str(rec(o).id);
+        const video = str(rec(rec(o).snippet).videoId);
+        return { id, url: id && video ? watchUrl(video, id) : null };
+      },
       api: async ({ part, ...body }, leg) => {
         await onTheRightChannel(leg);
         return must(
@@ -648,6 +736,36 @@ export const youtube: SiteApi = {
       summary: "Reply to a comment (`snippet.parentId`)",
       request: reply,
       irreversible: true,
+      verify: {
+        words: (b) => b.snippet.textOriginal,
+        read: async (b, get): Promise<VerifyRead | Seen> => {
+          const own = await ownChannel(get);
+          if (!own) return unclear("the channel's id did not come back");
+          const r = rec(
+            await get("/youtube/v3/comments", {
+              part: "snippet",
+              parentId: b.snippet.parentId,
+              maxResults: 100,
+            }),
+          );
+          return {
+            rows: arr(r.items).map((e) => {
+              const sn = rec(rec(e).snippet);
+              return {
+                words: commentText(sn),
+                at: isoOf(sn.publishedAt),
+                id: str(rec(e).id),
+                url: null,
+                mine: str(rec(sn.authorChannelId).value) === own.id,
+              };
+            }),
+            // Replies come oldest first: only a read to the end proves absent.
+            order: "ranked",
+            complete: !str(r.nextPageToken),
+          };
+        },
+      },
+      sentAs: (o) => ({ id: str(rec(o).id), url: null }),
       api: async ({ part, ...body }, leg) => {
         await onTheRightChannel(leg);
         return must(
@@ -768,6 +886,14 @@ export const youtube: SiteApi = {
         "! A community post (no official API; YouTube in the browser); image is a path or URL; answers {url} (null when the list didn't show it)",
       request: communityPost,
       irreversible: true,
+      verify: {
+        none: "no read lists community posts: the Data API has none, and the uploads list holds only videos",
+      },
+      // The answer is the post's link (`/post/<id>`), null when the list did not show it.
+      sentAs: (o) => {
+        const url = str(rec(o).url);
+        return { id: url ? (/\/post\/([^/?#]+)/.exec(url)?.[1] ?? null) : null, url };
+      },
       browser: {
         flow: "google/youtube-community-post",
         uploads: "image",
@@ -781,6 +907,9 @@ export const youtube: SiteApi = {
         "! A video's custom thumbnail through Studio, Shorts too (thumbnails.set refuses them); file is a path or URL, dry stages then undoes; answers {videoId,saved,dry?}",
       request: studioThumbnail,
       irreversible: true,
+      verify: {
+        none: "a thumbnail set is idempotent: a repeat sets the same image, and no read shows who set it",
+      },
       browser: {
         flow: "google/youtube-thumbnail",
         uploads: "file",

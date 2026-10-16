@@ -11,6 +11,8 @@ import { z } from "zod";
 import { HttpError } from "../clients/http.js";
 import { WEB_REDIRECT } from "./oauth.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import type { Seen, VerifyGet, VerifyRead } from "./verdict.js";
+import { arr, hasNext, isoOf, rec, str, text, unclear } from "./verify-kit.js";
 
 /**
  * Whose account the browser legs post as. The composer follows whoever the
@@ -67,6 +69,16 @@ const comments = z.object({
   after: z.string().optional(),
 });
 const reply = z.object({ commentId: id, message: z.string().min(1).max(2200) });
+const replies = z.object({
+  commentId: id,
+  fields: z.string().default("id,text,username,timestamp"),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  after: z.string().optional(),
+});
+const containerState = z.object({
+  containerId: id,
+  fields: z.string().default("id,status_code"),
+});
 const webPost = z.object({
   caption: z.string().max(2200).default(""),
   /** The image or video the browser leg uploads: a path on the box, or a URL it downloads. */
@@ -97,6 +109,15 @@ async function must<T>(res: { ok: boolean; status: number; body: T | null }, wha
   return res.body as T;
 }
 const v = (path: string) => `${INSTAGRAM_ORIGIN}/${INSTAGRAM_VERSION}/${path}`;
+/** The signed-in account: its numeric id and username (`GET /me`). */
+async function ownAccount(
+  look: VerifyGet,
+): Promise<{ id: string; username: string | null } | null> {
+  const me = rec(await look("/me"));
+  const id = str(me.user_id) ?? str(me.id);
+  return id ? { id, username: str(me.username) } : null;
+}
+
 const withQuery = (url: string, q: Record<string, string | number | undefined>) => {
   const u = new URL(url);
   for (const [k, val] of Object.entries(q))
@@ -172,6 +193,22 @@ export const instagram: SiteApi = {
       summary: "Publish a container (step 2); answers the media id",
       request: publish,
       irreversible: true,
+      verify: {
+        // The container says whether it was published: a state, not words.
+        words: () => "",
+        read: async (b, look): Promise<Seen> => {
+          const status = text(
+            rec(await look(`/containers/${b.creation_id}`, { fields: "id,status_code" }))
+              .status_code,
+          );
+          if (status === "PUBLISHED") return { seen: "found", id: null, url: null, at: null };
+          // Never published, and never will be: its time is out or it failed.
+          if (status === "ERROR" || status === "EXPIRED") return { seen: "absent" };
+          // Ready or still processing: the publish may yet land.
+          return unclear(`the container is ${status || "in an unknown state"}`);
+        },
+      },
+      sentAs: (o) => ({ id: str(rec(o).id), url: null }),
       api: async ({ igUserId, creation_id }, leg) =>
         must(
           await leg.http.json<unknown>(v(`${igUserId}/media_publish`), {
@@ -189,6 +226,32 @@ export const instagram: SiteApi = {
         "A post from a local file with a caption (no official path: the API wants a public URL; the browser leg uploads)",
       request: webPost,
       irreversible: true,
+      verify: {
+        words: (b) => b.caption,
+        read: async (b, look): Promise<VerifyRead | Seen> => {
+          if (!b.caption.trim()) return unclear("the post has no caption to look for");
+          const own = await ownAccount(look);
+          if (!own) return unclear("the account's id did not come back");
+          const r = await look(`/${own.id}/media`, {
+            fields: "id,caption,timestamp,permalink",
+            limit: 25,
+          });
+          return {
+            rows: arr(rec(r).data).map((e) => {
+              const m = rec(e);
+              return {
+                words: text(m.caption),
+                at: isoOf(m.timestamp),
+                id: str(m.id),
+                url: str(m.permalink),
+              };
+            }),
+            order: "newest",
+            complete: !hasNext(r),
+          };
+        },
+        lags: () => "Instagram lists a video or Reel only once it is processed",
+      },
       browser: {
         flow: "instagram/create-post",
         input: (i, env) => ({ ...i, account: env(INSTAGRAM_ACCOUNT) }),
@@ -238,11 +301,65 @@ export const instagram: SiteApi = {
       browser: { workflow: "instagram-post-comments" },
     }),
     route({
+      method: "GET",
+      path: "/{commentId}/replies",
+      summary: "Replies under a comment (`fields`, `limit`, `after`): who wrote each, and when",
+      request: replies,
+      api: async ({ commentId, ...q }, leg) =>
+        must(
+          await leg.http.json<unknown>(withQuery(v(`${commentId}/replies`), q), {
+            headers: bearer(leg),
+          }),
+          "{commentId}/replies",
+        ),
+    }),
+    route({
+      method: "GET",
+      path: "/containers/{containerId}",
+      summary:
+        "A media container's state (`status_code`: IN_PROGRESS, FINISHED, PUBLISHED, EXPIRED, ERROR)",
+      request: containerState,
+      api: async ({ containerId, fields }, leg) =>
+        must(
+          await leg.http.json<unknown>(withQuery(v(containerId), { fields }), {
+            headers: bearer(leg),
+          }),
+          "{containerId}",
+        ),
+    }),
+    route({
       method: "POST",
       path: "/{commentId}/replies",
       summary: "Reply to a comment",
       request: reply,
       irreversible: true,
+      verify: {
+        words: (b) => b.message,
+        read: async (b, look): Promise<VerifyRead | Seen> => {
+          const own = await ownAccount(look);
+          if (!own?.username) return unclear("the account's username did not come back");
+          const r = await look(`/${b.commentId}/replies`, {
+            fields: "id,text,username,timestamp",
+            limit: 100,
+          });
+          return {
+            rows: arr(rec(r).data).map((e) => {
+              const c = rec(e);
+              return {
+                words: text(c.text),
+                at: isoOf(c.timestamp),
+                id: str(c.id),
+                url: null,
+                mine: text(c.username).toLowerCase() === own.username?.toLowerCase(),
+              };
+            }),
+            // Replies come in the edge's own order; only a read to the end proves absent.
+            order: "ranked",
+            complete: !hasNext(r),
+          };
+        },
+      },
+      sentAs: (o) => ({ id: str(rec(o).id), url: null }),
       api: async ({ commentId, message }, leg) =>
         must(
           await leg.http.json<unknown>(v(`${commentId}/replies`), {
@@ -282,6 +399,28 @@ export const instagram: SiteApi = {
         "Comment on another account's post (the API comments only on our own): `{ shortcode, commented }`",
       request: webComment,
       irreversible: true,
+      verify: {
+        words: (b) => b.text,
+        read: async (b, look): Promise<VerifyRead> => {
+          const r = rec(await look(`/web/p/${b.shortcode}/comments`, { max: 100 }));
+          return {
+            rows: arr(r.comments).map((e) => {
+              const c = rec(e);
+              return {
+                words: text(c.text),
+                at: str(c.at) ? isoOf(c.at) : null,
+                id: str(c.id),
+                url: null,
+                // The page marks the signed-in account's comments. A reply is not a post comment.
+                mine: c.mine === true && !str(c.parentId),
+              };
+            }),
+            // Instagram ranks them; the read says when it did not reach them all.
+            order: "ranked",
+            complete: r.more === false && !!str(r.viewer),
+          };
+        },
+      },
       meter: () => ({ comment: 1 }),
       browser: { flow: "instagram/comment" },
     }),
@@ -319,6 +458,7 @@ export const instagram: SiteApi = {
         "The account's display name (no API sets it; Accounts Center in the browser): `name`; answers `{ before, name }`. Twice in 14 days; the username never changes",
       request: profileName,
       irreversible: true,
+      verify: { none: "a name set is idempotent: a repeat sets the same name" },
       browser: { flow: "instagram/profile-name" },
     }),
   ],

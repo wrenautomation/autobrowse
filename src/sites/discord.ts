@@ -432,6 +432,9 @@ export const discord: SiteApi = {
       request: z.object({ channel: id }),
       api: ({ channel }, leg) => call(leg, "DELETE", `/channels/${channel}`),
       irreversible: true,
+      verify: {
+        none: "a delete is idempotent: a repeat finds the channel gone and changes nothing",
+      },
       summary: "Delete a channel and its messages (irreversible)",
     }),
     route({

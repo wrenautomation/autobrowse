@@ -9,6 +9,8 @@
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import type { Seen, VerifyRead, VerifyRow } from "./verdict.js";
+import { arr, isoOf, mimeText, rec, str, text, unclear } from "./verify-kit.js";
 
 export const GMAIL_ORIGIN = "https://gmail.googleapis.com";
 const ME = `${GMAIL_ORIGIN}/gmail/v1/users/me`;
@@ -29,6 +31,19 @@ async function must<T>(res: { ok: boolean; status: number; body: T | null }, wha
   }
   return res.body as T;
 }
+
+/** The Subject and the addresses on To of an RFC 2822 message (base64url), decoded. */
+export function headersOfRaw(raw: string): { subject: string; to: string[] } {
+  const head =
+    Buffer.from(raw, "base64url")
+      .toString("utf8")
+      .split(/\r?\n\r?\n/, 1)[0] ?? "";
+  const field = (name: string) =>
+    new RegExp(`^${name}:[ \\t]*((?:.*)(?:\\r?\\n[ \\t]+.*)*)`, "im").exec(head)?.[1] ?? "";
+  return { subject: mimeText(field("Subject")), to: addressesOf(field("To")) };
+}
+const addressesOf = (v: string): string[] =>
+  (v.match(/[^\s<>,;"]+@[^\s<>,;"]+/g) ?? []).map((a) => a.toLowerCase());
 
 export const gmailOAuth: OAuthSpec = {
   authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
@@ -120,6 +135,47 @@ export const gmail: SiteApi = {
       summary: "Send a message: `raw` is the whole RFC 2822 message, base64url",
       request: send,
       irreversible: true,
+      verify: {
+        words: (b) => headersOfRaw(b.raw).subject,
+        read: async (b, look): Promise<VerifyRead | Seen> => {
+          const sent = headersOfRaw(b.raw);
+          if (!sent.subject || !sent.to.length) return unclear("the message has no subject or To");
+          const MAX = 10;
+          const list = rec(
+            await look("/gmail/v1/users/me/messages", { q: "in:sent", maxResults: MAX }),
+          );
+          const ids = arr(list.messages).flatMap((m) => str(rec(m).id) ?? []);
+          // The list holds ids only: each message is read for its headers.
+          const rows = await Promise.all(
+            ids.map(async (id): Promise<VerifyRow> => {
+              const m = rec(
+                await look(`/gmail/v1/users/me/messages/${id}`, { format: "metadata" }),
+              );
+              const headers = arr(rec(m.payload).headers).map(rec);
+              const header = (name: string) =>
+                text(headers.find((h) => text(h.name).toLowerCase() === name)?.value);
+              const to = addressesOf(header("to"));
+              return {
+                words: mimeText(header("subject")),
+                at: isoOf(m.internalDate),
+                id,
+                url: `https://mail.google.com/mail/#all/${id}`,
+                // The same subject to another person is another message.
+                mine: sent.to.every((a) => to.includes(a)),
+              };
+            }),
+          );
+          return {
+            rows: rows.sort((a, c) => (c.at ?? "").localeCompare(a.at ?? "")),
+            order: "newest",
+            complete: ids.length < MAX && !str(list.nextPageToken),
+          };
+        },
+      },
+      sentAs: (o) => {
+        const id = str(rec(o).id);
+        return { id, url: id ? `https://mail.google.com/mail/#all/${id}` : null };
+      },
       api: async (body, leg) =>
         must(
           await leg.http.json<unknown>(`${ME}/messages/send`, {

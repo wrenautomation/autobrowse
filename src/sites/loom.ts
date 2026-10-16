@@ -62,6 +62,7 @@ export const loom: SiteApi = {
       path: "/videos/{id}",
       request: z.object({ id }),
       irreversible: true,
+      verify: { none: "a delete is idempotent: a repeat finds the video gone and changes nothing" },
       meter: () => ({ edits: 1 }),
       browser: { flow: "loom/delete" },
       summary: "Delete a video for good (its link stops working)",

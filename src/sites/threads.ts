@@ -10,6 +10,8 @@ import { z } from "zod";
 import { HttpError } from "../clients/http.js";
 import { WEB_REDIRECT } from "./oauth.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import type { Seen } from "./verdict.js";
+import { rec, str, text, unclear } from "./verify-kit.js";
 
 export const THREADS_ORIGIN = "https://graph.threads.net";
 export const THREADS_VERSION = "v1.0";
@@ -161,6 +163,21 @@ export const threads: SiteApi = {
       summary: "Publish a container (step 2); answers the post id",
       request: publish,
       irreversible: true,
+      verify: {
+        // The container says whether it was published: a state, not words.
+        words: () => "",
+        read: async (b, look): Promise<Seen> => {
+          const status = text(
+            rec(await look(`/containers/${b.creation_id}`, { fields: "id,status" })).status,
+          );
+          if (status === "PUBLISHED") return { seen: "found", id: null, url: null, at: null };
+          // Never published, and never will be: its time is out or it failed.
+          if (status === "ERROR" || status === "EXPIRED") return { seen: "absent" };
+          // Ready or still processing: the publish may yet land.
+          return unclear(`the container is ${status || "in an unknown state"}`);
+        },
+      },
+      sentAs: (o) => ({ id: str(rec(o).id), url: null }),
       api: async ({ userId, creation_id }, leg) =>
         must(
           await leg.http.json<unknown>(v(`${userId}/threads_publish`), {

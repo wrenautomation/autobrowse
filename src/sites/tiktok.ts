@@ -11,10 +11,34 @@ import { MAX_COMMENTS } from "../browser/flows/tiktok-comments.js";
 import { HttpError } from "../clients/http.js";
 import { pollWaits } from "./poll.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import type { Seen, VerifyGet, VerifyRead } from "./verdict.js";
+import { arr, isoOf, rec, sameName, str, text, unclear } from "./verify-kit.js";
 
 export const TIKTOK_ORIGIN = "https://open.tiktokapis.com";
 
 const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
+
+/** Why a fresh video is not in the list at once. */
+const LISTS_LATE =
+  "TikTok lists a new video only once it is processed, and never one that is not public";
+
+/** The account's newest videos (a POST that only reads), titled as it posted them. */
+async function tiktokVideos(get: VerifyGet): Promise<VerifyRead> {
+  const data = rec(rec(await get("/v2/video/list/", { max_count: 20 }, { method: "POST" })).data);
+  return {
+    rows: arr(data.videos).map((e) => {
+      const v = rec(e);
+      return {
+        words: text(v.title),
+        at: isoOf(v.create_time, "s"),
+        id: str(v.id),
+        url: str(v.share_url),
+      };
+    }),
+    order: "newest",
+    complete: data.has_more === false,
+  };
+}
 
 const userInfo = z.object({
   fields: z.string().default("open_id,union_id,avatar_url,display_name,follower_count,video_count"),
@@ -184,6 +208,14 @@ export const tiktok: SiteApi = {
         "Publish a video from a URL the app's domain owns, or start a chunked upload; answers `publish_id` (unaudited apps: SELF_ONLY)",
       request: publishInit,
       irreversible: true,
+      verify: {
+        words: (b) => b.post_info.title ?? "",
+        read: async (b, get): Promise<VerifyRead | Seen> =>
+          b.post_info.title ? tiktokVideos(get) : unclear("the post has no title to look for"),
+        lags: () => LISTS_LATE,
+      },
+      // The API answers the publish id; the video's own id comes only once it is processed.
+      sentAs: (o) => ({ id: str(rec(rec(o).data).publish_id), url: null }),
       api: async (body, leg) =>
         must(
           await leg.http.json<unknown>(`${TIKTOK_ORIGIN}/v2/post/publish/video/init/`, {
@@ -224,6 +256,13 @@ export const tiktok: SiteApi = {
         "A post from a video file (a path, or a URL it downloads) with a caption, on TikTok Studio (an unaudited app's API posts only SELF_ONLY): `privacy` everyone|friends|only-me (default everyone), `comments`, `reuse` (default on), `aiGenerated`; answers `{ id, url, profile, note? }`, id null when the post went out but the profile does not list it yet",
       request: webPost,
       irreversible: true,
+      verify: {
+        words: (b) => b.caption,
+        read: async (b, get): Promise<VerifyRead | Seen> =>
+          b.caption ? tiktokVideos(get) : unclear("the post has no caption to look for"),
+        lags: () => LISTS_LATE,
+      },
+      sentAs: (o) => ({ id: str(rec(o).id), url: str(rec(o).url) }),
       browser: { flow: "tiktok/create-post", uploads: "file" },
     }),
     route({
@@ -241,6 +280,32 @@ export const tiktok: SiteApi = {
       summary: "Reply to a comment (no public API; browser)",
       request: reply,
       irreversible: true,
+      verify: {
+        words: (b) => b.text,
+        read: async (b, get): Promise<VerifyRead> => {
+          // On our own video the page marks our comments (`creator`); on another's, the name does.
+          // A failed whoami leaves only the mark.
+          const info = await get("/v2/user/info/").catch(() => null);
+          const name = str(rec(rec(rec(info).data).user).display_name);
+          const r = rec(await get(`/web/videos/${b.videoId}/comments`, { max: 100 }));
+          return {
+            rows: arr(r.comments).map((e) => {
+              const c = rec(e);
+              return {
+                words: text(c.text),
+                at: isoOf(c.at),
+                id: str(c.id),
+                url: null,
+                // A reply has a parent; a top-level comment is not our reply.
+                mine: (c.creator === true || sameName(c.authorName, name)) && !!str(c.parentId),
+              };
+            }),
+            // Replies load only by "View replies" clicks, so the read is never the whole thread.
+            order: "ranked",
+            complete: false,
+          };
+        },
+      },
       browser: { workflow: "tiktok-reply" },
     }),
     route({
@@ -250,6 +315,7 @@ export const tiktok: SiteApi = {
         "The account's nickname (no API sets it; Edit profile in the browser): `name`; answers `{ before, name, note }`, note = TikTok's lock line. Once every 7 days; the username never changes",
       request: profileName,
       irreversible: true,
+      verify: { none: "a name set is idempotent: a repeat sets the same name" },
       browser: { flow: "tiktok/profile-name" },
     }),
   ],

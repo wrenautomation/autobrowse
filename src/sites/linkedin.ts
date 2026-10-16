@@ -19,6 +19,8 @@ import {
   SiteError,
   type SiteRoute,
 } from "./types.js";
+import type { Seen, VerifyRead } from "./verdict.js";
+import { arr, isoOf, rec, sameName, str, text, unclear } from "./verify-kit.js";
 import { bytesOf } from "./youtube.js";
 
 export const LINKEDIN_ORIGIN = "https://api.linkedin.com";
@@ -129,6 +131,22 @@ const upload = z.object({
   /** Where the bytes are: an https URL (a signed media link), never a path on this machine. */
   file: z.string().regex(/^https:\/\/\S+$/, "an https URL"),
 });
+
+const FEED = "https://www.linkedin.com/feed/update/";
+const PROFILE = "https://www.linkedin.com/in/";
+
+/** The post a comment URN sits on: `urn:li:comment:(urn:li:activity:1,2)` is on `urn:li:activity:1`. */
+const postOf = (urn: string): string =>
+  /^urn:li:comment:\((urn:li:[a-zA-Z]+:\d+),\d+\)$/.exec(urn)?.[1] ?? urn;
+
+/** Where this account stands with a member, as the profile's buttons read (`GET /in/{vanity}/relationship`). */
+async function relationshipOf(
+  get: (path: string) => Promise<unknown>,
+  vanity: string,
+): Promise<"connected" | "pending" | "none" | null> {
+  const r = text(rec(await get(`/in/${vanity}/relationship`)).relationship);
+  return r === "connected" || r === "pending" || r === "none" ? r : null;
+}
 
 const vanity = z
   .string()
@@ -416,6 +434,37 @@ export const linkedin: SiteApi = {
         "Publish a post as the member, or as a Page it admins (`author: urn:li:organization:…`, by the browser)",
       request: post,
       irreversible: true,
+      verify: {
+        words: (b) => b.commentary,
+        read: async (b, get): Promise<VerifyRead> => {
+          const r = await get("/rest/posts", {
+            q: "author",
+            author: b.author,
+            count: 10,
+            sortBy: "CREATED",
+          });
+          return {
+            rows: arr(rec(r).elements).map((e) => {
+              const p = rec(e);
+              const id = str(p.id);
+              return {
+                words: text(p.commentary),
+                at: isoOf(p.publishedAt ?? p.createdAt),
+                id,
+                url: id ? `${FEED}${id}/` : null,
+              };
+            }),
+            order: "newest",
+            complete: false,
+          };
+        },
+      },
+      // The API answers the URN (`id`); the browser leg answers the post's link.
+      sentAs: (o) => {
+        const r = rec(o);
+        const id = str(r.id);
+        return { id, url: str(r.url) ?? (id ? `${FEED}${id}/` : null) };
+      },
       needs: (b) => asPage(b.author, "w_organization_social"),
       api: async (body, leg) => {
         const res = await leg.http.json<unknown>(`${LINKEDIN_ORIGIN}/rest/posts`, {
@@ -517,6 +566,41 @@ export const linkedin: SiteApi = {
       summary: "Comment on a post (or reply, when `urn` is a comment)",
       request: comment,
       irreversible: true,
+      verify: {
+        words: (b) => b.message.text,
+        read: async (b, get): Promise<VerifyRead | Seen> => {
+          const asPage = PAGE_URN.test(b.actor);
+          // A member's comment names its author by a profile link, so the name says whose it is.
+          const name = asPage ? null : str(rec(await get("/v2/userinfo")).name);
+          if (!asPage && !name) return unclear("who the account is on LinkedIn did not come back");
+          const parent = b.parentComment ?? (b.urn.startsWith("urn:li:comment:") ? b.urn : null);
+          const r = await get(
+            `/rest/socialActions/${encodeURIComponent(b.object ?? postOf(b.urn))}/comments`,
+            { count: 100 },
+          );
+          return {
+            // The same words under another comment, or by another person, are not ours.
+            rows: arr(rec(r).elements).map((e) => {
+              const c = rec(e);
+              const by = asPage ? text(c.actor) === b.actor : sameName(c.actorName, name);
+              return {
+                words: text(rec(c.message).text),
+                at: isoOf(rec(c.created).time),
+                id: str(c.commentUrn) ?? str(c.$URN),
+                url: null,
+                mine: by && (str(c.parentComment) ?? null) === parent,
+              };
+            }),
+            // LinkedIn orders them its own way, and the read stops at a count.
+            order: "ranked",
+            complete: false,
+          };
+        },
+      },
+      sentAs: (o) => {
+        const r = rec(o);
+        return { id: str(r.commentUrn) ?? str(r.$URN) ?? str(r.id), url: null };
+      },
       // Commenting is partner-only for members too (403 partnerApiSocialActions.CREATE on
       // w_member_social, 2026-10-13): Community Management's feed scope, until then the browser.
       needs: (b) => [PAGE_URN.test(b.actor) ? "w_organization_social" : "w_member_social_feed"],
@@ -646,6 +730,18 @@ export const linkedin: SiteApi = {
         "Invite to connect, with an optional note (200 characters; five notes a month free): `{ sent: true, note }`, or `{ sent: false, relationship }` when no invite is offered (connected, pending, follow-only)",
       request: connect,
       irreversible: true,
+      verify: {
+        words: () => "",
+        // A state, not words: an invite out (pending) or accepted (connected) went through.
+        read: async (b, get): Promise<Seen> => {
+          const now = await relationshipOf(get, b.vanity);
+          if (now === "pending" || now === "connected")
+            return { seen: "found", id: null, url: `${PROFILE}${b.vanity}/`, at: null };
+          return now === "none"
+            ? { seen: "absent" }
+            : unclear("the profile's buttons were not clear");
+        },
+      },
       meter: () => ({ connect: 1 }),
       // No invite offered sent nothing: a profile look, not one of the day's invites.
       used: (_q, out) =>
@@ -722,6 +818,18 @@ export const linkedin: SiteApi = {
         "Withdraw our pending invite (reads the button first: connected or none withdraws nothing and says so)",
       request: z.object({ vanity }),
       irreversible: true,
+      verify: {
+        words: () => "",
+        // The invite is gone (none) or still out (pending). Connected: it was accepted, not withdrawn.
+        read: async (b, get): Promise<Seen> => {
+          const now = await relationshipOf(get, b.vanity);
+          if (now === "none")
+            return { seen: "found", id: null, url: `${PROFILE}${b.vanity}/`, at: null };
+          return now === "pending"
+            ? { seen: "absent" }
+            : unclear("the invite did not end as pending or none");
+        },
+      },
       meter: () => ({ withdraw: 1 }),
       browser: { flow: "linkedin/withdraw" },
     }),
@@ -785,6 +893,30 @@ export const linkedin: SiteApi = {
       summary: "Message a 1st-degree connection (anyone else is InMail, which needs Premium)",
       request: message,
       irreversible: true,
+      verify: {
+        words: (b) => b.text,
+        read: async (b, get): Promise<VerifyRead> => {
+          const r = await get("/messaging", { max: 40 });
+          return {
+            rows: arr(rec(r).conversations).map((e) => {
+              const c = rec(e);
+              const preview = text(c.preview).trim();
+              const ours = /^you:\s*/i.test(preview);
+              return {
+                words: preview.replace(/^you:\s*/i, ""),
+                // The list gives a relative label ("2h"), no time.
+                at: null,
+                id: null,
+                url: str(c.url),
+                // The list shows only the last message: another person's, or theirs, is not ours.
+                mine: ours && sameName(c.vanity, b.vanity),
+              };
+            }),
+            order: "ranked",
+            complete: false,
+          };
+        },
+      },
       meter: () => ({ message: 1 }),
       browser: { flow: "linkedin/message" },
     }),

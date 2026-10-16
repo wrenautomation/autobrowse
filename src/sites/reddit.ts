@@ -10,6 +10,8 @@
  */
 import { z } from "zod";
 import { route, type SiteApi, SiteError } from "./types.js";
+import type { VerifyGet, VerifyRead, VerifyRow } from "./verdict.js";
+import { arr, isoOf, rec, sameName, str, text, unclear } from "./verify-kit.js";
 
 export const REDDIT_ORIGIN = "https://oauth.reddit.com";
 
@@ -126,6 +128,45 @@ const compose = z.object({
   subject: z.string().min(1).max(100),
   text: z.string().min(1).max(10_000),
 });
+
+const WWW = "https://www.reddit.com";
+/** How many of the account's newest things a verify read looks at. */
+const VERIFY_LIMIT = 25;
+
+/** The signed-in account's name: `/api/v1/me` answers it flat, the browser's `/api/me` under `data`. */
+async function redditSelf(get: VerifyGet): Promise<string | null> {
+  const r = rec(await get("/api/v1/me"));
+  return str(r.name) ?? str(rec(r.data).name);
+}
+
+/**
+ * One of the account's own listings (posts, comments, sent messages) as verify rows, newest
+ * first. A row that is not a match for this send (another sub, another parent, another person)
+ * stays in the list with `mine: false`, so the list still shows how far back it reaches.
+ */
+function redditRows(body: unknown, row: (d: Json) => VerifyRow): VerifyRead {
+  const data = rec(rec(body).data);
+  const kids = arr(data.children).map((c) => rec(rec(c).data));
+  return {
+    rows: kids.map(row),
+    order: "newest",
+    // A short list with no next page is the account's whole history.
+    complete: kids.length < VERIFY_LIMIT && !str(data.after),
+  };
+}
+type Json = Record<string, unknown>;
+
+const permalink = (d: Json) => (str(d.permalink) ? `${WWW}${text(d.permalink)}` : null);
+const redditRow = (d: Json, mine: boolean, words: string): VerifyRow => ({
+  words,
+  at: isoOf(d.created_utc, "s"),
+  id: str(d.name),
+  url: permalink(d),
+  mine,
+});
+/** `r/x`, `x` and `u/name` against the `subreddit` field: `x`, or `u_name` for a profile. */
+const subOf = (sr: string) => sr.replace(/^r\//, "").replace(/^u\//, "u_").toLowerCase();
+const NO_NAME = "the account's name did not come back";
 
 const read = "reddit/read";
 
@@ -341,6 +382,24 @@ export const reddit: SiteApi = {
       path: "/api/submit",
       request: submit,
       irreversible: true,
+      verify: {
+        words: (s) => s.title,
+        read: async (s, get) => {
+          const name = await redditSelf(get);
+          if (!name) return unclear(NO_NAME);
+          const sub = subOf(s.sr);
+          return redditRows(
+            await get(`/user/${name}/submitted`, { limit: VERIFY_LIMIT, sort: "new" }),
+            (d) => redditRow(d, text(d.subreddit).toLowerCase() === sub, text(d.title)),
+          );
+        },
+      },
+      // Fullname (`t3_abc`): what a later `thing_id` takes. A dry run answers an empty id.
+      sentAs: (o) => {
+        const d = rec(rec(rec(o).json).data);
+        const id = str(d.name) ?? (str(d.id) ? `t3_${text(d.id)}` : null);
+        return { id, url: str(d.url) };
+      },
       meter: (s) => (s.dry ? {} : { posts: 1 }),
       browser: {
         flow: "reddit/submit",
@@ -359,6 +418,23 @@ export const reddit: SiteApi = {
       path: "/api/comment",
       request: comment,
       irreversible: true,
+      verify: {
+        words: (c) => c.text,
+        read: async (c, get) => {
+          const name = await redditSelf(get);
+          if (!name) return unclear(NO_NAME);
+          return redditRows(
+            await get(`/user/${name}/comments`, { limit: VERIFY_LIMIT, sort: "new" }),
+            // The same words under another parent are another comment.
+            (d) => redditRow(d, text(d.parent_id) === c.thing_id, text(d.body)),
+          );
+        },
+      },
+      sentAs: (o) => {
+        const d = rec(rec(arr(rec(rec(rec(o).json).data).things)[0]).data);
+        const id = str(d.name) ?? (str(d.id) ? `t1_${text(d.id)}` : null);
+        return { id, url: permalink(d) };
+      },
       meter: () => ({ comments: 1 }),
       browser: { flow: "reddit/comment" },
       summary: "! A comment on a post (t3_) or a reply to a comment (t1_)",
@@ -368,6 +444,19 @@ export const reddit: SiteApi = {
       path: "/api/compose",
       request: compose,
       irreversible: true,
+      verify: {
+        words: (m) => m.text,
+        read: async (m, get) => {
+          const body = await get("/message/sent", { limit: VERIFY_LIMIT });
+          return redditRows(body, (d) => ({
+            words: text(d.body),
+            at: isoOf(d.created_utc, "s"),
+            id: str(d.name),
+            url: str(d.id) ? `${WWW}/message/messages/${text(d.id)}` : null,
+            mine: sameName(d.dest, m.to),
+          }));
+        },
+      },
       meter: () => ({ messages: 1 }),
       browser: {
         flow: "reddit/message",
@@ -381,6 +470,9 @@ export const reddit: SiteApi = {
       path: "/api/subscribe",
       request: subscribe,
       irreversible: true,
+      verify: {
+        none: "a join or leave is idempotent: a repeat changes nothing, so an unknown end may send again",
+      },
       meter: (s) => (s.dry ? {} : { joins: 1 }),
       browser: {
         flow: "reddit/subscribe",
@@ -396,6 +488,7 @@ export const reddit: SiteApi = {
         "The profile's display name (new Reddit settings in the browser): `name`; answers `{ before, name }`. The username never changes",
       request: profileName,
       irreversible: true,
+      verify: { none: "a name set is idempotent: a repeat sets the same name" },
       browser: { flow: "reddit/profile-name" },
     }),
   ],

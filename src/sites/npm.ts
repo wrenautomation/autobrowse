@@ -87,6 +87,9 @@ export const npm: SiteApi = {
         "Make a free org (unlimited public packages) so packages publish under its scope; the name is fixed once made",
       request: z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/) }),
       irreversible: true,
+      verify: {
+        none: "no read lists the orgs the account made, and a repeat is refused (the name is taken), which is harmless",
+      },
       browser: { flow: "npm/create-org" },
     }),
     route({
@@ -103,6 +106,9 @@ export const npm: SiteApi = {
         allowPublish: z.boolean().optional(),
       }),
       irreversible: true,
+      verify: {
+        none: "no read shows a package's trusted publisher, and a repeat is refused (fixed once made), which is harmless",
+      },
       browser: { flow: "npm/trusted-publisher" },
     }),
   ],

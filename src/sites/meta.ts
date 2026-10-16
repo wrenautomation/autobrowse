@@ -14,10 +14,63 @@ import { HttpError } from "../clients/http.js";
 import type { Amount } from "../gates/spend.js";
 import { WEB_REDIRECT } from "./oauth.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi, SiteError } from "./types.js";
+import type { Seen, VerifyGet, VerifyRead, VerifyRow } from "./verdict.js";
+import { arr, hasNext, isoOf, rec, str, text, unclear } from "./verify-kit.js";
 
 export const META_ORIGIN = "https://graph.facebook.com";
 /** Graph API versions live about two years. */
 export const META_VERSION = "v23.0";
+
+const POSTS_READ = 25;
+const fbUrl = (id: string) => `https://www.facebook.com/${id}`;
+
+/** The Page's newest posts (published ones), as verify rows. */
+async function pagePostRows(look: VerifyGet, pageId: string): Promise<VerifyRead> {
+  const r = await look(`/${pageId}/posts`, {
+    fields: "id,message,created_time,permalink_url",
+    limit: POSTS_READ,
+  });
+  return {
+    rows: arr(rec(r).data).map((e) => {
+      const p = rec(e);
+      return {
+        words: text(p.message),
+        at: isoOf(p.created_time),
+        id: str(p.id),
+        url: str(p.permalink_url),
+      };
+    }),
+    order: "newest",
+    complete: !hasNext(r),
+  };
+}
+
+/** What a post to a Page looks for: its words, or nothing to find it by. */
+const noWords = (m: string | undefined): Seen | null =>
+  m?.trim() ? null : unclear("the post has no words to look for");
+
+/** A scheduled or unpublished post is not in the Page's posts yet. */
+const unlisted = (published: boolean, at?: number): string | null =>
+  !published || at ? "a scheduled or unpublished post is not in the Page's posts" : null;
+
+/** A DM's rows from a Page's conversations; `ours` says whose a message is. */
+function dmRows(bodies: readonly unknown[], ours: (from: string) => boolean): VerifyRow[] {
+  return bodies
+    .flatMap((b) => arr(rec(b).data))
+    .flatMap((conv) =>
+      arr(rec(rec(conv).messages).data).map((m): VerifyRow => {
+        const msg = rec(m);
+        return {
+          words: text(msg.message),
+          at: isoOf(msg.created_time),
+          id: str(msg.id),
+          url: null,
+          mine: ours(text(rec(msg.from).id)),
+        };
+      }),
+    )
+    .sort((a, b) => (b.at ?? "").localeCompare(a.at ?? ""));
+}
 
 const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 const id = z.string().regex(/^[0-9]+$/, "a numeric Graph id");
@@ -698,6 +751,15 @@ export const meta: SiteApi = {
         "A text or link post on a Page (`published:false` + `scheduled_publish_time` schedules)",
       request: feed,
       irreversible: true,
+      verify: {
+        words: (b) => b.message,
+        read: (b, look) => pagePostRows(look, b.pageId),
+        lags: (b) => unlisted(b.published, b.scheduled_publish_time),
+      },
+      sentAs: (o) => {
+        const id = str(rec(o).id);
+        return { id, url: id ? fbUrl(id) : null };
+      },
       api: async ({ pageId, ...body }, leg) =>
         post(await pageLeg(leg, pageId), `${pageId}/feed`, body),
     }),
@@ -707,6 +769,16 @@ export const meta: SiteApi = {
       summary: "A photo post on a Page from a public image URL",
       request: photo,
       irreversible: true,
+      verify: {
+        words: (b) => b.message ?? "",
+        read: async (b, look) => noWords(b.message) ?? (await pagePostRows(look, b.pageId)),
+        lags: (b) => unlisted(b.published),
+      },
+      // `post_id` is the Page post; `id` is the photo.
+      sentAs: (o) => {
+        const id = str(rec(o).post_id) ?? str(rec(o).id);
+        return { id, url: id ? fbUrl(id) : null };
+      },
       api: async ({ pageId, ...body }, leg) =>
         post(await pageLeg(leg, pageId), `${pageId}/photos`, body),
     }),
@@ -716,6 +788,16 @@ export const meta: SiteApi = {
       summary: "A video (or Reel) on a Page from a public video URL",
       request: video,
       irreversible: true,
+      verify: {
+        words: (b) => b.description ?? b.title ?? "",
+        read: async (b, look) =>
+          noWords(b.description ?? b.title) ?? (await pagePostRows(look, b.pageId)),
+        lags: () => "Facebook lists a video post only once it is processed",
+      },
+      sentAs: (o) => {
+        const id = str(rec(o).id);
+        return { id, url: id ? `https://www.facebook.com/watch/?v=${id}` : null };
+      },
       api: async ({ pageId, ...body }, leg) =>
         post(await pageLeg(leg, pageId), `${pageId}/videos`, body),
     }),
@@ -726,6 +808,10 @@ export const meta: SiteApi = {
         "A photo story on a Page from a public image URL: the photo goes up unpublished, then the story; answers {post_id}",
       request: photoStory,
       irreversible: true,
+      verify: {
+        none: "a story is not in the Page's posts, and no read route lists a Page's stories",
+      },
+      sentAs: (o) => ({ id: str(rec(o).post_id), url: null }),
       api: async ({ pageId, url }, leg) => {
         const page = await pageLeg(leg, pageId);
         const photo = (await post(page, `${pageId}/photos`, { url, published: false })) as {
@@ -743,6 +829,10 @@ export const meta: SiteApi = {
         "A video story on a Page from a public video URL (9:16, 3 to 90 s): start, hosted upload, finish; answers {post_id}",
       request: videoStory,
       irreversible: true,
+      verify: {
+        none: "a story is not in the Page's posts, and no read route lists a Page's stories",
+      },
+      sentAs: (o) => ({ id: str(rec(o).post_id), url: null }),
       api: async ({ pageId, file_url }, leg) => {
         const page = await pageLeg(leg, pageId);
         const start = (await post(page, `${pageId}/video_stories`, {
@@ -809,6 +899,21 @@ export const meta: SiteApi = {
       summary: "Publish an Instagram container (step 2); answers the media id",
       request: igPublish,
       irreversible: true,
+      verify: {
+        // The container says whether it was published: a state, not words.
+        words: () => "",
+        read: async (b, look): Promise<Seen> => {
+          const status = text(
+            rec(await look(`/${b.creation_id}`, { fields: "status_code" })).status_code,
+          );
+          if (status === "PUBLISHED") return { seen: "found", id: null, url: null, at: null };
+          // Never published, and never will be: its time is out or it failed.
+          if (status === "ERROR" || status === "EXPIRED") return { seen: "absent" };
+          // Ready or still processing: the publish may yet land.
+          return unclear(`the container is ${status || "in an unknown state"}`);
+        },
+      },
+      sentAs: (o) => ({ id: str(rec(o).id), url: null }),
       api: ({ igUserId, creation_id }, leg) =>
         post(leg, `${igUserId}/media_publish`, { creation_id }),
     }),
@@ -839,6 +944,10 @@ export const meta: SiteApi = {
       summary: "Reply to an Instagram comment",
       request: igReply,
       irreversible: true,
+      verify: {
+        none: "Graph names a replier by username and the input holds no account to tell our reply from another's",
+      },
+      sentAs: (o) => ({ id: str(rec(o).id), url: null }),
       api: ({ commentId, message }, leg) => post(leg, `${commentId}/replies`, { message }),
     }),
     route({
@@ -847,6 +956,31 @@ export const meta: SiteApi = {
       summary: "The Page's reply under a Facebook comment",
       request: pageReply,
       irreversible: true,
+      verify: {
+        words: (b) => b.message,
+        read: async (b, look): Promise<VerifyRead> => {
+          const r = await look(`/${b.commentId}/comments`, {
+            fields: "id,message,from{id},created_time",
+            limit: 100,
+          });
+          return {
+            rows: arr(rec(r).data).map((e) => {
+              const c = rec(e);
+              return {
+                words: text(c.message),
+                at: isoOf(c.created_time),
+                id: str(c.id),
+                url: null,
+                mine: text(rec(c.from).id) === b.pageId,
+              };
+            }),
+            // Replies come in the edge's own order; only a read to the end proves absent.
+            order: "ranked",
+            complete: !hasNext(r),
+          };
+        },
+      },
+      sentAs: (o) => ({ id: str(rec(o).id), url: null }),
       // Not asked in the consent yet: it needs App Review, which waits on Business Verification.
       needs: ["pages_manage_engagement"],
       api: async ({ pageId, commentId, message }, leg) =>
@@ -869,6 +1003,39 @@ export const meta: SiteApi = {
         "A DM from the Page (Send API): to someone who wrote first, or a comment's Private Reply",
       request: pageMessage,
       irreversible: true,
+      verify: {
+        words: (b) => b.message.text,
+        read: async (b, look): Promise<VerifyRead> => {
+          // To a person: their one conversation (Messenger or Instagram). From a comment's
+          // Private Reply: who the person is is not in the input, so the newest conversations.
+          const to = "id" in b.recipient ? b.recipient.id : null;
+          const reads = await Promise.allSettled(
+            (["messenger", "instagram"] as const).map((platform) =>
+              look(`/${b.pageId}/conversations`, {
+                platform,
+                limit: 25,
+                ...(to ? { user_id: to } : {}),
+              }),
+            ),
+          );
+          const ok = reads.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+          const failed = reads.find((r) => r.status === "rejected");
+          if (!ok.length && failed?.status === "rejected") throw failed.reason;
+          const convs = ok.flatMap((b2) => arr(rec(b2).data));
+          return {
+            // With the person known, any message not from them is ours. Without, only the
+            // Page's own id is known, which Messenger uses and Instagram does not.
+            rows: dmRows(ok, (from) => (to ? from !== to : from === b.pageId)),
+            order: to ? "newest" : "ranked",
+            complete:
+              !!to &&
+              reads.every((r) => r.status === "fulfilled") &&
+              ok.every((r) => !hasNext(r)) &&
+              convs.every((c) => !hasNext(rec(c).messages)),
+          };
+        },
+      },
+      sentAs: (o) => ({ id: str(rec(o).message_id), url: null }),
       // Without Advanced Access a Page messages only the app's own testers; set META_GRANTS=messaging
       // when App Review grants pages_messaging and instagram_manage_messages.
       needs: ["messaging"],
