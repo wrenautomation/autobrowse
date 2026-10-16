@@ -72,11 +72,15 @@ export type Seen =
   | { seen: "absent" }
   | { seen: "unclear"; why: string };
 
-/** A GET on this site as the sending account (`site`: another one, such as `reddit-public`). */
+/**
+ * A read on this site as the sending account, through the facade like any call. `site`: another
+ * one (`reddit-public`). `method`: a POST that only reads (TikTok's `/v2/video/list/`); never an
+ * irreversible route.
+ */
 export type VerifyGet = (
   path: string,
   input?: Record<string, unknown>,
-  site?: string,
+  o?: { site?: string; method?: "GET" | "POST" },
 ) => Promise<unknown>;
 
 /** How an irreversible route proves what happened after an unclear end. */

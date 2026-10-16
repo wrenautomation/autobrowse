@@ -82,7 +82,7 @@ The seam both repos build to. Types: `src/sites/verdict.ts`.
 - A key with a final verdict answers it and writes nothing. A key that is submitted with no verdict, or `unknown`, runs only the verify read. A key started but not submitted, with no live call in this process, is `not_sent` `before_submit`: the process that ran it died before the act.
 - Verify: up to 3 reads, at 30 s, 3 min and 10 min after the end (`ctx.sleep` between, each read one `ctx.run`). Found is `sent` `verified`. Absent on a full read is `not_sent` `verified_absent`. Else `unknown`. A route with `verify: { none }` is `unknown` with its reason at once.
 - `sites/verdict {sendKey}` answers the journal's verdict without the call: for a call that was killed, or to check an `unknown` again (it runs the verify reads again). No record is `not_sent` `before_submit`. A live call is `unknown` "still running".
-- Each verify read is a GET through the same facade as the sending account (`VerifyGet`), so it takes caps and pace like any read.
+- Each verify read is a read through the same facade as the sending account (`VerifyGet`: a GET, or a POST route that only reads), so it takes caps and pace like any read.
 
 ## Decision log
 
