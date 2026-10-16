@@ -7,200 +7,27 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { z } from "zod";
-import { currentCall, fileDoneActs, markSubmitted } from "../src/browser/attempt.js";
-import { ProfileBusy } from "../src/browser/browsers.js";
-import { defineFlow, type FlowRunner } from "../src/browser/flow.js";
-import { HttpError, httpClient } from "../src/clients/http.js";
-import { memorySink } from "../src/deps/sink.js";
+import { markSubmitted } from "../src/browser/attempt.js";
 import {
   fileSendJournal,
   memorySendJournal,
-  route,
   type SendJournal,
-  type SiteApi,
   type SiteFacade,
-  siteFacade,
   sitesService,
   VERIFY_PAUSES_MS,
 } from "../src/sites/index.js";
 import type { SendVerdict } from "../src/sites/verdict.js";
-
-/** The pauses before the three verify reads in a test: small, and different. */
-const PAUSES = [1, 2, 3];
-
-/** What the fake platform holds, and what its next write does. */
-const platform = {
-  comments: [] as { text: string; at: string; id: string }[],
-  videos: [] as { title: string; at: string; id: string; visible: boolean }[],
-  /** `ok` answers; `close` posts then the page dies; `died` the page dies at the click, nothing posted. */
-  mode: "ok" as "ok" | "close" | "died" | "lost" | "refuse" | "hold" | "busy",
-  /** The video list shows a new video only after processing. */
-  lagging: false,
-  /** Every write that reached the platform. */
-  writes: [] as string[],
-  /** `hold`: the leg waits here after its submit step. */
-  release: Promise.resolve(),
-  /** The send key each leg ran under (`currentCall`), and the journal's `submitted` read from disk at the act. */
-  keys: [] as (string | undefined)[],
-  onDisk: [] as (boolean | undefined)[],
-  reads: 0,
-};
+import { platform, resetPlatform, scratchFacade } from "./send-rig.js";
 
 let dir: string;
 let journal: SendJournal;
 const diskJournal = () => fileSendJournal(join(dir, "sends"));
 
-const comment = defineFlow<{ thread: string; text: string }, { id: string; url: string }>({
-  site: "scratch",
-  name: "comment",
-  async run() {
-    throw new Error("the fake runner answers this");
-  },
-});
-const _dm = defineFlow<{ to: string; text: string }, { id: string }>({
-  site: "scratch",
-  name: "dm",
-  async run() {
-    throw new Error("never recorded");
-  },
-});
-
-/** The browser: what a flow does when its irreversible act goes through and then the page dies. */
-const runner: FlowRunner = {
-  async run(flow, input) {
-    const { text } = input as { text: string };
-    platform.keys.push(currentCall());
-    if (platform.mode === "busy") throw new ProfileBusy("scratch", 4242, "cli", "");
-    markSubmitted();
-    const key = currentCall()?.replace(/^send /, "") ?? "";
-    platform.onDisk.push(diskJournal().get(key)?.submitted);
-    if (platform.mode === "died") throw new Error("page closed at the click");
-    const id = `c${platform.comments.length + 1}`;
-    platform.comments.unshift({ text, at: new Date().toISOString(), id });
-    platform.writes.push(`${flow.name} ${text}`);
-    if (platform.mode === "hold") await platform.release;
-    if (platform.mode === "close" || platform.mode === "hold")
-      throw new Error("page closed after Post");
-    return { id, url: `https://scratch.test/c/${id}` } as never;
-  },
-};
-
-const scratch: SiteApi = {
-  site: "scratch",
-  origin: "https://scratch.test",
-  auth: { open: true },
-  setup: [],
-  routes: [
-    route({
-      method: "GET",
-      path: "/comments",
-      request: z.object({ thread: z.string() }),
-      summary: "A thread's comments, newest first",
-      api: async () => ({ items: platform.comments }),
-    }),
-    route({
-      method: "POST",
-      path: "/videos/list",
-      request: z.object({}),
-      summary: "The account's videos (a POST that only reads)",
-      api: async () => ({ videos: platform.videos.filter((v) => v.visible) }),
-    }),
-    route({
-      method: "POST",
-      path: "/comments",
-      request: z.object({ thread: z.string(), text: z.string() }),
-      summary: "Comment on a thread",
-      irreversible: true,
-      browser: { flow: "scratch/comment" },
-      sentAs: (o: { id: string; url: string }) => ({ id: o.id, url: o.url }),
-      verify: {
-        words: (i: { thread: string; text: string }) => i.text,
-        read: async (i: { thread: string; text: string }, get) => {
-          platform.reads += 1;
-          const got = (await get("/comments", { thread: i.thread })) as {
-            items: { text: string; at: string; id: string }[];
-          };
-          return {
-            rows: got.items.map((c) => ({ words: c.text, at: c.at, id: c.id, url: null })),
-            order: "newest" as const,
-            complete: true,
-          };
-        },
-      },
-    }),
-    route({
-      method: "POST",
-      path: "/dms",
-      request: z.object({ to: z.string(), text: z.string() }),
-      summary: "A DM whose flow nobody recorded",
-      irreversible: true,
-      browser: { flow: "scratch/dm" },
-      verify: { none: "no list shows a DM we sent" },
-    }),
-    route({
-      method: "POST",
-      path: "/pins",
-      request: z.object({ note: z.string() }),
-      summary: "Pin a note: nothing lists it",
-      irreversible: true,
-      verify: { none: "no list shows a pinned note" },
-      api: async (i: { note: string }) => {
-        platform.writes.push(`pin ${i.note}`);
-        throw new Error("socket hang up");
-      },
-    }),
-    route({
-      method: "POST",
-      path: "/videos",
-      request: z.object({ title: z.string() }),
-      summary: "Publish a video",
-      irreversible: true,
-      sentAs: (o: { id: string }) => ({ id: o.id, url: `https://scratch.test/v/${o.id}` }),
-      verify: {
-        words: (i: { title: string }) => i.title,
-        lags: () => "a new video shows in the list only after processing",
-        read: async (_i: { title: string }, get) => {
-          platform.reads += 1;
-          const got = (await get("/videos/list", {}, { method: "POST" })) as {
-            videos: { title: string; at: string; id: string }[];
-          };
-          return {
-            rows: got.videos.map((v) => ({ words: v.title, at: v.at, id: v.id, url: null })),
-            order: "newest" as const,
-            complete: false,
-          };
-        },
-      },
-      api: async (i: { title: string }) => {
-        platform.keys.push(currentCall());
-        platform.writes.push(`video ${i.title}`);
-        if (platform.mode === "refuse")
-          throw new HttpError("POST", "https://scratch.test/videos", 403);
-        const id = `v:${i.title}`;
-        platform.videos.unshift({
-          title: i.title,
-          at: new Date().toISOString(),
-          id,
-          visible: !platform.lagging,
-        });
-        // The request went out and the platform has it; the answer never comes back.
-        if (platform.mode === "lost") throw new Error("socket hang up");
-        return { id };
-      },
-    }),
-  ],
-};
+/** The pauses before the three verify reads in a test: small, and different. */
+const PAUSES = [1, 2, 3];
 
 function build(opts: { wait?: { boundMs: number; pausesMs: number[] } } = {}) {
-  const facade: SiteFacade = siteFacade([scratch], {
-    http: httpClient(),
-    env: () => undefined,
-    sink: memorySink(),
-    runner,
-    flow: (name) => (name === "scratch/comment" ? (comment as never) : null),
-    started: fileDoneActs(join(dir, "started")),
-  });
+  const facade = scratchFacade(join(dir, "started"));
   const svc = sitesService(facade, "sites_verdicts", undefined, null, {
     journal,
     verifyPausesMs: PAUSES,
@@ -234,18 +61,7 @@ const showVideos = () => {
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "autobrowse-verdicts-"));
   journal = memorySendJournal();
-  platform.comments = [];
-  // An old video, so a list read reaches back past the send.
-  platform.videos = [
-    { title: "old video", at: "2026-01-01T00:00:00.000Z", id: "v:old", visible: true },
-  ];
-  platform.mode = "ok";
-  platform.lagging = false;
-  platform.writes = [];
-  platform.release = Promise.resolve();
-  platform.keys = [];
-  platform.onDisk = [];
-  platform.reads = 0;
+  resetPlatform();
 });
 
 describe("a keyed write answers a verdict", () => {
@@ -264,9 +80,12 @@ describe("a keyed write answers a verdict", () => {
 
   it("writes `submitted` to disk before the act (old code kept no record)", async () => {
     journal = diskJournal();
+    const onDisk: (boolean | undefined)[] = [];
+    // Read the file as the act goes out, with a fresh journal: this is what a crash would find.
+    platform.onAct = (key) => void onDisk.push(diskJournal().get(key)?.submitted);
     const { call } = build();
     await call(say("disk words", "k-disk"));
-    expect(platform.onDisk).toEqual([true]);
+    expect(onDisk).toEqual([true]);
   });
 
   it("10-15 Reddit: the act went through, then the page closed; the verify read says sent (old code: terminal 'may have gone through', and a rerun threw 'already went through')", async () => {
