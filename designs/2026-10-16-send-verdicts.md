@@ -68,3 +68,22 @@ The verdict is the call's result, not an error. A request that is wrong (bad bod
 - Every irreversible route has `verify` or is listed as "unknown only" with a reason.
 - Wren has no code that reads autobrowse error words.
 - The 10-15 Reddit case and the 10-16 TikTok case each have a test that fails on the old code.
+
+## Contract (planner, 2026-10-16)
+
+The seam both repos build to. Types: `src/sites/verdict.ts`.
+
+- `sites/call` and `desk/call` take `sendKey` (1 to 200 chars). Any non-GET call with a key answers a `SendVerdict` as its result. Without a key a call answers as today (the CLI, older callers).
+- The caller also sets the Restate idempotency key to the send key, so two live invocations with one key are one.
+- A keyed `sent` with `how: "answer"` carries `output`: the official answer an unkeyed call gives. `id` and `url` come from the route's `sentAs`.
+- Before the submit step, a `SiteError` under 500 stays a thrown `SiteError` (a bad request, no route, no leg, a cap's 429). Anything else before the submit step is `not_sent` `before_submit`.
+- After the submit step, a platform's 4xx (not 408) is `not_sent` `refused` with its `status`. Anything else runs the verify read.
+- The desk journal (`src/sites/send-journal.ts`) keeps one file per key: site, method, path, account, input, started-at, submitted, verdict. `markSubmitted` writes `submitted` to the file before the act.
+- A key with a final verdict answers it and writes nothing. A key that is submitted with no verdict, or `unknown`, runs only the verify read. A key started but not submitted, with no live call in this process, is `not_sent` `before_submit`: the process that ran it died before the act.
+- Verify: up to 3 reads, at 30 s, 3 min and 10 min after the end (`ctx.sleep` between, each read one `ctx.run`). Found is `sent` `verified`. Absent on a full read is `not_sent` `verified_absent`. Else `unknown`. A route with `verify: { none }` is `unknown` with its reason at once.
+- `sites/verdict {sendKey}` answers the journal's verdict without the call: for a call that was killed, or to check an `unknown` again (it runs the verify reads again). No record is `not_sent` `before_submit`. A live call is `unknown` "still running".
+- Each verify read is a GET through the same facade as the sending account (`VerifyGet`), so it takes caps and pace like any read.
+
+## Decision log
+
+- 2026-10-16: contract above. `output` added to `sent` so callers keep their answer parsers. `sites/verdict` added because Restate gives a killed invocation's failure back to any repeat of its idempotency key.

@@ -84,3 +84,4 @@ export const SITES: readonly SiteApi[] = [
   fbPublic,
   connectors,
 ];
+export * from "./verdict.js";

@@ -15,6 +15,7 @@ import type { Amount } from "../gates/spend.js";
 import type { SpentKeys } from "../reach/key-ring.js";
 import type { Pace } from "./caps.js";
 import type { UploadSessions } from "./uploads.js";
+import type { NoVerify, RouteVerify } from "./verdict.js";
 
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -68,6 +69,13 @@ export interface SiteRoute<I = unknown, O = unknown> {
   browser?: BrowserLeg<I, O>;
   /** Publishes something: said in the route listing so an orchestrator gates it. */
   irreversible?: boolean;
+  /**
+   * How a keyed call of this irreversible route proves what happened after an unclear end
+   * (`sites/verdict.ts`), or `{ none }` with why no read can. Every irreversible route has one.
+   */
+  verify?: RouteVerify<I> | NoVerify;
+  /** The platform's id and link for what the answer made, for a `sent` verdict; nulls when absent. */
+  sentAs?: (output: O) => { id: string | null; url: string | null };
   /**
    * The API leg picks up its own earlier try when Restate reruns the call (a resumable upload
    * keyed on the call): a rerun may go ahead. Any other irreversible API call that started once
