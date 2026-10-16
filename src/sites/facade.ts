@@ -682,6 +682,13 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       try {
         const out = await answer();
         note("ok");
+        // The answer says the call used less (no invite offered): the day's count follows it.
+        const real = taken && use && r.used?.(parsed.data as never, out as never);
+        if (real && deps.caps) {
+          const who = chosen ?? s.site;
+          deps.caps.giveBack(s.site, who, use);
+          deps.caps.take(s.site, who, real, {});
+        }
         return out;
       } catch (e) {
         // The profile was open elsewhere: nothing was asked of the site, so nothing is spent.

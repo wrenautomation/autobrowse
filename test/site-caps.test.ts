@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Credential, CredentialStore } from "credvault";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { linkedinCompanyJobs } from "../src/browser/flows/linkedin-reach.js";
+import { linkedinCompanyJobs, linkedinConnect } from "../src/browser/flows/linkedin-reach.js";
 import { xProfile, xSearch } from "../src/browser/flows/x-read.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
@@ -470,6 +470,43 @@ describe("who spent a cap", () => {
       /GET \/company\/\{company\}\/jobs failed after spending a read/,
     );
     expect(caps.today()).toEqual({ "linkedin|r@x.com|company": 1, "linkedin|r@x.com|total": 1 });
+  });
+});
+
+describe("an invite the page did not offer", () => {
+  it("books a profile look, not one of the day's invites (2026-10-16)", async () => {
+    const caps = memoryCaps(() => noon);
+    const calls: string[] = [];
+    const browser = fakeBrowser(calls);
+    let offered = false;
+    browser.on(linkedinConnect, async () =>
+      offered ? { sent: true } : { sent: false, relationship: "pending" },
+    );
+    const sites = siteFacade([{ ...linkedin, pace: { gapMs: 0 } }], {
+      http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+      env: () => undefined,
+      sink: memorySink(),
+      runner: browser,
+      flow: (n) => (n === "linkedin/connect" ? (linkedinConnect as never) : null),
+      caps,
+      now: () => noon,
+      accountOf: async (_site, name) => (name === "linkedin@wren" ? "w@x.com" : null),
+    });
+    const connect = () =>
+      sites.call("linkedin", "POST", "/in/x-y/connect", { vanity: "x-y" }, "linkedin@wren");
+    await connect();
+    expect(caps.today()).toMatchObject({
+      "linkedin|w@x.com|connect": 0,
+      "linkedin|w@x.com|profile": 1,
+      "linkedin|w@x.com|total": 1,
+    });
+    offered = true;
+    await connect();
+    expect(caps.today()).toMatchObject({
+      "linkedin|w@x.com|connect": 1,
+      "linkedin|w@x.com|profile": 1,
+      "linkedin|w@x.com|total": 2,
+    });
   });
 });
 

@@ -291,12 +291,22 @@ export const linkedinOAuth: OAuthSpec = {
 function withTotal(r: SiteRoute<never, unknown>): SiteRoute<never, unknown> {
   const meter = r.meter;
   if (!meter) return r;
+  const total = (use: Record<string, number>) => ({
+    ...use,
+    total: Object.values(use).reduce((n, k) => n + k, 0),
+  });
+  const used = r.used;
   return {
     ...r,
-    meter: (q) => {
-      const use = meter(q);
-      return { ...use, total: Object.values(use).reduce((n, k) => n + k, 0) };
-    },
+    meter: (q) => total(meter(q)),
+    ...(used
+      ? {
+          used: (q, out) => {
+            const u = used(q, out);
+            return u && total(u);
+          },
+        }
+      : {}),
   };
 }
 
@@ -637,6 +647,9 @@ export const linkedin: SiteApi = {
       request: connect,
       irreversible: true,
       meter: () => ({ connect: 1 }),
+      // No invite offered sent nothing: a profile look, not one of the day's invites.
+      used: (_q, out) =>
+        (out as { sent?: boolean } | null)?.sent === false ? { profile: 1 } : undefined,
       browser: { flow: "linkedin/connect" },
     }),
     route({

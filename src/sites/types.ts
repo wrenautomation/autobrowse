@@ -87,6 +87,12 @@ export interface SiteRoute<I = unknown, O = unknown> {
    */
   meter?: (input: I) => Record<string, number>;
   /**
+   * What the call really used, read from its answer, when that differs from `meter`: an invite
+   * the page did not offer sent nothing, so it spends a profile look, not an invite. The
+   * facade gives `meter`'s count back and books this instead. Undefined: `meter` stands.
+   */
+  used?: (input: I, output: O) => Record<string, number> | undefined;
+  /**
    * "browser": the browser leg answers even when a token is in hand (the API
    * charges per read and the signed-in page shows the same thing for free).
    * A function decides per request: a LinkedIn post by a Page goes by the
