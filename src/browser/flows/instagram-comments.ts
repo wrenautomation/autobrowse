@@ -42,6 +42,8 @@ export interface IgComment {
   /** The top-level comment a reply is under, else null. */
   parentId: string | null;
   likes: number | null;
+  /** Written by the signed-in account (`viewer`). */
+  mine: boolean;
 }
 
 export interface IgPostComments {
@@ -49,6 +51,8 @@ export interface IgPostComments {
   url: string;
   /** The post's owner, off its meta tags; null when the page gave none. */
   owner: string | null;
+  /** The signed-in account's username, off the nav's Profile link; null when unread. */
+  viewer: string | null;
   /** One row per id, newest first. Instagram sends them ranked, so this is not every comment. */
   comments: IgComment[];
   /** The page said it holds more than were read (`has_next_page` on the last list read). */
@@ -81,6 +85,7 @@ function commentOf(n: Json): IgComment | null {
     at: Number.isFinite(secs) && secs > 0 ? new Date(secs * 1000).toISOString() : "",
     parentId: idOf(n.parent_comment_id),
     likes: typeof n.comment_like_count === "number" ? n.comment_like_count : null,
+    mine: false,
   };
 }
 
@@ -138,6 +143,19 @@ export function mergeIgComments(rows: IgComment[]): IgComment[] {
   return [...seen.values()].sort((a, b) => (a.at === b.at ? 0 : a.at < b.at ? 1 : -1));
 }
 
+/** The signed-in account: the nav's Profile link is `/<username>/`. */
+const VIEWER_SCRIPT = `(() => {
+  const a = Array.from(document.querySelectorAll("a[href]")).find(
+    (el) => (el.textContent || "").trim() === "Profile",
+  );
+  return a ? a.getAttribute("href") : null;
+})()`;
+
+/** `/<username>/` as the username; null for any other link. */
+export function viewerOf(href: string | null): string | null {
+  return /^\/([A-Za-z0-9._]{1,30})\/?$/.exec(href ?? "")?.[1] ?? null;
+}
+
 /** The page's prefetch blobs that hold comments, as text. */
 const BLOBS_SCRIPT = `Array.from(document.querySelectorAll("script[data-sjs]"))
   .map((s) => s.textContent || "")
@@ -193,6 +211,7 @@ export const instagramPostComments = defineFlow<
 
     fp.page.on("response", onResponse);
     let owner: string | null = null;
+    let viewer: string | null = null;
     try {
       await fp.open(postUrl(shortcode));
       if (SIGNED_OUT.test(fp.url()))
@@ -210,6 +229,7 @@ export const instagramPostComments = defineFlow<
         await fp.wait(POLL_MS);
       }
       if (!rendered) return fp.human(`post ${shortcode} did not render (${fp.url()})`);
+      viewer = viewerOf(await fp.page.evaluate<string | null>(VIEWER_SCRIPT).catch(() => null));
       const blobs = await fp.page.evaluate<string[]>(BLOBS_SCRIPT).catch(() => [] as string[]);
       for (const b of blobs) for (const j of jsonsOf(b)) take(j);
       await Promise.all(pending);
@@ -225,11 +245,12 @@ export const instagramPostComments = defineFlow<
     } finally {
       fp.page.off("response", onResponse);
     }
-    const comments = merged();
+    const comments = merged().map((c) => ({ ...c, mine: !!viewer && c.username === viewer }));
     return {
       shortcode,
       url: postUrl(shortcode),
       owner,
+      viewer,
       comments: comments.slice(0, cap),
       more: more || comments.length > cap,
     };

@@ -5,6 +5,7 @@ import {
   instagramPostComments,
   jsonsOf,
   mergeIgComments,
+  viewerOf,
 } from "../src/browser/flows/instagram-comments.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
 import { instagram } from "../src/sites/instagram.js";
@@ -85,6 +86,7 @@ describe("instagram post comments: parsing", () => {
       at: iso(T + 10),
       parentId: null,
       likes: 1,
+      mine: false,
     });
     const caption = {
       caption: { pk: "9", text: "A walk", created_at: T, user: { username: "x" } },
@@ -95,6 +97,14 @@ describe("instagram post comments: parsing", () => {
   it("reads Relay answers line by line, past a for(;;) guard and a cut line", () => {
     const text = `for (;;);${JSON.stringify(PAGE_2)}\n{"cut":\n${JSON.stringify({ a: 1 })}`;
     expect(jsonsOf(text)).toEqual([PAGE_2, { a: 1 }]);
+  });
+
+  it("reads the viewer off the Profile link only", () => {
+    expect(viewerOf("/our_acct/")).toBe("our_acct");
+    expect(viewerOf("/our.acct")).toBe("our.acct");
+    expect(viewerOf("/p/AbC123/")).toBeNull();
+    expect(viewerOf("https://x.test/a/")).toBeNull();
+    expect(viewerOf(null)).toBeNull();
   });
 
   it("merges by id, newest first", () => {
@@ -121,6 +131,7 @@ describe("instagram post comments: the flow and the route", () => {
       evaluate: async (fn: unknown) => {
         const src = String(fn);
         if (src.includes("data-sjs")) return opts.blobs ?? [BLOB];
+        if (src.includes("Profile")) return "/our_acct/";
         scrolls++;
         // The first scroll loads the next page; the others bring nothing.
         if (scrolls === 1)
@@ -147,6 +158,8 @@ describe("instagram post comments: the flow and the route", () => {
     if ("found" in out) throw new Error("not found");
     expect(page.opened).toEqual([`https://www.instagram.com/p/${CODE}/`]);
     expect(out.owner).toBe("owner_acct");
+    expect(out.viewer).toBe("our_acct");
+    expect(out.comments.filter((c) => c.mine).map((c) => c.id)).toEqual(["13"]);
     expect(out.comments.map((c) => c.id)).toEqual(["13", "21", "12", "11"]);
     expect(out.more).toBe(false);
     // The second page said no more: one scroll.

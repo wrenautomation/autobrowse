@@ -298,7 +298,7 @@ export const instagram: SiteApi = {
       method: "GET",
       path: "/web/p/{shortcode}/comments",
       summary:
-        "The comments on any public post, read off the page (the API reads only our own): `{ shortcode, url, owner, comments: [{ id, username, userId, text, at, parentId, likes }], more }`, newest first; Instagram ranks them, so `more` says some were not read (`max`, default 100). Reads only",
+        "The comments on any public post, read off the page (the API reads only our own): `{ shortcode, url, owner, viewer, comments: [{ id, username, userId, text, at, parentId, likes, mine }], more }`, newest first; Instagram ranks them, so `more` says some were not read (`max`, default 100). Reads only",
       request: webComments,
       meter: () => ({ comments: 1 }),
       browser: { flow: "instagram/post-comments" },
