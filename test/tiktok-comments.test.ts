@@ -191,6 +191,8 @@ describe("tiktok comments: the flow and the route", () => {
     label?: string;
     /** What the panel's Comments tab brings when clicked. */
     onTab?: unknown[];
+    /** Clicks on the tab before this one do nothing (the tab is not live yet). */
+    tabLiveAt?: number;
   }) => {
     const { fp, acts } = fakePage({ text: [opts.text ?? "Video"], present: () => true });
     const handlers = new Set<Handler>();
@@ -217,12 +219,16 @@ describe("tiktok comments: the flow and the route", () => {
         return true;
       },
       getByRole: (_role: string, o: { name: RegExp }) => ({
-        first: () => ({
-          click: async () => {
-            if (!o.name.test("Comments")) return;
-            tabs++;
-            for (const body of opts.onTab ?? []) emit(list, body);
-          },
+        // The flow asks for the visible Comments tab; the first click may land before it is live.
+        filter: () => ({
+          first: () => ({
+            click: async () => {
+              if (!o.name.test("Comments")) return;
+              tabs++;
+              if (tabs < (opts.tabLiveAt ?? 1)) return;
+              for (const body of opts.onTab ?? []) emit(list, body);
+            },
+          }),
         }),
       }),
       getByText: (re: RegExp) => ({
@@ -281,6 +287,15 @@ describe("tiktok comments: the flow and the route", () => {
     expect(tab.tabs()).toBe(1);
     expect(out.comments.map((c) => c.id)).toContain("101");
     expect(tab.acts).toEqual([]);
+    // A click that lands before the tab is live is lost: the flow clicks again until a call comes.
+    const late = videoPage({
+      label: "Read or add comments 5 comments",
+      onTab: [TOP],
+      tabLiveAt: 2,
+    });
+    const got = await tiktokPostComments.run(late.fp, { videoId: VIDEO });
+    expect(late.tabs()).toBe(2);
+    expect(got.comments.map((c) => c.id)).toContain("101");
   });
 
   it("reads the comment count off the button label", () => {

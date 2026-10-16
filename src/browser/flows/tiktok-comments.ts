@@ -13,8 +13,10 @@
  *
  * Live 2026-10-15: the side panel can open on "You may like", which makes no
  * comment call, so with no call after a few seconds the flow clicks the
- * panel's Comments tab once. A video whose comment button reads 0 comments
- * answers an empty list (our new videos failed nine reads that way).
+ * panel's visible Comments tab, and again every few seconds until a call
+ * arrives (2026-10-16: one click at 3 s landed before the tab was live and was
+ * lost). A video whose comment button reads 0 comments answers an empty list
+ * (our new videos failed nine reads that way).
  */
 import type { Response } from "playwright";
 import { defineFlow, type FlowPage } from "../flow.js";
@@ -31,6 +33,8 @@ const REPLY_CLICKS = 10;
 const CLICK_MS = 3_000;
 /** No comment call by now: the panel may be on "You may like"; its Comments tab is clicked. */
 const TAB_AFTER_MS = 3_000;
+/** The tab is clicked again this often until a comment call arrives (one early click is lost). */
+const TAB_EVERY_MS = 2_500;
 export const MAX_COMMENTS = 100;
 
 const LIST = "/api/comment/list/";
@@ -243,7 +247,7 @@ export const tiktokPostComments = defineFlow<PostCommentsInput, PostComments>({
       const left = () => TOTAL_MS - (Date.now() - started);
       await fp.open(videoUrl(videoId, username));
       let count: number | null = null;
-      let tabbed = false;
+      let lastTab = TAB_AFTER_MS - TAB_EVERY_MS;
       for (let waited = 0; !bodies.length && waited < FIRST_MS; waited += POLL_MS) {
         await Promise.all(pending);
         if (bodies.length) break;
@@ -251,10 +255,13 @@ export const tiktokPostComments = defineFlow<PostCommentsInput, PostComments>({
           await fp.page.evaluate<string | null>(COUNT_SCRIPT).catch(() => null),
         );
         if (count === 0) break;
-        if (!tabbed && waited >= TAB_AFTER_MS) {
-          tabbed = true;
+        if (waited >= lastTab + TAB_EVERY_MS) {
+          lastTab = waited;
+          // The page has two Comments buttons: a hidden tab in the Activity panel and the
+          // visible one in the side panel's tab bar. Only the visible one opens the list.
           await fp.page
             .getByRole("button", { name: /^comments$/i })
+            .filter({ visible: true })
             .first()
             .click({ timeout: CLICK_MS })
             .catch(() => undefined);
