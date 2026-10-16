@@ -3,12 +3,14 @@
  * the HTTP face serves. `site` lists them, `site <name>` says what answers
  * and what setup is left, `site <name> call` is one official call, `site
  * <name> setup <step>` makes a key or token, `site check` proves each token live,
- * `site caps` says who spent a day's capped reads.
+ * `site caps` says who spent a day's capped reads, `site revoke` ends a grant and
+ * queues its re-make. A token a platform refused is shown plainly, with since when.
  */
 
 import type { Command } from "commander";
 import type { CapsReport } from "../sites/facade.js";
 import { type CheckRow, checkSite, type Method } from "../sites/index.js";
+import { refusedLine, utcOf } from "../sites/refused.js";
 import { accent, bad, bold, columns, dim, good, warn } from "../style.js";
 import type { LocalBackend } from "./backend.js";
 import { readJson } from "./cli-json.js";
@@ -58,7 +60,11 @@ export function registerSiteCommands(program: Command, local: LocalBackend, box?
         const left = s.setup.filter((x) => !x.done).map((x) => x.name);
         return [
           accent(s.site),
-          s.authed ? good("token ok") : warn("no token"),
+          s.refused?.length
+            ? bad(`token refused since ${utcOf(s.refused[0]?.since ?? "")}`)
+            : s.authed
+              ? good("token ok")
+              : warn("no token"),
           `${s.routes.length} routes`,
           left.length ? warn(`setup left: ${left.join(", ")}`) : dim("set up"),
         ];
@@ -74,8 +80,9 @@ export function registerSiteCommands(program: Command, local: LocalBackend, box?
       if (!sites) throw new Error("no site apis here");
       const s = await sites.status(name);
       console.log(
-        `${bold(s.site)} ${dim(s.origin)}  ${s.authed ? good("token ok") : warn("no token")}`,
+        `${bold(s.site)} ${dim(s.origin)}  ${s.refused?.length ? bad("token refused") : s.authed ? good("token ok") : warn("no token")}`,
       );
+      for (const r of s.refused ?? []) console.log(bad(`  refused: ${refusedLine(r)}`));
       // `!` = irreversible; a route that cannot answer yet says what it lacks instead of what it does.
       const routes = s.routes.map((r) => [
         `  ${r.irreversible ? warn("!") : " "} ${r.method}`,
@@ -109,7 +116,10 @@ export function registerSiteCommands(program: Command, local: LocalBackend, box?
       const rows = name ? [await sites.status(name)] : await sites.list();
       const checks = await Promise.all(rows.map((r) => checkSite(sites, r, o.account ?? null)));
       for (const line of columns(checks.map(checkRow))) console.log(line);
-      if (name && !checks[0]?.ok) process.exitCode = 1;
+      // What is refused now, this check's finds included, with since when.
+      const open = (sites.refused?.() ?? []).filter((r) => !name || r.site === name);
+      for (const r of open) console.log(bad(`refused: ${refusedLine(r)}`));
+      if ((name && !checks[0]?.ok) || open.length) process.exitCode = 1;
     });
   site
     .command("route <site> <method> <path>")
@@ -225,14 +235,48 @@ export function registerSiteCommands(program: Command, local: LocalBackend, box?
   site
     .command("renew")
     .description(
-      "Make again every kept token that lapses within 14 days, by the setup step and account that made it (the box runs this daily)",
+      "Prove each token, then make again every refused one and every one that lapses within 14 days, by the setup step and account that made it (wren's TokenRenewal runs this daily on the desk)",
     )
-    .option("--dry", "only say what is due")
-    .action(async (o: { dry?: boolean }) => {
+    .option("--dry", "only say what is due; no probes")
+    .option("--names <names...>", "only these refused names, made again now")
+    .action(async (o: { dry?: boolean; names?: string[] }) => {
       const sites = local().backend.sites;
       if (!sites?.renew) throw new Error("no site apis here");
-      const r = await sites.renew({ dry: Boolean(o.dry) });
-      console.log(r.lines.join("\n") || "nothing lapses within 14 days");
+      const r = await sites.renew({ dry: Boolean(o.dry), ...(o.names ? { names: o.names } : {}) });
+      console.log(r.lines.join("\n") || "nothing refused or lapsing within 14 days");
       if (r.results.some((x) => !x.ok)) process.exitCode = 1;
+    });
+  site
+    .command("revoke <site>")
+    .description(
+      "End the grant behind a site's token at the site (every token it covered dies, other holders' too) and queue their re-make: the only way our code revokes",
+    )
+    .option("--account <address>", "that consented account's grant; the policy's by default")
+    .option(
+      "--after <minutes>",
+      "wait this long before the re-make (a consent screen filmed first)",
+      (v) => Number.parseInt(v, 10),
+      0,
+    )
+    .option("--here", "on this machine, re-made inline, instead of the desk through Restate")
+    .action(async (name: string, o: { account?: string; after: number; here?: boolean }) => {
+      if (o.here) {
+        const sites = local().backend.sites;
+        if (!sites?.revoke || !sites.renew) throw new Error("no revoke here");
+        const { revoked } = await sites.revoke(name, o.account ?? null);
+        console.log(`revoked ${revoked.join(", ")}`);
+        if (o.after) await new Promise((ok) => setTimeout(ok, o.after * 60_000));
+        const r = await sites.renew({ names: revoked });
+        console.log(r.lines.join("\n"));
+        if (r.results.some((x) => !x.ok)) process.exitCode = 1;
+        return;
+      }
+      if (!box) throw new Error("no Restate ingress here; --here runs it on this machine");
+      const out = await box
+        .desk()
+        .revoke({ site: name, ...(o.account ? { account: o.account } : {}), after: o.after });
+      console.log(
+        `revoked ${out.revoked.join(", ")}; re-make queued on the desk${out.after ? ` in ${out.after} min` : ""}`,
+      );
     });
 }

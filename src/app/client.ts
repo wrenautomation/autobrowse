@@ -5,7 +5,7 @@ import type { RunObject } from "../engine/object.js";
 import { REGISTRY_KEY, type RunsRegistry, registryOf } from "../engine/registry.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import { DEFAULT_OWNER, named } from "../owner.js";
-import { SITES_SERVICE, type SitesService } from "../sites/service.js";
+import { DESK_SERVICE, SITES_SERVICE, type SitesService } from "../sites/service.js";
 import { COMPILED_OBJECT, compiledKey, HAND_WRITTEN } from "../workflows/compiled.js";
 
 export interface IngressOptions {
@@ -38,6 +38,9 @@ export function ingress(opts: IngressOptions) {
     /** The worker's site facade (`sites/*`): the box's tokens, caps and ledger. */
     sites: () =>
       conn.serviceClient<SitesService>({ name: named(SITES_SERVICE, owner) } as SitesService),
+    /** The same facade on the Mac (`desk/*`): prod's tokens since the box was retired. */
+    desk: () =>
+      conn.serviceClient<SitesService>({ name: named(DESK_SERVICE, owner) } as SitesService),
   };
 }
 

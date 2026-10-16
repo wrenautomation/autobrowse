@@ -161,6 +161,7 @@ import {
   sitesFor,
   sitesService,
 } from "../sites/index.js";
+import { fileRefusedTokens } from "../sites/refused.js";
 import { fileUploadSessions } from "../sites/uploads.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import { type WalkDeps, type WalkInput, type WalkOutput, walkFlow } from "../walks/flow.js";
@@ -188,6 +189,7 @@ import {
 } from "../workflows/workspace-inbox/index.js";
 import type { Settings } from "./config.js";
 import { holding, type Idle, idleTracker } from "./idle.js";
+import { type OpsLane, opsLane } from "./ops.js";
 import { awsFor } from "./owner.js";
 import { headed, type Screen, screenOf } from "./screen.js";
 import type { DeviceLink } from "./setup.js";
@@ -577,6 +579,14 @@ export function ledgerPath(
 }
 
 /** The owner's state folder: where the credentials file lives, and every ledger beside it. */
+/** Notices to the ops lane, an owner's named; none without its webhook. */
+function noticeFor(settings: Settings): { notice?: OpsLane } {
+  const ops = opsLane(httpClient());
+  if (!ops) return {};
+  const who = isDefaultOwner(settings.owner) ? "" : `[${settings.owner}] `;
+  return { notice: (text, o) => ops(`${who}${text}`, o) };
+}
+
 export const stateDirFor = (settings: Settings): string =>
   dirname(expandHome(settings.credentialsFile));
 
@@ -1614,6 +1624,8 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       uploads: fileUploadSessions(join(expandHome(settings.artifactsDir), "uploads")),
       started: fileDoneActs(join(expandHome(settings.artifactsDir), "started-calls")),
       walks: (name) => walkFor(settings, name, sink),
+      refused: fileRefusedTokens(join(stateDirFor(settings), "refused-tokens.json")),
+      ...noticeFor(settings),
     }),
   );
   const late: { doer: Doer | null } = { doer: null };

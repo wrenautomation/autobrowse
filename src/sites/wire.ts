@@ -23,10 +23,25 @@ import type { SpentKeys } from "../reach/key-ring.js";
 import type { CompiledCatalog } from "../workflows/compiled.js";
 import { runCompiled } from "../workflows/proof.js";
 import type { DailyCaps } from "./caps.js";
-import { type SiteFacade, siteFacade } from "./facade.js";
+import { checkSite, type SiteFacade, type SiteRow, siteFacade } from "./facade.js";
 import { SITES } from "./index.js";
-import { TokenRefused } from "./oauth.js";
-import { nextLapse, renewals, renewDue, renewWording } from "./renew.js";
+import { pointedAt, TokenRefused } from "./oauth.js";
+import {
+  dueToday,
+  GIVE_UP_DAYS,
+  maskAccount,
+  type RefusedToken,
+  type RefusedTokens,
+  refusedLine,
+} from "./refused.js";
+import {
+  nextLapse,
+  RENEW_WITHIN_MS,
+  type RenewResult,
+  renewals,
+  renewDue,
+  renewWording,
+} from "./renew.js";
 import { type SetupStep, type SiteApi, SiteError } from "./types.js";
 import type { UploadSessions } from "./uploads.js";
 
@@ -71,7 +86,14 @@ export interface SiteParts {
   uploads?: UploadSessions;
   /** Irreversible API calls already started, by durable call: a rerun of one is refused. */
   started?: DoneActs;
+  /** Tokens the platforms refused (`refused.ts`): turns on keeping them, re-making them, `revoke`. */
+  refused?: RefusedTokens;
+  /** One line to a person (the ops lane); `ping` when it needs them. A failed send fails nothing. */
+  notice?: (text: string, o?: { ping?: boolean }) => Promise<void>;
 }
+
+/** What our own revoke tells the refused-token rows the site would have said. */
+export const REVOKED_WORDS = "revoked by us (site revoke)";
 
 /** How long a store read on a token miss stands before a miss reads again. */
 const RELOAD_EVERY_MS = 60_000;
@@ -199,51 +221,190 @@ export function sitesFor(p: SiteParts): SiteFacade {
             accountForSite(await (p.identities as () => Promise<Identity[]>)(), s, step),
         }
       : {}),
+    // A token that answers again ends its incident.
+    ...(p.refused ? { worked: (name: string) => void p.refused?.clear([name]) } : {}),
   });
+  const refused = p.refused;
+  const say = async (text: string, o?: { ping?: boolean }) => {
+    await p.notice?.(text, o).catch(() => {});
+  };
+  /** Keep a refusal where `renew` reads it; the first of an incident is said, once. */
+  const record = async (e: unknown) => {
+    if (!refused || !(e instanceof TokenRefused) || !e.site) return;
+    const { fresh, row } = refused.refuse(
+      { name: e.token, site: e.site, account: e.account, words: e.why },
+      new Date(),
+    );
+    if (fresh)
+      await say(
+        `token refused: ${refusedLine(row)}. Renew makes it again (one try a day, ${GIVE_UP_DAYS} days).`,
+      );
+  };
   const reload = p.reload;
   let readAt = 0;
-  const call: SiteFacade["call"] = reload
-    ? async (...a) => {
-        try {
-          return await facade.call(...a);
-        } catch (e) {
-          // Another process (the laptop, the desk) rolled the refresh token: the store holds the new one.
-          if (e instanceof TokenRefused) {
-            const held = made.get(e.token) ?? env(e.token);
-            const entries = await reload((name) => name !== e.token).catch(() => null);
-            const fresh = entries?.find((x) => x.name === e.token)?.value;
-            if (!fresh || fresh === held) throw e;
-            made.set(e.token, fresh);
-            return facade.call(...a);
-          }
-          const miss = e instanceof SiteError && e.status === 501 && /no token/.test(e.message);
-          if (!miss || Date.now() - readAt < RELOAD_EVERY_MS) throw e;
-          readAt = Date.now();
-          const entries = await reload((name) => Boolean(made.get(name) ?? env(name))).catch(
-            () => null,
-          );
-          if (!entries) throw e;
-          for (const { name, value } of entries) if (!env(name)) made.set(name, value);
-          return facade.call(...a);
-        }
-      }
-    : facade.call;
-  const kept = p.kept;
-  if (!kept) return { ...facade, call };
-  return {
-    ...facade,
-    call,
-    async renew(o = {}) {
-      const sites = p.sites ?? SITES;
-      const identities = (await p.identities?.()) ?? [];
-      const plan = renewals(sites, identities, await kept());
-      const results = o.dry ? null : await renewDue(facade, plan);
-      return {
-        ...plan,
-        results: results ?? [],
-        lines: renewWording(plan, results),
-        next: nextLapse(sites, identities, await kept()),
-      };
-    },
+  /** Another process (the laptop, the desk) may hold what this one lacks: true when a read found it. */
+  const reloaded = async (e: unknown): Promise<boolean> => {
+    if (!reload) return false;
+    // Another process rolled the refresh token: the store holds the new one.
+    if (e instanceof TokenRefused) {
+      const held = made.get(e.token) ?? env(e.token);
+      const entries = await reload((name) => name !== e.token).catch(() => null);
+      const fresh = entries?.find((x) => x.name === e.token)?.value;
+      if (!fresh || fresh === held) return false;
+      made.set(e.token, fresh);
+      return true;
+    }
+    const miss = e instanceof SiteError && e.status === 501 && /no token/.test(e.message);
+    if (!miss || Date.now() - readAt < RELOAD_EVERY_MS) return false;
+    readAt = Date.now();
+    const entries = await reload((name) => Boolean(made.get(name) ?? env(name))).catch(() => null);
+    if (!entries) return false;
+    for (const { name, value } of entries) if (!env(name)) made.set(name, value);
+    return true;
   };
+  const call: SiteFacade["call"] = async (...a) => {
+    try {
+      return await facade.call(...a);
+    } catch (e) {
+      if (!(await reloaded(e))) {
+        await record(e);
+        throw e;
+      }
+    }
+    try {
+      return await facade.call(...a);
+    } catch (e) {
+      await record(e);
+      throw e;
+    }
+  };
+  // What a setup makes again ends its incident, whichever door ran it.
+  const setup: SiteFacade["setup"] = async (...a) => {
+    const out = await facade.setup(...a);
+    refused?.clear(out.made);
+    return out;
+  };
+  const withRefused = (row: SiteRow): SiteRow => {
+    const mine = refused?.list().filter((r) => r.site === row.site) ?? [];
+    return mine.length ? { ...row, refused: mine } : row;
+  };
+  const base = { ...facade, call, setup };
+  if (!refused) return withRenew(base);
+  return withRenew({
+    ...base,
+    list: async () => (await facade.list()).map(withRefused),
+    status: async (name) => withRefused(await facade.status(name)),
+    refused: () => refused.list(),
+    claimRefused: () => refused.claim(),
+    async revoke(site, account) {
+      if (!facade.revoke) throw new SiteError(501, "no revoke here");
+      const { revoked } = await facade.revoke(site, account).catch(async (e) => {
+        await record(e);
+        throw e;
+      });
+      // Every name the grant covered: the real copy, and each alias pointing at it or holding it.
+      const real = revoked[0] as string;
+      const value = made.get(real) ?? env(real);
+      const family = real.split("__")[0] as string;
+      const covered = [
+        real,
+        ...((await p.kept?.()) ?? [])
+          .map((e) => e.name)
+          .filter((n) => n !== real && (n === family || n.startsWith(`${family}__`)))
+          .filter((n) => {
+            const held = made.get(n) ?? env(n);
+            return pointedAt(held) === real || (value !== undefined && held === value);
+          }),
+      ];
+      const now = new Date();
+      for (const name of covered)
+        refused.refuse({ name, site, account: account ?? null, words: REVOKED_WORDS }, now);
+      await say(`revoked the ${site} grant (${covered.join(", ")}): making it again now`);
+      return { revoked: covered };
+    },
+  });
+
+  /** `renew` when the sink lists what is kept: lapsing tokens and refused ones, made again. */
+  function withRenew(f: SiteFacade): SiteFacade {
+    const kept = p.kept;
+    if (!kept) return f;
+    /** One who-am-I call per site with an API leg: a dead token nothing called lately is found. */
+    const probeAll = async () => {
+      const rows = await facade.list();
+      await Promise.all(rows.filter((r) => r.probe).map((r) => checkSite({ call }, r)));
+    };
+    /** What a person runs once renew has stopped. */
+    const howTo = (row: RefusedToken, sites: readonly SiteApi[], identities: Identity[]) => {
+      const r = renewals(sites, identities, [], RENEW_WITHIN_MS, 0, [row]).due[0];
+      return r
+        ? `autobrowse site setup ${r.site} ${r.step}${r.account ? ` (as ${maskAccount(r.account)})` : ""}`
+        : `make ${row.name} by hand`;
+    };
+    const gaveUp = (row: RefusedToken, sites: readonly SiteApi[], identities: Identity[]) =>
+      say(
+        `token still refused, renew stopped: ${refusedLine(row)}. Run: ${howTo(row, sites, identities)}`,
+        { ping: true },
+      );
+    return {
+      ...f,
+      async renew(o = {}) {
+        const sites = p.sites ?? SITES;
+        const identities = (await p.identities?.()) ?? [];
+        const now = new Date();
+        // A full pass proves each token first; a lone re-make (`names`) and a dry look do not.
+        if (!o.dry && !o.names) await probeAll();
+        if (!o.dry && refused)
+          for (const row of refused.stale(now)) await gaveUp(row, sites, identities);
+        const rows = refused
+          ? dueToday(refused.list(), now).filter((r) => !o.names || o.names.includes(r.name))
+          : [];
+        const plan = renewals(
+          sites,
+          identities,
+          o.names ? [] : await kept(),
+          RENEW_WITHIN_MS,
+          now.getTime(),
+          rows,
+        );
+        let results: RenewResult[] | null = null;
+        if (!o.dry) {
+          const mine = (n: string) => rows.some((r) => r.name === n);
+          results = await renewDue({ setup }, plan, (r) => {
+            for (const n of r.names) if (mine(n)) refused?.start(n, now);
+          });
+          // How each refused name's try went; a name nothing makes is a failed try too.
+          const ends: Array<[string, { ok: boolean; error?: string; busy?: boolean }]> = [
+            ...results.flatMap((r) =>
+              r.names
+                .filter(mine)
+                .map((n): [string, { ok: boolean; error?: string; busy?: boolean }] => [
+                  n,
+                  {
+                    ok: r.ok,
+                    ...(r.error ? { error: r.error } : {}),
+                    ...(r.busy ? { busy: true } : {}),
+                  },
+                ]),
+            ),
+            ...plan.unplacedRefused.map((n): [string, { ok: boolean; error?: string }] => [
+              n,
+              { ok: false, error: "no setup step makes it" },
+            ]),
+          ];
+          for (const [n, end] of ends) {
+            if (!end.ok) refused?.start(n, now);
+            if (!refused?.end(n, end, now).gaveUp) continue;
+            const row = refused.list().find((r) => r.name === n);
+            if (row) await gaveUp(row, sites, identities);
+          }
+        }
+        return {
+          ...plan,
+          results: results ?? [],
+          lines: renewWording(plan, results),
+          next: nextLapse(sites, identities, await kept()),
+        };
+      },
+    };
+  }
 }

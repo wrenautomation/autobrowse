@@ -664,7 +664,9 @@ domain-wide delegation stays the path for those).
 pnpm autobrowse site                        # sites, token state, setup left
 pnpm autobrowse site status linkedin        # every route: api | browser | none (why)
 pnpm autobrowse site route youtube POST /upload/youtube/v3/videos   # one route's inputs; --template for a body file
-pnpm autobrowse site check                    # one who-am-I call per site: is each token alive
+pnpm autobrowse site check                    # one who-am-I call per site: is each token alive; refused ones listed with since when
+pnpm autobrowse site renew                    # probe each site, then make again every refused token and every one lapsing within 14 days
+pnpm autobrowse site revoke tiktok --after 10 # end the grant (the only way our code revokes); its re-make is queued on the desk
 pnpm autobrowse read https://firm.test --max 4000   # a page as plain text, no browser
 pnpm autobrowse search fee-only RIA Austin -n 5     # web search: exa, brave, then duckduckgo
 pnpm autobrowse maps "ria in austin tx" --max-minutes 10   # Google Maps listings as a CSV (Docker); wren --format google-maps

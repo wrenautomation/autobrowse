@@ -194,6 +194,11 @@ export interface OAuthSpec {
   redirect?: string;
   /** The leg that opens the authorize URL (`{url}`) in the site's logged-in profile and clicks through. */
   consent: Leg;
+  /**
+   * Where the grant is ended (`site revoke`, the only way our code revokes): POST `url` with the
+   * client and the `access` or `refresh` token as `token`.
+   */
+  revoke?: { url: string; token: "access" | "refresh" };
 }
 
 export interface SiteApi {

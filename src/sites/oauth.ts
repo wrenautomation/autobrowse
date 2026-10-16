@@ -101,9 +101,21 @@ export const pointedAt = (value: string | undefined): string | null =>
  */
 export class TokenRefused extends SiteError {
   readonly token: string;
-  constructor(token: string, why: string) {
+  /** What the site said. */
+  readonly why: string;
+  /** Which site and account asked, once the facade knows (`refused.ts` keeps them). */
+  readonly site: string | null;
+  readonly account: string | null;
+  constructor(
+    token: string,
+    why: string,
+    at: { site: string; account: string | null } | null = null,
+  ) {
     super(409, `${token} was refused (${why}); re-consent the account`);
     this.token = token;
+    this.why = why;
+    this.site = at?.site ?? null;
+    this.account = at?.account ?? null;
   }
 }
 
@@ -135,7 +147,8 @@ export function accessTokens(
     const secret = env(spec.clientSecret);
     if (!refresh || !id || !secret)
       return (spec.accessToken && env(accountEnv(spec.accessToken, account))) || null;
-    const hit = cache.get(refreshName);
+    // By name and value: a re-made refresh token never serves the old grant's access token.
+    const hit = cache.get(`${refreshName}\n${refresh}`);
     if (hit && hit.until > now()) return hit.token;
     const no = refused.get(`${refreshName}\n${refresh}`);
     if (no && no.until > now()) throw no.err;
@@ -161,11 +174,44 @@ export function accessTokens(
       throw err;
     });
     const token = body.access_token as string;
-    cache.set(refreshName, { token, until: now() + ((body.expires_in ?? 3600) - 60) * 1000 });
+    cache.set(`${refreshName}\n${refresh}`, {
+      token,
+      until: now() + ((body.expires_in ?? 3600) - 60) * 1000,
+    });
     if (keep && body.refresh_token && body.refresh_token !== refresh)
       await keep(refreshName, body.refresh_token);
     return token;
   };
+}
+
+/**
+ * End a grant at the site (`OAuthSpec.revoke`): every token the person gave the app dies with it,
+ * ours and any other holder's. `token` is the access or refresh token the endpoint takes.
+ */
+export async function revokeGrant(
+  http: HttpClient,
+  spec: OAuthSpec,
+  env: (name: string) => string | undefined,
+  token: string,
+): Promise<void> {
+  if (!spec.revoke) throw new SiteError(501, "this site has no revoke endpoint");
+  const id = env(spec.clientId);
+  const secret = env(spec.clientSecret);
+  if (!id || !secret)
+    throw new SiteError(409, `revoke needs ${spec.clientId} and ${spec.clientSecret}`);
+  const client = clientFields(spec, id, secret);
+  const res = await http.json<TokenBody>(spec.revoke.url, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded", ...client.headers },
+    raw: form({ token, ...client.fields }),
+  });
+  if (!res.ok || res.body?.error)
+    throw new HttpError(
+      "POST",
+      spec.revoke.url,
+      res.status,
+      res.body?.error ? `${res.body.error}: ${res.body.error_description ?? ""}`.trim() : "",
+    );
 }
 
 export interface ConsentInput {

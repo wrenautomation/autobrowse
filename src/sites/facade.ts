@@ -17,7 +17,7 @@ import type { Page } from "playwright";
 import { currentCall, type DoneActs, markSubmitted } from "../browser/attempt.js";
 import { profileBusyOf } from "../browser/browsers.js";
 import type { BrowserFlow, FlowRunner, HeldTab } from "../browser/flow.js";
-import { type HttpClient, lastingRefusal } from "../clients/http.js";
+import { type HttpClient, HttpError, lastingRefusal } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
 import { type JsonSchema, jsonSchemaOf } from "../engine/inputs.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
@@ -25,7 +25,16 @@ import type { Approver } from "../gates/payment.js";
 import { ringCount, type SpentKeys } from "../reach/key-ring.js";
 import type { Proof, RunAs } from "../workflows/proof.js";
 import type { DailyCaps, MeteredCall } from "./caps.js";
-import { accessTokens, accountEnv, pointTo, runConsent } from "./oauth.js";
+import {
+  accessTokens,
+  accountEnv,
+  pointedAt,
+  pointTo,
+  revokeGrant,
+  runConsent,
+  TokenRefused,
+} from "./oauth.js";
+import type { RefusedToken } from "./refused.js";
 import type { UploadSessions } from "./uploads.js";
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -101,6 +110,8 @@ export interface SiteFacadeDeps {
    * name is not one, and the account is taken as an address.
    */
   accountOf?: (site: string, name: string) => Promise<string | null>;
+  /** An API leg answered with the token kept under `name`: a refusal of it is over. */
+  worked?: (name: string) => void;
 }
 
 export type CompiledRun = Pick<Proof, "status" | "steps" | "output">;
@@ -137,6 +148,8 @@ export interface SiteRow {
   routes: RouteRow[];
   setup: SetupRow[];
   probe?: SiteApi["probe"];
+  /** Its tokens the platform refused, open incidents (`refused.ts`); absent when none are kept. */
+  refused?: RefusedToken[];
 }
 
 /** Who is calling, for the caps ledger: `caller` as the caller names itself, `invocation` its Restate id. */
@@ -211,7 +224,16 @@ export interface SiteFacade {
    * setup step and account that made it; `dry` only says which. Absent when
    * nothing lists what is kept.
    */
-  renew?(o?: { dry?: boolean }): Promise<RenewReport>;
+  renew?(o?: { dry?: boolean; names?: readonly string[] }): Promise<RenewReport>;
+  /**
+   * End the grant behind a site's token at the site (`OAuthSpec.revoke`): the only way our code
+   * revokes. Answers the kept names it covered, now dead; the caller makes them again.
+   */
+  revoke?(site: string, account?: string | null): Promise<{ revoked: string[] }>;
+  /** Open refused-token incidents, oldest first. */
+  refused?(): RefusedToken[];
+  /** Incidents no re-make was queued for yet, now marked queued: each one once. */
+  claimRefused?(): RefusedToken[];
 }
 
 export interface CheckRow {
@@ -327,6 +349,16 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       : "token" in s.auth
         ? deps.env(accountEnv(s.auth.token, account)) || null
         : minted(s.auth.oauth, account);
+  /** The kept name a call as `account` reads its token from (an alias's real copy); null for an open site. */
+  const keptName = (s: SiteApi, account: string | null): string | null => {
+    if ("open" in s.auth) return null;
+    if ("token" in s.auth) return accountEnv(s.auth.token, account);
+    const o = s.auth.oauth;
+    const asked = accountEnv(o.refreshToken, account);
+    const held = deps.env(asked);
+    if (held) return pointedAt(held) ?? asked;
+    return o.accessToken ? accountEnv(o.accessToken, account) : asked;
+  };
   /** A token under the site's plain name, or under the account (the policy's when none is named). */
   const hasToken = (s: SiteApi, account: string | null = null) => {
     if ("open" in s.auth) return true;
@@ -583,10 +615,23 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       // A route that prefers the browser never reaches the API, so never pays for a read; one
       // whose token lacks a grant (a review still pending) runs as if no token were held.
       const lacks = lacking(s, r, chosen, parsed.data as never);
-      const token =
-        r.api && !prefersBrowser(r, parsed.data as never) && !lacks.length
-          ? ((await tokenFor(s, chosen)) ?? (fallback ? await tokenFor(s, null) : null))
-          : null;
+      // Whose token the API leg holds: the chosen account's, else the site's own (`fallback`).
+      let tokenAs = chosen;
+      const tokenOf = (as: string | null) =>
+        tokenFor(s, as).catch((e) => {
+          // Which site and account asked, so the refusal is kept where `renew` finds it.
+          if (e instanceof TokenRefused)
+            throw new TokenRefused(e.token, e.why, { site: s.site, account: as });
+          throw e;
+        });
+      let token: string | null = null;
+      if (r.api && !prefersBrowser(r, parsed.data as never) && !lacks.length) {
+        token = await tokenOf(chosen);
+        if (token === null && fallback) {
+          tokenAs = null;
+          token = await tokenOf(null);
+        }
+      }
       const byBrowser = !(r.api && token !== null) && Boolean(r.browser);
       const use = r.meter?.(parsed.data as never);
       const note = (outcome: MeteredCall["outcome"], bucket?: string) => {
@@ -686,14 +731,26 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
               throw new SiteError(409, `${method} ${r.path}: ${MAY_HAVE_GONE}`);
             deps.started.add(call, STARTED);
           }
-          return r.api(parsed.data as never, {
-            token,
-            http: deps.http,
-            env: deps.env,
-            keep: async (name, value) => deps.sink.put(name, value),
-            ...(deps.spent ? { spent: deps.spent } : {}),
-            ...(deps.uploads ? { uploads: deps.uploads } : {}),
-          });
+          const kept = keptName(s, tokenAs);
+          let out: unknown;
+          try {
+            out = await r.api(parsed.data as never, {
+              token,
+              http: deps.http,
+              env: deps.env,
+              keep: async (name, value) => deps.sink.put(name, value),
+              ...(deps.spent ? { spent: deps.spent } : {}),
+              ...(deps.uploads ? { uploads: deps.uploads } : {}),
+            });
+          } catch (e) {
+            // A 401 on the who-am-I probe: the bearer itself is dead, whatever minted it.
+            const probe = method === "GET" && s.probe && matchPath(r.path, s.probe.path);
+            if (probe && kept && e instanceof HttpError && e.status === 401)
+              throw new TokenRefused(kept, e.message, { site: s.site, account: tokenAs });
+            throw e;
+          }
+          if (kept) deps.worked?.(kept);
+          return out;
         }
         if (r.browser) {
           // The same account the API leg would have used: its profile, so a browser
@@ -745,6 +802,29 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           );
         throw new SiteError(501, `${method} ${r.path}: no token for ${name} and no browser leg`);
       }
+    },
+    async revoke(name, account) {
+      const s = site(name);
+      const spec = "oauth" in s.auth ? s.auth.oauth : null;
+      if (!spec?.revoke) throw new SiteError(501, `${name} has no revoke endpoint`);
+      // The same token a call would use: the named account's, else the policy's, else the site's own.
+      const policy = account ?? (await deps.accountFor?.(s)) ?? null;
+      const as =
+        account ?? (policy && deps.env(accountEnv(spec.refreshToken, policy)) ? policy : null);
+      const kept = keptName(s, as);
+      if (!kept || !deps.env(kept))
+        throw new SiteError(404, `no ${name} token kept${as ? ` for ${as}` : ""}`);
+      const token =
+        spec.revoke.token === "refresh"
+          ? (deps.env(kept) as string)
+          : await minted(spec, as).catch((e) => {
+              if (e instanceof TokenRefused)
+                throw new TokenRefused(e.token, e.why, { site: s.site, account: as });
+              throw e;
+            });
+      if (!token) throw new SiteError(404, `no ${name} access token to revoke`);
+      await revokeGrant(deps.http, spec, deps.env, token);
+      return { revoked: [kept] };
     },
     async setup(name, stepName, account, asProfile, over) {
       const s = site(name);

@@ -9,6 +9,8 @@
  * never retried into a duplicate), a read retries like a browser leg.
  * `sites/arm` takes a call and runs its browser leg up to the last safe step, answering an arm
  * id the real call carries (`armId`).
+ * A token the platform refuses (`refused.ts`) queues its re-make here, once per incident:
+ * `renew` for that name alone, one-way. `sites/revoke` ends a grant and queues the same.
  * With watchers (the desk), `watch` leases a tab watcher, `unwatch` ends one, `watches` lists them.
  * A busy browser profile is waited for, durably, never a failure (`browser/profile-wait`); a
  * write that fails says whether it was sent: `not sent: …` before its submit step, `…; may have
@@ -63,6 +65,43 @@ const call = site.extend({
   armId: z.string().uuid().optional(),
 });
 const setup = site.extend({ step: z.string().min(1) });
+const revoke = site.extend({
+  /** Minutes before the re-make runs (a consent screen filmed first); at once by default. */
+  after: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 60)
+    .default(0),
+});
+const renewReq = z.object({
+  dry: z.boolean().default(false),
+  /** Only these refused names, made again now: a queued re-make. Every due token when absent. */
+  names: z.array(z.string().min(1)).min(1).optional(),
+});
+
+/** The one-way door a re-make goes through: this service's own `renew`. */
+type Renewer = { renew: (ctx: restate.Context, req: z.input<typeof renewReq>) => Promise<unknown> };
+
+/**
+ * Queue `renew` for each name, once per incident (the key is the name and since when): durable,
+ * so it runs when the worker can, even after a crash between here and there.
+ */
+function queueRemake(
+  ctx: restate.Context,
+  service: string,
+  rows: readonly { name: string; since: string }[],
+  delayMs = 0,
+) {
+  for (const r of rows)
+    ctx.serviceSendClient<Renewer>({ name: service }).renew(
+      { names: [r.name] },
+      restate.rpc.sendOpts({
+        idempotencyKey: `remake ${r.name} ${r.since}`,
+        ...(delayMs ? { delay: delayMs } : {}),
+      }),
+    );
+}
 
 /** A request the shape rejects is the caller's mistake: terminal 400, nothing ran. */
 function parse<T>(schema: z.ZodType<T>, raw: unknown): T {
@@ -236,22 +275,30 @@ export function sitesService(
           ...from,
         };
         let attempt = 0;
-        return waitForProfile(
-          ctx,
-          step,
-          () =>
-            recorded(calls, base, ++attempt, () =>
-              terminalOnSiteError(
-                `${ctx.request().id} ${step}`,
-                () => facade.call(req.site, req.method, req.path, req.input, req.account, from),
-                // Writes run once; this bounds a read's retries.
-                write ? undefined : attempt,
-                write,
+        try {
+          return await waitForProfile(
+            ctx,
+            step,
+            () =>
+              recorded(calls, base, ++attempt, () =>
+                terminalOnSiteError(
+                  `${ctx.request().id} ${step}`,
+                  () => facade.call(req.site, req.method, req.path, req.input, req.account, from),
+                  // Writes run once; this bounds a read's retries.
+                  write ? undefined : attempt,
+                  write,
+                ),
               ),
-            ),
-          // A write may take its profile from an explore session nobody is driving.
-          { retry, take: write, ...(o.wait ? { wait: o.wait } : {}) },
-        );
+            // A write may take its profile from an explore session nobody is driving.
+            { retry, take: write, ...(o.wait ? { wait: o.wait } : {}) },
+          );
+        } catch (err) {
+          // A refused token (409): its re-make starts now, not at tomorrow's renew.
+          const claim = facade.claimRefused?.bind(facade);
+          if (claim && err instanceof restate.TerminalError && err.code === 409)
+            queueRemake(ctx, name, await ctx.run("refused tokens", async () => claim()));
+          throw err;
+        }
       }),
       /** The call's browser leg up to its last safe step, nothing sent: `{armed: id | null, until}`. */
       arm: async (ctx: restate.Context, raw: unknown) => {
@@ -287,17 +334,48 @@ export function sitesService(
         return ctx.run(`sites caps ${q.day ?? "today"}`, () => facade.caps(q.day, q.site));
       },
       /** Make again what lapses within the window (a scheduler's daily call); lines say what happened. */
-      renew: async (ctx: restate.Context, raw: unknown) => {
-        const { dry } = parse(z.object({ dry: z.boolean().default(false) }), raw ?? {});
+      renew: restate.handlers.handler(CALL_OPTS, async (ctx: restate.Context, raw: unknown) => {
+        const { dry, names } = parse(renewReq, raw ?? {});
         if (!facade.renew)
           throw new restate.TerminalError("nothing lists what is kept here", { errorCode: 501 });
         const renew = facade.renew.bind(facade);
-        const step = `sites renew${dry ? " (dry)" : ""}`;
+        const step = `sites renew${dry ? " (dry)" : ""}${names ? ` ${names.join(" ")}` : ""}`;
+        // One try: a refused token's day is marked before its setup runs, so a rerun after a hung
+        // consent page skips it, and two days of tries is the most it gets (`refused.ts`).
         return ctx.run(
           step,
-          () => withCall(`${ctx.request().id} ${step}`, () => renew({ dry })),
+          () =>
+            withCall(`${ctx.request().id} ${step}`, () =>
+              renew({ dry, ...(names ? { names } : {}) }),
+            ),
           WRITE_RETRY,
         );
+      }),
+      /** End a grant at the site and queue the re-make of every token it covered: `{revoked}`. */
+      revoke: async (ctx: restate.Context, raw: unknown) => {
+        const req = parse(revoke, raw);
+        const claim = facade.claimRefused?.bind(facade);
+        if (!facade.revoke || !claim)
+          throw new restate.TerminalError("no revoke here", { errorCode: 501 });
+        const end = facade.revoke.bind(facade);
+        const step = `sites revoke ${req.site}`;
+        const out = await ctx.run(
+          step,
+          () =>
+            terminalOnSiteError(`${ctx.request().id} ${step}`, async () => ({
+              ...(await end(req.site, req.account ?? null)),
+              queued: claim(),
+            })),
+          WRITE_RETRY,
+        );
+        const ours = (r: { name: string }) => out.revoked.includes(r.name);
+        queueRemake(ctx, name, out.queued.filter(ours), req.after * 60_000);
+        queueRemake(
+          ctx,
+          name,
+          out.queued.filter((r) => !ours(r)),
+        );
+        return { revoked: out.revoked, after: req.after };
       },
       setup: async (ctx: restate.Context, raw: unknown) => {
         const req = parse(setup, raw);

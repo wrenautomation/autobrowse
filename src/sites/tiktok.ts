@@ -116,6 +116,7 @@ export const tiktokOAuth: OAuthSpec = {
   refreshToken: "TIKTOK_REFRESH_TOKEN",
   redirect: TIKTOK_REDIRECT,
   consent: { flow: "tiktok/oauth-consent" },
+  revoke: { url: `${TIKTOK_ORIGIN}/v2/oauth/revoke/`, token: "access" },
 };
 
 export const tiktok: SiteApi = {
