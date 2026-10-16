@@ -27,7 +27,7 @@ import { httpClient } from "../clients/http.js";
 import { isDefaultOwner, named } from "../owner.js";
 import { fileSiteCalls } from "../runs/calls.js";
 import { DESK_SERVICE, sitesService } from "../sites/index.js";
-import { studioService, watchRecordings, wrenIn } from "../studio/service.js";
+import { studioService, watchRecordings, wrenCheckout, wrenIn } from "../studio/service.js";
 import { registerOnBox } from "./box-register.js";
 import { cloudAdminUrl, planEndpoint } from "./endpoint.js";
 import { awsFor, boot } from "./owner.js";
@@ -52,7 +52,7 @@ const desk = sitesService(
 // Claude Code reads the workspace holding this checkout (wren's `Ask`).
 const claude = claudeService(resolve(".."), named(CLAUDE_SERVICE, settings.owner));
 // Wren's video editor: its prod, its recordings; never another owner's desk.
-const wren = isDefaultOwner(settings.owner) ? wrenIn(resolve("..")) : null;
+const wren = isDefaultOwner(settings.owner) ? wrenIn(wrenCheckout(resolve(".."))) : null;
 // William's calls, recorded by OBS on this Mac (wren designs/2026-10-16-call-recording.md).
 const recorder = wren
   ? new Recorder({

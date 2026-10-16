@@ -13,12 +13,18 @@
  * - No pull: commits are made in this checkout. A push from elsewhere ships
  *   on the next pull here.
  *
+ * - The desk's own wren checkout (`../wren-desk`, a worktree of wren) moves to
+ *   origin/main, fetched at most every 5 minutes. The desk runs `wren` there
+ *   (`wrenCheckout`), never in the main `wren` checkout where sessions edit.
+ *   Its `bin/wren` installs and rebuilds itself on the next call.
+ *
  * Plain node, no tsx: launchd's node has the Full Disk Access ~/Documents needs.
  * State: ~/.config/autobrowse/desk-deploy.json. Log: ~/Library/Logs/autobrowse-desk-deploy.log.
  */
 import { execFileSync } from "node:child_process";
 import {
   closeSync,
+  existsSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -97,7 +103,33 @@ function upSince(from) {
   }
 }
 
+const WREN_DESK = join(REPO, "../wren-desk");
+const WREN_FETCH_MS = 5 * 60_000;
+
+/** `../wren-desk` to origin/main; quiet when there is none or nothing moved. Never fails the deploy. */
+function syncWren(state) {
+  if (!existsSync(join(WREN_DESK, ".git"))) return state;
+  if (state.wrenFetched && Date.now() - state.wrenFetched < WREN_FETCH_MS) return state;
+  const git = (args) =>
+    execFileSync("git", ["-C", WREN_DESK, ...args], { encoding: "utf8" }).trim();
+  try {
+    git(["fetch", "-q", "origin", "main"]);
+    const at = git(["rev-parse", "HEAD"]);
+    const main = git(["rev-parse", "origin/main"]);
+    if (at !== main) {
+      git(["checkout", "-q", "--detach", main]);
+      say(`wren-desk ${short(at)} -> ${short(main)}`);
+    }
+  } catch (err) {
+    say(`wren-desk sync failed: ${err instanceof Error ? err.message.split("\n")[0] : err}`);
+  }
+  const next = { ...state, wrenFetched: Date.now() };
+  writeState(next);
+  return next;
+}
+
 async function main() {
+  syncWren(readState());
   if (sh("git", ["symbolic-ref", "--short", "HEAD"]) !== "main") return;
   const head = sh("git", ["rev-parse", "HEAD"]);
   const state = readState();
@@ -109,7 +141,7 @@ async function main() {
       say(
         `${short(head)}: uncommitted changes under ${SHIPPED.join(", ")}; holding until they land`,
       );
-      writeState({ ...state, held: head });
+      writeState({ ...readState(), held: head });
     }
     return;
   }
@@ -122,7 +154,7 @@ async function main() {
     }
   };
   if (state.deployed && !changed(SHIPPED)) {
-    writeState({ deployed: head, held: null });
+    writeState({ ...readState(), deployed: head, held: null });
     return;
   }
   if (state.deployed) {
@@ -141,7 +173,7 @@ async function main() {
   say(`${short(state.deployed ?? "unknown")} -> ${short(head)}: restarting the desk`);
   sh("launchctl", ["kickstart", "-k", `gui/${process.getuid()}/${LABEL}`]);
   // Written before the wait: a commit that will not boot is reported once, not retried every minute.
-  writeState({ deployed: head, held: null });
+  writeState({ ...readState(), deployed: head, held: null });
   const until = Date.now() + UP_WITHIN_MS;
   while (Date.now() < until) {
     await new Promise((r) => setTimeout(r, 5_000));

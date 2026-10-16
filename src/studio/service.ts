@@ -6,6 +6,7 @@
  * each finished OBS or Cap recording becomes a video, once.
  */
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import * as restate from "@restatedev/restate-sdk";
 import { z } from "zod";
@@ -18,15 +19,26 @@ const WATCH_MS = 60_000;
 
 export type Wren = (args: string[], timeoutMs: number) => Promise<string>;
 
-/** `node scripts/prod-wren.mjs <args>` in the wren checkout beside this one. */
+/**
+ * The wren checkout the desk runs: `AUTOBROWSE_WREN_CHECKOUT`, else `wren-desk` in the workspace
+ * (a worktree on origin/main that the desk's deploy agent keeps current), else `wren`. The main
+ * `wren` checkout is where sessions edit, so its tree can be behind or half changed.
+ */
+export function wrenCheckout(workspace: string, env = process.env): string {
+  if (env.AUTOBROWSE_WREN_CHECKOUT) return env.AUTOBROWSE_WREN_CHECKOUT;
+  const desk = join(workspace, "wren-desk");
+  return existsSync(join(desk, "scripts/prod-wren.mjs")) ? desk : join(workspace, "wren");
+}
+
+/** `node scripts/prod-wren.mjs <args>` in one wren checkout (`wrenCheckout`). */
 export const wrenIn =
-  (root: string): Wren =>
+  (checkout: string): Wren =>
   (args, timeoutMs) =>
     new Promise((ok, fail) =>
       execFile(
         "node",
         ["scripts/prod-wren.mjs", ...args],
-        { cwd: join(root, "wren"), timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 },
+        { cwd: checkout, timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 },
         (err, stdout, stderr) => {
           if (!err) return ok(stdout);
           const why = err.killed ? `took over ${timeoutMs / 60_000} minutes` : `exit ${err.code}`;

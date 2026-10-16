@@ -48,6 +48,7 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | `Dockerfile` | `src/app/main.ts`, env names | a moved entry file or a renamed variable |
 | `deploy/desk/install.sh` (launchd on the Mac) | `src/app/desk.ts`, `node_modules/tsx/dist/cli.mjs` | a moved entry file or tsx's cli path |
 | `deploy/desk/update.mjs` (launchd, every minute) | the `desk up` log line in `src/app/desk.ts`, the desk label | a renamed log line: every deploy pings #ops as failed |
+| `wrenCheckout` (`src/studio/service.ts`) | `../wren-desk` kept on origin/main by `update.mjs`; wren's prod CLI script | no `wren-desk`: calls fall back to the main `wren` checkout, which may be behind or mid-edit |
 | `deploy/terraform/` local state (never committed) | the box, CI role, shots bucket | a second machine has no state; read before apply |
 | `track/` (autotrack, own package) | `src/autotrack/types.ts` (copied `Event`), `src/autotrack/code.ts` (install code), the key layout in `src/autotrack/store.ts` | a changed event field, code field or S3 key: import reads nothing or the wrong thing, a device's put is denied |
 | `NEEDS-WILLIAM.md` (hand-kept) | mirrors `autobrowse needs` | drift when a need clears in code but not in prose |
