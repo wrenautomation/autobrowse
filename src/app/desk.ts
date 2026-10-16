@@ -10,13 +10,17 @@
  * With no Cloud settings, the desk registers itself on the box's server instead.
  * It also serves `claude`: questions to Claude Code on this Mac, read only (`src/claude/`),
  * and for Wren `studio`: renders the Videos page asks for, and new recordings picked up every
- * minute (`src/studio/`).
+ * minute (`src/studio/`); and `calls`: William's calls recorded by OBS (`src/calls/`).
  * launchd keeps it (and the tunnel) up: `deploy/desk/`.
  */
 import http2 from "node:http2";
 import { resolve } from "node:path";
 import { createEndpointHandler } from "@restatedev/restate-sdk";
 import pino from "pino";
+import { obsBooth } from "../calls/obs.js";
+import { Recorder } from "../calls/recorder.js";
+import { callsService, macBanner, watchCalls } from "../calls/service.js";
+import { OBS_CREDENTIAL } from "../calls/setup.js";
 import { awsCliLoginChore } from "../chores/aws-login.js";
 import { CLAUDE_SERVICE, claudeService } from "../claude/service.js";
 import { httpClient } from "../clients/http.js";
@@ -28,7 +32,7 @@ import { registerOnBox } from "./box-register.js";
 import { cloudAdminUrl, planEndpoint } from "./endpoint.js";
 import { awsFor, boot } from "./owner.js";
 import { registerDeployment } from "./register.js";
-import { buildApp, siteCallsDirFor, watchersFor } from "./services.js";
+import { buildApp, credentialsFor, siteCallsDirFor, watchersFor } from "./services.js";
 
 /** The port deploy/desk/install.sh points the Cloudflare Tunnel at. */
 const DESK_PORT = 9083;
@@ -49,7 +53,21 @@ const desk = sitesService(
 const claude = claudeService(resolve(".."), named(CLAUDE_SERVICE, settings.owner));
 // Wren's video editor: its prod, its recordings; never another owner's desk.
 const wren = isDefaultOwner(settings.owner) ? wrenIn(resolve("..")) : null;
-const services = wren ? [desk, claude, studioService(wren)] : [desk, claude];
+// William's calls, recorded by OBS on this Mac (wren designs/2026-10-16-call-recording.md).
+const recorder = wren
+  ? new Recorder({
+      booth: obsBooth(async () => {
+        const cred = await credentialsFor(settings).get(OBS_CREDENTIAL);
+        if (!cred?.password) throw new Error("no OBS password: autobrowse calls setup");
+        return cred.password;
+      }),
+      wren,
+      log: (msg) => log.info({ calls: msg }, "calls"),
+      notify: macBanner,
+    })
+  : null;
+const services =
+  wren && recorder ? [desk, claude, studioService(wren), callsService(recorder)] : [desk, claude];
 await new Promise<void>((ok) =>
   http2
     .createServer(
@@ -98,6 +116,7 @@ if (plan.mode === "tunnel") {
   });
 }
 if (wren) watchRecordings(wren, (msg) => log.info({ watch: msg }, "recordings"));
+if (recorder) watchCalls(recorder, (msg) => log.warn({ calls: msg }, "calls"));
 watchers?.start();
 // deploy/desk/update.mjs waits for this exact message after a restart.
 log.info(

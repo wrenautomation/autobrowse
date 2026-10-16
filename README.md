@@ -512,6 +512,7 @@ src/mods/       mods: walks, screens, fixes, logins (code with --trust) packed t
 src/agent/      the exploration agent (digest, one act a step), sessions (play/pause, persisted), repair, evaluator
 src/workflows/  one dir per workflow; domain + bootstrap hand-written, compiled ones are served as they appear (one `Compiled` object)
 src/ui/         Hono API (+ SSE bus, bearer, rate limit) and the static SPA
+src/calls/      William's calls recorded by OBS over its websocket; the desk's `calls` service (wren designs/2026-10-16-call-recording.md)
 src/app/        settings, composition root (lazy deps), self-registration, status, sentry, CLI, worker
 Dockerfile, compose.yml   the deploy unit; designs/2026-09-19-deploy.md
 ui/             React SPA (Vite); ui/dist is served by the worker
@@ -580,6 +581,11 @@ the sink changes.
 
 Thin: writes the roster to SSM, dispatches wren's deploy, calls its ingress
 to start loops. No imports in either direction.
+
+The desk records William's calls with OBS. `autobrowse calls setup` turns on OBS's websocket
+through its config file (quit OBS first) and keeps the password as credential `obs`. After that
+the desk records each booked call that has a Meet or Zoom window open, and hands the file to
+`wren calls add`. `autobrowse calls start|stop|status` covers calls nobody booked.
 
 ## OAuth sign-in
 

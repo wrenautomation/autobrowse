@@ -107,6 +107,7 @@
     "hono": "4.13.8",
     "libmime": "5.4.7",
     "nodemailer": "10.0.15",
+    "obs-websocket-js": "5.0.8",
     "patchright": "1.63.0",
     "pino": "10.3.1",
     "playwright": "1.63.0",

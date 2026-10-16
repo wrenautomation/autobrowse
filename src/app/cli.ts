@@ -24,6 +24,7 @@ import { registerAccountsCommands } from "./cli-accounts.js";
 import { registerAuthCommands } from "./cli-auth.js";
 import { registerAutotrackCommands } from "./cli-autotrack.js";
 import { registerAwsCommands } from "./cli-aws.js";
+import { registerCallsCommands } from "./cli-calls.js";
 import { registerConnectorsCommands } from "./cli-connectors.js";
 import { registerDesktopCommands } from "./cli-desktop.js";
 import { registerDoCommands } from "./cli-do.js";
@@ -794,6 +795,7 @@ registerEnvCommands(program, settings, { store: () => envStoreFor(settings) });
 registerDesktopCommands(program, tmpdir());
 registerWalletCommands(program, settings);
 registerPapersCommands(program, settings);
+registerCallsCommands(program, settings);
 registerAutotrackCommands(program, settings);
 registerAccessCommands(program, settings);
 

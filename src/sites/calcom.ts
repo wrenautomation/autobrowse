@@ -37,11 +37,20 @@ async function get(leg: ApiLeg, path: string, version: string | null, q: Query =
   return res.body;
 }
 
-async function send<T>(leg: ApiLeg, method: "POST" | "DELETE", path: string, body?: unknown) {
+async function send<T>(
+  leg: ApiLeg,
+  method: "POST" | "PATCH" | "DELETE",
+  path: string,
+  body?: unknown,
+  version?: string,
+) {
   const url = `${CALCOM_ORIGIN}${path}`;
   const res = await leg.http.json<T & { error?: { message?: string } }>(url, {
     method,
-    headers: { authorization: `Bearer ${leg.token}` },
+    headers: {
+      authorization: `Bearer ${leg.token}`,
+      ...(version ? { "cal-api-version": version } : {}),
+    },
     ...(body === undefined ? {} : { body }),
   });
   if (!res.ok) throw new HttpError(method, url, res.status, res.body?.error?.message ?? "");
@@ -97,6 +106,28 @@ export const calcom: SiteApi = {
       api: (q, leg) => get(leg, "/v2/event-types", VERSION.eventTypes, q),
       summary:
         "The account's event types (the pilot call among them), with their slugs and lengths",
+    }),
+    route({
+      method: "PATCH",
+      path: "/v2/event-types/{eventTypeId}",
+      request: z.object({
+        eventTypeId: z.coerce.number().int().positive(),
+        title: z.string().min(1).optional(),
+        description: z.string().optional(),
+        lengthInMinutes: z.number().int().positive().optional(),
+      }),
+      api: async ({ eventTypeId, ...change }, leg) => {
+        const r = await send<{ data: unknown }>(
+          leg,
+          "PATCH",
+          `/v2/event-types/${eventTypeId}`,
+          change,
+          VERSION.eventTypes,
+        );
+        return r.data;
+      },
+      summary:
+        "Change an event type's title, description (shown on the booking page and in its emails) or length",
     }),
     route({
       method: "GET",

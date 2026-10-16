@@ -57,3 +57,19 @@ describe("calcom webhooks", () => {
     expect(JSON.stringify(out)).not.toContain("s3cr3t");
   });
 });
+
+describe("calcom event types", () => {
+  it("changes an event type's description on its pinned version", async () => {
+    const f = fakeFetch(({ body }) => ({
+      body: { status: "success", data: { id: 11, ...JSON.parse(body ?? "{}") } },
+    }));
+    const leg: ApiLeg = { token: "k", http: httpClient({ fetch: f.fetch }), env: () => undefined };
+    const r = routeOf("PATCH", "/v2/event-types/{eventTypeId}");
+    const out = await r.api(r.request.parse({ eventTypeId: "11", description: "Recorded." }), leg);
+    expect(out).toMatchObject({ id: 11, description: "Recorded." });
+    expect(f.calls[0]?.url.href).toBe("https://api.cal.com/v2/event-types/11");
+    expect(f.calls[0]?.method).toBe("PATCH");
+    expect(f.calls[0]?.headers.get("cal-api-version")).toBe("2024-06-14");
+    expect(JSON.parse(f.calls[0]?.body ?? "{}")).toEqual({ description: "Recorded." });
+  });
+});
