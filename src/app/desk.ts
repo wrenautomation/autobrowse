@@ -15,6 +15,7 @@
  */
 import http2 from "node:http2";
 import { resolve } from "node:path";
+import { monitorEventLoopDelay } from "node:perf_hooks";
 import { createEndpointHandler } from "@restatedev/restate-sdk";
 import pino from "pino";
 import { obsBooth } from "../calls/obs.js";
@@ -118,6 +119,15 @@ if (plan.mode === "tunnel") {
 if (wren) watchRecordings(wren, (msg) => log.info({ watch: msg }, "recordings"));
 if (recorder) watchCalls(recorder, (msg) => log.warn({ calls: msg }, "calls"));
 watchers?.start();
+// A stalled event loop starves every Restate stream on it: calls arrive past their 60 s token
+// and connections die (2026-10-16). Log any stall over 2 s, so the next one is proven.
+const loopDelay = monitorEventLoopDelay({ resolution: 50 });
+loopDelay.enable();
+setInterval(() => {
+  const maxMs = Math.round(loopDelay.max / 1e6);
+  if (maxMs > 2_000) log.warn({ maxMs }, "desk event loop stalled");
+  loopDelay.reset();
+}, 10_000).unref();
 // deploy/desk/update.mjs waits for this exact message after a restart.
 log.info(
   { deployment: reg.id, services: reg.services, browser: settings.browser, on: plan.mode },

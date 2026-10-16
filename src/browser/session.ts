@@ -5,8 +5,9 @@
  * same idea. Either way the session is opened for one flow and closed
  * after it; `flow.ts` decides when and holds the per-site lock.
  */
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { type HttpClient, safeUrls } from "../clients/http.js";
 import { expandHome } from "../google-auth.js";
@@ -18,6 +19,8 @@ import type { Hints } from "./locate.js";
 import { notReachable, type OwnBrowser, ownEndpoint, runsInOwn } from "./own.js";
 import { reapOrphans, reapTempDirs } from "./reap.js";
 import { type PasskeyRecord, type Passkeys, virtualAuthenticator } from "./webauthn.js";
+
+const run = promisify(execFile);
 
 /**
  * Patchright: Playwright with the CDP tells (Runtime.enable, console hooks)
@@ -169,7 +172,7 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
     );
     void reapTempDirs(); // files a crashed upload left, in the background
     context = await launchLocal(profileDir, opts, opts.egress?.exitFor(profile) ?? null);
-    if (opts.headless === false) keepOutOfTheWay();
+    if (opts.headless === false) await keepOutOfTheWay();
     // `navigator.webdriver` is already false (LOCAL_ARGS). No init-script shim: an own
     // `webdriver` property on navigator, reading undefined, is itself a tell.
   }
@@ -231,28 +234,23 @@ async function openOwn(own: OwnBrowser): Promise<Session> {
  * parent gets them), so a captcha checkbox never ticks. Best effort; only
  * macOS has the tools.
  */
-function keepOutOfTheWay(): void {
+async function keepOutOfTheWay(): Promise<void> {
   if (process.platform !== "darwin") return;
+  // Async, with a cap: a System Events that hangs (memory pressure, a permission prompt) once
+  // froze the desk's event loop for minutes, and every Restate call on it died (2026-10-16).
+  const osascript = (script: string) =>
+    run("osascript", ["-e", script], { encoding: "utf8", timeout: 5_000 });
   try {
-    const front = execFileSync(
-      "osascript",
-      [
-        "-e",
-        'tell application "System Events" to get name of first process whose frontmost is true',
-      ],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
-    ).trim();
+    const { stdout } = await osascript(
+      'tell application "System Events" to get name of first process whose frontmost is true',
+    );
+    const front = stdout.trim();
     if (front)
-      execFileSync(
-        "osascript",
-        [
-          "-e",
-          `tell application "System Events" to set frontmost of process "${front.replace(/"/g, "")}" to true`,
-        ],
-        { stdio: "ignore" },
+      await osascript(
+        `tell application "System Events" to set frontmost of process "${front.replace(/"/g, "")}" to true`,
       );
   } catch {
-    // no Accessibility permission, or nothing frontmost: Chrome keeps the focus
+    // no Accessibility permission, nothing frontmost, or past the cap: Chrome keeps the focus
   }
 }
 
