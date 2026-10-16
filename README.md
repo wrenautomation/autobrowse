@@ -703,7 +703,10 @@ sink `keep` uses. `OAUTH_PORT` (9400) is the loopback redirect the OAuth
 clients register. The same facade is the Restate service `sites`
 (`sites/call`, `sites/status`, `sites/setup`) for an orchestrator on the same
 Restate (wren's `Content` service): no port on the box, a call queues while
-the box is down, a write runs once. Design: `designs/2026-09-21-site-apis.md`.
+the box is down, a write runs once. A write with a `sendKey` answers a typed
+verdict (`sent`, `not_sent` or `unknown`) instead of words in an error, and
+`sites/verdict {sendKey}` reads it back after a killed call. Design:
+`designs/2026-09-21-site-apis.md`, `designs/2026-10-16-send-verdicts.md`.
 
 ### Chores on those APIs
 

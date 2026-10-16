@@ -17,12 +17,14 @@ One place picks the account, mints the bearer, matches the path, books the accou
 
 ## Shape
 
-- `SiteFacade { list, status, call(site, method, path, input, account?, from?), caps(day?, site?), setup(site, step, account?, profile?, input?), renew?({dry?, names?}), revoke?(site, account?), refused?(), claimRefused?() }` — `src/sites/facade.ts:174-204`; `CallFrom { caller?, invocation?, arm?, armId? }`, `Armed`, `CapsReport { day, used, calls }` — `:137-172`
-- Arming (designs/2026-10-12-watchers-and-arming.md): `call(..., {arm: true})` runs a browser leg's `prepare` in a tab of its own (`FlowRunner.tab`) and answers `{armed: id, until}` (`armLeg`, `src/sites/facade.ts:345`); the next call on the same path and target (typed words left out, `armKey`), or `{armId}`, runs the leg in that tab (`takeArm`), so `run`'s opening finds the page open. An API leg, a spend, a GET, an upload or a flow without `prepare`: `{armed: null}`. `ARM_MS` 20 min, 3 per browser (`:153`). Restate `sites/arm`, `armId` on `sites/call` (`src/sites/service.ts:200`)
-- `SiteFacadeDeps { http, env, sink, runner, flow, compiled?, oauthPort?, profileFor?, providerOf?, accountFor?, approve?, caps?, sleep?, accountOf? }` — `:45-98`; `matchPath` — `:244`; `checkSite` — `:215`
+- `SiteFacade { list, status, call(site, method, path, input, account?, from?), sendSpec?(site, method, path), caps(day?, site?), setup(site, step, account?, profile?, input?), renew?({dry?, names?}), revoke?(site, account?), refused?(), claimRefused?() }` — `src/sites/facade.ts:212`; `CallFrom { caller?, invocation?, arm?, armId? }`, `Armed`, `CapsReport { day, used, calls }` — `:157-200`
+- Arming (designs/2026-10-12-watchers-and-arming.md): `call(..., {arm: true})` runs a browser leg's `prepare` in a tab of its own (`FlowRunner.tab`) and answers `{armed: id, until}` (`armLeg`, `src/sites/facade.ts:446`); the next call on the same path and target (typed words left out, `armKey`), or `{armId}`, runs the leg in that tab (`takeArm`), so `run`'s opening finds the page open. An API leg, a spend, a GET, an upload or a flow without `prepare`: `{armed: null}`. `ARM_MS` 20 min, 3 per browser (`:173`). Restate `sites/arm`, `armId` on `sites/call` (`src/sites/service.ts:600`)
+- `SiteFacadeDeps { http, env, sink, runner, flow, compiled?, oauthPort?, profileFor?, providerOf?, accountFor?, approve?, caps?, sleep?, accountOf? }` — `:59`; `matchPath` — `:296`; `checkSite` — `:267`
 - `SiteParts` (what `sitesFor` needs, including `reload` for tokens minted elsewhere) — `src/sites/wire.ts:30-69`; `usernameOf` — `:137-145`
 - `DailyCaps { take, slot, today, note, calls }`, `Pace { gapMs, jitterMs?, maxWaitMs? }`, `fileCaps` (`CAPS_FILE`, `/data/caps.json` on the box), `memoryCaps` — `src/sites/caps.ts:52-67`; `MeteredCall { at, site, account, route, use, caller, invocation?, outcome, bucket? }` — `:70-84`; the day files — `:156-189`
-- Restate: `SITES_SERVICE = "sites"`, `DESK_SERVICE = "desk"` (the Mac), `sitesService(facade, name)` with `call`, `status`, `caps`, `renew` (`names` re-makes refused ones now), `revoke`, `setup` — `src/sites/service.ts:16-122`; a 409 refusal on `call` queues `renew {names}` once per incident (`queueRemake`, `src/sites/service.ts:90`)
+- Restate: `SITES_SERVICE = "sites"`, `DESK_SERVICE = "desk"` (the Mac), `sitesService(facade, name, calls?, watchers?, { wait?, journal?, verifyPausesMs? })` with `call`, `verdict`, `status`, `caps`, `renew` (`names` re-makes refused ones now), `revoke`, `setup` — `src/sites/service.ts:42-47,263`; a 409 refusal on `call` queues `renew {names}` once per incident (`queueRemake`, `src/sites/service.ts:100`)
+- Keyed writes (designs/2026-10-16-send-verdicts.md): `call` with `sendKey` on a non-GET answers a `SendVerdict` (`src/sites/verdict.ts`), never an error for an unclear end. `sendSpec(site, method, path)` gives the service the matched route's `irreversible`, `verify`, `sentAs` and `parse` (`SendSpec`, `src/sites/facade.ts:203`; optional, a stand-in without it reads as "no verify read"). Under a key `currentCall()` is `send <key>`, so the API leg's `started` guard and the browser leg's `done` guard span every invocation of that key. The leg code is as before. Without a key a write answers today's words (`sentWords`)
+- The send journal: `SendJournal { get, start, submitted, settle, tried, forget, live, enter, leave }`, one JSON file per key (`sha256(key).json`, mode 0600, tmp + rename, 30 days) in `<artifactsDir>/sends/` on `sites` and `desk` each — `src/sites/send-journal.ts:28-70,150`, wired by `sendJournalFor` (`src/app/services.ts:630`); `markSubmitted` calls `CallTry.onSubmit` first, so `submitted` is on disk before the act (`src/browser/attempt.ts:35,57`). A final verdict stands; `unknown` is replaced by a later verdict
 - Paths are interpolated by the caller; a template path plus a param in the input is HTTP 400
 
 ## Connected to
@@ -34,7 +36,7 @@ One place picks the account, mints the bearer, matches the path, books the accou
 
 ## If you change this
 
-- **Hits:** `src/sites/wire.ts`, `src/sites/service.ts`, `src/app/cli-site.ts`, `src/ui/api.ts:75` (`siteError`: status, `Retry-After`), `src/ui/api.ts:466-520`, `src/do/doer.ts` (`callSite`), `src/app/needs.ts`, wren's `Content` service and channel packages (Restate `sites/call`, `sites/status`, `sites/setup`, `sites/caps`).
+- **Hits:** `src/sites/wire.ts`, `src/sites/service.ts`, `src/sites/send-journal.ts`, `src/app/cli-site.ts`, `src/ui/api.ts:75` (`siteError`: status, `Retry-After`), `src/ui/api.ts:466-520`, `src/do/doer.ts` (`callSite`), `src/app/needs.ts`, wren's `Content` service and channel packages (Restate `sites/call`, `sites/verdict`, `sites/status`, `sites/setup`, `sites/caps`).
 - **Does not hit:** sign-ins; the run object.
 
 ## Surfaces
@@ -46,4 +48,4 @@ One place picks the account, mints the bearer, matches the path, books the accou
 
 ## See
 
-- Source: `src/sites/facade.ts`, `src/sites/wire.ts`, `src/sites/service.ts`
+- Source: `src/sites/facade.ts`, `src/sites/wire.ts`, `src/sites/service.ts`, `src/sites/send-journal.ts`, `src/sites/verdict.ts`

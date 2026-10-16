@@ -87,3 +87,11 @@ The seam both repos build to. Types: `src/sites/verdict.ts`.
 ## Decision log
 
 - 2026-10-16: contract above. `output` added to `sent` so callers keep their answer parsers. `sites/verdict` added because Restate gives a killed invocation's failure back to any repeat of its idempotency key.
+- 2026-10-16 (A1 build): the journal lives in `<artifactsDir>/sends/`, one file per key (`sendJournalFor`, `src/app/services.ts`), for both `sites` (box) and `desk` (Mac). `CallTry.onSubmit` is the hook `markSubmitted` calls once, before the act. A hook that throws stops the act.
+- 2026-10-16 (A1 build): `SiteFacade.sendSpec(site, method, path)` is optional, so a fake facade needs no change. A route or facade without it reads as "nothing declared": an unclear end is `unknown` "this route has no verify read". Under a keyed call `currentCall()` is `send <key>`, so the API leg's `started` guard and the browser leg's `done` guard span the invocations of one key.
+- 2026-10-16 (A1 build): verify pauses are 30 s, 2 min 30 s, 7 min (`VERIFY_PAUSES_MS`), so the reads fall at about 30 s, 3 min and 10 min after the end. The service takes `verifyPausesMs` so a test keeps them short.
+- 2026-10-16 (A1 build): a `verdict` call, and a rerun of a key that was submitted with no verdict or `unknown`, read once at once (the end was earlier), then wait the later pauses. A fresh failure waits the first pause.
+- 2026-10-16 (A1 build): "refused" is a platform `HttpError` 4xx after the submit step, except 408. A 429 is a refusal too. A `SiteError` 501 (no flow recorded) before the submit step stays a terminal 501, worded `not sent: …` as for an unkeyed call; nothing was attempted, so the journal keeps no record.
+- 2026-10-16 (A1 build): a profile wait that gives up (503) is `not_sent` `before_submit` under a key, and leaves no record. The next call under the key starts clean.
+- 2026-10-16 (A1 build): a verify read on another site passes no account (the account named for the send belongs to the sending site). A read on the same site passes the send's account.
+- 2026-10-16 (A1 build): a journal file that does not parse reads as submitted with `unknown` "the journal record is unreadable". A rerun then verifies and never writes.

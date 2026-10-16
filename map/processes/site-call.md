@@ -28,22 +28,25 @@ One shape for everyone (CLI, HTTP, Restate `sites`, wren): the caller never know
 6. Browser leg: `{ flow }` → `flow(name, input)` on the worker's runner, `{ workflow }` → `compiled.run(name, plan)` (gates approved by the caller) — `src/sites/types.ts:37-49`, `src/workflows/proof.ts:49`
 7. `setup(site, step, …)` mints a token the same way and keeps it through the sink under the account's name — `src/sites/facade.ts:151`, `src/sites/oauth.ts:212`; an OAuth consent opens in the account's provider profile for a `via` site (TikTok), like its browser legs — `src/sites/facade.ts:607-611`
 8. Restate face: `sites/call`, `sites/status`, `sites/setup`, `sites/renew` — `src/sites/service.ts:61-121`; the same handlers as `desk/*` from the Mac (`src/app/desk.ts`) for legs a site refuses from the box's IP (Reddit). A read retries without a bound (300 tries) only when it is not the API leg failing: the API leg's 429, 5xx or timeout turns terminal on the 4th try (`API_READ_TRIES`) and goes back to the caller, and `http` does not re-ask a 429 whose Retry-After is past its 10 s wait cap
-9. A busy browser profile waits, durably, then runs once (`waitForProfile`, `src/browser/profile-wait.ts`); past 5 min: `not sent: profile … is busy …` under 503, the caller's "try next tick". A busy try spends no cap (`giveBack`, `src/sites/caps.ts`). A write that fails says whether it left (`sentWords`, `src/sites/service.ts`): `not sent: …` before its submit step (`markSubmitted`: an irreversible act, or the API leg), `…; may have gone through` after it; a refusal under 500 stays as it is
+9. A busy browser profile waits, durably, then runs once (`waitForProfile`, `src/browser/profile-wait.ts`); past 5 min: `not sent: profile … is busy …` under 503, the caller's "try next tick". A busy try spends no cap (`giveBack`, `src/sites/caps.ts`). A write that fails says whether it left (`sentWords`, `src/sites/service.ts`): `not sent: …` before its submit step (`markSubmitted`: an irreversible act, or the API leg), `…; may have gone through` after it; a refusal under 500 stays as it is. That is the unkeyed call; a keyed write answers a verdict (step 11)
 10. Every try, retries included, is a line in the [[site-call-ledger]] inside the `ctx.run` — `src/sites/service.ts:122,153`
+11. A keyed write (`sendKey`, designs/2026-10-16-send-verdicts.md) answers a `SendVerdict` as its result — `keyedCall`, `src/sites/service.ts:462`. Order: the journal says what it knows of the key (`gateOf`); a final verdict answers with no leg call; submitted with no verdict, or `unknown`, runs only the verify reads; started and not submitted with no live call is `not_sent` `before_submit`. Else the record starts and the leg runs inside `waitForProfile` under `currentCall() = send <key>` (`sendLeg`, `:317`). Success is `sent` `answer` with `output`, `id` and `url` from the route's `sentAs`. A `SiteError` under 500 before the submit step stays thrown (a 501 words `not sent: …`); any other failure before it, and a profile wait that gives up, is `not_sent` `before_submit`. After it, a platform 4xx (not 408) is `not_sent` `refused` with `status`; anything else runs the verify reads
+12. Verify reads (`verifyReads`, `:396`): up to three, at about 30 s, 3 min and 10 min after the end (`VERIFY_PAUSES_MS`, `:225`), each a durable `ctx.sleep` then one `ctx.run`. A read is the route's `verify.read` through `facade.call` as the sending account (`VerifyGet`; another site takes no account), judged by `settle` (`src/sites/verdict.ts`) with the route's words, the start time and `lags`. Found is `sent` `verified`; absent on a full read is `not_sent` `verified_absent`; else `unknown`. A read that throws is unclear. A route with `verify: { none }` or no `verify` is `unknown` at once, with no read. The journal keeps the verdict (`src/sites/send-journal.ts`)
+13. `sites/verdict {sendKey}` (`:579`) answers the journal's verdict with no leg: a killed call's key reads back its verdict; `unknown` and submitted-without-verdict read again, the first read at once. No record is `not_sent` `before_submit` "no send under this key"; a call live in this process is `unknown` "still running". Restate gives a killed invocation's failure to any repeat of its idempotency key, so a caller reads `verdict` after a kill. Without a key, step 9 holds as written
 
 ## If you change this
 
-- **Hits:** `src/sites/wire.ts`, `src/sites/service.ts`, `src/app/cli-site.ts`, `src/ui/api.ts:466-520`, `src/do/doer.ts` (`callSite`), wren's channel packages (they call these paths over the ingress).
+- **Hits:** `src/sites/wire.ts`, `src/sites/service.ts`, `src/sites/send-journal.ts`, `src/app/cli-site.ts`, `src/ui/api.ts:466-520`, `src/do/doer.ts` (`callSite`), wren's channel packages (they call these paths over the ingress).
 - **Does not hit:** sign-ins (a browser leg gets the wall hook from the runner); the run object.
 
 ## Surfaces
 
 | Surface | Role |
 |---|---|
-| `autobrowse site call/setup/renew`, `/api/sites`, Restate `sites` | callers |
+| `autobrowse site call/setup/renew`, `/api/sites`, Restate `sites` and `desk` (`call`, `verdict`) | callers |
 | wren `Content` service | caller, outside the tree |
 
 ## See
 
 - Objects: [[site-call-ledger]], [[site-api]], [[site-facade]], [[token]], [[account]], [[approval]], [[spend-policy]]
-- Source: `src/sites/facade.ts`, `src/sites/service.ts`
+- Source: `src/sites/facade.ts`, `src/sites/service.ts`, `src/sites/send-journal.ts`, `src/sites/verdict.ts`
