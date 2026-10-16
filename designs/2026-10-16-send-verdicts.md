@@ -69,6 +69,59 @@ The verdict is the call's result, not an error. A request that is wrong (bad bod
 - Wren has no code that reads autobrowse error words.
 - The 10-15 Reddit case and the 10-16 TikTok case each have a test that fails on the old code.
 
+## Verify per route
+
+One row per irreversible route (`src/sites/*.ts`). A read lists the sending account's own recent objects; `settle` matches them (`src/sites/verdict.ts`). "Unknown only" routes carry `verify: { none }`. Notes: Reddit ids are fullnames (`t1_`, `t3_`). A row that is not a match for this send (other parent, other person) keeps `mine: false`, so the last row still shows how far back the list reaches. `read` gets no account name, so each read finds it through `get` (`/api/v1/me`, `/v2/userinfo`, `/me`).
+
+| Site | Route | Verify read | Why |
+|---|---|---|---|
+| linkedin | `POST /rest/posts` | `GET /rest/posts` by author, newest 10 | Matches the commentary. Cut at a count, so absent only past the send in time. |
+| linkedin | `POST /rest/socialActions/{urn}/comments` | `GET /rest/socialActions/{urn}/comments`, 100 | A Page matches by actor. A member matches by `/v2/userinfo` name, since the browser read names members by profile link. Parent must match. Ranked, never complete. |
+| linkedin | `POST /in/{vanity}/connect` | `GET /in/{vanity}/relationship` | A state: pending or connected is found, none is absent. |
+| linkedin | `POST /in/{vanity}/withdraw` | `GET /in/{vanity}/relationship` | A state: none is found, pending is absent. |
+| linkedin | `POST /in/{vanity}/message` | `GET /messaging`, 40 | Preview of the last message only; ours starts `You:`. No time, ranked, never complete: found or unclear. |
+| youtube | `POST /upload/youtube/v3/videos` | `GET /youtube/v3/playlistItems` on the uploads playlist | Matches the title. Lags, so absent is unclear. |
+| youtube | `DELETE /youtube/v3/videos` | unknown only | A delete is idempotent. |
+| youtube | `POST /youtube/v3/commentThreads` | `GET /youtube/v3/commentThreads`, order time | Matches our channel and words. Complete when no next page. |
+| youtube | `POST /youtube/v3/comments` | `GET /youtube/v3/comments` by parent | Matches our channel and words. Oldest first, so ranked. |
+| youtube | `POST /studio/communityPosts` | unknown only | No read lists community posts. The Data API has none. |
+| youtube | `POST /studio/thumbnail` | unknown only | A repeat sets the same image. |
+| instagram | `POST /{igUserId}/media_publish` | `GET /containers/{containerId}` (new) | A state: PUBLISHED is found, ERROR or EXPIRED is absent, else unclear. |
+| instagram | `POST /web/posts` | `GET /me`, then `GET /{id}/media`, 25 | Matches the caption. Lags (a video lists once processed). |
+| instagram | `POST /{commentId}/replies` | `GET /me`, then `GET /{commentId}/replies` (new) | Matches our username and words. Ranked. |
+| instagram | `POST /web/p/{shortcode}/comments` | `GET /web/p/{shortcode}/comments`, 100 | The page marks our comments (`mine`). Complete only when `more` is false and the viewer is known. |
+| instagram | `POST /web/profile/name` | unknown only | A repeat sets the same name. |
+| threads | `POST /{userId}/threads_publish` | `GET /containers/{containerId}` | A state: PUBLISHED is found, ERROR or EXPIRED is absent, else unclear. |
+| tiktok | `POST /v2/post/publish/video/init/` | `POST /v2/video/list/` (reads), 20 | Matches the title; no title is unclear. Lags: public and processed videos only, so absent is unclear. |
+| tiktok | `POST /web/posts` | `POST /v2/video/list/` (reads), 20 | Matches the caption. Lags like the API publish. |
+| tiktok | `POST /web/videos/{videoId}/comments/{commentId}/replies` | `GET /web/videos/{videoId}/comments`, 100 | Our reply has a parent and is marked `creator` or carries our name. Replies load by click, so never complete. |
+| tiktok | `POST /web/profile/name` | unknown only | A repeat sets the same name. |
+| outlook | `POST /me/sendMail` | `GET /me`, then `GET /me/messages` newest 25 | Matches subject, from us, to the first recipient. Not saved to Sent is unclear. |
+| outlook | `POST /me/messages/{id}/reply` | `GET /me/messages/{id}`, then `GET /me/messages` | Matches the preview in the same conversation, from us. |
+| outlook | `POST /me/events` | unknown only | The events list orders by start time, so a new event cannot be told from an old one. |
+| gmail | `POST /gmail/v1/users/me/messages/send` | `GET /gmail/v1/users/me/messages` (`in:sent`, 10), then each message's metadata | Matches the subject and every To address in the raw message. |
+| meta | `POST /{pageId}/feed` | `GET /{pageId}/posts`, 25 | Matches the message. A scheduled or unpublished post never proves absent. |
+| meta | `POST /{pageId}/photos` | `GET /{pageId}/posts`, 25 | Matches the message; no message is unclear. Unpublished never proves absent. |
+| meta | `POST /{pageId}/videos` | `GET /{pageId}/posts`, 25 | Matches the description or title. Lags (lists once processed). |
+| meta | `POST /{pageId}/photo_stories` | unknown only | A story is not in the Page's posts, and no route lists stories. |
+| meta | `POST /{pageId}/video_stories` | unknown only | Same as photo stories. |
+| meta | `POST /{igUserId}/media_publish` | `GET /{objectId}` (`status_code`) | A state: PUBLISHED is found, ERROR or EXPIRED is absent, else unclear. |
+| meta | `POST /{commentId}/replies` | unknown only | Graph names a replier by username, and the input holds no account. |
+| meta | `POST /{commentId}/comments` | `GET /{commentId}/comments`, 100 | Matches the Page as author and the words. Ranked. |
+| meta | `POST /{pageId}/messages` | `GET /{pageId}/conversations`, Messenger and Instagram | To a person: newest, complete when no paging. A private reply (comment id) has no person, so ranked and never absent. |
+| x | `POST /2/tweets` | Post: `GET /2/users/{id}/tweets`, 10. Reply: `GET /2/tweets/search/recent`, `conversation_id` | Words compare without links (`t.co`). A post of media alone is unclear. A reply search lags, so absent is unclear. |
+| x | `DELETE /2/tweets/{id}` | unknown only | A delete is idempotent. |
+| x | `POST /1.1/account/update_profile.json` | unknown only | A repeat sets the same name. |
+| reddit | `POST /api/submit` | `GET /api/v1/me`, then `GET /user/{name}/submitted`, 25 | Matches the title in that subreddit. |
+| reddit | `POST /api/comment` | `GET /api/v1/me`, then `GET /user/{name}/comments`, 25 | Matches the words under that parent. Another parent is not a match. A cut list that does not reach the send is unclear. |
+| reddit | `POST /api/compose` | `GET /message/sent`, 25 | Matches the words to that person. |
+| reddit | `POST /api/subscribe` | unknown only | A join or leave is idempotent. |
+| reddit | `POST /web/profile/name` | unknown only | A repeat sets the same name. |
+| loom | `DELETE /videos/{id}` | unknown only | A delete is idempotent. |
+| npm | `POST /orgs` | unknown only | No read lists the orgs the account made. A repeat is refused, which is harmless. |
+| npm | `POST /packages/{package}/trust` | unknown only | No read shows a trusted publisher. A repeat is refused, which is harmless. |
+| discord | `DELETE /channels/{channel}` | unknown only | A delete is idempotent. |
+
 ## Contract (planner, 2026-10-16)
 
 The seam both repos build to. Types: `src/sites/verdict.ts`.
