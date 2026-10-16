@@ -33,7 +33,13 @@ import { registerOnBox } from "./box-register.js";
 import { cloudAdminUrl, planEndpoint } from "./endpoint.js";
 import { awsFor, boot } from "./owner.js";
 import { registerDeployment } from "./register.js";
-import { buildApp, credentialsFor, siteCallsDirFor, watchersFor } from "./services.js";
+import {
+  buildApp,
+  credentialsFor,
+  sendJournalFor,
+  siteCallsDirFor,
+  watchersFor,
+} from "./services.js";
 
 /** The port deploy/desk/install.sh points the Cloudflare Tunnel at. */
 const DESK_PORT = 9083;
@@ -47,8 +53,9 @@ const desk = sitesService(
   named(DESK_SERVICE, settings.owner),
   fileSiteCalls(siteCallsDirFor(settings)),
   watchers,
-  // A busy profile: who waited, and which idle explore a write took it from.
-  { wait: { log: (msg, extra) => log.info(extra ?? {}, msg) } },
+  // A busy profile: who waited, and which idle explore a write took it from. The journal: what
+  // each keyed write left on this Mac, so a rerun after a crash never writes twice.
+  { wait: { log: (msg, extra) => log.info(extra ?? {}, msg) }, journal: sendJournalFor(settings) },
 );
 // Claude Code reads the workspace holding this checkout (wren's `Ask`).
 const claude = claudeService(resolve(".."), named(CLAUDE_SERVICE, settings.owner));

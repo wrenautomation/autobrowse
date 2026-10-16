@@ -29,7 +29,19 @@ export { accessTokens, accountEnv, runConsent } from "./oauth.js";
 export { outlook } from "./outlook.js";
 export { PERPLEXITY_API, perplexity } from "./perplexity.js";
 export { REDDIT_ORIGIN, reddit, redditPublic } from "./reddit.js";
-export { DESK_SERVICE, SITES_SERVICE, type SitesService, sitesService } from "./service.js";
+export {
+  fileSendJournal,
+  memorySendJournal,
+  type SendJournal,
+  type SendRecord,
+} from "./send-journal.js";
+export {
+  DESK_SERVICE,
+  SITES_SERVICE,
+  type SitesService,
+  sitesService,
+  VERIFY_PAUSES_MS,
+} from "./service.js";
 export { THREADS_MAX, threads, threadsOAuth } from "./threads.js";
 export { tiktok } from "./tiktok.js";
 export * from "./types.js";

@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { fileDoneActs, withCall } from "../src/browser/attempt.js";
+import { type CallTry, fileDoneActs, markSubmitted, withCall } from "../src/browser/attempt.js";
 import { defineFlow, flowRunner } from "../src/browser/flow.js";
 import { NeedsHuman } from "../src/browser/session.js";
 
@@ -64,4 +64,52 @@ describe("a retried call never repeats an irreversible act", () => {
     await withCall("inv-2 step", () => runner.run(post, undefined));
     expect(posts).toBe(2);
   }, 60_000);
+});
+
+describe("the submit hook", () => {
+  it("runs once, as the submit step starts, before the act (a send journal writes it to disk)", async () => {
+    const seen: string[] = [];
+    const t: CallTry = { key: "send k", submitted: false, onSubmit: () => seen.push("hook") };
+    await withCall(
+      "send k",
+      async () => {
+        seen.push("before");
+        markSubmitted();
+        seen.push("act");
+        markSubmitted(); // a second irreversible act in the same call: no second hook
+        expect(t.submitted).toBe(true);
+      },
+      t,
+    );
+    expect(seen).toEqual(["before", "hook", "act"]);
+  });
+
+  it("a hook that throws stops the act, and the call is not submitted", async () => {
+    const t: CallTry = {
+      key: "send k",
+      submitted: false,
+      onSubmit: () => {
+        throw new Error("disk full");
+      },
+    };
+    let acted = false;
+    await expect(
+      withCall(
+        "send k",
+        async () => {
+          markSubmitted();
+          acted = true;
+        },
+        t,
+      ),
+    ).rejects.toThrow("disk full");
+    expect(acted).toBe(false);
+    expect(t.submitted).toBe(false);
+  });
+
+  it("a call without a hook marks submitted as it did", async () => {
+    const t: CallTry = { key: "inv step", submitted: false };
+    await withCall("inv step", async () => markSubmitted(), t);
+    expect(t.submitted).toBe(true);
+  });
 });

@@ -15,6 +15,10 @@
  * A busy browser profile is waited for, durably, never a failure (`browser/profile-wait`); a
  * write that fails says whether it was sent: `not sent: …` before its submit step, `…; may have
  * gone through` after it.
+ * A write with a `sendKey` answers a typed `SendVerdict` instead (`verdict.ts`, designs/2026-10-16-
+ * send-verdicts.md): the send journal keeps what went out per key, an unclear end is settled by the
+ * route's verify read, and `verdict` answers a key without a call. Restate's own idempotency is the
+ * caller's header (set it to the send key); nothing here dedupes invocations.
  */
 import * as restate from "@restatedev/restate-sdk";
 import { z } from "zod";
@@ -23,14 +27,17 @@ import { profileBusyOf } from "../browser/browsers.js";
 import {
   MAY_HAVE_GONE_THROUGH,
   NOT_SENT,
+  PROFILE_BUSY_STATUS,
   type ProfileWait,
   waitForProfile,
 } from "../browser/profile-wait.js";
 import type { Watchers } from "../browser/watchers.js";
 import { HttpError, lastingRefusal } from "../clients/http.js";
 import type { SiteCalls } from "../runs/calls.js";
-import type { SiteFacade } from "./facade.js";
+import type { SendSpec, SiteFacade } from "./facade.js";
+import { memorySendJournal, type SendJournal, type SendRecord } from "./send-journal.js";
 import { SiteError } from "./types.js";
+import { isFinal, type Seen, type SendVerdict, settle, type VerifyGet } from "./verdict.js";
 
 export const SITES_SERVICE = "sites";
 /**
@@ -63,7 +70,10 @@ const call = site.extend({
   caller: z.string().min(1).max(120).optional(),
   /** An earlier `arm`'s id: the leg runs in its tab, already on the page. */
   armId: z.string().uuid().optional(),
+  /** A write with a key answers a `SendVerdict`, once per key (`send-journal.ts`). */
+  sendKey: z.string().min(1).max(200).optional(),
 });
+const verdictReq = z.object({ sendKey: z.string().min(1).max(200) });
 const setup = site.extend({ step: z.string().min(1) });
 const revoke = site.extend({
   /** Minutes before the re-make runs (a consent screen filmed first); at once by default. */
@@ -209,6 +219,44 @@ async function recorded<T>(
 }
 
 /**
+ * Pauses before each verify read of a keyed write that ended unclear: reads at about 30 s, 3 min
+ * and 10 min after the end. Platform lists lag, so one read at once proves little.
+ */
+export const VERIFY_PAUSES_MS: readonly number[] = [30_000, 150_000, 420_000];
+
+/** What a keyed call's leg step settles to: the verdict, or only the verify reads are left. */
+type Gate =
+  | { end: SendVerdict }
+  | {
+      verify: SendRecord;
+      /** This call ran the leg and it just ended: wait before the first read. Else read at once. */
+      fresh: boolean;
+    };
+
+const notSent = (
+  reason: string,
+  how: "refused" | "before_submit" | "verified_absent",
+  status?: number,
+): SendVerdict => ({
+  verdict: "not_sent",
+  reason: reason.slice(0, 300),
+  how,
+  ...(status === undefined ? {} : { status }),
+});
+
+/** The facade's answer for a route with no leg to run (a browser flow nobody recorded). */
+const NO_LEG = 501;
+
+const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/** The status of a platform's refusal of a write: an HTTP 4xx, not a timeout (408). Else null. */
+function refusalOf(err: unknown): number | null {
+  return err instanceof HttpError && err.status >= 400 && err.status < 500 && err.status !== 408
+    ? err.status
+    : null;
+}
+
+/**
  * `name`: `sites` on the box, `desk` on the Mac; one shape, two machines.
  * `calls`: every try of a call, one line each (`src/runs/calls.ts`).
  */
@@ -217,13 +265,236 @@ export function sitesService(
   name: string = SITES_SERVICE,
   calls?: SiteCalls,
   watchers?: Watchers | null,
-  /** How a call waits for a busy browser profile; the defaults when absent. */
-  o: { wait?: ProfileWait } = {},
+  o: {
+    /** How a call waits for a busy browser profile; the defaults when absent. */
+    wait?: ProfileWait;
+    /** What each keyed write left on this machine; in memory when absent (it forgets a restart). */
+    journal?: SendJournal;
+    /** Pauses before each verify read; `VERIFY_PAUSES_MS` when absent. */
+    verifyPausesMs?: readonly number[];
+  } = {},
 ) {
+  const journal = o.journal ?? memorySendJournal();
+  const pauses = o.verifyPausesMs ?? VERIFY_PAUSES_MS;
   const watching = () => {
     if (!watchers) throw new restate.TerminalError("no watchers here", { errorCode: 501 });
     return watchers;
   };
+  /** A route with nothing declared: an unclear end of its write stays `unknown`. */
+  const bare: SendSpec = { irreversible: true, parse: (_path, input) => input };
+  const specOf = (req: z.infer<typeof call>): SendSpec => {
+    try {
+      return facade.sendSpec?.(req.site, req.method, req.path) ?? bare;
+    } catch (err) {
+      if (err instanceof SiteError)
+        throw new restate.TerminalError(err.message, { errorCode: err.status });
+      throw err;
+    }
+  };
+
+  /** What the journal already says about a key. */
+  const gateOf = (rec: SendRecord): Gate => {
+    if (rec.verdict && isFinal(rec.verdict)) return { end: rec.verdict };
+    if (journal.live(rec.key))
+      return {
+        end: { verdict: "unknown", reason: "the send is still running", since: rec.startedAt },
+      };
+    if (rec.submitted || rec.verdict) return { verify: rec, fresh: false };
+    // Started, never submitted, and no call here is running it: its process died before the act.
+    return {
+      end: journal.settle(
+        rec.key,
+        notSent("an earlier try ended before its submit step", "before_submit"),
+      ),
+    };
+  };
+
+  /**
+   * One keyed write: the leg runs at most once per key, behind the journal. Inside `ctx.run`.
+   * It never throws except a request the site refuses outright (a SiteError under 500 before the
+   * submit step) and a busy profile, which `waitForProfile` waits out.
+   */
+  async function sendLeg(
+    req: z.infer<typeof call>,
+    key: string,
+    spec: SendSpec,
+    run: (fn: () => Promise<unknown>) => Promise<unknown>,
+    from: object,
+  ): Promise<Gate> {
+    const known = journal.get(key);
+    if (known) return gateOf(known);
+    journal.start({
+      key,
+      site: req.site,
+      method: req.method,
+      path: req.path,
+      account: req.account ?? null,
+      input: req.input,
+    });
+    journal.enter(key);
+    // The key every guard below the facade reads (`currentCall`): one send key, one durable call.
+    const t: CallTry = {
+      key: `send ${key}`,
+      submitted: false,
+      onSubmit: () => journal.submitted(key),
+    };
+    try {
+      const out = await run(() =>
+        withCall(
+          t.key,
+          () => facade.call(req.site, req.method, req.path, req.input, req.account, from),
+          t,
+        ),
+      );
+      let ids: { id: string | null; url: string | null } = { id: null, url: null };
+      try {
+        ids = spec.sentAs?.(out) ?? ids;
+      } catch {
+        // The answer came; its id is a courtesy.
+      }
+      return {
+        end: journal.settle(key, {
+          verdict: "sent",
+          ...ids,
+          at: new Date().toISOString(),
+          how: "answer",
+          ...(out === undefined ? {} : { output: out }),
+        }),
+      };
+    } catch (err) {
+      // Nothing was asked of the site: forget the try, the wait runs it again.
+      if (profileBusyOf(err)) {
+        journal.forget(key);
+        throw err;
+      }
+      const why = messageOf(err);
+      if (!t.submitted) {
+        // A request the site refuses outright: a bad body, no route, a cap's 429, or no leg
+        // recorded (501, which the unkeyed call words `not sent: …`). Nothing was attempted.
+        if (err instanceof SiteError && (err.status < 500 || err.status === NO_LEG)) {
+          journal.forget(key);
+          throw new restate.TerminalError(err.status < 500 ? why : sentWords(why, false), {
+            errorCode: err.status,
+          });
+        }
+        return { end: journal.settle(key, notSent(why, "before_submit")) };
+      }
+      const status = refusalOf(err);
+      if (status !== null) return { end: journal.settle(key, notSent(why, "refused", status)) };
+      const rec = journal.get(key);
+      if (!rec) return { end: journal.settle(key, notSent(why, "before_submit")) };
+      return { verify: rec, fresh: true };
+    } finally {
+      journal.leave(key);
+    }
+  }
+
+  /**
+   * The verify reads of a write that ended unclear: each one `ctx.run`, a durable pause before
+   * it. Found is `sent`, absent on a full read is `not_sent`, else `unknown`. The journal keeps it.
+   */
+  async function verifyReads(
+    ctx: restate.Context,
+    rec: SendRecord,
+    spec: SendSpec,
+    waits: readonly number[],
+    from: object,
+  ): Promise<SendVerdict> {
+    const key = rec.key;
+    const keep = (make: () => SendVerdict) =>
+      ctx.run(`send ${key} verdict`, async () => journal.settle(key, make()));
+    const unknown = (reason: string): SendVerdict => ({
+      verdict: "unknown",
+      reason: reason.slice(0, 300),
+      since: rec.startedAt,
+    });
+    const v = spec.verify;
+    if (!v) return keep(() => unknown("this route has no verify read"));
+    if ("none" in v) return keep(() => unknown(v.none));
+    let why = "no verify read ran";
+    for (const [n, pause] of waits.entries()) {
+      if (pause > 0) await ctx.sleep(pause);
+      const seen = await ctx.run(`send ${key} verify read ${n + 1}`, async (): Promise<Seen> => {
+        journal.tried(key);
+        try {
+          const input = spec.parse(rec.path, rec.input);
+          // The same account on the same site; another site (a signed-out one) has no account.
+          const get: VerifyGet = (path, inp = {}, at) =>
+            facade.call(
+              at?.site ?? rec.site,
+              at?.method ?? "GET",
+              path,
+              inp,
+              at?.site && at.site !== rec.site ? null : rec.account,
+              from,
+            );
+          const got = await v.read(input, get);
+          return settle(got, {
+            words: v.words(input),
+            since: rec.startedAt,
+            lags: v.lags?.(input) ?? null,
+          });
+        } catch (err) {
+          return { seen: "unclear", why: `the verify read failed: ${messageOf(err)}` };
+        }
+      });
+      if (seen.seen === "found")
+        return keep(() => ({
+          verdict: "sent",
+          id: seen.id,
+          url: seen.url,
+          at: seen.at ?? new Date().toISOString(),
+          how: "verified",
+        }));
+      if (seen.seen === "absent")
+        return keep(() =>
+          notSent(
+            "a full read of the account's recent items shows nothing sent",
+            "verified_absent",
+          ),
+        );
+      why = seen.why;
+    }
+    return keep(() => unknown(why));
+  }
+
+  /** A keyed write: the verdict is its result. */
+  async function keyedCall(
+    ctx: restate.Context,
+    req: z.infer<typeof call>,
+    key: string,
+    from: object,
+  ): Promise<SendVerdict> {
+    const spec = specOf(req);
+    const step = `sites ${req.site} ${req.method} ${req.path}`;
+    const base = {
+      service: name,
+      site: req.site,
+      route: `${req.method} ${req.path}`,
+      ...(from as { caller: string | null; invocation: string }),
+    };
+    let attempt = 0;
+    let gate: Gate;
+    try {
+      gate = await waitForProfile(
+        ctx,
+        step,
+        () => sendLeg(req, key, spec, (fn) => recorded(calls, base, ++attempt, fn), from),
+        // A write may take its profile from an explore session nobody is driving.
+        { retry: WRITE_RETRY, take: true, ...(o.wait ? { wait: o.wait } : {}) },
+      );
+    } catch (err) {
+      // A profile held past the bound: nothing was asked of the site.
+      if (err instanceof restate.TerminalError && err.code === PROFILE_BUSY_STATUS)
+        return await ctx.run(`send ${key} verdict`, async () =>
+          journal.settle(key, notSent(err.message, "before_submit")),
+        );
+      throw err;
+    }
+    if ("end" in gate) return gate.end;
+    return verifyReads(ctx, gate.verify, spec, gate.fresh ? pauses : [0, ...pauses.slice(1)], from);
+  }
+
   return restate.service({
     name,
     handlers: {
@@ -276,6 +547,7 @@ export function sitesService(
         };
         let attempt = 0;
         try {
+          if (write && req.sendKey) return await keyedCall(ctx, req, req.sendKey, from);
           return await waitForProfile(
             ctx,
             step,
@@ -299,6 +571,30 @@ export function sitesService(
             queueRemake(ctx, name, await ctx.run("refused tokens", async () => claim()));
           throw err;
         }
+      }),
+      /**
+       * What became of a keyed write, without calling it again: the journal's verdict. A write
+       * that ended unclear is read again (at once, then the backoff). No record is `not_sent`.
+       */
+      verdict: restate.handlers.handler(CALL_OPTS, async (ctx: restate.Context, raw: unknown) => {
+        const { sendKey } = parse(verdictReq, raw);
+        const gate = await ctx.run(`send ${sendKey} gate`, async (): Promise<Gate> => {
+          const rec = journal.get(sendKey);
+          return rec ? gateOf(rec) : { end: notSent("no send under this key", "before_submit") };
+        });
+        if ("end" in gate) return gate.end;
+        const from = {
+          caller: ctx.request().headers.get("x-caller") ?? null,
+          invocation: ctx.request().id,
+        };
+        // The route is read from the record; a stand-in facade without a spec has no verify read.
+        const spec = specOf({
+          site: gate.verify.site,
+          method: gate.verify.method as z.infer<typeof call>["method"],
+          path: gate.verify.path,
+          input: gate.verify.input,
+        });
+        return verifyReads(ctx, gate.verify, spec, [0, ...pauses.slice(1)], from);
       }),
       /** The call's browser leg up to its last safe step, nothing sent: `{armed: id | null, until}`. */
       arm: async (ctx: restate.Context, raw: unknown) => {

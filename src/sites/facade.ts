@@ -54,6 +54,7 @@ import {
   siteEnv,
 } from "./types.js";
 import { withLocalFile } from "./upload-file.js";
+import type { NoVerify, RouteVerify } from "./verdict.js";
 
 export interface SiteFacadeDeps {
   http: HttpClient;
@@ -195,6 +196,19 @@ export interface CapsReport {
   calls: MeteredCall[];
 }
 
+/**
+ * What a keyed write needs from its route to settle (`service.ts`, `send-journal.ts`): whether it
+ * publishes, how a verify read proves it, and the id and link of what it made.
+ */
+export interface SendSpec {
+  irreversible: boolean;
+  /** Absent: the route declares nothing, so an unclear end stays `unknown`. */
+  verify?: RouteVerify<unknown> | NoVerify;
+  sentAs?: (output: unknown) => { id: string | null; url: string | null };
+  /** The route's own input for this request: path params and query folded in, defaults applied. */
+  parse(path: string, input: Record<string, unknown>): unknown;
+}
+
 export interface SiteFacade {
   list(): Promise<SiteRow[]>;
   status(site: string): Promise<SiteRow>;
@@ -207,6 +221,11 @@ export interface SiteFacade {
     account?: string | null,
     from?: CallFrom,
   ): Promise<unknown>;
+  /**
+   * The route a write would hit, as a keyed call settles it. Throws `SiteError` 404 for a path
+   * that is no route. Absent on a stand-in: the call then has no verify read.
+   */
+  sendSpec?(site: string, method: Method, path: string): SendSpec;
   /** A day's capped reads (today when absent): what each bucket used and every metered call, who asked. */
   caps(day?: string, site?: string): CapsReport;
   /** Run one setup step; what it makes lands in the sink (under the account's name, with one). */
@@ -342,6 +361,27 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     const s = byName.get(name);
     if (!s) throw new SiteError(404, `no site api named ${name}`);
     return s;
+  };
+  /** The route that answers `method path` on a site, with the path's params. */
+  const routeOf = (s: SiteApi, method: Method, path: string) => {
+    for (const r of s.routes) {
+      const params = r.method === method ? matchPath(r.path, path) : null;
+      if (params) return { r, params };
+    }
+    throw new SiteError(404, `${method} ${path} is not a ${s.site} route`);
+  };
+  /** The path's own query is part of the request, as the official API reads it. */
+  const requestOf = (
+    r: SiteRoute<never, unknown>,
+    path: string,
+    params: Record<string, string>,
+    input: Record<string, unknown>,
+  ) => {
+    const query = Object.fromEntries(new URLSearchParams(path.split("?")[1] ?? ""));
+    const parsed = r.request.safeParse({ ...query, ...input, ...params });
+    if (!parsed.success)
+      throw new SiteError(400, parsed.error.issues.map((i) => i.message).join("; "));
+    return parsed;
   };
   const tokenFor = async (s: SiteApi, account?: string | null): Promise<string | null> =>
     "open" in s.auth
@@ -584,27 +624,23 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
         calls: (deps.caps?.calls(at) ?? []).filter((c) => !only || c.site === only),
       };
     },
+    sendSpec(name, method, path) {
+      const { r, params } = routeOf(site(name), method, path);
+      return {
+        irreversible: r.irreversible ?? false,
+        ...(r.verify ? { verify: r.verify as RouteVerify<unknown> | NoVerify } : {}),
+        ...(r.sentAs ? { sentAs: r.sentAs as NonNullable<SendSpec["sentAs"]> } : {}),
+        parse: (p, input): unknown => requestOf(r, p, params, input).data,
+      };
+    },
     async call(name, method, path, input, named, from) {
       const s = site(name);
       // A credential name (`linkedin@research`) is the account whose username it holds.
       const account = named
         ? ((await deps.accountOf?.(deps.providerOf?.(s) ?? s.site, named)) ?? named)
         : named;
-      let hit: { r: SiteRoute<never, unknown>; params: Record<string, string> } | null = null;
-      for (const r of s.routes) {
-        const params = r.method === method ? matchPath(r.path, path) : null;
-        if (params) {
-          hit = { r, params };
-          break;
-        }
-      }
-      if (!hit) throw new SiteError(404, `${method} ${path} is not a ${name} route`);
-      const { r, params } = hit;
-      // The path's own query is part of the request, as the official API reads it.
-      const query = Object.fromEntries(new URLSearchParams(path.split("?")[1] ?? ""));
-      const parsed = r.request.safeParse({ ...query, ...input, ...params });
-      if (!parsed.success)
-        throw new SiteError(400, parsed.error.issues.map((i) => i.message).join("; "));
+      const { r, params } = routeOf(s, method, path);
+      const parsed = requestOf(r, path, params, input);
       // Named by the caller, else by the accounts policy. A policy pick falls back to the site's own
       // token at a provider's site, and at a site whose key a browser flow mints (npm, Cal.com: one
       // key, kept under its plain name). A site with its own OAuth logins keeps that token for whoever

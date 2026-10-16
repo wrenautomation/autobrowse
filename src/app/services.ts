@@ -153,8 +153,10 @@ import { fileCaps } from "../sites/caps.js";
 import {
   accessTokens,
   accountEnv,
+  fileSendJournal,
   gmailOAuth,
   profileOf,
+  type SendJournal,
   SITES_SERVICE,
   type SiteFacade,
   type SitesService,
@@ -619,6 +621,14 @@ export const llmCallsDirFor = (settings: Settings): string => join(stateDirFor(s
 
 /** Every try of a `sites`/`desk` call (src/runs/calls.ts): `calls/calls-YYYY-MM.jsonl`, kept for good. */
 export const siteCallsDirFor = (settings: Settings): string => join(stateDirFor(settings), "calls");
+
+/**
+ * What each keyed write left on this machine (`sites/send-journal.ts`): one file per send key,
+ * beside the done-acts files the legs guard themselves with. `sites` (box) and `desk` (Mac) each
+ * keep their own.
+ */
+export const sendJournalFor = (settings: Settings): SendJournal =>
+  fileSendJournal(join(expandHome(settings.artifactsDir), "sends"));
 
 /**
  * Tab watchers on this worker's browser (`browser/watchers.ts`): leases kept in `watchers.json`,
@@ -1644,7 +1654,10 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
         named(SITES_SERVICE, settings.owner),
         fileSiteCalls(siteCallsDirFor(settings)),
         null,
-        { wait: { log: (msg, extra) => log.info(extra ?? {}, msg) } },
+        {
+          wait: { log: (msg, extra) => log.info(extra ?? {}, msg) },
+          journal: sendJournalFor(settings),
+        },
       ),
       // One verb for the same orchestrator; the backend wires the doer in after the model exists.
       doService(

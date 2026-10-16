@@ -28,6 +28,11 @@ export interface CallTry {
    * after it may have gone through. Before it, nothing left this machine.
    */
   submitted: boolean;
+  /**
+   * Runs once, synchronously, as the submit step starts and before the act: the send journal
+   * writes `submitted` to disk here (`sites/send-journal.ts`). If it throws, the act never runs.
+   */
+  onSubmit?: () => void;
 }
 
 const calls = new AsyncLocalStorage<CallTry>();
@@ -48,7 +53,9 @@ export const currentCall = (): string | null => calls.getStore()?.key ?? null;
 /** The step that sends starts now: from here a failure may have gone through. */
 export const markSubmitted = (): void => {
   const t = calls.getStore();
-  if (t) t.submitted = true;
+  if (!t || t.submitted) return;
+  t.onSubmit?.();
+  t.submitted = true;
 };
 
 export interface DoneActs {
