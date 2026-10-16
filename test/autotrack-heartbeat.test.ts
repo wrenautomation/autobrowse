@@ -128,12 +128,21 @@ describe("devices formatting", () => {
       paused: "hotkey",
       ship: { ok: false, error: "403 AccessDenied" },
       update: { error: "bad signature" },
+      memoryRestarts: {
+        count: 2,
+        last: {
+          helper: "probe",
+          why: "memory 312 MB over the 300 MB cap",
+          at: "2026-10-16T00:00:00Z",
+        },
+      },
       waiting: { segments: 14, bytes: 340_000_000 },
     });
     expect(problems(r)).toEqual([
       "paused (hotkey)",
       "ship error: 403 AccessDenied",
       "update error: bad signature",
+      "helper memory restarts 2 (last probe: memory 312 MB over the 300 MB cap)",
       "waiting 14 segments (340 MB)",
     ]);
     expect(deviceLine(d, r, NOW)).toMatch(/seen 12m ago {2}paused \(hotkey\); ship error/);

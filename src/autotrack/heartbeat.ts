@@ -21,6 +21,12 @@ const heartbeatSchema = z.object({
   startedAt: iso.optional(),
   paused: z.string().nullish(),
   level: z.string().nullish(),
+  memoryRestarts: z
+    .object({
+      count: z.number(),
+      last: z.object({ helper: z.string(), why: z.string(), at: z.string() }).nullish(),
+    })
+    .nullish(),
   waiting: z.object({ segments: z.number().optional(), bytes: z.number().optional() }).optional(),
   ship: z
     .object({ at: z.string().nullish(), ok: z.boolean().nullish(), error: z.string().nullish() })
@@ -90,6 +96,9 @@ export function problems(read: BeatRead): string[] {
   if (b.paused) out.push(`paused (${b.paused})`);
   if (b.ship?.error) out.push(`ship error: ${b.ship.error}`);
   if (b.update?.error) out.push(`update error: ${b.update.error}`);
+  const mr = b.memoryRestarts;
+  if (mr?.count && mr.last)
+    out.push(`helper memory restarts ${mr.count} (last ${mr.last.helper}: ${mr.last.why})`);
   const seg = b.waiting?.segments ?? 0;
   const bytes = b.waiting?.bytes ?? 0;
   if (seg >= BACKLOG_SEGMENTS || bytes >= BACKLOG_BYTES)

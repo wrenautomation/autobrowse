@@ -210,6 +210,8 @@ export type Event = Base &
     | { kind: "task"; goal: string; done?: boolean }
     /** The quality level changed; every act after it was captured at `level`. `why` names the input. */
     | { kind: "level"; level: Level; why: string }
+    /** A helper (`probe`, `shots`) was restarted: its memory (MB) passed the cap. */
+    | { kind: "restart"; helper: string; why: string; mb: number }
     /**
      * One per written frame: `at` is the grab's `t` (a ring frame can be older than the act), `x, y`
      * the cursor then (screenshots carry no cursor), `display` the display it was grabbed from.
