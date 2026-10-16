@@ -78,6 +78,10 @@ const shortcode = z.string().regex(/^[\w-]{5,40}$/, "a post code, as in /p/<code
 const webFollow = z.object({ username, undo: z.boolean().optional() });
 const webLike = z.object({ shortcode, undo: z.boolean().optional() });
 const webComment = z.object({ shortcode, text: z.string().trim().min(1).max(2200) });
+const webComments = z.object({
+  shortcode,
+  max: z.coerce.number().int().min(1).max(200).default(100),
+});
 const webSearch = z.object({
   q: z.string().trim().min(1).max(100),
   max: z.coerce.number().int().min(1).max(30).default(12),
@@ -131,7 +135,7 @@ export const instagram: SiteApi = {
   probe: { path: "/me" },
   auth: { oauth: instagramOAuth },
   // Acts on others' accounts go through the page (no API does them): a person's pace, per account.
-  caps: { follow: 15, like: 40, comment: 10, post: 60, search: 10 },
+  caps: { follow: 15, like: 40, comment: 10, post: 60, comments: 40, search: 10 },
   pace: { gapMs: 8_000, jitterMs: 12_000 },
   routes: [
     route({
@@ -289,6 +293,15 @@ export const instagram: SiteApi = {
       request: z.object({ shortcode }),
       meter: () => ({ post: 1 }),
       browser: { flow: "instagram/post" },
+    }),
+    route({
+      method: "GET",
+      path: "/web/p/{shortcode}/comments",
+      summary:
+        "The comments on any public post, read off the page (the API reads only our own): `{ shortcode, url, owner, comments: [{ id, username, userId, text, at, parentId, likes }], more }`, newest first; Instagram ranks them, so `more` says some were not read (`max`, default 100). Reads only",
+      request: webComments,
+      meter: () => ({ comments: 1 }),
+      browser: { flow: "instagram/post-comments" },
     }),
     route({
       method: "GET",

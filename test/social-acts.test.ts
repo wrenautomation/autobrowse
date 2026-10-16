@@ -39,6 +39,7 @@ describe("social act routes", () => {
       [instagram, "POST", "/web/p/{shortcode}/like", "instagram/like"],
       [instagram, "POST", "/web/p/{shortcode}/comments", "instagram/comment"],
       [instagram, "GET", "/web/p/{shortcode}", "instagram/post"],
+      [instagram, "GET", "/web/p/{shortcode}/comments", "instagram/post-comments"],
       [instagram, "GET", "/web/search", "instagram/search"],
       [linkedin, "POST", "/in/{vanity}/follow", "linkedin/follow"],
       [linkedin, "POST", "/company/{company}/follow", "linkedin/follow"],
@@ -51,8 +52,13 @@ describe("social act routes", () => {
       expect(BROWSER_FLOWS[flow], flow).toBeDefined();
     }
     expect(
-      instagram.routes.find((r) => r.path === "/web/p/{shortcode}/comments")?.irreversible,
+      instagram.routes.find((r) => r.method === "POST" && r.path === "/web/p/{shortcode}/comments")
+        ?.irreversible,
     ).toBe(true);
+    expect(
+      instagram.routes.find((r) => r.method === "GET" && r.path === "/web/p/{shortcode}/comments")
+        ?.irreversible,
+    ).toBeUndefined();
   });
 
   it("sends a text-only X reply through the page until X grants replies; anything else to the API", () => {

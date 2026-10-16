@@ -33,6 +33,7 @@ import {
   instagramPost,
   instagramSearch,
 } from "../browser/flows/instagram-act.js";
+import { instagramPostComments } from "../browser/flows/instagram-comments.js";
 import { instagramCreatePost } from "../browser/flows/instagram-create-post.js";
 import { instagramOauthConsent } from "../browser/flows/instagram-oauth-consent.js";
 import { linkedinFollow, linkedinLike } from "../browser/flows/linkedin-act.js";
@@ -141,6 +142,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     instagramLike,
     instagramComment,
     instagramPost,
+    instagramPostComments,
     instagramSearch,
     linkedinCreatePost,
     linkedinSearchPeople,

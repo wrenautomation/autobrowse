@@ -66,6 +66,7 @@ describe("browser service", () => {
       "instagram/like",
       "instagram/oauth-consent",
       "instagram/post",
+      "instagram/post-comments",
       "instagram/profile-name",
       "instagram/search",
       "instagram/threads-consent",

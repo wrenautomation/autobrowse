@@ -295,6 +295,24 @@ describe("meta site", () => {
     expect(JSON.parse(calls[1]?.body ?? "{}")).toEqual({ subscribed_fields: "feed,messages" });
   });
 
+  it("reads a Page's conversations with the Page's own token", async () => {
+    const { sites, calls } = facade(null);
+    await sites.call("meta", "GET", "/111/conversations", { platform: "instagram", limit: 5 });
+    expect(calls.map((c) => [c.method, c.url.pathname, c.auth])).toEqual([
+      ["GET", "/v23.0/111", "Bearer user-token"],
+      ["GET", "/v23.0/111/conversations", "Bearer page-token"],
+    ]);
+    const q = calls[1]?.url.searchParams;
+    expect(q?.get("platform")).toBe("instagram");
+    expect(q?.get("limit")).toBe("5");
+    expect(q?.get("fields")).toBe(
+      "participants,updated_time,messages.limit(10){id,message,from,created_time}",
+    );
+    await expect(
+      sites.call("meta", "GET", "/111/conversations", { platform: "whatsapp" }),
+    ).rejects.toThrow();
+  });
+
   it("points the app's webhooks at a callback with the app token and the handshake token", async () => {
     const { sites, calls } = facade(null);
     await sites.call("meta", "POST", "/app/subscriptions", {

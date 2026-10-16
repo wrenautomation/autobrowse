@@ -260,6 +260,20 @@ const igReply = z.object({ commentId: id, message: z.string().min(1).max(2200) }
 /** A Page's answer under a Facebook comment, by the Page's own token. */
 const pageReply = z.object({ pageId: id, commentId: id, message: z.string().min(1).max(8000) });
 /**
+ * A Page's conversations, newest first by `updated_time`, each with the messages `fields` asks
+ * for. `platform` picks the inbox: Messenger, or the Page's Instagram. `user_id` narrows it to
+ * one person (their PSID or IGSID).
+ */
+const conversations = z.object({
+  pageId: id,
+  platform: z.enum(["messenger", "instagram"]).default("messenger"),
+  fields: z
+    .string()
+    .default("participants,updated_time,messages.limit(10){id,message,from,created_time}"),
+  user_id: id.optional(),
+  ...page,
+});
+/**
  * The Send API: a DM from the Page (Facebook or its Instagram), to a person who wrote first
  * (`recipient.id`) or as the one Private Reply a comment allows (`recipient.comment_id`).
  */
@@ -837,6 +851,16 @@ export const meta: SiteApi = {
       needs: ["pages_manage_engagement"],
       api: async ({ pageId, commentId, message }, leg) =>
         post(await pageLeg(leg, pageId), `${commentId}/comments`, { message }),
+    }),
+    route({
+      method: "GET",
+      path: "/{pageId}/conversations",
+      summary:
+        "The Page's conversations (Messenger, or `platform=instagram`), newest first, each with its last messages (`from`, `created_time`); the Page's own token, so `pages_messaging` is enough",
+      request: conversations,
+      // A read: the Page's own inbox. No `needs`: Standard Access reads the app's own Pages.
+      api: async ({ pageId, ...q }, leg) =>
+        get(await pageLeg(leg, pageId), `${pageId}/conversations`, q),
     }),
     route({
       method: "POST",
