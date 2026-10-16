@@ -37,6 +37,12 @@ const comments = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(25),
   depth: z.coerce.number().int().min(1).max(10).default(1),
   sort: z.enum(["confidence", "top", "new", "controversial", "old", "qa"]).default("new"),
+  // One comment's conversation: that comment, its replies, and `context` ancestors above it.
+  comment: z
+    .string()
+    .regex(/^[a-z0-9]{1,12}$/, "a comment id without t1_")
+    .optional(),
+  context: z.coerce.number().int().min(0).max(8).optional(),
 });
 /** A form value ("true"/"false") or a boolean; `z.coerce` would read "false" as true. */
 const flag = z.preprocess((v) => (v === "true" ? true : v === "false" ? false : v), z.boolean());

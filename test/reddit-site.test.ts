@@ -236,6 +236,12 @@ describe("reddit request shapes", () => {
     });
     expect(ok(...comments, { article: "t3_abc" })).toBe(false);
     expect(ok(...comments, { article: "abc", depth: "11" })).toBe(false);
+    expect(parsed(...comments, { article: "abc", comment: "def", context: "8" })).toMatchObject({
+      comment: "def",
+      context: 8,
+    });
+    expect(ok(...comments, { article: "abc", comment: "t1_def" })).toBe(false);
+    expect(ok(...comments, { article: "abc", context: 9 })).toBe(false);
 
     const rules = ["GET", "/r/{subreddit}/about/rules"] as const;
     expect(ok(...rules, { subreddit: "startups" })).toBe(true);
@@ -261,6 +267,12 @@ describe("reddit browser leg inputs", () => {
     expect(legInput("GET", "/comments/{article}", { article: "abc" })).toEqual({
       path: "/comments/abc",
       query: { limit: 25, depth: 1, sort: "new" },
+    });
+    expect(
+      legInput("GET", "/comments/{article}", { article: "abc", comment: "def", context: 8 }),
+    ).toEqual({
+      path: "/comments/abc",
+      query: { limit: 25, depth: 1, sort: "new", comment: "def", context: 8 },
     });
     expect(legInput("GET", "/r/{subreddit}/about/rules", { subreddit: "startups" })).toEqual({
       path: "/r/startups/about/rules",
