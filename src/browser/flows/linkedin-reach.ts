@@ -151,16 +151,45 @@ export async function go(fp: FlowPage, url: string): Promise<void> {
 const LIMITED = /reached the (monthly )?(commercial use )?limit|commercial use limit/i;
 const EMPTY = /no results found|no matching members/i;
 
-async function waitRows(fp: FlowPage): Promise<RawRow[]> {
+/** What the page holds where rows were looked for: the words of a "no list" error. */
+export interface PageShape {
+  main: boolean;
+  items: number;
+  links: number;
+  mainLinks: number;
+}
+
+export const shapeWords = (s: PageShape): string =>
+  `main ${s.main ? "yes" : "no"}, ${s.items} list items, ${s.links} profile links, ${s.mainLinks} in main`;
+
+const shapeOf = (fp: FlowPage): Promise<PageShape> =>
+  fp.page.evaluate(() => ({
+    main: Boolean(document.querySelector("main")),
+    items: [...document.querySelectorAll("main [role=listitem], main li")].length,
+    links: [...document.querySelectorAll("a[href*='/in/']")].length,
+    mainLinks: [...document.querySelectorAll("main a[href*='/in/']")].length,
+  }));
+
+/**
+ * Rows once the page shows them. A page that says it has none is `[]`; a
+ * page that shows neither rows nor that is an error with its url, never an
+ * empty list: a changed page must not read as "nobody".
+ */
+async function waitRows(
+  fp: FlowPage,
+  what: string,
+  empty: RegExp = EMPTY,
+  read: (fp: FlowPage) => Promise<RawRow[]> = rowsOnPage,
+): Promise<RawRow[]> {
   for (let i = 0; i < RENDER_MS / SETTLE_MS; i++) {
-    const rows = await rowsOnPage(fp);
+    const rows = await read(fp);
     if (rows.length) return rows;
     const text = await fp.text();
     if (LIMITED.test(text)) return fp.human("LinkedIn's free search limit for the month is hit");
-    if (EMPTY.test(text)) return [];
+    if (empty.test(text)) return [];
     await fp.wait(SETTLE_MS);
   }
-  return [];
+  return fp.human(`no ${what} at ${fp.url()} (${shapeWords(await shapeOf(fp))})`);
 }
 
 export interface SearchPeopleInput {
@@ -193,7 +222,7 @@ export const linkedinSearchPeople = defineFlow<
     let read = 0;
     for (let p = first; p < first + (input.pages ?? 1); p++) {
       await go(fp, searchUrl(input, p));
-      const found = peopleOf(await waitRows(fp));
+      const found = peopleOf(await waitRows(fp, "search results"));
       read++;
       const fresh = found.filter((x) => !people.some((y) => y.vanity === x.vanity));
       people.push(...fresh);
@@ -498,7 +527,7 @@ export const linkedinCompanyPeople = defineFlow<CompanyPeopleInput, { people: Pe
     if (input.keywords) u.searchParams.set("keywords", input.keywords);
     await go(fp, u.toString());
     const max = input.max ?? 30;
-    let people = peopleOf(await waitRows(fp));
+    let people = peopleOf(await waitRows(fp, "company people"));
     // The page shows a dozen and grows by "Show more results".
     for (let i = 0; i < 20 && people.length < max && (await fp.has(showMore, 3_000)); i++) {
       const before = people.length;
@@ -882,6 +911,8 @@ export interface Connection extends Person {
 }
 
 const CONNECTED = /^connected\b.*$/im;
+/** The page's own words for an account with no connections. */
+const NO_CONNECTIONS = /you don.t have any connections|no connections yet|^0 connections$/im;
 
 /** One "recently added" card: the person, plus when they connected (kept off the headline). */
 export function connectionOf(row: RawRow): Connection | null {
@@ -901,7 +932,8 @@ export const linkedinConnections = defineFlow<ConnectionsInput, { connections: C
   async run(fp, input) {
     const max = input.max ?? 40;
     await go(fp, `${WEB}/mynetwork/invite-connect/connections/`);
-    if (!(await fp.has({ css: "main a[href*='/in/']" }, RENDER_MS))) return { connections: [] };
+    const rows = await waitRows(fp, "connections list", NO_CONNECTIONS);
+    if (!rows.length) return { connections: [] };
     await fp.wait(SETTLE_MS);
     const seen = new Set<string>();
     const connections: Connection[] = [];
