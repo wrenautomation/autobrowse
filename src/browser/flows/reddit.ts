@@ -18,6 +18,8 @@
  * `form.usertext` into the thing's `.child`; a post's own form is
  * `.commentarea > form.usertext`. Both save with `button[type=submit]`.
  */
+
+import { already } from "../attempt.js";
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
 import {
@@ -907,10 +909,9 @@ export const redditSubscribe = defineFlow<
     if (!(await signedIn(fp))) return fp.human("reddit: signed out on this profile");
     const joined = await fp.has(JOINED, 1_000);
     const want = action === "sub";
-    if (joined === want || dry)
-      return {
-        json: { errors: [], data: { subscribed: joined, changed: false, ...(dry ? { dry } : {}) } },
-      };
+    if (dry) return { json: { errors: [], data: { subscribed: joined, changed: false, dry } } };
+    if (joined === want)
+      return already({ json: { errors: [], data: { subscribed: joined, changed: false } } });
     await fp.act({ kind: "click" }, want ? JOIN : LEAVE, {
       goal: `${want ? "join" : "leave"} r/${sr}`,
       irreversible: true,

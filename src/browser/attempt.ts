@@ -33,6 +33,11 @@ export interface CallTry {
    * writes `submitted` to disk here (`sites/send-journal.ts`). If it throws, the act never runs.
    */
   onSubmit?: () => void;
+  /**
+   * The leg found what it was asked for already there (the name already set, the org already
+   * made): an answer with no submit step still counts as done (`markAlready`).
+   */
+  already?: boolean;
 }
 
 const calls = new AsyncLocalStorage<CallTry>();
@@ -56,6 +61,21 @@ export const markSubmitted = (): void => {
   if (!t || t.submitted) return;
   t.onSubmit?.();
   t.submitted = true;
+};
+
+/**
+ * The leg answers with no act because the thing is already there: a keyed irreversible call
+ * then settles as sent. Without it, such a call's answer with no submit step is `not_sent`.
+ */
+export const markAlready = (): void => {
+  const t = calls.getStore();
+  if (t) t.already = true;
+};
+
+/** `out`, answered as already there (`markAlready`). */
+export const already = <T>(out: T): T => {
+  markAlready();
+  return out;
 };
 
 export interface DoneActs {

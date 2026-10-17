@@ -12,6 +12,7 @@
  * Provider, owner, repository and workflow cannot be changed afterwards.
  */
 import { unlockWithPasskey } from "../../auth/recovery.js";
+import { already } from "../attempt.js";
 import { defineFlow } from "../flow.js";
 
 export interface TrustedPublisherInput {
@@ -51,7 +52,8 @@ export const npmTrustedPublisher = defineFlow<TrustedPublisherInput, TrustedPubl
     await unlockWithPasskey(fp, USE_KEY);
     const add = { role: "button", name: "Add Trusted Publisher connection for GitHub Actions" };
     if (!(await fp.has(add, 8_000))) {
-      if (listed(await fp.text(), input)) return { package: input.package, trusted, existed: true };
+      if (listed(await fp.text(), input))
+        return already({ package: input.package, trusted, existed: true });
       return fp.human(`${input.package} settings show no trusted publisher form`);
     }
     await fp.act({ kind: "click" }, add, { goal: "trust a GitHub Actions workflow" });

@@ -247,6 +247,12 @@ const notSent = (
 /** The facade's answer for a route with no leg to run (a browser flow nobody recorded). */
 const NO_LEG = 501;
 
+/** Why an answer with no submit step sent nothing: its own `reason`, else a plain one. */
+export function unsentReasonOf(out: unknown): string {
+  const r = (out as { reason?: unknown } | null)?.reason;
+  return typeof r === "string" && r ? r : "the leg answered before any irreversible act";
+}
+
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 /** The status of a platform's refusal of a write: an HTTP 4xx, not a timeout (408). Else null. */
@@ -346,6 +352,10 @@ export function sitesService(
           t,
         ),
       );
+      // An irreversible leg that answered with no act sent nothing (no post or comment found),
+      // unless it said the thing was already there.
+      if (spec.irreversible && !t.submitted && !t.already)
+        return { end: journal.settle(key, notSent(unsentReasonOf(out), "before_submit")) };
       let ids: { id: string | null; url: string | null } = { id: null, url: null };
       try {
         ids = spec.sentAs?.(out) ?? ids;

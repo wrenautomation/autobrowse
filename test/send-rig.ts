@@ -4,7 +4,7 @@
  * next write ends. Synthetic: no real site, name or id.
  */
 import { z } from "zod";
-import { currentCall, fileDoneActs, markSubmitted } from "../src/browser/attempt.js";
+import { already, currentCall, fileDoneActs, markSubmitted } from "../src/browser/attempt.js";
 import { ProfileBusy } from "../src/browser/browsers.js";
 import { defineFlow, type FlowRunner } from "../src/browser/flow.js";
 import { HttpError, httpClient } from "../src/clients/http.js";
@@ -16,7 +16,17 @@ export const platform = {
   comments: [] as { text: string; at: string; id: string }[],
   videos: [] as { title: string; at: string; id: string; visible: boolean }[],
   /** `ok` answers; `close` posts then the page dies; `died` the page dies at the click, nothing posted. */
-  mode: "ok" as "ok" | "close" | "died" | "lost" | "refuse" | "hold" | "busy",
+  /** `missing`: the flow answers `{ found: false }` before any act; `already`: it is already there. */
+  mode: "ok" as
+    | "ok"
+    | "close"
+    | "died"
+    | "lost"
+    | "refuse"
+    | "hold"
+    | "busy"
+    | "missing"
+    | "already",
   /** The video list shows a new video only after processing. */
   lagging: false,
   /** Every write that reached the platform. */
@@ -47,6 +57,11 @@ export const runner: FlowRunner = {
     const { text } = input as { text: string };
     platform.keys.push(currentCall());
     if (platform.mode === "busy") throw new ProfileBusy("scratch", 4242, "cli", "");
+    const { thread } = input as { thread: string };
+    if (platform.mode === "missing")
+      return { found: false, reason: `no thread ${thread}` } as never;
+    if (platform.mode === "already")
+      return already({ id: "c0", url: "https://scratch.test/c/c0" }) as never;
     markSubmitted();
     platform.onAct?.(sendKeyOf());
     if (platform.mode === "died") throw new Error("page closed at the click");

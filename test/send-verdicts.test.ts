@@ -299,6 +299,30 @@ describe("before the submit step", () => {
   });
 });
 
+describe("an answer with no submit step", () => {
+  it("10-17 LinkedIn: the flow found no comment and answered `{ found: false }`: `not_sent` with its reason (old code: `sent` how answer)", async () => {
+    platform.mode = "missing";
+    const { call } = build();
+    expect(await call(say("a reply", "k-missing"))).toEqual({
+      verdict: "not_sent",
+      reason: "no thread t1",
+      how: "before_submit",
+    });
+    expect(platform.writes).toEqual([]);
+    expect(journal.get("k-missing")?.verdict?.verdict).toBe("not_sent");
+  });
+
+  it("a flow that says it is already there (`already`) is `sent` how answer", async () => {
+    platform.mode = "already";
+    const { call } = build();
+    expect(await call(say("a reply", "k-already"))).toMatchObject({
+      verdict: "sent",
+      how: "answer",
+      id: "c0",
+    });
+  });
+});
+
 describe("after the submit step", () => {
   it("a submit that was journaled and never settled runs only the verify read after a restart", async () => {
     const first = diskJournal();

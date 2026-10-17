@@ -10,6 +10,8 @@
  * A taken name shows no inline error: the page just stays on /org/create.
  * An org we already own opens its members page instead of npm's 404.
  */
+
+import { already } from "../attempt.js";
 import { defineFlow } from "../flow.js";
 
 export interface CreateOrgInput {
@@ -33,7 +35,7 @@ export const npmCreateOrg = defineFlow<CreateOrgInput, CreateOrgResult>({
   async run(fp, input) {
     await fp.open(members(input.name));
     if (fp.url().startsWith(members(input.name)) && !/not found/i.test(await fp.text()))
-      return { org: input.name, existed: true };
+      return already({ org: input.name, existed: true });
     await fp.open("https://www.npmjs.com/org/create");
     await fp.act(
       { kind: "fill", value: input.name },

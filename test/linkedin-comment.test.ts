@@ -1,9 +1,11 @@
+import { chromium } from "playwright";
 import { describe, expect, it } from "vitest";
 import {
   commentElements,
   commentUrnsOf,
   linkedinComment,
   linkedinPostComments,
+  replyButtonCss,
   targetOf,
   timeOfId,
 } from "../src/browser/flows/linkedin-comment.js";
@@ -98,9 +100,7 @@ describe("linkedin comments by the page", () => {
       present: (h: Hints) =>
         h.css === "[contenteditable=true]" ||
         /Comment as /.test(h.css ?? "") ||
-        /replaceableComment_urn:li:comment:\(activity:7513655466959208449,9\)"\] button\[aria-label="Reply"\]/.test(
-          h.css ?? "",
-        ),
+        h.css === replyButtonCss("9"),
     });
     const urn = `urn:li:comment:(${POST},9)`;
     const out = await linkedinComment.run(fp, {
@@ -156,5 +156,33 @@ describe("linkedin comments by the page", () => {
       actorName: "Sam Test",
       created: { time: timeOfId("7513488260065648640") },
     });
+  });
+});
+
+describe("linkedin reply: the comment found by its own id", () => {
+  it("a urn that names the post as a share finds the comment the page keys by activity", async () => {
+    // Synthetic ids: the page keys comments by the post's activity id, the urn by its share id.
+    const html = `<main>
+      <article id="replaceableComment_urn:li:comment:(activity:7000000000000000001,7000000000000000009)">
+        <button aria-label="Reply">Reply</button></article>
+      <article id="replaceableComment_urn:li:comment:(activity:7000000000000000001,7000000000000000099)">
+        <button aria-label="Reply">Reply</button></article></main>`;
+    const urn = "urn:li:comment:(urn:li:share:7000000000000000002,7000000000000000009)";
+    const { comment } = targetOf(urn);
+    expect(comment).toBe("7000000000000000009");
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html);
+      const found = await page.$$eval(replyButtonCss(comment as string), (els) =>
+        els.map((e) => (e.closest("article") as { id: string }).id),
+      );
+      // Only that comment: a comment id that ends the same digits (…099) is another comment.
+      expect(found).toEqual([
+        "replaceableComment_urn:li:comment:(activity:7000000000000000001,7000000000000000009)",
+      ]);
+    } finally {
+      await browser.close();
+    }
   });
 });

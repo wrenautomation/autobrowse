@@ -17,6 +17,8 @@
  * Facebook Page names are not here: the legacy settings iframe asks for the
  * password and Meta reviews it; "Wren" was refused as too broad (2026-10-07).
  */
+
+import { already } from "../attempt.js";
 import type { FlowPage } from "../flow.js";
 import { defineFlow } from "../flow.js";
 import type { Hints } from "../locate.js";
@@ -66,7 +68,7 @@ export const instagramProfileName = defineFlow<ProfileNameInput, ProfileNameResu
     const box: Hints = { role: "textbox", name: "Name" };
     if (!(await fp.has(box, RENDER_MS))) return fp.human("Accounts Center: no Name field");
     const before = (await fp.page.getByRole("textbox", { name: "Name" }).inputValue()).trim();
-    if (before === name) return { before, name };
+    if (before === name) return already({ before, name });
     await fp.act({ kind: "fill", value: name }, box, { goal: "type the new name" });
     const done: Hints = { role: "button", name: "Done" };
     if (!(await fp.has(done, 3_000))) {
@@ -91,7 +93,7 @@ export const xProfileName = defineFlow<ProfileNameInput, ProfileNameResult>({
     const field = "input[name=displayName]";
     if (!(await fp.has({ css: field }, RENDER_MS))) return fp.human("X: no Edit profile dialog");
     const before = await fieldValue(fp, field);
-    if (before === name) return { before, name };
+    if (before === name) return already({ before, name });
     await fp.act({ kind: "fill", value: name }, { css: field }, { goal: "type the new name" });
     await fp.act(
       { kind: "click" },
@@ -124,7 +126,7 @@ export const tiktokProfileName = defineFlow<ProfileNameInput, ProfileNameResult>
       return fp.human(`TikTok will not take a nickname now${said ? `: ${said}` : ""}`);
     }
     const before = (await fp.page.getByRole("textbox", { name: "Name" }).inputValue()).trim();
-    if (before === name) return { before, name };
+    if (before === name) return already({ before, name });
     await fp.act({ kind: "fill", value: name }, box, { goal: "type the new nickname" });
     await fp.act({ kind: "click" }, { role: "button", name: "Save" }, { goal: "save the profile" });
     await fp.act(
@@ -160,7 +162,7 @@ export const redditProfileName = defineFlow<ProfileNameInput, ProfileNameResult>
     const before = (
       await fp.page.getByRole("textbox", { name: "Display name" }).inputValue()
     ).trim();
-    if (before === name) return { before, name };
+    if (before === name) return already({ before, name });
     await fp.act({ kind: "fill", value: name }, box, { goal: "type the new display name" });
     await fp.act(
       { kind: "click" },

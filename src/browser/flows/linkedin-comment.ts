@@ -106,6 +106,14 @@ async function more(fp: FlowPage): Promise<void> {
   await fp.wait(2 * SETTLE_MS);
 }
 
+/**
+ * The Reply button under one comment, found by the comment's own id. The page keys a comment by
+ * the post's activity id, while the urn may name the post as a share or ugcPost (another id), so
+ * the post half of the element id is never matched (2026-10-17: a share urn found no comment).
+ */
+export const replyButtonCss = (comment: string): string =>
+  `[id^="replaceableComment_urn:li:comment:("][id$=",${comment})"] button[aria-label="Reply"]`;
+
 export interface CommentInput {
   /** The post, or (a reply) the comment, `urn:li:comment:(urn:li:activity:1,2)`. */
   urn: string;
@@ -148,10 +156,7 @@ export const linkedinComment = defineFlow<
       return fp.human(`the comment box acts as someone other than the member (${fp.url()})`);
     let nth = 0;
     if (comment) {
-      const [, kind, id] = /^urn:li:([a-zA-Z]+):(\d+)$/.exec(post) ?? [];
-      const reply: Hints = {
-        css: `[id="replaceableComment_urn:li:comment:(${kind}:${id},${comment})"] button[aria-label="Reply"]`,
-      };
+      const reply: Hints = { css: replyButtonCss(comment) };
       for (let i = 0; i < 10 && !(await fp.has(reply, 2_000)); i++) await more(fp);
       if (!(await fp.has(reply))) return { found: false, reason: `no LinkedIn comment ${urn}` };
       await fp.act({ kind: "click" }, reply, { goal: `open a reply to ${urn}` });
