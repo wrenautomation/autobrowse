@@ -27,6 +27,7 @@ import {
   syncedCredentials,
   syncedEnvStore,
   tailJson,
+  unsharedFile,
   versionsFile,
 } from "credvault";
 import type { Logger } from "pino";
@@ -922,11 +923,17 @@ export function bootstrapDepsFor(
   };
 }
 
-export function sinkFor(settings: Settings, ssm: SSMClient = ssmFor(settings)): EnvStore {
+export function sinkFor(
+  settings: Settings,
+  ssm: SSMClient = ssmFor(settings),
+): EnvStore & { share?: () => Promise<string[]> } {
   const shared = envStoreFor(settings, ssm);
   return settings.secretSink === "ssm"
     ? shared
-    : syncedEnvStore(envFileStore(settings.envFile), shared);
+    : syncedEnvStore(envFileStore(settings.envFile), shared, {
+        // A token minted while the shared store refused writes: sent by the next put or share.
+        unshared: unsharedFile(join(dirname(expandHome(settings.envFile)), "unshared.json")),
+      });
 }
 
 /**

@@ -43,7 +43,13 @@ export function registerAwsCommands(
         ...(o.overwrite ? { overwrite: true } : {}),
       });
       console.log(`${r.ok ? "signed in" : "not signed in"}\n${r.detail}`);
-      if (!r.ok) process.exitCode = 1;
+      if (!r.ok) {
+        process.exitCode = 1;
+        return;
+      }
+      // Tokens minted while the session was out stayed on this machine: send them now.
+      const sent = await sinkFor(settings).share?.();
+      if (sent?.length) console.log(`shared ${sent.length} kept here: ${sent.join(", ")}`);
     });
 
   program
