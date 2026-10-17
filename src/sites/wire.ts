@@ -25,7 +25,7 @@ import { runCompiled } from "../workflows/proof.js";
 import type { DailyCaps } from "./caps.js";
 import { checkSite, type SiteFacade, type SiteRow, siteFacade } from "./facade.js";
 import { SITES } from "./index.js";
-import { pointedAt, TokenRefused } from "./oauth.js";
+import { type MintedTokens, pointedAt, TokenRefused } from "./oauth.js";
 import {
   dueToday,
   GIVE_UP_DAYS,
@@ -88,6 +88,8 @@ export interface SiteParts {
   started?: DoneActs;
   /** Tokens the platforms refused (`refused.ts`): turns on keeping them, re-making them, `revoke`. */
   refused?: RefusedTokens;
+  /** Access tokens minted by any process on this machine (`fileMintedTokens`). */
+  minted?: MintedTokens;
   /** One line to a person (the ops lane); `ping` when it needs them. A failed send fails nothing. */
   notice?: (text: string, o?: { ping?: boolean }) => Promise<void>;
 }
@@ -186,10 +188,12 @@ export function sitesFor(p: SiteParts): SiteFacade {
     env: (name) => made.get(name) ?? env(name),
     sink: {
       put: async (name, value, o) => {
-        await p.sink.put(name, value, o);
+        // Held first: a rolled refresh token whose store write fails still serves this process.
         made.set(name, value);
+        await p.sink.put(name, value, o);
       },
     },
+    ...(p.minted ? { minted: p.minted } : {}),
     runner: p.browser,
     flow: (name) => flows[name] ?? p.walks?.(name) ?? null,
     compiled: {

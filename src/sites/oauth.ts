@@ -7,7 +7,9 @@
  */
 
 import { createHash, randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { dirname } from "node:path";
 import { CONSENT_RECEIVED } from "../browser/flows/oauth-consent.js";
 import { type HttpClient, HttpError } from "../clients/http.js";
 import { type OAuthSpec, SiteError } from "./types.js";
@@ -122,6 +124,45 @@ export class TokenRefused extends SiteError {
 /** How long a refused refresh token is believed before the platform is asked again. */
 const REFUSED_MS = 5 * 60_000;
 
+/** A minted access token and when it stops serving (a minute before it lapses). */
+export interface MintedToken {
+  token: string;
+  until: number;
+}
+
+/**
+ * Minted access tokens every process on a machine shares, keyed by the refresh token's name and a
+ * hash of its value. A site that rolls its refresh token on each mint (X) lost one to a mint whose
+ * answer timed out (10-16), after ~30 mints in 8 hours: each CLI run minted its own.
+ */
+export interface MintedTokens {
+  get(key: string): MintedToken | null;
+  set(key: string, v: MintedToken): void;
+}
+
+/** `MintedTokens` in one owner-only file; expired rows go on each write. */
+export function fileMintedTokens(path: string, now: () => number = Date.now): MintedTokens {
+  const load = (): Record<string, MintedToken> => {
+    try {
+      return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
+    } catch {
+      return {};
+    }
+  };
+  return {
+    get: (key) => load()[key] ?? null,
+    set: (key, v) => {
+      const rows = Object.fromEntries(
+        Object.entries({ ...load(), [key]: v }).filter(([, r]) => r.until > now()),
+      );
+      mkdirSync(dirname(path), { recursive: true });
+      const tmp = `${path}.${process.pid}.tmp`;
+      writeFileSync(tmp, `${JSON.stringify(rows)}\n`, { mode: 0o600 });
+      renameSync(tmp, path);
+    },
+  };
+}
+
 /**
  * An access token: minted from the refresh token when there is one (cached
  * until a minute before it expires), else the kept access token itself.
@@ -133,8 +174,14 @@ export function accessTokens(
   now: () => number = Date.now,
   /** Told when a mint answers a new refresh token (X rolls them): keep it under that name. */
   keep?: (name: string, value: string) => Promise<void>,
+  /** Mints other processes made, so this one reuses them instead of rolling the token again. */
+  shared?: MintedTokens,
 ): (spec: OAuthSpec, account?: string | null) => Promise<string | null> {
-  const cache = new Map<string, { token: string; until: number }>();
+  const cache = new Map<string, MintedToken>();
+  // One mint per refresh token at a time: two calls at once rolled X's token twice (10-16).
+  const minting = new Map<string, Promise<string>>();
+  const sharedKey = (name: string, value: string) =>
+    `${name} ${createHash("sha256").update(value).digest("hex").slice(0, 16)}`;
   // A refresh token the platform refused, by name and value: not asked again for a few minutes.
   // A rolled or re-consented token is another value, so it is tried at once.
   const refused = new Map<string, { err: TokenRefused; until: number }>();
@@ -148,10 +195,33 @@ export function accessTokens(
     if (!refresh || !id || !secret)
       return (spec.accessToken && env(accountEnv(spec.accessToken, account))) || null;
     // By name and value: a re-made refresh token never serves the old grant's access token.
-    const hit = cache.get(`${refreshName}\n${refresh}`);
+    const key = `${refreshName}\n${refresh}`;
+    const hit = cache.get(key);
     if (hit && hit.until > now()) return hit.token;
-    const no = refused.get(`${refreshName}\n${refresh}`);
+    const theirs = shared?.get(sharedKey(refreshName, refresh));
+    if (theirs && theirs.until > now()) {
+      cache.set(key, theirs);
+      return theirs.token;
+    }
+    const no = refused.get(key);
     if (no && no.until > now()) throw no.err;
+    const running = minting.get(key);
+    if (running) return running;
+    const mint = mintFrom(spec, refreshName, refresh, id, secret).finally(() =>
+      minting.delete(key),
+    );
+    minting.set(key, mint);
+    return mint;
+  };
+
+  async function mintFrom(
+    spec: OAuthSpec,
+    refreshName: string,
+    refresh: string,
+    id: string,
+    secret: string,
+  ): Promise<string> {
+    const key = `${refreshName}\n${refresh}`;
     const client = clientFields(spec, id, secret);
     const body = await tokenCall(
       http,
@@ -168,20 +238,25 @@ export function accessTokens(
         /invalid_grant|invalid_request/.test(err.message)
       ) {
         const no = new TokenRefused(refreshName, err.message);
-        refused.set(`${refreshName}\n${refresh}`, { err: no, until: now() + REFUSED_MS });
+        refused.set(key, { err: no, until: now() + REFUSED_MS });
         throw no;
       }
       throw err;
     });
     const token = body.access_token as string;
-    cache.set(`${refreshName}\n${refresh}`, {
-      token,
-      until: now() + ((body.expires_in ?? 3600) - 60) * 1000,
-    });
-    if (keep && body.refresh_token && body.refresh_token !== refresh)
-      await keep(refreshName, body.refresh_token);
+    const until = now() + ((body.expires_in ?? 3600) - 60) * 1000;
+    cache.set(key, { token, until });
+    // Kept under the refresh token it now pairs with: the rolled one when the site rolled it.
+    const next =
+      body.refresh_token && body.refresh_token !== refresh ? body.refresh_token : refresh;
+    try {
+      shared?.set(sharedKey(refreshName, next), { token, until });
+    } catch {
+      // A machine that can't write the file mints per process, as before.
+    }
+    if (keep && next !== refresh) await keep(refreshName, next);
     return token;
-  };
+  }
 }
 
 /**

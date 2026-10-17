@@ -13,7 +13,7 @@ import { memorySink } from "../src/deps/sink.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
 import { siteFacade } from "../src/sites/facade.js";
 import { SITES } from "../src/sites/index.js";
-import { accessTokens, pointTo } from "../src/sites/oauth.js";
+import { accessTokens, fileMintedTokens, pointTo } from "../src/sites/oauth.js";
 import { multipart, x, xOAuth } from "../src/sites/x.js";
 import { fakePage } from "./auth-fakes.js";
 
@@ -217,6 +217,46 @@ describe("x site", () => {
     expect(await mint(xOAuth, "wren")).toBe("at3");
     expect(kept.at(-1)).toEqual(["X_REFRESH_TOKEN", "rt4"]);
     expect(env.X_REFRESH_TOKEN__WREN).toBe(pointTo("X_REFRESH_TOKEN"));
+  });
+
+  it("mints once for calls at once, and a second process reuses the first's mint", async () => {
+    let n = 0;
+    const { http } = fakeApi(() => ({
+      access_token: `at${++n}`,
+      refresh_token: `rt${n + 1}`,
+      expires_in: 7200,
+    }));
+    const env: Record<string, string> = {
+      X_CLIENT_ID: "cid",
+      X_CLIENT_SECRET: "cs",
+      X_REFRESH_TOKEN: "rt1",
+    };
+    const dir = await mkdtemp(join(tmpdir(), "x-minted-"));
+    const shared = fileMintedTokens(join(dir, "access-tokens.json"), () => 0);
+    const keep = async (name: string, value: string) => {
+      env[name] = value;
+    };
+    const first = accessTokens(
+      http,
+      (k) => env[k],
+      () => 0,
+      keep,
+      shared,
+    );
+    // Two calls at once: one mint, so X rolls the token once.
+    expect(await Promise.all([first(xOAuth), first(xOAuth)])).toEqual(["at1", "at1"]);
+    expect(n).toBe(1);
+    expect(env.X_REFRESH_TOKEN).toBe("rt2");
+    // Another process (a CLI run) reads the rolled token and finds the mint made under it.
+    const second = accessTokens(
+      http,
+      (k) => env[k],
+      () => 0,
+      keep,
+      shared,
+    );
+    expect(await second(xOAuth)).toBe("at1");
+    expect(n).toBe(1);
   });
 
   it("uploads an image in one multipart request and a video in chunks, waiting for processing", async () => {

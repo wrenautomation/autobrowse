@@ -298,6 +298,66 @@ describe("the desk queues re-makes", () => {
     ]);
     expect(sent.map((s) => opts(s.opts).delay)).toEqual([300_000, 300_000]);
   });
+
+  /** A facade whose token is refused until `renew` makes it again; `remade` is what renew answers. */
+  function remaking(remade: boolean) {
+    const kept = memoryRefusedTokens();
+    let good = false;
+    let calls = 0;
+    const f: SiteFacade = {
+      ...facade,
+      call: async () => {
+        calls++;
+        if (good) return { ok: true };
+        kept.refuse(
+          { name: NAME, site: "acme", account: null, words: "invalid_grant" },
+          new Date(),
+        );
+        throw new SiteError(409, `${NAME} was refused (invalid_grant); re-consent the account`);
+      },
+      claimRefused: () => kept.claim(),
+      refused: () => kept.list(),
+    };
+    const awaited: { req: unknown; key?: string }[] = [];
+    const base = ctxOf();
+    const ctx = {
+      ...(base.ctx as object),
+      serviceClient: () => ({
+        renew: async (req: unknown, o: unknown) => {
+          awaited.push({ req, key: opts(o).idempotencyKey });
+          good = remade;
+          return {
+            results: [{ site: "acme", step: "s", account: null, names: [NAME], ok: remade }],
+          };
+        },
+      }),
+    } as never;
+    const handlers = (
+      sitesService(f, "desk") as unknown as {
+        service: Record<string, (...args: never) => Promise<unknown>>;
+      }
+    ).service;
+    return { handlers, ctx, sent: base.sent, awaited, calls: () => calls };
+  }
+
+  it("a call whose token was refused waits for its re-make, then runs once more", async () => {
+    const t = remaking(true);
+    expect(
+      await t.handlers.call?.(t.ctx, { site: "acme", method: "POST", path: "/post", input: {} }),
+    ).toEqual({ ok: true });
+    expect(t.calls()).toBe(2);
+    // Awaited under the queued re-make's key, so the two are one run; nothing else is queued.
+    expect(t.awaited).toEqual([{ req: { names: [NAME] }, key: expect.stringMatching(/^remake /) }]);
+    expect(t.sent).toEqual([]);
+  });
+
+  it("a re-make that fails leaves the refusal terminal, with no second try", async () => {
+    const t = remaking(false);
+    await expect(
+      t.handlers.call?.(t.ctx, { site: "acme", method: "POST", path: "/post", input: {} }),
+    ).rejects.toThrow(/was refused/);
+    expect(t.calls()).toBe(1);
+  });
 });
 
 describe("refused, then re-made (local OAuth server)", () => {

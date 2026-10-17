@@ -35,6 +35,8 @@ import type { Watchers } from "../browser/watchers.js";
 import { HttpError, lastingRefusal } from "../clients/http.js";
 import type { SiteCalls } from "../runs/calls.js";
 import type { SendSpec, SiteFacade } from "./facade.js";
+import type { RefusedToken } from "./refused.js";
+import type { RenewReport } from "./renew.js";
 import { memorySendJournal, type SendJournal, type SendRecord } from "./send-journal.js";
 import { SiteError } from "./types.js";
 import { isFinal, type Seen, type SendVerdict, settle, type VerifyGet } from "./verdict.js";
@@ -90,8 +92,29 @@ const renewReq = z.object({
   names: z.array(z.string().min(1)).min(1).optional(),
 });
 
-/** The one-way door a re-make goes through: this service's own `renew`. */
-type Renewer = { renew: (ctx: restate.Context, req: z.input<typeof renewReq>) => Promise<unknown> };
+/** The door a re-make goes through: this service's own `renew`. */
+type Renewer = {
+  renew: (ctx: restate.Context, req: z.input<typeof renewReq>) => Promise<RenewReport>;
+};
+
+/** One incident's re-make: every send and wait on it shares the one run. */
+const remakeKey = (r: { name: string; since: string }) => `remake ${r.name} ${r.since}`;
+
+/**
+ * Wait for one refused token's re-make: true when it made the name again. The same key as
+ * `queueRemake`, so this joins a queued run (or reads its answer) instead of starting another.
+ */
+async function awaitRemake(
+  ctx: restate.Context,
+  service: string,
+  r: Pick<RefusedToken, "name" | "since">,
+): Promise<boolean> {
+  const report = await ctx
+    .serviceClient<Renewer>({ name: service })
+    .renew({ names: [r.name] }, restate.rpc.opts({ idempotencyKey: remakeKey(r) }))
+    .catch(() => null);
+  return Boolean(report?.results.some((x) => x.ok && x.names.includes(r.name)));
+}
 
 /**
  * Queue `renew` for each name, once per incident (the key is the name and since when): durable,
@@ -107,7 +130,7 @@ function queueRemake(
     ctx.serviceSendClient<Renewer>({ name: service }).renew(
       { names: [r.name] },
       restate.rpc.sendOpts({
-        idempotencyKey: `remake ${r.name} ${r.since}`,
+        idempotencyKey: remakeKey(r),
         ...(delayMs ? { delay: delayMs } : {}),
       }),
     );
@@ -556,7 +579,7 @@ export function sitesService(
           ...from,
         };
         let attempt = 0;
-        try {
+        const once = async () => {
           if (write && req.sendKey) return await keyedCall(ctx, req, req.sendKey, from);
           return await waitForProfile(
             ctx,
@@ -574,12 +597,30 @@ export function sitesService(
             // A write may take its profile from an explore session nobody is driving.
             { retry, take: write, ...(o.wait ? { wait: o.wait } : {}) },
           );
+        };
+        try {
+          return await once();
         } catch (err) {
           // A refused token (409): its re-make starts now, not at tomorrow's renew.
           const claim = facade.claimRefused?.bind(facade);
-          if (claim && err instanceof restate.TerminalError && err.code === 409)
-            queueRemake(ctx, name, await ctx.run("refused tokens", async () => claim()));
-          throw err;
+          if (!claim || !(err instanceof restate.TerminalError) || err.code !== 409) throw err;
+          const { queued, ours } = await ctx.run("refused tokens", async () => ({
+            queued: claim(),
+            ours:
+              (facade.refused?.() ?? []).find(
+                (r) =>
+                  r.site === req.site && !r.gaveUp && err.message.includes(`${r.name} was refused`),
+              ) ?? null,
+          }));
+          queueRemake(
+            ctx,
+            name,
+            queued.filter((r) => r.name !== ours?.name),
+          );
+          // This call's own token: wait for its re-make, then try once more. A refresh token lost
+          // to a rotation whose answer timed out (X, 10-16) costs a minute, not a failed post.
+          if (!ours || !(await awaitRemake(ctx, name, ours))) throw err;
+          return await once();
         }
       }),
       /**

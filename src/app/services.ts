@@ -164,6 +164,7 @@ import {
   sitesFor,
   sitesService,
 } from "../sites/index.js";
+import { fileMintedTokens } from "../sites/oauth.js";
 import { fileRefusedTokens } from "../sites/refused.js";
 import { fileUploadSessions } from "../sites/uploads.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
@@ -595,6 +596,9 @@ export const stateDirFor = (settings: Settings): string =>
 
 /** Run history (src/runs/log.ts): one folder per site, kept for good. */
 export const runsDirFor = (settings: Settings): string => join(stateDirFor(settings), "runs");
+/** Minted access tokens the desk and every CLI run on this machine share. */
+export const mintedTokensFor = (settings: Settings) =>
+  fileMintedTokens(join(stateDirFor(settings), "access-tokens.json"));
 
 /** Walks built from runs (src/walks): `walks/<site>/<name>.json`. */
 export const walksDirFor = (settings: Settings): string => join(stateDirFor(settings), "walks");
@@ -1642,6 +1646,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       started: fileDoneActs(join(expandHome(settings.artifactsDir), "started-calls")),
       walks: (name) => walkFor(settings, name, sink),
       refused: fileRefusedTokens(join(stateDirFor(settings), "refused-tokens.json")),
+      minted: mintedTokensFor(settings),
       ...noticeFor(settings),
     }),
   );

@@ -28,6 +28,7 @@ import type { DailyCaps, MeteredCall } from "./caps.js";
 import {
   accessTokens,
   accountEnv,
+  type MintedTokens,
   pointedAt,
   pointTo,
   revokeGrant,
@@ -62,6 +63,8 @@ export interface SiteFacadeDeps {
   env: (name: string) => string | undefined;
   /** Where setup puts what it made. */
   sink: SecretSink;
+  /** Access tokens minted by any process on this machine, reused instead of minted again. */
+  minted?: MintedTokens;
   runner: FlowRunner;
   flow(name: string): BrowserFlow<never, unknown> | null;
   /** Compiled workflows by name, run in-process with gates approved (the caller gated the route). */
@@ -341,8 +344,12 @@ function resolveInput(v: unknown, env: SiteFacadeDeps["env"], account: string | 
 export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): SiteFacade {
   const byName = new Map(sites.map((s) => [s.site, s]));
   // A site that rolls its refresh token on every mint (X) hands the new one to the sink.
-  const minted = accessTokens(deps.http, deps.env, deps.now, (name, value) =>
-    deps.sink.put(name, value),
+  const minted = accessTokens(
+    deps.http,
+    deps.env,
+    deps.now,
+    (name, value) => deps.sink.put(name, value),
+    deps.minted,
   );
   const identityOf = async (
     id: NonNullable<OAuthSpec["identity"]>,

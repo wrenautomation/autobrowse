@@ -3,7 +3,7 @@ type: object
 cluster: sites
 universe: live
 status: verified
-verified: 2026-10-16 @ refused-tokens
+verified: 2026-10-17 @ x-token-loss
 entity: src/sites/oauth.ts
 ---
 
@@ -13,15 +13,15 @@ A site API key or OAuth token kept in the env store under a name, per account: m
 
 ## Why this shape
 
-Access tokens are minted on demand from the refresh token and cached until they expire; a rolled refresh token is kept back under the same name. A refresh token the platform refused is not sent again for 5 minutes (by name and value, so a re-consented one is tried at once). A token minted on the laptop is seen on the box by a one-time reload on a miss, because every SSM read is a KMS decrypt (`src/sites/wire.ts:224-260`).
+Access tokens are minted on demand from the refresh token and cached until they expire; a rolled refresh token is kept back under the same name, held in memory before the store write. One mint per refresh token at a time in a process, and every process on the machine shares its mints through `access-tokens.json` in the state dir (`fileMintedTokens`, owner-only): X rolls its token on each mint, and a mint whose answer timed out lost one on 10-16, after ~30 mints in 8 hours. A refresh token the platform refused is not sent again for 5 minutes (by name and value, so a re-consented one is tried at once). A token minted on the laptop is seen on the box by a one-time reload on a miss, because every SSM read is a KMS decrypt (`src/sites/wire.ts:224-260`).
 
-Refused tokens (designs/2026-10-16-refused-tokens.md): a refusal (invalid_grant, revoked, a 401 on the who-am-I probe) is kept by name, site, account, since when and the site's words, in `refused-tokens.json` in the state dir. The first of an incident is one ops-lane line; later calls add nothing. A refused name is due at once: the desk queues `renew {names}` for it (one-way, keyed by name and since), and the daily renew probes every site first and makes it again too. One try a day, marked before the setup runs, so a hung consent page costs a day, not a loop. Two failed days and renew stops with one ping saying the setup a person runs; a setup that makes it, or a call that works, ends the incident. `site revoke` is the only way our code ends a grant, and it marks every name the grant covered, so their re-make is queued in the same call.
+Refused tokens (designs/2026-10-16-refused-tokens.md): a refusal (invalid_grant, revoked, a 401 on the who-am-I probe) is kept by name, site, account, since when and the site's words, in `refused-tokens.json` in the state dir. The first of an incident is one ops-lane line; later calls add nothing. A refused name is due at once: the desk queues `renew {names}` for it (keyed by name and since), and the daily renew probes every site first and makes it again too. The call whose own token was refused waits for that re-make under the same key, then runs once more, so a post costs a minute instead of failing; a re-make that fails leaves the 409 terminal. One try a day, marked before the setup runs, so a hung consent page costs a day, not a loop. Two failed days and renew stops with one ping saying the setup a person runs; a setup that makes it, or a call that works, ends the incident. `site revoke` is the only way our code ends a grant, and it marks every name the grant covered, so their re-make is queued in the same call.
 
 ## Shape
 
-- `accountEnv(name, account)` = the per-account name — `src/sites/oauth.ts:80`; `accessTokens(http, env, now, keep)` — `:102-135`; `runConsent` — `:203`; `pkcePair`, `codeFrom` — `:74,148`; `WEB_REDIRECT` (the https redirect Meta and Instagram register; TikTok registers wren's portal callback, `TIKTOK_REDIRECT` in `src/sites/tiktok.ts`) — `:71`
+- `accountEnv(name, account)` = the per-account name — `src/sites/oauth.ts:80`; `accessTokens(http, env, now, keep, shared)`, `MintedTokens`, `fileMintedTokens` — `:125-260`; `runConsent` — `:203`; `pkcePair`, `codeFrom` — `:74,148`; `WEB_REDIRECT` (the https redirect Meta and Instagram register; TikTok registers wren's portal callback, `TIKTOK_REDIRECT` in `src/sites/tiktok.ts`) — `:71`
 - Renewal: `RENEW_WITHIN_MS` 14 days, `Renewal`, `RenewalPlan`, `renewals` (lapsing + refused), `renewDue`, `renewWording`, `nextLapse` — `src/sites/renew.ts:21-188`
-- Refused: `TokenRefused { token, why, site, account }` — `src/sites/oauth.ts:102`; `revokeGrant` — `src/sites/oauth.ts:191`; `RefusedToken`, `RefusedTokens { list, refuse, claim, start, end, stale, clear }`, `GIVE_UP_DAYS` 2, `dueToday`, `fileRefusedTokens`, `refusedLine` — `src/sites/refused.ts:13-180`; kept and said in `sitesFor` (`record`, `withRenew`, `revoke`) — `src/sites/wire.ts:232-408`; queued by `sitesService` (`queueRemake`, `revoke`) — `src/sites/service.ts:90,355`; notices via `opsLane` — `src/app/ops.ts`
+- Refused: `TokenRefused { token, why, site, account }` — `src/sites/oauth.ts:102`; `revokeGrant` — `src/sites/oauth.ts:191`; `RefusedToken`, `RefusedTokens { list, refuse, claim, start, end, stale, clear }`, `GIVE_UP_DAYS` 2, `dueToday`, `fileRefusedTokens`, `refusedLine` — `src/sites/refused.ts:13-180`; kept and said in `sitesFor` (`record`, `withRenew`, `revoke`) — `src/sites/wire.ts:232-408`; queued and awaited by `sitesService` (`queueRemake`, `awaitRemake`, `call`, `revoke`) — `src/sites/service.ts:95-140`; `mintedTokensFor` — `src/app/services.ts`; notices via `opsLane` — `src/app/ops.ts`
 - Store: `SecretSink.put(name, value, o)` — `src/deps/sink.ts:9-12`; `envStoreFor` / `sinkFor` (SSM `/autobrowse/config` via credvault `EnvStore`, `.env` locally) — `src/app/services.ts:958,769`; `autobrowse env` (`src/app/cli-env.ts`)
 - Loopback redirect `OAUTH_PORT` 9400; a `keep` op in a recording lands here too
 
@@ -48,4 +48,4 @@ Refused tokens (designs/2026-10-16-refused-tokens.md): a refusal (invalid_grant,
 
 - Source: `src/sites/oauth.ts`, `src/sites/renew.ts`, `src/sites/refused.ts`
 - Design: `designs/2026-09-21-site-apis.md`, `designs/2026-10-16-refused-tokens.md`
-- Tests: `test/refused-tokens.test.ts`
+- Tests: `test/refused-tokens.test.ts`, `test/x.test.ts`
