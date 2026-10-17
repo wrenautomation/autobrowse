@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { chromium, type Page } from "playwright";
 import { describe, expect, it } from "vitest";
 import type { FlowRunner } from "../src/browser/flow.js";
 import {
@@ -5,9 +8,12 @@ import {
   companyIdOf,
   companyOf,
   connectionOf,
+  connectionsOf,
   jobCardsOf,
   jobsOf,
   linkedinConnect,
+  linkedinConnections,
+  linkedinSearchPeople,
   linkedinWithdraw,
   type Person,
   type Profile,
@@ -16,6 +22,7 @@ import {
   profileOf,
   rolesOf,
   searchUrl,
+  totalOf,
 } from "../src/browser/flows/linkedin-reach.js";
 import type { Hints } from "../src/browser/locate.js";
 import { httpClient } from "../src/clients/http.js";
@@ -504,6 +511,115 @@ describe("company jobs", () => {
         title: "Manager, Global Sanctions",
         url: "https://www.linkedin.com/jobs/view/1/",
       },
+    ]);
+  });
+});
+
+describe("linkedin reach: the 2026 connections page", () => {
+  const FIXTURE = readFileSync(join(__dirname, "fixtures/linkedin-connections-sdui.html"), "utf8");
+
+  /** The flow against a real page holding `html`: reads run in Chromium, acts are counted. */
+  async function onPage<T>(
+    html: string,
+    run: (fp: ReturnType<typeof fakePage>["fp"]) => Promise<T>,
+  ) {
+    const browser = await chromium.launch();
+    try {
+      const page: Page = await browser.newPage();
+      await page.setContent(html);
+      const { fp, acts } = fakePage({ text: [""], present: () => false });
+      fp.page = page;
+      fp.text = () =>
+        page.evaluate(
+          () =>
+            (globalThis as unknown as { document: { body: { innerText: string } } }).document.body
+              .innerText,
+        );
+      fp.url = () => "https://www.linkedin.com/mynetwork/invite-connect/connections/";
+      let scrolls = 0;
+      fp.scroll = async () => {
+        scrolls++;
+      };
+      const out = await run(fp);
+      return { out, acts, scrolls };
+    } finally {
+      await browser.close();
+    }
+  }
+
+  it("reads each card (no li) as a connection with its Connected label, and scrolls for the rest", async () => {
+    const { out, acts, scrolls } = await onPage(FIXTURE, (fp) => linkedinConnections.run(fp, {}));
+    expect(out.connections).toEqual([
+      {
+        name: "Test Person",
+        vanity: "test-person-a1",
+        url: "https://www.linkedin.com/in/test-person-a1/",
+        headline: "Founder, Example Staffing",
+        connected: "Connected on October 15, 2026",
+      },
+      {
+        name: "Sample Owner",
+        vanity: "sample-owner",
+        url: "https://www.linkedin.com/in/sample-owner/",
+        headline: "CEO @ Example Group",
+        connected: "Connected on September 5, 2026",
+      },
+    ]);
+    // The header says 3: it scrolls for the third, twice with nothing new, then stops. No clicks.
+    expect(scrolls).toBe(2);
+    expect(acts).toEqual([]);
+  });
+
+  it("max caps the list and skips the scroll", async () => {
+    const { out, scrolls } = await onPage(FIXTURE, (fp) => linkedinConnections.run(fp, { max: 1 }));
+    expect(out.connections.map((c) => c.vanity)).toEqual(["test-person-a1"]);
+    expect(scrolls).toBe(0);
+  });
+
+  it("a page that shows no list is an error with its url, never an empty list", async () => {
+    const changed =
+      "<main><section><a href='https://www.linkedin.com/in/someone/'>x</a></section></main>";
+    await expect(onPage(changed, (fp) => linkedinConnections.run(fp, {}))).rejects.toThrow(
+      /no connections list at https:\/\/www\.linkedin\.com\/mynetwork\/invite-connect\/connections\/ \(main yes, 0 list items, 1 profile links, 1 in main\)/,
+    );
+  });
+
+  it("empty only when the page says zero", async () => {
+    const zero = "<main><section><p>0 connections</p></section></main>";
+    const { out } = await onPage(zero, (fp) => linkedinConnections.run(fp, {}));
+    expect(out).toEqual({ connections: [] });
+  });
+
+  it("a search page with no rows and no 'No results' is an error too", async () => {
+    await expect(
+      onPage("<main><p>Something else</p></main>", (fp) =>
+        linkedinSearchPeople.run(fp, { keywords: "founder" }),
+      ),
+    ).rejects.toThrow(/no search results at /);
+    const { out } = await onPage("<main><p>No results found</p></main>", (fp) =>
+      linkedinSearchPeople.run(fp, { keywords: "founder" }),
+    );
+    expect(out.people).toEqual([]);
+  });
+
+  it("the header count and the card list as pure reads", () => {
+    expect(totalOf("Sort by\n1,204 connections\nSearch")).toBe(1204);
+    expect(totalOf("1 connection")).toBe(1);
+    expect(totalOf("no header")).toBeNull();
+    const rows = [
+      {
+        text: "A Person\nConnected on October 1, 2026",
+        links: ["https://www.linkedin.com/in/a-person/"],
+      },
+      {
+        text: "A Person\nConnected on October 1, 2026",
+        links: ["https://www.linkedin.com/in/a-person/"],
+      },
+      { text: "B Person\nConnected 2 days ago", links: ["https://www.linkedin.com/in/b-person/"] },
+    ];
+    expect(connectionsOf(rows, 40).map((c) => [c.vanity, c.connected])).toEqual([
+      ["a-person", "Connected on October 1, 2026"],
+      ["b-person", "Connected 2 days ago"],
     ]);
   });
 });

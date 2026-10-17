@@ -20,6 +20,7 @@
  * so and the act is never repaired.
  */
 import { decodeHTML } from "entities";
+import { already } from "../attempt.js";
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
 
@@ -122,19 +123,24 @@ export function peopleOf(rows: RawRow[]): Person[] {
   return out;
 }
 
-/** Every list item with a profile link: search results and company people alike. */
-const rowsOnPage = (fp: FlowPage): Promise<RawRow[]> =>
-  fp.page.evaluate(() => {
-    const items = [...document.querySelectorAll("main [role=listitem], main li")];
-    // A card nested in another card counts once: the innermost item with the link.
+/** List items: search results and company people alike. */
+export const LIST_ITEMS = "main [role=listitem], main li";
+
+/**
+ * Every card with a profile link, `cards` naming what a card is (list items by
+ * default). A card nested in another counts once: the innermost one.
+ */
+export const rowsOnPage = (fp: FlowPage, cards: string = LIST_ITEMS): Promise<RawRow[]> =>
+  fp.page.evaluate((sel) => {
+    const items = [...document.querySelectorAll(sel)];
     return items
-      .filter((li) => !li.querySelector("[role=listitem], li"))
+      .filter((li) => !li.querySelector(sel))
       .map((li) => ({
         text: li.innerText,
         links: [...li.querySelectorAll("a[href*='/in/']")].map((a) => a.href),
       }))
       .filter((r) => r.links.length);
-  });
+  }, cards);
 
 /**
  * LinkedIn's "Allow pages to see that you visited" modal covers every page
@@ -718,10 +724,9 @@ export const linkedinConnect = defineFlow<
       await fp.wait(SETTLE_MS);
       const { relationship } = await relationshipOnPage(fp);
       if (relationship === "none") return fp.human(`${none}, yet the profile shows Connect`);
-      return {
-        sent: false,
-        relationship: relationship === "unknown" ? "follow-only" : relationship,
-      };
+      // Connected or an invite already out: what an invite is for is already there.
+      if (relationship === "unknown") return { sent: false, relationship: "follow-only" };
+      return already({ sent: false, relationship });
     }
     let notesLeft: number | undefined;
     if (input.note) {
@@ -883,6 +888,8 @@ export const linkedinWithdraw = defineFlow<
       return fp.human(`no profile at ${fp.url()}`);
     await fp.wait(SETTLE_MS);
     const before = await relationshipOnPage(fp);
+    // No invite out: already withdrawn (or never sent). Connected: nothing to withdraw.
+    if (before.relationship === "none") return already({ withdrawn: false, relationship: "none" });
     if (before.relationship !== "pending")
       return { withdrawn: false, relationship: before.relationship };
     await fp.act({ kind: "click" }, pendingButton, { goal: "open the pending invite" });
@@ -912,7 +919,14 @@ export interface Connection extends Person {
 
 const CONNECTED = /^connected\b.*$/im;
 /** The page's own words for an account with no connections. */
-const NO_CONNECTIONS = /you don.t have any connections|no connections yet|^0 connections$/im;
+const NO_CONNECTIONS = /you don.t have any connections|no connections yet|^0\s+connections$/im;
+/**
+ * A connection card. Since 2026-10 the page is LinkedIn's server-driven UI:
+ * no `li`, each card a `div[componentkey="ConnectionCard_<n>-<vanity>"]`
+ * (the photo inside is `ConnectionCardProfileImage_…`, not a card). The old
+ * list items stay as a fallback.
+ */
+export const CONNECTION_CARDS = `main [componentkey^="ConnectionCard_"], ${LIST_ITEMS}`;
 
 /** One "recently added" card: the person, plus when they connected (kept off the headline). */
 export function connectionOf(row: RawRow): Connection | null {
@@ -921,10 +935,35 @@ export function connectionOf(row: RawRow): Connection | null {
   return p ? { ...p, ...(connected ? { connected } : {}) } : null;
 }
 
+/** Cards as connections, each once, up to `max`. */
+export function connectionsOf(rows: RawRow[], max: number): Connection[] {
+  const seen = new Set<string>();
+  const out: Connection[] = [];
+  for (const r of rows) {
+    const c = connectionOf(r);
+    if (!c || seen.has(c.vanity)) continue;
+    seen.add(c.vanity);
+    out.push(c);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/** The list header's count: "4 connections", "1,204 connections"; null when absent. */
+export function totalOf(text: string): number | null {
+  const m = /^([\d,]+)\s+connections?$/im.exec(text);
+  return m?.[1] ? Number(m[1].replace(/,/g, "")) : null;
+}
+
+/** Scrolls before the lazy list is taken as all there is. */
+const MORE_TRIES = 12;
+
 /**
  * Recently added connections, newest first. An accepted invite shows here,
  * so one read finds every accept since the last one; the loop never reads a
- * profile per pending invite.
+ * profile per pending invite. The list loads as it scrolls, so it scrolls
+ * until `max`, the header's count, or two scrolls that load nothing. Cards
+ * that read no person are an error, never an empty list.
  */
 export const linkedinConnections = defineFlow<ConnectionsInput, { connections: Connection[] }>({
   site: "linkedin",
@@ -932,18 +971,22 @@ export const linkedinConnections = defineFlow<ConnectionsInput, { connections: C
   async run(fp, input) {
     const max = input.max ?? 40;
     await go(fp, `${WEB}/mynetwork/invite-connect/connections/`);
-    const rows = await waitRows(fp, "connections list", NO_CONNECTIONS);
-    if (!rows.length) return { connections: [] };
+    const read = (p: FlowPage) => rowsOnPage(p, CONNECTION_CARDS);
+    const first = await waitRows(fp, "connections list", NO_CONNECTIONS, read);
+    if (!first.length) return { connections: [] };
     await fp.wait(SETTLE_MS);
-    const seen = new Set<string>();
-    const connections: Connection[] = [];
-    for (const r of await rowsOnPage(fp)) {
-      const c = connectionOf(r);
-      if (!c || seen.has(c.vanity)) continue;
-      seen.add(c.vanity);
-      connections.push(c);
-      if (connections.length >= max) break;
+    let connections = connectionsOf(await read(fp), max);
+    const total = totalOf(await fp.text());
+    const want = Math.min(max, total ?? max);
+    for (let i = 0, idle = 0; i < MORE_TRIES && connections.length < want && idle < 2; i++) {
+      const before = connections.length;
+      await fp.scroll(2_000);
+      await fp.wait(SETTLE_MS);
+      connections = connectionsOf(await read(fp), max);
+      idle = connections.length > before ? 0 : idle + 1;
     }
+    if (!connections.length)
+      return fp.human(`the connection cards at ${fp.url()} read no person (${first.length} cards)`);
     return { connections };
   },
 });
