@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
+import { graphWhy } from "./meta.js";
 import { WEB_REDIRECT } from "./oauth.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { Seen } from "./verdict.js";
@@ -66,7 +67,8 @@ const replies = z.object({
 });
 
 async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok) throw new HttpError("CALL", `${THREADS_ORIGIN}/${what}`, res.status);
+  if (!res.ok)
+    throw new HttpError("CALL", `${THREADS_ORIGIN}/${what}`, res.status, graphWhy(res.body));
   return res.body as T;
 }
 const v = (path: string) => `${THREADS_ORIGIN}/${THREADS_VERSION}/${path}`;
@@ -141,7 +143,7 @@ export const threads: SiteApi = {
             headers: bearer(leg),
             body,
           }),
-          "{userId}/threads",
+          `${userId}/threads`,
         ),
     }),
     route({
@@ -154,7 +156,7 @@ export const threads: SiteApi = {
           await leg.http.json<unknown>(withQuery(v(containerId), { fields }), {
             headers: bearer(leg),
           }),
-          "{containerId}",
+          containerId,
         ),
     }),
     route({
@@ -185,7 +187,7 @@ export const threads: SiteApi = {
             headers: bearer(leg),
             body: { creation_id },
           }),
-          "{userId}/threads_publish",
+          `${userId}/threads_publish`,
         ),
     }),
     route({
@@ -198,7 +200,7 @@ export const threads: SiteApi = {
           await leg.http.json<unknown>(withQuery(v(mediaId), { fields }), {
             headers: bearer(leg),
           }),
-          "{mediaId}",
+          mediaId,
         ),
     }),
     route({
@@ -212,7 +214,7 @@ export const threads: SiteApi = {
             withQuery(v(`${userId}/threads`), { fields, limit, after }),
             { headers: bearer(leg) },
           ),
-          "{userId}/threads",
+          `${userId}/threads`,
         ),
     }),
     route({
@@ -225,7 +227,7 @@ export const threads: SiteApi = {
           await leg.http.json<unknown>(withQuery(v(`${mediaId}/insights`), { metric }), {
             headers: bearer(leg),
           }),
-          "{mediaId}/insights",
+          `${mediaId}/insights`,
         ),
     }),
     route({
@@ -238,7 +240,7 @@ export const threads: SiteApi = {
           await leg.http.json<unknown>(withQuery(v(`${mediaId}/replies`), { fields, reverse }), {
             headers: bearer(leg),
           }),
-          "{mediaId}/replies",
+          `${mediaId}/replies`,
         ),
     }),
   ],

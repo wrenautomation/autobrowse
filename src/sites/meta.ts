@@ -350,7 +350,7 @@ const graphNote = (body: unknown) => {
 };
 
 /** The code and Graph's own words: they name the bad field, never the token. */
-const graphWhy = (body: unknown) => {
+export const graphWhy = (body: unknown) => {
   const msg = (body as GraphFailure | null)?.error?.message;
   return [graphNote(body), msg?.slice(0, 200)].filter(Boolean).join(": ");
 };
