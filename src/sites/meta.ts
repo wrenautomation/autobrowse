@@ -526,6 +526,8 @@ export const metaOAuth: OAuthSpec = {
     "instagram_content_publish",
     "instagram_manage_insights",
     "instagram_manage_comments",
+    // The IG inbox read (a private reply's verdict): 403 graph code 230 without it.
+    "instagram_manage_messages",
     "read_insights",
     "leads_retrieval",
   ],
