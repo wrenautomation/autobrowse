@@ -64,6 +64,7 @@ import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { HUMAN_PACE, type Pace } from "../browser/human/index.js";
 import { ownBrowserOf } from "../browser/own.js";
 import { SessionPark } from "../browser/park.js";
+import { renderer } from "../browser/render.js";
 import {
   llmRepairer,
   llmScreenReader,
@@ -1567,9 +1568,10 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       ["SIGINT", 130],
     ] as const)
       process.once(signal, () => void park.closeAll().finally(() => process.exit(code)));
+  const browserOpts = browserOptions(settings, screen);
   const browser = holding(
     idle,
-    flowRunner(browserOptions(settings, screen), {
+    flowRunner(browserOpts, {
       ...(park ? { park } : {}),
       onFailure: (record, file) => failures.hook?.(record, file),
       pace: paceFor(settings),
@@ -1643,6 +1645,8 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       caps: fileCaps(expandHome(settings.capsFile)),
       spent: fileSpent(join(dirname(expandHome(settings.capsFile)), "spent-keys.json")),
       uploads: fileUploadSessions(join(expandHome(settings.artifactsDir), "uploads")),
+      // The fetch ladder's render and exit rungs: profiles `fetch` and `fetch@exit`, parked like flows' browsers.
+      render: renderer({ opts: browserOpts, ...(park ? { park } : {}) }),
       started: fileDoneActs(join(expandHome(settings.artifactsDir), "started-calls")),
       walks: (name) => walkFor(settings, name, sink),
       refused: fileRefusedTokens(join(stateDirFor(settings), "refused-tokens.json")),

@@ -15,6 +15,7 @@ import {
 } from "../auth/identities.js";
 import type { DoneActs } from "../browser/attempt.js";
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
+import type { Render } from "../browser/render.js";
 import { type HttpClient, httpClient } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
 import { BROWSER_FLOWS } from "../engine/browser-service.js";
@@ -55,6 +56,8 @@ export interface SiteParts {
   /** Where keys and tokens are read from; the process env unless said. */
   env?: (name: string) => string | undefined;
   http?: HttpClient;
+  /** A page in a stealth browser, for the fetch ladder (`browser/render.ts`); absent: the ladder stops at the TLS rung. */
+  render?: Render;
   /** Hand-written legs by `site/name`; the built-in catalog unless said. */
   flows?: Record<string, BrowserFlow<never, unknown>>;
   /** Built walks by catalog name (`fb-public/walk-ad-library`), for a route whose leg is one. */
@@ -185,6 +188,7 @@ export function sitesFor(p: SiteParts): SiteFacade {
   const flows = p.flows ?? BROWSER_FLOWS;
   const facade = siteFacade(p.sites ?? SITES, {
     http: p.http ?? httpClient(),
+    ...(p.render ? { render: p.render } : {}),
     env: (name) => made.get(name) ?? env(name),
     sink: {
       put: async (name, value, o) => {

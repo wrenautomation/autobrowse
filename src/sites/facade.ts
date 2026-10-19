@@ -17,6 +17,7 @@ import type { Page } from "playwright";
 import { currentCall, type DoneActs, markSubmitted } from "../browser/attempt.js";
 import { profileBusyOf } from "../browser/browsers.js";
 import type { BrowserFlow, FlowRunner, HeldTab } from "../browser/flow.js";
+import type { Render } from "../browser/render.js";
 import { type HttpClient, HttpError, lastingRefusal } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
 import { type JsonSchema, jsonSchemaOf } from "../engine/inputs.js";
@@ -104,6 +105,8 @@ export interface SiteFacadeDeps {
   spent?: SpentKeys;
   /** Resumable upload sessions by durable call, so a rerun call resumes its bytes. */
   uploads?: UploadSessions;
+  /** A page in a stealth browser, for the fetch ladder's render and exit rungs (`browser/render.ts`). */
+  render?: Render;
   /** Irreversible API calls already started, by durable call: a rerun of one is refused. */
   started?: DoneActs;
   /** How a paced call waits for its slot (tests pass a fake). */
@@ -791,6 +794,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
               keep: async (name, value) => deps.sink.put(name, value),
               ...(deps.spent ? { spent: deps.spent } : {}),
               ...(deps.uploads ? { uploads: deps.uploads } : {}),
+              ...(deps.render ? { render: deps.render } : {}),
             });
           } catch (e) {
             // A 401 on the who-am-I probe: the bearer itself is dead, whatever minted it.

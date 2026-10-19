@@ -681,6 +681,7 @@ pnpm autobrowse site call web GET "/linkedin/profile?url=linkedin.com/in/<vanity
 pnpm autobrowse site call web GET "/linkedin/company?url=linkedin.com/company/<handle>"
 pnpm autobrowse site call web GET "/companies?domain=acme.com"   # Exa's company search: LinkedIn page, homepage match
 pnpm autobrowse site call web GET "/exa/companies?q=staffing%20agency%20in%20Austin&n=10"   # firms by niche and city: url, title, domain, raw; 7 mills a search
+pnpm autobrowse site call web GET "/fetch?url=https://firm.test&from=impersonate"   # one page raw up the fetch ladder: html, tier, block, tries
 pnpm autobrowse doctor                        # which read/search/maps backends and site tokens work now; browser warnings
 pnpm autobrowse browsers                      # our browsers (owner, age, MB) and explore sessions (idle, held); `browsers stop <port>`
 pnpm autobrowse site call linkedin GET "/search/results/people?keywords=ria%20founder%20austin&pages=2"   # as Wren's LinkedIn
@@ -707,6 +708,17 @@ the box is down, a write runs once. A write with a `sendKey` answers a typed
 verdict (`sent`, `not_sent` or `unknown`) instead of words in an error, and
 `sites/verdict {sendKey}` reads it back after a killed call. Design:
 `designs/2026-09-21-site-apis.md`, `designs/2026-10-16-send-verdicts.md`.
+
+### The fetch ladder
+
+`web GET /fetch?url=` returns one page raw (`html`, `finalUrl`, `status`, `tier`,
+`block`, `tries`). It tries four rungs and climbs only on a block signal: a plain
+fetch, then Chrome's TLS fingerprint (`impit`), then a stealth browser (profile
+`fetch`), then that browser out of an exit (profile `fetch@exit`, set with
+`EGRESS_SITES=fetch@exit:<name>`). A block (Cloudflare, Turnstile, Akamai, 403,
+429, a JS shell) is data in the answer, not an error. One request per host every
+2 s; 1500 a day. Wren's batch render pass is the caller. Code:
+`src/reach/ladder.ts`, `src/browser/render.ts`.
 
 ### Chores on those APIs
 

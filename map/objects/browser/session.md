@@ -3,7 +3,7 @@ type: object
 cluster: browser
 universe: live
 status: verified
-verified: 2026-10-15 @ 807dbb0
+verified: 2026-10-18 @ 2eccaf2
 entity: src/browser/session.ts
 ---
 
@@ -20,6 +20,7 @@ A profile per site name keeps sign-ins between runs. Three tiers say where the b
 - `Session { context, page, shared?, passkeys, close }` — `src/browser/session.ts:119-130`
 - `BrowserOptions` — `:79`; `NeedsHuman` (a person is needed; artifacts set by the runner) — `:30-37`; `Artifacts` — `:39-49`
 - Egress (opt-in, `EGRESS_SITES=web:mobile,linkedin@research:isp` + `EGRESS_<NAME>` proxy URLs): a local launch for a listed site (`x`: every x profile) or profile goes out through its named exit; unlisted or `desk` = this machine's line — `src/browser/egress.ts` (designs/2026-10-04-egress.md). An exit may rotate (`EGRESS_<NAME>_ROTATE`, a change-IP URL, `_GAP` seconds apart): `Session.newIp` / `FlowPage.newIp`, used by Google's `/sorry` before the captcha. A rotating exit never serves a site in `SITE_LOGINS` (startup refuses). A proxied launch blocks WebRTC's unproxied UDP (it would show the page the real IP) and says `EGRESS_<NAME>_TZ`; others say `BROWSER_TIMEZONE` (Chrome reads `TZ`). `autobrowse doctor` prints the mapping, no URLs
+- Fetch profiles (2026-10-18): `fetch` and `fetch@exit` are the profiles of the fetch ladder's render and exit rungs (`renderer`, `src/browser/render.ts:56`): one render at a time per profile, session parked in `SessionPark`, no resource blocking, up to 15 s for a challenge to clear. `fetch@exit` has no exit unless `EGRESS_SITES=fetch@exit:<name>` maps it (then the rung answers block `no-exit`). Mapping bare `fetch` sends the render rung out the exit too
 - How real it looks, measured: `autobrowse fingerprint [profile] [--box]` (the `fingerprint/check` flow, `src/browser/flows/fingerprint.ts`) reads the IP's network and zone and the page (UA, WebGL, codecs, WebRTC) and lists the tells
 - `Wall` and `looksLikeWall` (login or captcha) — `:364-376`
 - Kept warm between calls by `SessionPark` (`src/browser/park.ts:25`); a pinned key (a [[watcher]] or an armed tab lives in it) neither idles out nor is evicted (`pin`, `:67`), closed on the worker's SIGTERM/SIGINT (`buildApp`, `src/app/services.ts`); orphans reaped (`src/browser/reap.ts`, `browserRoots` shared with `browsers`)

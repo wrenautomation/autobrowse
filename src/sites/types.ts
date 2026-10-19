@@ -10,6 +10,7 @@
  */
 import type { z } from "zod";
 import type { IdentityProvider } from "../auth/identities.js";
+import type { Render } from "../browser/render.js";
 import type { HttpClient } from "../clients/http.js";
 import type { Amount } from "../gates/spend.js";
 import type { SpentKeys } from "../reach/key-ring.js";
@@ -31,6 +32,12 @@ export interface ApiLeg {
   spent?: SpentKeys;
   /** Resumable upload sessions by durable call (`sites/uploads.ts`); absent, an upload can't resume. */
   uploads?: UploadSessions;
+  /**
+   * A page in a stealth browser, profile `fetch` or `fetch@exit` (`browser/render.ts`): the
+   * fetch ladder's last two rungs. It throws `NoExit` for `fetch@exit` with no exit mapped.
+   * Absent, the ladder stops after `impersonate`.
+   */
+  render?: Render;
 }
 
 /**

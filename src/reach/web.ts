@@ -9,7 +9,9 @@
  * credit (`key-ring.ts`).
  */
 import { decodeHTML, decodeHTMLAttribute } from "entities";
+import { htmlText } from "./html.js";
 import { memorySpent, NoLiveKey, type SpentKeys, withKey } from "./key-ring.js";
+import { TIMEOUT_MS, UA } from "./ladder.js";
 
 export type Env = (name: string) => Promise<string | undefined>;
 
@@ -78,11 +80,6 @@ async function exaJson(deps: Deps, path: string, body: unknown): Promise<unknown
   }
 }
 
-/** A desktop browser's name: some sites answer a bare fetch with a bot page. */
-const UA =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36";
-const TIMEOUT_MS = 30_000;
-
 class Skip extends Error {}
 
 /**
@@ -142,27 +139,6 @@ export const READ_ORDER = ["jina", "fetch"] as const;
 
 /** A URL carrying what looks like a credential never goes to a third party. */
 const PRIVATE_QUERY = /[?&](token|key|sig|signature|code|auth|session|password)=/i;
-
-/** HTML to plain text a person would read: no scripts, headings marked, blocks on their own lines, table rows across. */
-export function htmlText(html: string): { title: string | null; text: string } {
-  const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
-  const body = html
-    .replace(/<(script|style|noscript|svg|template|head|title)[\s\S]*?<\/\1>/gi, "")
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/<h([1-6])[^>]*>/gi, (_, n: string) => `\n\n${"#".repeat(Number(n))} `)
-    .replace(/<li[^>]*>/gi, "\n- ")
-    // A table row reads across, its cells apart: `Plan | Price`.
-    .replace(/<\/t[dh]>\s*(?=<t[dh][\s>])/gi, " | ")
-    .replace(/<(br|\/p|\/div|\/h[1-6]|\/tr|\/section|\/article|\/header|\/footer)[^>]*>/gi, "\n")
-    .replace(/<[^>]+>/g, " ");
-  const text = decodeHTML(body)
-    .split("\n")
-    .map((l) => l.replace(/[ \t ]+/g, " ").trim())
-    .filter((l, i, all) => l || all[i - 1])
-    .join("\n")
-    .trim();
-  return { title: title ? decodeHTML(title).replace(/\s+/g, " ").trim() : null, text };
-}
 
 export async function readPage(
   url: string,

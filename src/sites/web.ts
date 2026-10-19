@@ -11,6 +11,12 @@
  * business's Place ID off Google Maps the same way (`browser/flows/google-place.ts`), and
  * `GET /place/reviews` its reviews, signed in (`browser/flows/google-reviews.ts`).
  *
+ * `GET /fetch?url=` is one page raw, up the fetch ladder (`reach/ladder.ts`): a
+ * plain fetch, then Chrome's TLS fingerprint, then a stealth browser, then the
+ * same browser out of the `fetch@exit` exit. It climbs only on a block signal and
+ * answers a block as data (`block`, `tries`), never an error. Metered on the
+ * `fetch` bucket, 1500 a day.
+ *
  * LinkedIn without LinkedIn: `GET /linkedin/profile?url=` and
  * `/linkedin/company?url=` read Exa's cached copy (never live, so neither
  * LinkedIn nor Exa's crawler visits), in the `linkedin` site's shapes;
@@ -21,6 +27,7 @@
  */
 import { z } from "zod";
 import { MAX_REVIEWS } from "../browser/flows/google-reviews.js";
+import { climb, FETCH_MAX, realRungs, TIERS } from "../reach/ladder.js";
 import {
   cachedLinkedinCompany,
   cachedLinkedinProfile,
@@ -72,8 +79,8 @@ export const web: SiteApi = {
   origin: "https://web",
   auth: { open: true },
   signedOut: true,
-  // Google's page is capped in searches; Exa in mills of a dollar. /search's backends meter themselves.
-  caps: { google: 300, exa: 330 },
+  // Google's page is capped in searches; Exa in mills of a dollar; /fetch in calls. /search's backends meter themselves.
+  caps: { google: 300, exa: 330, fetch: 1500 },
   // 330 mills ($0.33) a day per live Exa key: each key's free $10 a month gets used.
   capsPerKey: { exa: "EXA" },
   pace: { gapMs: 5_000, jitterMs: 10_000 },
@@ -208,6 +215,20 @@ export const web: SiteApi = {
           { env: async (k) => leg.env(k), ...(leg.spent ? { spent: leg.spent } : {}) },
           { max, ...(via ? { order: via } : {}) },
         ).catch(final),
+    }),
+    route({
+      method: "GET",
+      path: "/fetch",
+      summary:
+        "One page raw, up the fetch ladder (`url` http(s), `from` the first rung: plain, impersonate, render, exit; default plain; `max` characters of `html`, 10000 to 5000000, default 2000000). Climbs only on a block (cloudflare, turnstile, akamai, datadome, perimeterx, imperva, sucuri, aws-waf, vercel, kasada, status-403, status-429, status-503, shell). Answers `finalUrl`, `status`, `type`, `html`, `cut`, `tier` (the rung that answered), `block` (null: a usable page; else what the last rung still hit; also `no-exit`, `reset`, `unreachable`) and `tries`. A block is data, not an error. 1 of the `fetch` budget",
+      request: z.object({
+        url: z.url({ protocol: /^https?$/ }),
+        from: z.enum(TIERS).default("plain"),
+        max: z.coerce.number().int().min(FETCH_MAX.min).max(FETCH_MAX.max).default(FETCH_MAX.def),
+      }),
+      meter: () => ({ fetch: 1 }),
+      api: ({ url, from, max }, leg) =>
+        climb(url, { from, max }, realRungs(leg.render ? { render: leg.render } : {})),
     }),
     route({
       method: "GET",

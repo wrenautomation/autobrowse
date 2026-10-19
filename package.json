@@ -105,6 +105,7 @@
     "credvault": "0.12.0",
     "entities": "8.1.0",
     "hono": "4.13.8",
+    "impit": "0.14.5",
     "libmime": "5.4.7",
     "nodemailer": "10.0.15",
     "obs-websocket-js": "5.0.8",

@@ -3,7 +3,7 @@ type: object
 cluster: sites
 universe: live
 status: verified
-verified: 2026-10-07 @ 9726bda+
+verified: 2026-10-18 @ 2eccaf2+
 entity: src/sites/facade.ts
 ---
 
@@ -19,12 +19,13 @@ One place picks the account, mints the bearer, matches the path, books the accou
 
 - `SiteFacade { list, status, call(site, method, path, input, account?, from?), sendSpec?(site, method, path), caps(day?, site?), setup(site, step, account?, profile?, input?), renew?({dry?, names?}), revoke?(site, account?), refused?(), claimRefused?() }` — `src/sites/facade.ts:212`; `CallFrom { caller?, invocation?, arm?, armId? }`, `Armed`, `CapsReport { day, used, calls }` — `:157-200`
 - Arming (designs/2026-10-12-watchers-and-arming.md): `call(..., {arm: true})` runs a browser leg's `prepare` in a tab of its own (`FlowRunner.tab`) and answers `{armed: id, until}` (`armLeg`, `src/sites/facade.ts:446`); the next call on the same path and target (typed words left out, `armKey`), or `{armId}`, runs the leg in that tab (`takeArm`), so `run`'s opening finds the page open. An API leg, a spend, a GET, an upload or a flow without `prepare`: `{armed: null}`. `ARM_MS` 20 min, 3 per browser (`:173`). Restate `sites/arm`, `armId` on `sites/call` (`src/sites/service.ts:600`)
-- `SiteFacadeDeps { http, env, sink, runner, flow, compiled?, oauthPort?, profileFor?, providerOf?, accountFor?, approve?, caps?, sleep?, accountOf? }` — `:59`; `matchPath` — `:296`; `checkSite` — `:267`
+- `SiteFacadeDeps { http, env, sink, runner, flow, render?, compiled?, oauthPort?, profileFor?, providerOf?, accountFor?, approve?, caps?, sleep?, accountOf? }` — `:59`; `matchPath` — `:296`; `checkSite` — `:267`
 - `SiteParts` (what `sitesFor` needs, including `reload` for tokens minted elsewhere) — `src/sites/wire.ts:30-69`; `usernameOf` — `:137-145`
 - `DailyCaps { take, slot, today, note, calls }`, `Pace { gapMs, jitterMs?, maxWaitMs? }`, `fileCaps` (`CAPS_FILE`, `/data/caps.json` on the box), `memoryCaps` — `src/sites/caps.ts:52-67`; `MeteredCall { at, site, account, route, use, caller, invocation?, outcome, bucket? }` — `:70-84`; the day files — `:156-189`
 - Restate: `SITES_SERVICE = "sites"`, `DESK_SERVICE = "desk"` (the Mac), `sitesService(facade, name, calls?, watchers?, { wait?, journal?, verifyPausesMs? })` with `call`, `verdict`, `status`, `caps`, `renew` (`names` re-makes refused ones now), `revoke`, `setup` — `src/sites/service.ts:42-47,263`; a 409 refusal on `call` queues `renew {names}` once per incident (`queueRemake`, `src/sites/service.ts:100`)
 - Keyed writes (designs/2026-10-16-send-verdicts.md): `call` with `sendKey` on a non-GET answers a `SendVerdict` (`src/sites/verdict.ts`), never an error for an unclear end. `sendSpec(site, method, path)` gives the service the matched route's `irreversible`, `verify`, `sentAs` and `parse` (`SendSpec`, `src/sites/facade.ts:203`; optional, a stand-in without it reads as "no verify read"). Under a key `currentCall()` is `send <key>`, so the API leg's `started` guard and the browser leg's `done` guard span every invocation of that key. The leg code is as before. Without a key a write answers today's words (`sentWords`)
 - The send journal: `SendJournal { get, start, submitted, settle, tried, forget, live, enter, leave }`, one JSON file per key (`sha256(key).json`, mode 0600, tmp + rename, 30 days) in `<artifactsDir>/sends/` on `sites` and `desk` each — `src/sites/send-journal.ts:28-70,150`, wired by `sendJournalFor` (`src/app/services.ts:630`); `markSubmitted` calls `CallTry.onSubmit` first, so `submitted` is on disk before the act (`src/browser/attempt.ts:35,57`). A final verdict stands; `unknown` is replaced by a later verdict
+- `render` (2026-10-18, `src/sites/facade.ts:109`) is a stealth-browser page fetch, `renderer` in `src/browser/render.ts`, handed to every api leg as `ApiLeg.render`; only `web GET /fetch` uses it. `sitesFor` in the CLI app (`src/app/backend.ts`) gets none, so there the ladder stops at the TLS rung
 - Paths are interpolated by the caller; a template path plus a param in the input is HTTP 400
 
 ## Connected to

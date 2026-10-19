@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { htmlText } from "../src/reach/html.js";
 import {
   cachedLinkedinCompany,
   cachedLinkedinProfile,
@@ -8,7 +9,6 @@ import {
   duckduckgoHits,
   exaCompany,
   exaProfile,
-  htmlText,
   linkedinPosts,
   linkedinSlug,
   people,
