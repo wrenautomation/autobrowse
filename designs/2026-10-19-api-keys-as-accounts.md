@@ -98,3 +98,9 @@ Every read of a key by a call writes a `SecretUse` (existing type) with the key 
 - wren: `vendor_usage.key_id` is set where wren holds the value (own keys, env-held managed keys). Calls whose key a path holds (autobrowse's Exa ring, the gateway) keep null.
 - wren: the operator's keys are mirrored into `vault_keys` from autobrowse `sites/keys`, hourly and after each action. Why: the Accounts page makes no vendor call on load.
 - wren's own env is not a projection target yet. `WREN_KEYS` entries that name an env name keep reading wren's env. Making wren's deploy read the vault is a later step (the `/wren/prod/env` cap makes it a deploy change of its own).
+- `--account` sits on the top-level `autobrowse search` command: no `web` CLI exists. A named key that is refused answers 402 when spent, 400 otherwise.
+- `creds key add` with a new value for a label that exists rotates that key (the old id goes to `previous`).
+- The `keys` handlers take a `KeyAdmin` option on `sitesService` (built in `services.ts` and `desk.ts`), not a facade route. Why: far less plumbing for four handlers.
+- The Console flow has two steps: `check-key` (reversible, also runs in a dry run) and `create-key` (gated). A new key at an address that exists is refused before the browser opens.
+- A failed projection after a key is minted does not fail the step: a retry would mint a second key. The `done` text says to run `creds key project`.
+- `keyRotate` starts the owner's `Compiled_<owner>` run object with idempotency key `<workflow>/<key>`, the same object the CLI uses.
