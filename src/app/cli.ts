@@ -59,6 +59,7 @@ import {
   identitiesFor,
   inboxActivityDepsFor,
   inboxFleetDepsFor,
+  keysDepFor,
   LOCAL_WORKFLOWS,
   loadDataLogins,
   sinkFor,
@@ -635,6 +636,7 @@ registerReachCommands(
   local,
   spentKeysFor(settings),
   expandHome(settings.profilesDir),
+  keysDepFor(settings),
 );
 registerShotsCommands(program, settings);
 registerWatchedCommands(program, settings);

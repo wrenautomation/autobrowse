@@ -42,12 +42,24 @@ import {
   WebMiss,
 } from "../reach/web.js";
 import { proofShotRoute } from "./proof.js";
-import { route, type SiteApi, SiteError } from "./types.js";
+import { type ApiLeg, route, type SiteApi, SiteError } from "./types.js";
 
 /** No backend answering is the caller's to read, not a retry: Restate would replay it forever. */
 const final = (e: unknown): never => {
   throw e instanceof WebMiss ? new SiteError(e.status, e.message) : e;
 };
+
+/**
+ * What `reach/web.ts` takes from a leg: the env names, the spent marks, the vault's keys
+ * and the audit. A call's `account` is the Exa key's address (`exa@label`) and runs on that
+ * key only.
+ */
+const reachDeps = (leg: ApiLeg) => ({
+  env: async (k: string) => leg.env(k),
+  ...(leg.spent ? { spent: leg.spent } : {}),
+  ...(leg.keys ? { keys: leg.keys } : {}),
+  ...(leg.keyCall ? { call: leg.keyCall } : {}),
+});
 
 /** Checked before the meter, so a bad URL spends none of the budget. */
 const pageOf = (kind: "in" | "company") =>
@@ -96,11 +108,7 @@ export const web: SiteApi = {
         via: order,
       }),
       api: ({ q, n, via }, leg) =>
-        search(
-          q,
-          { env: async (k) => leg.env(k), ...(leg.spent ? { spent: leg.spent } : {}) },
-          { n, ...(via ? { order: via } : {}) },
-        ).catch(final),
+        search(q, reachDeps(leg), { n, ...(via ? { order: via } : {}) }).catch(final),
     }),
     route({
       method: "GET",
@@ -112,12 +120,7 @@ export const web: SiteApi = {
         n: z.coerce.number().int().min(1).max(25).default(10),
       }),
       meter: () => ({ exa: 7 }),
-      api: ({ q, n }, leg) =>
-        people(
-          q,
-          { env: async (k) => leg.env(k), ...(leg.spent ? { spent: leg.spent } : {}) },
-          { n },
-        ).catch(final),
+      api: ({ q, n }, leg) => people(q, reachDeps(leg), { n }).catch(final),
     }),
     route({
       method: "GET",
@@ -131,12 +134,7 @@ export const web: SiteApi = {
         n: z.coerce.number().int().min(1).max(10).default(3),
       }),
       meter: () => ({ exa: 7 }),
-      api: ({ domain, n }, leg) =>
-        companies(
-          domain,
-          { env: async (k) => leg.env(k), ...(leg.spent ? { spent: leg.spent } : {}) },
-          { n },
-        ).catch(final),
+      api: ({ domain, n }, leg) => companies(domain, reachDeps(leg), { n }).catch(final),
     }),
     route({
       method: "GET",
@@ -148,12 +146,7 @@ export const web: SiteApi = {
         n: z.coerce.number().int().min(1).max(25).default(10),
       }),
       meter: () => ({ exa: 7 }),
-      api: ({ q, n }, leg) =>
-        companySearch(
-          q,
-          { env: async (k) => leg.env(k), ...(leg.spent ? { spent: leg.spent } : {}) },
-          { n },
-        ).catch(final),
+      api: ({ q, n }, leg) => companySearch(q, reachDeps(leg), { n }).catch(final),
     }),
     route({
       method: "GET",
@@ -162,11 +155,7 @@ export const web: SiteApi = {
         "A LinkedIn profile from Exa's cache, never fetched live (`url`): `linkedin GET /in/{vanity}`'s shape with roles, plus education and the raw `text`; 404 when Exa holds no copy. 1 of the `exa` budget",
       request: z.object({ url: pageOf("in") }),
       meter: () => ({ exa: 1 }),
-      api: ({ url }, leg) =>
-        cachedLinkedinProfile(url, {
-          env: async (k) => leg.env(k),
-          ...(leg.spent ? { spent: leg.spent } : {}),
-        }).catch(final),
+      api: ({ url }, leg) => cachedLinkedinProfile(url, reachDeps(leg)).catch(final),
     }),
     route({
       method: "GET",
@@ -175,11 +164,7 @@ export const web: SiteApi = {
         "A LinkedIn company page from Exa's cache, never fetched live (`url`): `linkedin GET /company/{company}`'s shape plus type, employees, about and the raw `text`; 404 when Exa holds no copy. 1 of the `exa` budget",
       request: z.object({ url: pageOf("company") }),
       meter: () => ({ exa: 1 }),
-      api: ({ url }, leg) =>
-        cachedLinkedinCompany(url, {
-          env: async (k) => leg.env(k),
-          ...(leg.spent ? { spent: leg.spent } : {}),
-        }).catch(final),
+      api: ({ url }, leg) => cachedLinkedinCompany(url, reachDeps(leg)).catch(final),
     }),
     route({
       method: "GET",
@@ -193,11 +178,7 @@ export const web: SiteApi = {
       }),
       meter: () => ({ exa: 7 }),
       api: ({ q, n, since }, leg) =>
-        linkedinPosts(
-          q,
-          { env: async (k) => leg.env(k), ...(leg.spent ? { spent: leg.spent } : {}) },
-          { n, ...(since ? { since } : {}) },
-        ).catch(final),
+        linkedinPosts(q, reachDeps(leg), { n, ...(since ? { since } : {}) }).catch(final),
     }),
     route({
       method: "GET",
@@ -210,11 +191,7 @@ export const web: SiteApi = {
         via: order,
       }),
       api: ({ url, max, via }, leg) =>
-        readPage(
-          url,
-          { env: async (k) => leg.env(k), ...(leg.spent ? { spent: leg.spent } : {}) },
-          { max, ...(via ? { order: via } : {}) },
-        ).catch(final),
+        readPage(url, reachDeps(leg), { max, ...(via ? { order: via } : {}) }).catch(final),
     }),
     route({
       method: "GET",

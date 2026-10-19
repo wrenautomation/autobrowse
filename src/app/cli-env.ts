@@ -13,7 +13,9 @@ import type { Command } from "commander";
 import {
   type EnvEntry,
   type EnvStore,
+  isProjectedName,
   parseDotenv,
+  parseVendorKeyName,
   toDotenv,
   toExports,
   upsertDotenv,
@@ -33,6 +35,19 @@ export interface EnvCliDeps {
 }
 
 const CLEAR_MS = 60_000;
+
+/**
+ * Why `env set`/`env rm` refuse `name`, or null. API key names are the vault's
+ * projection (`creds key`): a hand-set value would be overwritten, or would
+ * split the env from the vault. `get` and `pull` still read them.
+ */
+export function projectedRefusal(name: string): string | null {
+  if (!isProjectedName(name)) return null;
+  const vendor = parseVendorKeyName(name)?.vendor;
+  return vendor
+    ? `${name} is an API key name: keys live in the vault. autobrowse creds key add ${vendor}@<label> --clipboard`
+    : `${name} is set by the projection from the vault's ${name.replace(/^NUM_/, "").toLowerCase().replace(/_/g, "-")} keys`;
+}
 
 /** macOS: pbcopy now, and a detached shell that empties it in a minute only if it still holds this value (compared by hash). */
 export async function macClipboard(text: string, clearAfterMs: number): Promise<void> {
@@ -198,6 +213,8 @@ export function registerEnvCommands(program: Command, settings: Settings, deps: 
     .option("--store-only", "the store alone, not the local env file")
     .action(async (name: string, o: { clipboard?: boolean; out: string; storeOnly?: boolean }) => {
       if (!/^[A-Z][A-Z0-9_]*$/.test(name)) throw new Error(`not an env name: ${name}`);
+      const refused = projectedRefusal(name);
+      if (refused) throw new Error(refused);
       const value = cleanValue(
         name,
         o.clipboard ? await (deps.paste ?? pasteboard)() : await secretInput(name),
@@ -233,6 +250,8 @@ export function registerEnvCommands(program: Command, settings: Settings, deps: 
     .command("rm <name>")
     .description("Remove one value from the store")
     .action(async (name: string) => {
+      const refused = projectedRefusal(name);
+      if (refused) throw new Error(refused);
       say((await deps.store().remove(name)) ? `removed ${name}` : `${name} was not in the store`);
     });
 }
@@ -254,7 +273,7 @@ export function cleanValue(name: string, raw: string): string {
 }
 
 /** What is on the macOS clipboard. */
-function pasteboard(): Promise<string> {
+export function pasteboard(): Promise<string> {
   if (process.platform !== "darwin") throw new Error("--clipboard needs macOS; pipe it in instead");
   return new Promise((res, rej) =>
     execFile("pbpaste", (err, stdout) => (err ? rej(err) : res(stdout))),
@@ -262,7 +281,7 @@ function pasteboard(): Promise<string> {
 }
 
 /** Piped stdin, or a prompt that echoes nothing. */
-async function secretInput(name: string): Promise<string> {
+export async function secretInput(name: string): Promise<string> {
   const { stdin, stderr } = process;
   if (!stdin.isTTY) {
     let text = "";

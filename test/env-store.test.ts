@@ -99,10 +99,10 @@ describe("autobrowse env", () => {
   });
   it("sets a new value from the clipboard into the store and .env, cleaned of a pasted line or quotes", async () => {
     const t = setup({});
-    t.paste("  INSTANTLY_API_KEY='k1'\n");
-    await t.run("set", "INSTANTLY_API_KEY", "--clipboard");
-    expect(await t.store.get("INSTANTLY_API_KEY")).toBe("k1");
-    expect(readFileSync(join(t.dir, ".env"), "utf8")).toMatch(/^INSTANTLY_API_KEY=k1$/m);
+    t.paste("  TWILIO_AUTH_TOKEN='k1'\n");
+    await t.run("set", "TWILIO_AUTH_TOKEN", "--clipboard");
+    expect(await t.store.get("TWILIO_AUTH_TOKEN")).toBe("k1");
+    expect(readFileSync(join(t.dir, ".env"), "utf8")).toMatch(/^TWILIO_AUTH_TOKEN=k1$/m);
     expect(t.said.join("\n")).not.toContain("k1");
     t.paste("");
     await expect(t.run("set", "X", "--clipboard")).rejects.toThrow(/empty/);
@@ -118,5 +118,21 @@ describe("autobrowse env", () => {
     await t.run("push", "ONLY_THERE");
     expect(t.said.join("\n")).toMatch(/already in the store/);
     await expect(t.run("push", "NOWHERE")).rejects.toThrow(/not in .* or the store: NOWHERE/);
+  });
+
+  it("refuses to set or remove a name the vault projects, and still reads it", async () => {
+    const t = setup({ EXA_API_KEY: "synthetic-a", NUM_EXA: "1" });
+    t.paste("synthetic-b");
+    await expect(t.run("set", "EXA_API_KEY", "--clipboard")).rejects.toThrow(
+      "EXA_API_KEY is an API key name: keys live in the vault. autobrowse creds key add exa@<label> --clipboard",
+    );
+    await expect(t.run("set", "NUM_EXA", "--clipboard")).rejects.toThrow(
+      "NUM_EXA is set by the projection from the vault's exa keys",
+    );
+    await expect(t.run("rm", "EXA_API_KEY_1")).rejects.toThrow(/API key name/);
+    await expect(t.run("rm", "NUM_EXA")).rejects.toThrow(/set by the projection/);
+    expect(t.store.values.EXA_API_KEY).toBe("synthetic-a");
+    await t.run("get", "EXA_API_KEY", "--print");
+    expect(t.printed()).toBe("synthetic-a");
   });
 });

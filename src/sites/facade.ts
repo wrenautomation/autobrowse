@@ -23,7 +23,8 @@ import type { SecretSink } from "../deps/sink.js";
 import { type JsonSchema, jsonSchemaOf } from "../engine/inputs.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import type { Approver } from "../gates/payment.js";
-import { ringCount, type SpentKeys } from "../reach/key-ring.js";
+import { envSource, ringCount, type SpentKeys } from "../reach/key-ring.js";
+import { type KeysDep, keyCall } from "../reach/key-source.js";
 import type { Proof, RunAs } from "../workflows/proof.js";
 import type { DailyCaps, MeteredCall } from "./caps.js";
 import {
@@ -103,6 +104,8 @@ export interface SiteFacadeDeps {
   caps?: DailyCaps;
   /** Paid keys out of credit (`reach/key-ring.ts`), for `capsPerKey` and api legs that rotate keys. */
   spent?: SpentKeys;
+  /** The vault's keys and their audit (`reach/key-source.ts`); absent, paid keys are the env names and no use is audited. */
+  keys?: KeysDep;
   /** Resumable upload sessions by durable call, so a rerun call resumes its bytes. */
   uploads?: UploadSessions;
   /** A page in a stealth browser, for the fetch ladder's render and exit rungs (`browser/render.ts`). */
@@ -604,14 +607,22 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     return {};
   };
   /** `capsPerKey` buckets at their cap times the ring's live keys (one at least, so a missing key says so). */
-  const capsOfKeys = async (s: SiteApi): Promise<Record<string, number>> => {
+  const capsOfKeys = async (
+    s: SiteApi,
+    keyAccount: string | null,
+  ): Promise<Record<string, number>> => {
     const out: Record<string, number> = {};
     for (const [bucket, base] of Object.entries(s.capsPerKey ?? {})) {
       const cap = s.caps?.[bucket];
       if (cap === undefined || !deps.spent) continue;
+      // A call that names its key counts on that key's own bucket: one key's cap.
+      if (keyAccount) {
+        out[bucket] = cap;
+        continue;
+      }
       const { live } = await ringCount(
         base,
-        async (n) => deps.env(n),
+        deps.keys?.source ?? envSource(async (n) => deps.env(n)),
         deps.spent,
         (deps.now ?? Date.now)(),
       );
@@ -656,6 +667,8 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       // key, kept under its plain name). A site with its own OAuth logins keeps that token for whoever
       // its own credential is (a person's own LinkedIn), never for the policy's account.
       const chosen = account ?? (s.signedOut ? null : await deps.accountFor?.(s)) ?? null;
+      // An open site has no logins: what a caller names there is a key's address (`web` + `exa@label`).
+      const keyAccount = "open" in s.auth && account ? account : null;
       const oneKey = !s.setup.some((st) => "oauth" in st.how);
       const fallback = !account && chosen && (deps.providerOf?.(s) || oneKey);
       // A route that prefers the browser never reaches the API, so never pays for a read; one
@@ -708,7 +721,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       if (use && s.caps && deps.caps) {
         const limits = {
           ...s.caps,
-          ...(await capsOfKeys(s)),
+          ...(await capsOfKeys(s, keyAccount)),
           ...(await capsOfAccount(s, chosen)),
         };
         const t = deps.caps.take(s.site, chosen ?? s.site, use, limits);
@@ -793,6 +806,16 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
               env: deps.env,
               keep: async (name, value) => deps.sink.put(name, value),
               ...(deps.spent ? { spent: deps.spent } : {}),
+              ...(deps.keys
+                ? {
+                    keys: deps.keys.source,
+                    keyCall: keyCall(deps.keys, {
+                      by: from?.caller ?? "sites",
+                      reason: `${method} ${r.path}`,
+                      ...(keyAccount ? { account: keyAccount } : {}),
+                    }),
+                  }
+                : {}),
               ...(deps.uploads ? { uploads: deps.uploads } : {}),
               ...(deps.render ? { render: deps.render } : {}),
             });

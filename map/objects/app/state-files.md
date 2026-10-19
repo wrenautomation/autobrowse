@@ -3,7 +3,7 @@ type: object
 cluster: app
 universe: live
 status: verified
-verified: 2026-09-28 @ 70aefc3
+verified: 2026-10-19 @ 3720283
 entity: src/app/config.ts
 ---
 
@@ -26,6 +26,7 @@ Plain files a person can open, one concern each; secrets sealed; shared truth in
 | `~/.config/autobrowse/fixes.json` | kept repairs (`:112`) | [[fix]] |
 | `~/.config/autobrowse/screens.json` | learned screens (`:114`) | [[screen]] |
 | `~/.config/autobrowse/spent-keys.json` | paid keys out of credit, by sha256 fingerprint (never the value) → when they come back (1st of next month, UTC); beside the caps file (`src/reach/key-ring.ts`, `spentKeysFor` in `src/app/backend.ts`) | [[site-facade]] (`capsPerKey`), [[site-api]] (`web`'s Exa routes) |
+| `~/.config/autobrowse/key-uses.json` | calls this month per capped API key, by key id (never the value); beside the caps file (`fileKeyUses` `src/reach/key-ring.ts`, `keysDepFor` `src/app/services.ts`) | [[credential]] (`creds key`), [[site-api]] (`web`'s Exa routes) |
 | `~/.config/autobrowse/caps.json` | today's use of each account's daily caps, keyed site, account, bucket, and `next`: each site|account's next paced slot, kept across the day turning (`:116`; `/data/caps.json` on the box) | [[site-facade]] |
 | `~/.config/autobrowse/steps.jsonl` | agent step ledger (`src/agent/ledger.ts`) | [[agent-session]] |
 | `~/.config/autobrowse/runs/` | explore run history, one chained file a run, plus `index.jsonl` (`runsDirFor`, `src/app/services.ts:559`) | [[explore-run]] |

@@ -1,8 +1,10 @@
 /**
  * Research and lead lists: `read` and `search` (the open web, lean enough
  * for an agent to call per lead), `maps` (Google Maps listings), `people`
- * (LinkedIn), `doctor` (what answers now). Keys come from the
- * environment, then the env store; a backend without one is skipped.
+ * (LinkedIn), `doctor` (what answers now). Exa's keys come from the vault
+ * (`creds key`), then the env names; other keys from the environment, then the
+ * env store. A backend without one is skipped. `search --account exa@label` runs
+ * on that key alone.
  */
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -13,24 +15,15 @@ import type { EnvStore } from "credvault";
 import { SITE_LOGINS } from "../auth/sites.js";
 import { egressOf } from "../browser/egress.js";
 import type { Person, Profile } from "../browser/flows/linkedin-reach.js";
-import { ringCount, type SpentKeys } from "../reach/key-ring.js";
+import { envSource, ringCount, type SpentKeys } from "../reach/key-ring.js";
+import { type KeysDep, keyCall, reachEnv } from "../reach/key-source.js";
 import { writeLeads } from "../reach/linkedin-leads.js";
 import { csvRows, ensureMapsServer, mapsReady, mapsScrape, stopMapsServer } from "../reach/maps.js";
-import { type Env, READ_ORDER, readPage, SEARCH_ORDER, search } from "../reach/web.js";
+import { READ_ORDER, readPage, SEARCH_ORDER, search } from "../reach/web.js";
 import { checkSite } from "../sites/index.js";
 import { bold, columns, dim, good, warn } from "../style.js";
 import type { LocalBackend } from "./backend.js";
 import { checkRow } from "./cli-site.js";
-
-/** This machine's environment first, then the env store; a store that cannot be reached is no key. */
-export function reachEnv(store: () => EnvStore): Env {
-  return async (name) =>
-    process.env[name] ||
-    ((await store()
-      .get(name)
-      .catch(() => null)) ??
-      undefined);
-}
 
 const order = (via: string | undefined) => via?.split(",").map((v) => v.trim());
 
@@ -40,8 +33,10 @@ export function registerReachCommands(
   local: LocalBackend,
   spent: SpentKeys,
   profilesDir: string,
+  keys?: KeysDep,
 ): void {
   const env = reachEnv(store);
+  const source = keys?.source ?? envSource(env);
   /** Which profiles leave through which exit (`browser/egress`), or the config error. */
   const egressLine = () => {
     try {
@@ -62,7 +57,7 @@ export function registerReachCommands(
       const has = async (n: string) => ((await env(n)) ? good("ready") : dim(`no ${n}`));
       // Live keys of those held: `exa 2/3` has one out of credit until the 1st.
       const exaRing = async () => {
-        const { live, held } = await ringCount("EXA", env, spent);
+        const { live, held } = await ringCount("EXA", source, spent);
         const text = `${live}/${held}`;
         return !held ? dim("no EXA_API_KEY") : live === held ? good(text) : warn(text);
       };
@@ -111,20 +106,39 @@ export function registerReachCommands(
     .description(`Web search; backends in order: ${SEARCH_ORDER.join(", ")}`)
     .option("-n <count>", "how many results", "10")
     .option("--via <backends>", "backends to try, in order (comma list)")
+    .option(
+      "--account <vendor@label>",
+      "run on this key only (exa@label); no other backend answers",
+    )
     .option("--json", "the results as JSON")
-    .action(async (words: string[], o: { n: string; via?: string; json?: boolean }) => {
-      const via = order(o.via);
-      const r = await search(
-        words.join(" "),
-        { env, spent },
-        { n: Number(o.n) || 10, ...(via ? { order: via } : {}) },
-      );
-      if (o.json) return console.log(JSON.stringify(r));
-      console.log(`via ${r.via}`);
-      r.hits.forEach((h, i) => {
-        console.log(`${i + 1}. ${h.title}\n   ${h.url}${h.snippet ? `\n   ${h.snippet}` : ""}`);
-      });
-    });
+    .action(
+      async (words: string[], o: { n: string; via?: string; account?: string; json?: boolean }) => {
+        const via = order(o.via);
+        const r = await search(
+          words.join(" "),
+          {
+            env,
+            spent,
+            ...(keys
+              ? {
+                  keys: keys.source,
+                  call: keyCall(keys, {
+                    by: "search",
+                    reason: "autobrowse search",
+                    ...(o.account ? { account: o.account } : {}),
+                  }),
+                }
+              : {}),
+          },
+          { n: Number(o.n) || 10, ...(via ? { order: via } : {}) },
+        );
+        if (o.json) return console.log(JSON.stringify(r));
+        console.log(`via ${r.via}`);
+        r.hits.forEach((h, i) => {
+          console.log(`${i + 1}. ${h.title}\n   ${h.url}${h.snippet ? `\n   ${h.snippet}` : ""}`);
+        });
+      },
+    );
   program
     .command("maps <searches...>")
     .description(

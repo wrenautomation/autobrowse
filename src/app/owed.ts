@@ -24,7 +24,7 @@ import {
   needView,
   resolveNeeds,
 } from "./needs.js";
-import { credentialsFor, identitiesFor, phoneFor, sinkFor } from "./services.js";
+import { credentialsFor, identitiesFor, keyStoreFor, phoneFor, sinkFor } from "./services.js";
 
 export interface Owed {
   /** The rows and the kind titles they group under (the UI has no access to the server modules). */
@@ -69,6 +69,10 @@ export function needsContextFor(
     desktop: process.platform === "darwin" ? once(() => macDesktop().permissions()) : null,
     owner: settings.owner,
     envFile: settings.envFile,
+    keysHeld: async (vendor) =>
+      (await keyStoreFor(settings).list()).filter(
+        (k) => k.site === vendor && k.owner === settings.owner && k.status === "live",
+      ).length,
   });
 }
 

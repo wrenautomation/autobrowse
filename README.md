@@ -395,6 +395,14 @@ pnpm autobrowse needs                             # what only you can give (logi
                                                   # (the UI has the same list on its Needs page, and the account policy on Accounts)
 pnpm autobrowse needs do login-linkedin           # runs the row's ingestion (clipboard creds, a consent, a setup step); `needs done <id>` for decisions
 pnpm autobrowse creds copy google                 # one stored field onto the clipboard for a minute (--field password|username|totp|recovery|previous); never printed
+pnpm autobrowse creds key add exa@main --clipboard --purpose default   # an API key as an account: vendor@label, value from the clipboard or stdin, never an argument; --cap 1000 --cap-unit calls
+pnpm autobrowse creds key ls [--all]                # address, owner, status, id, purposes, cap, uses; never a value
+pnpm autobrowse creds key spend exa@main [--until 2026-11-01]   # out of credit: skipped until the 1st (or the date)
+pnpm autobrowse creds key revoke exa@main           # dead for good, dropped from the env names; revoke it at the vendor too
+pnpm autobrowse creds key purpose exa@main default bulk   # give purposes to a key, taking them from whichever held them
+pnpm autobrowse creds key audit exa@main -n 50      # one key's uses and refusals from the audit ledger
+pnpm autobrowse creds key project [--check]         # write the env names from the vault; --check exits 1 on a difference
+pnpm autobrowse creds key migrate [--apply]         # env keys into the vault: dry run first, the projection must then change nothing
 pnpm autobrowse creds link npm                    # one-time link for the phone: Wren sign-in, then Copy username / Copy password; 10 min
 pnpm autobrowse creds link --keys A_KEY,A_SECRET --open   # one-time link for someone outside Wren: no sign-in, 24h (--ttl 7d max)
 pnpm autobrowse creds password google             # you changed it on the site: type it here twice, echo off; only the store is touched
@@ -676,7 +684,8 @@ pnpm autobrowse site revoke tiktok --after 10 # end the grant (the only way our 
 pnpm autobrowse read https://firm.test --max 4000   # a page as plain text, no browser
 pnpm autobrowse search fee-only RIA Austin -n 5     # web search: exa, brave, then duckduckgo
 pnpm autobrowse maps "ria in austin tx" --max-minutes 10   # Google Maps listings as a CSV (Docker); wren --format google-maps
-pnpm autobrowse env set EXA_API_KEY_2 --clipboard   # more Exa keys: EXA_API_KEY_1..n with NUM_EXA=n; one out of credit is skipped until the 1st
+pnpm autobrowse creds key add exa@second --clipboard   # more Exa keys live in the vault; the env names (EXA_API_KEY_1..n, NUM_EXA) are its projection; one out of credit is skipped until the 1st
+pnpm autobrowse search fee-only RIA Austin --account exa@second   # run on one named key; a spent or revoked one is refused, never swapped
 pnpm autobrowse site call web GET "/linkedin/profile?url=linkedin.com/in/<vanity>"   # from Exa's cache; LinkedIn sees nothing
 pnpm autobrowse site call web GET "/linkedin/company?url=linkedin.com/company/<handle>"
 pnpm autobrowse site call web GET "/companies?domain=acme.com"   # Exa's company search: LinkedIn page, homepage match

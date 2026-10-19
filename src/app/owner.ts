@@ -54,7 +54,11 @@ export const PROCESS_SETTINGS = [
   "logLevel",
 ] as const satisfies readonly Key[];
 
-/** Tools the operator pays for and every owner uses. */
+/**
+ * Tools the operator pays for and every owner uses. Their keys live in the operator's vault and
+ * reach an owner's process through env (the projection), never through the owner's own vault:
+ * `creds key add` refuses these vendors in an owner's process.
+ */
 export const OPERATOR_TOOL_KEYS = new Set([
   "EXA_API_KEY",
   "NUM_EXA",

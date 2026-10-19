@@ -10,7 +10,15 @@
  */
 import { decodeHTML, decodeHTMLAttribute } from "entities";
 import { htmlText } from "./html.js";
-import { memorySpent, NoLiveKey, type SpentKeys, withKey } from "./key-ring.js";
+import {
+  envSource,
+  type KeySource,
+  memorySpent,
+  NoLiveKey,
+  type SpentKeys,
+  withKey,
+} from "./key-ring.js";
+import { type KeyCall, withKeyOptions } from "./key-source.js";
 import { TIMEOUT_MS, UA } from "./ladder.js";
 
 export type Env = (name: string) => Promise<string | undefined>;
@@ -50,20 +58,33 @@ interface Deps {
   fetch?: typeof fetch;
   /** Exa keys out of credit; absent, this process remembers them itself. */
   spent?: SpentKeys;
+  /** Where Exa's keys come from; absent, the env names (`EXA_API_KEY`, `_1..n`). */
+  keys?: KeySource;
+  /** Which key this call runs on, and the audit of each use; absent, the ring and no audit. */
+  call?: KeyCall;
 }
 
 const processSpent = memorySpent();
 
-/** One Exa call on the first key with credit left. A non-2xx answer comes back as is. */
+/** One Exa call on the first key with credit left (or on the one `deps.call.account` names). A non-2xx answer comes back as is. */
 const exaSend = (deps: Deps, path: string, body: unknown): Promise<Response> =>
-  withKey("EXA", deps.env, deps.spent ?? processSpent, (key) =>
-    (deps.fetch ?? fetch)(`https://api.exa.ai${path}`, {
-      method: "POST",
-      headers: { "x-api-key": key, "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    }),
+  withKey(
+    "EXA",
+    deps.keys ?? envSource(deps.env),
+    deps.spent ?? processSpent,
+    (key) =>
+      (deps.fetch ?? fetch)(`https://api.exa.ai${path}`, {
+        method: "POST",
+        headers: { "x-api-key": key, "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      }),
+    withKeyOptions(deps.call, "exa", `https://api.exa.ai${path}`),
   );
+
+/** A named key that cannot answer is the caller's to read: 402 when it is spent, else 400. */
+const namedMiss = (e: NoLiveKey): WebMiss =>
+  new WebMiss(`nothing answered: exa (${e.message})`, e.until ? 402 : 400);
 
 /** Exa's answer as JSON, or the WebMiss a caller of an Exa-only route gets. */
 async function exaJson(deps: Deps, path: string, body: unknown): Promise<unknown> {
@@ -72,6 +93,7 @@ async function exaJson(deps: Deps, path: string, body: unknown): Promise<unknown
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (e) {
+    if (e instanceof NoLiveKey && e.account) throw namedMiss(e);
     if (e instanceof NoLiveKey)
       throw e.held
         ? new WebMiss(`nothing answered: exa (${e.message})`, 402)
@@ -119,6 +141,8 @@ async function firstOf<T>(
     try {
       return { value: await go(), via, tried };
     } catch (e) {
+      // A named key that cannot answer ends the call: no other backend takes its place.
+      if (e instanceof WebMiss) throw e;
       const cause = e instanceof Error && e.cause ? ` (${String(e.cause)})` : "";
       tried.push({
         via,
@@ -222,6 +246,7 @@ export async function search(
     exa: async () => {
       const res = await exaSend(deps, "/search", { query, numResults: n, type: "auto" }).catch(
         (e) => {
+          if (e instanceof NoLiveKey && e.account) throw namedMiss(e);
           throw e instanceof NoLiveKey ? new Skip(e.message) : e;
         },
       );
@@ -263,7 +288,11 @@ export async function search(
       return hits.slice(0, n);
     },
   };
-  const { value, via, tried } = await firstOf(o.order ?? SEARCH_ORDER, run);
+  // A call that names a key runs on that key: exa alone, no other backend takes its place.
+  const named = deps.call?.account;
+  if (named && o.order && !o.order.includes("exa"))
+    throw new WebMiss(`${named} is an exa key; via has no exa`, 400);
+  const { value, via, tried } = await firstOf(named ? ["exa"] : (o.order ?? SEARCH_ORDER), run);
   return { query, hits: value, via, tried };
 }
 

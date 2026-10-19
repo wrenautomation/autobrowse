@@ -7,6 +7,7 @@ import { basename, dirname, join } from "node:path";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import {
   aesGcmCipher,
+  applyProjection,
   type CanaryOptions,
   type CredentialHistory,
   type CredentialStore,
@@ -16,8 +17,10 @@ import {
   type EnvStore,
   envCredentials,
   envFileStore,
+  envKeys,
   fileAudit,
   fileCredentials,
+  type KeyStore,
   keychainKey,
   layeredCredentials,
   plainCipher,
@@ -147,7 +150,8 @@ import { bankCodeReader } from "../money/bank-code.js";
 import { type Charge, type ChargeRow, reportCharge } from "../money/charges.js";
 import type { Profile } from "../money/profile.js";
 import { isDefaultOwner, named, ownerKeys } from "../owner.js";
-import { fileSpent } from "../reach/key-ring.js";
+import { fileKeyUses, fileSpent } from "../reach/key-ring.js";
+import { type KeysDep, ownerKeysIn, reachEnv, vaultSource } from "../reach/key-source.js";
 import { fileSiteCalls } from "../runs/calls.js";
 import { s3BlobStore } from "../shots/s3.js";
 import { keepArtifact, keepRecording, type ShipReport, shipShots } from "../shots/ship.js";
@@ -1184,6 +1188,67 @@ export function envStoreFor(settings: Settings, ssm: SSMClient = ssmFor(settings
   return store;
 }
 
+/**
+ * The API keys (`creds key`): one row per key under the owner's SSM path
+ * plus `/keys`, beside the env rows. One per client and path for the process,
+ * like `envStoreFor`.
+ */
+const keyStores = new WeakMap<SSMClient, Map<string, KeyStore>>();
+export function keyStoreFor(settings: Settings, ssm: SSMClient = ssmFor(settings)): KeyStore {
+  const path = `${ownerKeys(settings.owner).ssm}/keys`;
+  let byPath = keyStores.get(ssm);
+  if (!byPath) {
+    byPath = new Map();
+    keyStores.set(ssm, byPath);
+  }
+  let store = byPath.get(path);
+  if (!store) {
+    store = envKeys(ssmEnvStore(ssm, path));
+    byPath.set(path, store);
+  }
+  return store;
+}
+
+/**
+ * Writes the env names for the vendors' keys (`EXA_API_KEY`, `_1..n`, `NUM_EXA`)
+ * into the sink, from every key the owner holds. Call it after each key write.
+ * Returns the names it put and removed.
+ */
+export function projectKeysFor(
+  settings: Settings,
+  ssm: SSMClient = ssmFor(settings),
+): (vendors: string[]) => Promise<{ put: string[]; removed: string[] }> {
+  const store = keyStoreFor(settings, ssm);
+  const sink = sinkFor(settings, ssm);
+  return async (vendors) =>
+    applyProjection(sink, await ownerKeysIn(store, settings.owner), { vendors });
+}
+
+/**
+ * What a process hands the ring: the vault's keys (env names when the vault has none
+ * or fails), the audit and the call counter. One per settings, so the cache holds.
+ */
+const keyDeps = new WeakMap<Settings, KeysDep>();
+export function keysDepFor(settings: Settings): KeysDep {
+  let dep = keyDeps.get(settings);
+  if (!dep) {
+    dep = {
+      source: vaultSource({
+        store: keyStoreFor(settings),
+        owner: settings.owner,
+        env: reachEnv(() => envStoreFor(settings)),
+        onError: (e) =>
+          console.error(`key vault unreachable; using the env keys: ${(e as Error).message}`),
+      }),
+      audit: auditFor(settings),
+      owner: settings.owner,
+      uses: fileKeyUses(join(dirname(expandHome(settings.capsFile)), "key-uses.json")),
+    };
+    keyDeps.set(settings, dep);
+  }
+  return dep;
+}
+
 export function memoryFor(settings: Settings, http = httpClient()): Memory {
   if (settings.memory === "backboard" && settings.backboardApiKey)
     return backboardMemory({
@@ -1644,6 +1709,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       reload: (have) => missingEntries(sink, have),
       caps: fileCaps(expandHome(settings.capsFile)),
       spent: fileSpent(join(dirname(expandHome(settings.capsFile)), "spent-keys.json")),
+      keys: keysDepFor(settings),
       uploads: fileUploadSessions(join(expandHome(settings.artifactsDir), "uploads")),
       // The fetch ladder's render and exit rungs: profiles `fetch` and `fetch@exit`, parked like flows' browsers.
       render: renderer({ opts: browserOpts, ...(park ? { park } : {}) }),

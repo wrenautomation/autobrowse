@@ -13,7 +13,8 @@ import type { IdentityProvider } from "../auth/identities.js";
 import type { Render } from "../browser/render.js";
 import type { HttpClient } from "../clients/http.js";
 import type { Amount } from "../gates/spend.js";
-import type { SpentKeys } from "../reach/key-ring.js";
+import type { KeySource, SpentKeys } from "../reach/key-ring.js";
+import type { KeyCall } from "../reach/key-source.js";
 import type { Pace } from "./caps.js";
 import type { UploadSessions } from "./uploads.js";
 import type { NoVerify, RouteVerify } from "./verdict.js";
@@ -30,6 +31,10 @@ export interface ApiLeg {
   keep?: (name: string, value: string) => Promise<void>;
   /** Paid keys out of credit, kept on disk (`reach/key-ring.ts`). */
   spent?: SpentKeys;
+  /** Where paid keys come from: the vault, then the env names (`reach/key-source.ts`); absent, the env names. */
+  keys?: KeySource;
+  /** The key this call named (`account`), the audit of each use and the call counter. */
+  keyCall?: KeyCall;
   /** Resumable upload sessions by durable call (`sites/uploads.ts`); absent, an upload can't resume. */
   uploads?: UploadSessions;
   /**

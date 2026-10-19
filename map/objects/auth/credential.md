@@ -3,13 +3,13 @@ type: object
 cluster: auth
 universe: live
 status: verified
-verified: 2026-10-06 @ fb46b8e
+verified: 2026-10-19 @ 3720283
 entity: src/auth/keep.ts
 ---
 
 # Credential
 
-A stored sign-in for a site: `Credential` and `CredentialStore` come from the `credvault` package; autobrowse owns only its names in it (`src/auth/keep.ts`).
+A stored sign-in for a site: `Credential` and `CredentialStore` come from the `credvault` package; autobrowse owns only its names in it (`src/auth/keep.ts`). An API key is the second kind: `ApiKey` and `KeyStore` (credvault `keys`), addressed `<vendor>@<label>`, with an owner, purposes, a status and an id (the hash of its value).
 
 ## Why this shape
 
@@ -24,6 +24,8 @@ The vault is its own repo and npm package (public). Changing a name in `src/auth
 - Minted on signup: `accountKey`, `mintCredential`, `mintPassword` — `src/auth/signup.ts:225-313`
 - `creds link [logins...] [--keys] [--open] [--ttl]` (`src/app/cli-auth.ts:375`): `mintCredentialLink` (`src/auth/link.ts`) seals `{label, fields: [{name, value}]}` (stored logins and env keys) with AES-GCM, posts only the ciphertext to wren's phone Worker signed with `CRED_LINK_SECRET` (`credLinkUrl`, `credLinkSecret` in `src/app/config.ts`), and prints `<url>/c/<id>#<key>`; `--open` drops the sign-in for someone outside Wren; one audit line per login or key
 - `creds to-bitwarden [sites...]` (`src/app/cli-auth.ts`, `src/app/bitwarden.ts`): every account (canaries and the vault's own `bitwarden` key left out) upserted into Bitwarden as `autobrowse · <key>`: the break-glass copy outside AWS. `bw` CLI logged in once on the Mac; each run unlocks with the master password stored under `bitwarden`, then locks. Secrets go by env and stdin only
+- API keys: `<vendor>@<label>` in the owner's vault at SSM `<owner path>/keys` (`keyStoreFor` `src/app/services.ts`); the env names (`EXA_API_KEY`, `_1..n`, `NUM_EXA`) are the vault's projection (`projectKeysFor`, `ownerKeysIn` `src/reach/key-source.ts`), and `env set`/`env rm` refuse them (`projectedRefusal` `src/app/cli-env.ts`). The ring reads the vault first (`vaultSource`), env second; a named key is exact or `NoLiveKey`, never a fallback (`src/reach/key-ring.ts`). Every use is a `SecretUse` line with the address and id (`keyCall`). An owner's process never holds an operator vendor (exa, perplexity, brave, jina): it reaches the owner through env
+- `creds key add|ls|spend|revoke|purpose|audit|project|migrate` — `src/app/cli-keys.ts`, registered under `creds` in `src/app/cli-auth.ts`; `migrate` is a dry run unless `--apply`, with a `projectionDiff` check before and after
 - Every typed secret is audited (`SecretAudit`, `auditFor` `src/app/services.ts:620`; window read by `ledgerSince` `src/auth/ledger.ts:18`)
 
 ## Connected to

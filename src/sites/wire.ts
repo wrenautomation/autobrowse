@@ -21,6 +21,7 @@ import type { SecretSink } from "../deps/sink.js";
 import { BROWSER_FLOWS } from "../engine/browser-service.js";
 import type { Approver } from "../gates/payment.js";
 import type { SpentKeys } from "../reach/key-ring.js";
+import type { KeysDep } from "../reach/key-source.js";
 import type { CompiledCatalog } from "../workflows/compiled.js";
 import { runCompiled } from "../workflows/proof.js";
 import type { DailyCaps } from "./caps.js";
@@ -85,6 +86,8 @@ export interface SiteParts {
   caps?: DailyCaps;
   /** Paid keys out of credit (Exa's ring); absent: each process remembers its own. */
   spent?: SpentKeys;
+  /** The vault's keys, their audit and the call counter (`reach/key-source.ts`); absent: the env names. */
+  keys?: KeysDep;
   /** Resumable upload sessions by durable call (`uploads.ts`); absent: a rerun upload starts over. */
   uploads?: UploadSessions;
   /** Irreversible API calls already started, by durable call: a rerun of one is refused. */
@@ -214,6 +217,7 @@ export function sitesFor(p: SiteParts): SiteFacade {
     approve: p.approve ?? null,
     ...(p.caps ? { caps: p.caps } : {}),
     ...(p.spent ? { spent: p.spent } : {}),
+    ...(p.keys ? { keys: p.keys } : {}),
     ...(p.uploads ? { uploads: p.uploads } : {}),
     ...(p.started ? { started: p.started } : {}),
     ...(p.credentials

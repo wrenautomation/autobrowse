@@ -36,6 +36,7 @@ import { expandHome } from "../google-auth.js";
 const CLIPBOARD_MS = 60_000;
 
 import { macClipboard } from "./cli-env.js";
+import { registerKeyCommands } from "./cli-keys.js";
 import type { Settings } from "./config.js";
 import { askSecretTwice } from "./prompt.js";
 import { headed } from "./screen.js";
@@ -47,8 +48,11 @@ import {
   credentialsFor,
   devicesFor,
   gmailFor,
+  keyStoreFor,
   loginFor,
+  projectKeysFor,
   screensFor,
+  sinkFor,
 } from "./services.js";
 
 /** `william@wrenautomation.com` → `w***@wrenautomation.com`: whose, without the address in a log. */
@@ -99,6 +103,12 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     });
 
   const creds = program.command("creds").description("Site credentials for automated sign-in");
+  registerKeyCommands(creds, settings, {
+    keys: () => keyStoreFor(settings),
+    env: () => sinkFor(settings),
+    project: (vendors) => projectKeysFor(settings)(vendors),
+    audit: () => auditFor(settings),
+  });
   /** The browser profile carries the sign-in: it moves with the key, unless a browser has it open. */
   const moveProfile = (from: string, to: string): string => {
     const dir = expandHome(settings.profilesDir);

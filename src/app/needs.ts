@@ -60,6 +60,8 @@ export interface NeedsContext {
   desktop?: (() => Promise<{ accessibility: boolean; root: boolean }>) | null;
   /** Whose rows these are (designs/2026-09-30-owner-keys.md); absent = the default owner. */
   owner?: string;
+  /** How many live keys the vault holds for a vendor (`creds key`); absent = the env names alone. */
+  keysHeld?: (vendor: string) => Promise<number>;
   /** The env file `env push` reads, named in a row for an owner (the default owner's is `.env`). */
   envFile?: string;
 }
@@ -279,7 +281,7 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
       what: "An Instantly API key (scopes accounts:all)",
       unlocks: "new inboxes join warmup on their own: the domain workflow's warmup step",
       how: [
-        "app.instantly.ai → Settings → Integrations → API Keys → Create; copy it; autobrowse env set INSTANTLY_API_KEY --clipboard",
+        "app.instantly.ai → Settings → Integrations → API Keys → Create; copy it; autobrowse creds key add instantly@<label> --clipboard",
       ],
       check: () => holds(ctx, "INSTANTLY_API_KEY"),
     },
@@ -290,10 +292,12 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
       unlocks:
         "web search on the box (DuckDuckGo bot-checks its datacenter IP): wren's `crm` research over `sites web GET /search`",
       how: [
-        "dashboard.exa.ai → API keys → copy; autobrowse env set EXA_API_KEY --clipboard (more keys: EXA_API_KEY_1..n and NUM_EXA=n; one out of credit is skipped until the 1st)",
-        "or api-dashboard.search.brave.com → copy; autobrowse env set BRAVE_API_KEY --clipboard",
+        "dashboard.exa.ai → API keys → copy; autobrowse creds key add exa@<label> --clipboard (more keys: add more labels; one out of credit is skipped until the 1st)",
+        "or api-dashboard.search.brave.com → copy; autobrowse creds key add brave@<label> --clipboard",
       ],
       check: async () => {
+        // The vault's keys first; the env names when the vault has none (or is not wired).
+        if (ctx.keysHeld && (await ctx.keysHeld("exa").catch(() => 0)) > 0) return true;
         const n = ctx.env("NUM_EXA");
         for (const name of [...ringNames("EXA", n), "BRAVE_API_KEY"])
           if (await holds(ctx, name)) return true;
