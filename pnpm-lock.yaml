@@ -48,8 +48,8 @@ importers:
         specifier: 15.0.0
         version: 15.0.0
       credvault:
-        specifier: 0.12.0
-        version: 0.12.0
+        specifier: 0.13.0
+        version: 0.13.0
       entities:
         specifier: 8.1.0
         version: 8.1.0
@@ -1059,8 +1059,8 @@ packages:
     resolution: {integrity: sha512-piICUB6ei4IlTv1+653yq5+KoqfBYmj9bw6LqXoOneTMDXk5nM1qt12mFW1caG3LlJXEKW1Bp0WggEmIfQB34g==}
     engines: {node: '>= 14'}
 
-  credvault@0.12.0:
-    resolution: {integrity: sha512-JhOB3vxbS+u2USA89ZLE47ODs5phedP+tcKk5utB1qPtfUm8ykr05S+NECqh1i/hDs8A+UeW0EbthtKc2dEkkg==}
+  credvault@0.13.0:
+    resolution: {integrity: sha512-MdyzRJ7KAwtx08wX2cWxRkPXOz9eAi7k/YRSru/RAg3UbTkfkS7aQetDhmYlFxHJiu29gH9wTMgmv21fn07MUg==}
     engines: {node: '>=22'}
 
   cross-spawn@7.0.6:
@@ -2889,7 +2889,7 @@ snapshots:
       crc-32: 1.2.2
       readable-stream: 4.7.0
 
-  credvault@0.12.0:
+  credvault@0.13.0:
     dependencies:
       '@aws-sdk/client-ssm': 3.1136.0
       '@aws-sdk/client-sts': 3.1136.0
