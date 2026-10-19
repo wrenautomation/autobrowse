@@ -36,6 +36,7 @@ import { registerDeployment } from "./register.js";
 import {
   buildApp,
   credentialsFor,
+  keyAdminFor,
   sendJournalFor,
   siteCallsDirFor,
   watchersFor,
@@ -55,7 +56,11 @@ const desk = sitesService(
   watchers,
   // A busy profile: who waited, and which idle explore a write took it from. The journal: what
   // each keyed write left on this Mac, so a rerun after a crash never writes twice.
-  { wait: { log: (msg, extra) => log.info(extra ?? {}, msg) }, journal: sendJournalFor(settings) },
+  {
+    wait: { log: (msg, extra) => log.info(extra ?? {}, msg) },
+    journal: sendJournalFor(settings),
+    keys: keyAdminFor(settings),
+  },
 );
 // Claude Code reads the workspace holding this checkout (wren's `Ask`).
 const claude = claudeService(resolve(".."), named(CLAUDE_SERVICE, settings.owner));

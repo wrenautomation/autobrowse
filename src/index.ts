@@ -45,6 +45,7 @@ export {
   structure,
   writeRendered,
 } from "./compiler/index.js";
+export { type KeyKeeper, noKeys } from "./deps/keys.js";
 export { fakeShell, localShell, type Shell, type ShellResult } from "./deps/shell.js";
 export { envFileSink, memorySink, type SecretSink } from "./deps/sink.js";
 export { macDesktop } from "./desktop/mac.js";

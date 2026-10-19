@@ -354,6 +354,12 @@ a row; it is work.
   first Cloudflare token), `google-cloud-project`, `google-cloud-oauth-client`,
   `anthropic-console-api-key`, `workspace-skip-passwords`, `google-name`,
   `aws-port25-request` (EC2 email-limit removal form; the submit is a gate).
+  `anthropic-console-api-key` proves the new key with a free models call, then
+  keeps it as the key credential `anthropic@<account>` in the owner's vault and
+  projects the env names (no `keepAs`; plan `{name, account?, purposes?,
+  replaces?, login?}`). With `replaces` it rotates that key: the old key's
+  purposes, via and cap carry over and its id goes to `previous`. The old key
+  stays live at the Console: the run says which one to revoke by hand.
 - **Logins** (`src/auth/sites.ts`): cloudflare, google, google-admin,
   instantly, aws, anthropic, twilio, sentry, linkedin, instagram, tiktok,
   outlook (the `microsoft` credential), discord (hCaptcha by the runner,
@@ -399,6 +405,8 @@ pnpm autobrowse creds key add exa@main --clipboard --purpose default   # an API 
 pnpm autobrowse creds key ls [--all]                # address, owner, status, id, purposes, cap, uses; never a value
 pnpm autobrowse creds key spend exa@main [--until 2026-11-01]   # out of credit: skipped until the 1st (or the date)
 pnpm autobrowse creds key revoke exa@main           # dead for good, dropped from the env names; revoke it at the vendor too
+pnpm autobrowse creds key rotate anthropic@prod     # a vendor with a mint flow: starts its run (asks before it makes the key); watch with `autobrowse status`
+pnpm autobrowse creds key rotate exa@main --clipboard   # no flow: the new value from the clipboard. Same carry-over; revoke the old key at the vendor by hand
 pnpm autobrowse creds key purpose exa@main default bulk   # give purposes to a key, taking them from whichever held them
 pnpm autobrowse creds key audit exa@main -n 50      # one key's uses and refusals from the audit ledger
 pnpm autobrowse creds key project [--check]         # write the env names from the vault; --check exits 1 on a difference
@@ -717,6 +725,25 @@ the box is down, a write runs once. A write with a `sendKey` answers a typed
 verdict (`sent`, `not_sent` or `unknown`) instead of words in an error, and
 `sites/verdict {sendKey}` reads it back after a killed call. Design:
 `designs/2026-09-21-site-apis.md`, `designs/2026-10-16-send-verdicts.md`.
+
+The same service answers for the owner's API keys, for wren's Accounts page.
+No answer carries a value. A bad input is a 400, an unknown address a 404, a
+vendor with no mint flow a 501. Wren copies the shapes by hand (they are
+exported from `src/sites/keys.ts`):
+
+| handler | input | answer |
+|---|---|---|
+| `sites/keys` | `{vendor?, all?}` | `{keys: KeyRow[]}`; revoked keys only with `all` |
+| `sites/keySpend` | `{address, until?}` | `KeyRow`; out of credit until the date (the 1st of next month) |
+| `sites/keyRevoke` | `{address}` | `{key: KeyRow, projected: {put, removed}}`; revoked here, the env names follow |
+| `sites/keyRotate` | `{address}` | `{run, workflow}`; starts the vendor's mint flow as a run |
+
+`KeyRow` is the key without its value (`address`, `id`, `site`, `account`,
+`owner`, `purposes`, `status`, `spentUntil?`, `madeAt`, `revokedAt?`, `via?`,
+`vendorId?`, `cap?`, `previous`) plus `uses` and `lastUsedAt` from this
+process's audit. `keyRotate` starts the vendor's mint flow as a run on the
+owner's `Compiled` object; the run's own gate still asks before the key is
+made. The desk serves all four, and the Console flow needs the desk's browser.
 
 ### The fetch ladder
 

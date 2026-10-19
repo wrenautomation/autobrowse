@@ -27,6 +27,15 @@ import {
   type SecretUse,
   vendorBase,
 } from "credvault";
+import {
+  getKey,
+  ROTATORS,
+  revokeKey,
+  rotatable,
+  rotateKey,
+  rotationOf,
+  spendKey,
+} from "../auth/keys.js";
 import { isDefaultOwner } from "../owner.js";
 import { nextMonthUtc } from "../reach/key-ring.js";
 import { ownerKeysIn } from "../reach/key-source.js";
@@ -50,6 +59,8 @@ export interface KeysCliDeps {
   /** Set the exit code (a failed check). */
   exit?: (code: number) => void;
   now?: () => number;
+  /** Starts a run on the worker, as `autobrowse run` does; `rotate` uses it. None: no Restate here. */
+  start?: (workflow: string, key: string, plan: Record<string, unknown>) => Promise<unknown>;
 }
 
 /** The vendors whose keys the operator pays for and every owner uses: `exa`, `perplexity`, `brave`, `jina`. */
@@ -85,7 +96,7 @@ export function registerKeyCommands(creds: Command, settings: Settings, deps: Ke
   const keyCmd = creds
     .command("key")
     .description(
-      "API keys in the vault: add, ls, spend, revoke, purpose, audit, project, migrate. The env names are their projection",
+      "API keys in the vault: add, ls, spend, revoke, rotate, purpose, audit, project, migrate. The env names are their projection",
     );
 
   keyCmd
@@ -219,7 +230,7 @@ export function registerKeyCommands(creds: Command, settings: Settings, deps: Ke
       const key = await mustGet(deps.keys(), address);
       const until = o.until ? new Date(o.until) : new Date(nextMonthUtc(now()));
       if (Number.isNaN(until.getTime())) throw new Error(`not a date: ${o.until}`);
-      await deps.keys().put({ ...key, status: "spent", spentUntil: until.toISOString() });
+      await spendKey(deps.keys(), address, until);
       say(`${address} is spent until ${day(until.toISOString())}`);
       await reproject(key.site);
     });
@@ -229,10 +240,43 @@ export function registerKeyCommands(creds: Command, settings: Settings, deps: Ke
     .description("Take a key out of use for good; it stays in the vault as a record")
     .action(async (address: string) => {
       const key = await mustGet(deps.keys(), address);
-      await deps
-        .keys()
-        .put({ ...key, status: "revoked", revokedAt: new Date(now()).toISOString() });
+      await revokeKey(deps.keys(), address, now());
       say(`${address} is revoked here: revoke it at the vendor too`);
+      await reproject(key.site);
+    });
+
+  keyCmd
+    .command("rotate <address>")
+    .description(
+      "Replace a key: the vendor's mint flow makes the new one (a run that asks first), or --clipboard brings a new value. The old key keeps its purposes, via and cap",
+    )
+    .option("--clipboard", "the new value is on the clipboard (macOS); no mint flow")
+    .action(async (address: string, o: { clipboard?: boolean }) => {
+      const store = deps.keys();
+      const key = await mustGet(store, address);
+      await rotatable(store, address, { owner });
+      const flow = ROTATORS[key.site];
+      if (!o.clipboard) {
+        if (!flow)
+          throw new Error(
+            `${key.site} has no mint flow: autobrowse creds key rotate ${address} --clipboard`,
+          );
+        if (!deps.start) throw new Error("no worker to start the run on here");
+        const run = await rotationOf(store, address, { owner, now: now() });
+        await deps.start(run.workflow, run.key, run.plan);
+        say(
+          `started ${run.workflow}/${run.key}; watch: autobrowse status ${run.workflow} ${run.key}`,
+        );
+        say(`it asks before it makes the key: autobrowse approve ${run.workflow} ${run.key} send`);
+        return;
+      }
+      const name = `${vendorBase(key.site)}_API_KEY`;
+      const secret = cleanValue(name, await (deps.paste ?? pasteboard)());
+      const made = await rotateKey(store, address, secret, { owner, now: now() });
+      say(`rotated ${address} (id ${keyId(made.key.secret)}, was ${made.old.id}) for ${owner}`);
+      say(
+        `revoke the old key at ${key.site} by hand${made.old.vendorId ? ` ("${made.old.vendorId}")` : ""}`,
+      );
       await reproject(key.site);
     });
 
@@ -364,12 +408,8 @@ export function registerKeyCommands(creds: Command, settings: Settings, deps: Ke
     });
 }
 
-async function mustGet(store: KeyStore, address: string): Promise<ApiKey> {
-  parseKeyAddress(address);
-  const key = await store.get(address);
-  if (!key) throw new Error(`no key ${address}`);
-  return key;
-}
+/** The key at an address; a `KeyError` (400 bad address, 404 none) reads as the CLI's plain error. */
+const mustGet = getKey;
 
 /** `live`, `spent until 2026-11-01` or `revoked`. */
 function statusOf(k: KeyInfo): string {

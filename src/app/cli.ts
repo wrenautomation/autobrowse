@@ -59,6 +59,7 @@ import {
   identitiesFor,
   inboxActivityDepsFor,
   inboxFleetDepsFor,
+  keyKeeperFor,
   keysDepFor,
   LOCAL_WORKFLOWS,
   loadDataLogins,
@@ -312,7 +313,7 @@ program
               ? workspaceInboxDepsFor(settings, parts.browser, parts.sites, sinkFor(settings))
               : handWritten
                 ? domainDepsFor(settings, parts.browser)
-                : compiledDeps(parts.browser)) as never,
+                : compiledDeps(parts.browser, { keys: keyKeeperFor(settings) })) as never,
         plan,
         // A human gate means a person must act first; approving it here reruns the step, forever.
         (g) =>
@@ -778,7 +779,9 @@ browsers
     console.log(`stopped ${b.profile} (pid ${b.pid}, ${b.owner})`);
   });
 registerDoCommands(program, local);
-registerAuthCommands(program, settings);
+registerAuthCommands(program, settings, (workflow, key, plan) =>
+  patient(api.run(workflow, key).run({ ...plan, dryRun: false })),
+);
 registerNeedsCommands(program, () => ({
   context: needsContextFor(settings),
   done: fileDone(settings.needsDoneFile),

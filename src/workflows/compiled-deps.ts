@@ -9,6 +9,7 @@ import { SECRET_ENV_PREFIX } from "../auth/keep.js";
 import { siteAllowsHost } from "../auth/login.js";
 import { SITE_LOGINS } from "../auth/sites.js";
 import type { FlowRunner } from "../browser/flow.js";
+import { type KeyKeeper, noKeys } from "../deps/keys.js";
 import { localShell, type Shell } from "../deps/shell.js";
 import { envFileSink, type SecretSink } from "../deps/sink.js";
 import { macDesktop } from "../desktop/mac.js";
@@ -25,6 +26,8 @@ export interface CompiledDeps {
   desktop: Desktop;
   /** Where a `keep` op puts a secret the site minted; the local .env unless given. */
   sink: SecretSink;
+  /** Where a flow that mints an API key keeps it: the owner's key vault. */
+  keys: KeyKeeper;
 }
 
 /**
@@ -41,6 +44,7 @@ export function compiledDeps(
     shell?: Shell;
     desktop?: Desktop;
     sink?: SecretSink;
+    keys?: KeyKeeper;
     audit?: SecretAudit;
   } = {},
 ): CompiledDeps {
@@ -53,6 +57,7 @@ export function compiledDeps(
     }),
     secrets,
     shell: o.shell ?? localShell(),
+    keys: o.keys ?? noKeys,
     sink: o.sink ?? envFileSink(".env"),
     desktop: o.desktop ?? (process.platform === "darwin" ? macDesktop() : noDesktop()),
   };

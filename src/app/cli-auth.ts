@@ -36,7 +36,7 @@ import { expandHome } from "../google-auth.js";
 const CLIPBOARD_MS = 60_000;
 
 import { macClipboard } from "./cli-env.js";
-import { registerKeyCommands } from "./cli-keys.js";
+import { type KeysCliDeps, registerKeyCommands } from "./cli-keys.js";
 import type { Settings } from "./config.js";
 import { askSecretTwice } from "./prompt.js";
 import { headed } from "./screen.js";
@@ -78,7 +78,12 @@ async function loginOrVia(settings: Settings, site: string) {
   );
 }
 
-export function registerAuthCommands(program: Command, settings: Settings): void {
+export function registerAuthCommands(
+  program: Command,
+  settings: Settings,
+  /** Starts a run on the worker (`autobrowse run`); `creds key rotate` uses it. */
+  start?: KeysCliDeps["start"],
+): void {
   program
     .command("setup")
     .description(
@@ -108,6 +113,7 @@ export function registerAuthCommands(program: Command, settings: Settings): void
     env: () => sinkFor(settings),
     project: (vendors) => projectKeysFor(settings)(vendors),
     audit: () => auditFor(settings),
+    ...(start ? { start } : {}),
   });
   /** The browser profile carries the sign-in: it moves with the key, unless a browser has it open. */
   const moveProfile = (from: string, to: string): string => {

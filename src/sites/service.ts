@@ -22,6 +22,7 @@
  */
 import * as restate from "@restatedev/restate-sdk";
 import { z } from "zod";
+import { KeyError } from "../auth/keys.js";
 import { type CallTry, withCall } from "../browser/attempt.js";
 import { profileBusyOf } from "../browser/browsers.js";
 import {
@@ -33,8 +34,22 @@ import {
 } from "../browser/profile-wait.js";
 import type { Watchers } from "../browser/watchers.js";
 import { HttpError, lastingRefusal } from "../clients/http.js";
+import type { RunObject } from "../engine/object.js";
+import type { AnyWorkflow } from "../engine/workflow.js";
+import { named } from "../owner.js";
 import type { SiteCalls } from "../runs/calls.js";
+import { COMPILED_OBJECT, compiledKey } from "../workflows/compiled.js";
 import type { SendSpec, SiteFacade } from "./facade.js";
+import {
+  type KeyAdmin,
+  type KeyRevokeAnswer,
+  type KeyRotateAnswer,
+  type KeyRow,
+  keyRevokeRequest,
+  keyRotateRequest,
+  keySpendRequest,
+  keysRequest,
+} from "./keys.js";
 import type { RefusedToken } from "./refused.js";
 import type { RenewReport } from "./renew.js";
 import { memorySendJournal, type SendJournal, type SendRecord } from "./send-journal.js";
@@ -301,10 +316,26 @@ export function sitesService(
     journal?: SendJournal;
     /** Pauses before each verify read; `VERIFY_PAUSES_MS` when absent. */
     verifyPausesMs?: readonly number[];
+    /** The owner's API keys, for `keys`, `keySpend`, `keyRevoke` and `keyRotate`; 501 when absent. */
+    keys?: KeyAdmin;
   } = {},
 ) {
   const journal = o.journal ?? memorySendJournal();
   const pauses = o.verifyPausesMs ?? VERIFY_PAUSES_MS;
+  const keysHere = (): KeyAdmin => {
+    if (!o.keys) throw new restate.TerminalError("no key vault here", { errorCode: 501 });
+    return o.keys;
+  };
+  /** A `KeyError` is the caller's: its status, nothing else changed. */
+  const keyCall = async <T>(fn: () => Promise<T>): Promise<T> => {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err instanceof KeyError)
+        throw new restate.TerminalError(err.message, { errorCode: err.status });
+      throw err;
+    }
+  };
   const watching = () => {
     if (!watchers) throw new restate.TerminalError("no watchers here", { errorCode: 501 });
     return watchers;
@@ -723,6 +754,59 @@ export function sitesService(
           out.queued.filter((r) => !ours(r)),
         );
         return { revoked: out.revoked, after: req.after };
+      },
+      /** The owner's API keys, no value in them: `{keys: KeyRow[]}`. Revoked ones only with `all`. */
+      keys: async (ctx: restate.Context, raw: unknown): Promise<{ keys: KeyRow[] }> => {
+        const q = parse(keysRequest, raw ?? {});
+        const admin = keysHere();
+        return ctx.run(
+          "sites keys",
+          () => keyCall(async () => ({ keys: await admin.list(q) })),
+          READ_RETRY,
+        );
+      },
+      /** Mark a key out of credit until a date, re-project its vendor: the key's row. */
+      keySpend: async (ctx: restate.Context, raw: unknown): Promise<KeyRow> => {
+        const req = parse(keySpendRequest, raw);
+        const admin = keysHere();
+        return ctx.run(
+          "sites keySpend",
+          () => keyCall(() => admin.spend(req.address, req.until)),
+          WRITE_RETRY,
+        );
+      },
+      /** Take a key out of use here for good, re-project its vendor: the row and the env names changed. */
+      keyRevoke: async (ctx: restate.Context, raw: unknown): Promise<KeyRevokeAnswer> => {
+        const req = parse(keyRevokeRequest, raw);
+        const admin = keysHere();
+        return ctx.run(
+          "sites keyRevoke",
+          () => keyCall(() => admin.revoke(req.address)),
+          WRITE_RETRY,
+        );
+      },
+      /**
+       * Start the vendor's mint flow as a run that replaces this key. The run's own gate asks before
+       * the key is made. The key is the day's: asking twice in a day is the same run.
+       */
+      keyRotate: async (ctx: restate.Context, raw: unknown): Promise<KeyRotateAnswer> => {
+        const req = parse(keyRotateRequest, raw);
+        const admin = keysHere();
+        const rotation = await ctx.run(
+          "sites keyRotate",
+          () => keyCall(() => admin.rotation(req.address)),
+          READ_RETRY,
+        );
+        ctx
+          .objectSendClient<RunObject<AnyWorkflow>>(
+            { name: named(COMPILED_OBJECT.name, admin.owner) },
+            compiledKey(rotation.workflow, rotation.key),
+          )
+          .run(
+            { ...rotation.plan, dryRun: false } as never,
+            restate.rpc.sendOpts({ idempotencyKey: `${rotation.workflow}/${rotation.key}` }),
+          );
+        return { run: compiledKey(rotation.workflow, rotation.key), workflow: rotation.workflow };
       },
       setup: async (ctx: restate.Context, raw: unknown) => {
         const req = parse(setup, raw);

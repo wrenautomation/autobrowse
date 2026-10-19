@@ -99,6 +99,7 @@ import { type LinqClient, linqClient } from "../clients/linq.js";
 import { ssmTextStore } from "../clients/roster.js";
 import { twilioReader } from "../clients/twilio.js";
 import { wrenClient } from "../clients/wren.js";
+import type { KeyKeeper } from "../deps/keys.js";
 import type { SecretSink } from "../deps/sink.js";
 import {
   openFullDiskAccessPane,
@@ -169,6 +170,7 @@ import {
   sitesFor,
   sitesService,
 } from "../sites/index.js";
+import { type KeyAdmin, keyAdmin } from "../sites/keys.js";
 import { fileMintedTokens } from "../sites/oauth.js";
 import { fileRefusedTokens } from "../sites/refused.js";
 import { fileUploadSessions } from "../sites/uploads.js";
@@ -1225,6 +1227,34 @@ export function projectKeysFor(
 }
 
 /**
+ * What a workflow that mints an API key keeps it with: the owner's vault, the
+ * projection that follows, and the login its browser signs in with. One per
+ * settings, so a run and the handlers share the same store.
+ */
+export function keyKeeperFor(settings: Settings): KeyKeeper {
+  const store = keyStoreFor(settings);
+  const project = projectKeysFor(settings);
+  return {
+    owner: settings.owner,
+    put: (key) => store.put(key),
+    get: (address) => store.get(address),
+    project,
+    // The stored credential the browser signs in with (`anthropic` or its `anthropic@<role>`), else the site name.
+    login: async (site) => (await credentialsFor(settings, { armed: false }).keyOf(site)) ?? site,
+  };
+}
+
+/** The `keys` handlers' logic over the owner's vault, projection and audit. */
+export function keyAdminFor(settings: Settings): KeyAdmin {
+  return keyAdmin({
+    store: keyStoreFor(settings),
+    audit: auditFor(settings),
+    project: projectKeysFor(settings),
+    owner: settings.owner,
+  });
+}
+
+/**
  * What a process hands the ring: the vault's keys (env names when the vault has none
  * or fails), the audit and the call counter. One per settings, so the cache holds.
  */
@@ -1710,6 +1740,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       caps: fileCaps(expandHome(settings.capsFile)),
       spent: fileSpent(join(dirname(expandHome(settings.capsFile)), "spent-keys.json")),
       keys: keysDepFor(settings),
+      keeper: keyKeeperFor(settings),
       uploads: fileUploadSessions(join(expandHome(settings.artifactsDir), "uploads")),
       // The fetch ladder's render and exit rungs: profiles `fetch` and `fetch@exit`, parked like flows' browsers.
       render: renderer({ opts: browserOpts, ...(park ? { park } : {}) }),
@@ -1739,6 +1770,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
         {
           wait: { log: (msg, extra) => log.info(extra ?? {}, msg) },
           journal: sendJournalFor(settings),
+          keys: keyAdminFor(settings),
         },
       ),
       // One verb for the same orchestrator; the backend wires the doer in after the model exists.
@@ -1767,6 +1799,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
         host,
         opts: { guards },
         sink,
+        keys: keyKeeperFor(settings),
         audit: auditFor(settings),
       }),
     ],

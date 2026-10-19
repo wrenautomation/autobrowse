@@ -7,6 +7,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { FlowRunner } from "../browser/flow.js";
+import type { KeyKeeper } from "../deps/keys.js";
 import type { SecretSink } from "../deps/sink.js";
 import { memoryEffects } from "../engine/memory.js";
 import { type Outcome, runFlow } from "../engine/run.js";
@@ -49,13 +50,22 @@ export function runnerAs(browser: FlowRunner, as: RunAs | undefined): FlowRunner
 export async function runCompiled(
   workflow: AnyWorkflow,
   browser: FlowRunner,
-  o: { plan?: Record<string, unknown>; sink?: SecretSink; approve?: boolean; as?: RunAs } = {},
+  o: {
+    plan?: Record<string, unknown>;
+    sink?: SecretSink;
+    keys?: KeyKeeper;
+    approve?: boolean;
+    as?: RunAs;
+  } = {},
 ): Promise<Pick<Proof, "status" | "steps" | "output">> {
   const plan = workflow.plan.parse({ ...(o.plan ?? {}), dryRun: false });
   const out = await runFlow(
     memoryEffects().fx,
     workflow as never,
-    compiledDeps(runnerAs(browser, o.as), o.sink ? { sink: o.sink } : {}) as never,
+    compiledDeps(runnerAs(browser, o.as), {
+      ...(o.sink ? { sink: o.sink } : {}),
+      ...(o.keys ? { keys: o.keys } : {}),
+    }) as never,
     plan,
     () =>
       o.approve

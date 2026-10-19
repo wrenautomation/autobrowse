@@ -17,6 +17,7 @@ function setup(init: { env?: Record<string, string>; owner?: string } = {}) {
   let piped = "";
   let code = 0;
   const projected: string[][] = [];
+  const started: { workflow: string; key: string; plan: Record<string, unknown> }[] = [];
   const program = new Command().exitOverride();
   const creds = program.command("creds");
   registerKeyCommands(creds, { owner } as Settings, {
@@ -37,6 +38,7 @@ function setup(init: { env?: Record<string, string>; owner?: string } = {}) {
       code = c;
     },
     now: () => NOW,
+    start: async (workflow, key, plan) => void started.push({ workflow, key, plan }),
   });
   const run = (...args: string[]) =>
     program.parseAsync(["node", "autobrowse", "creds", "key", ...args]);
@@ -46,6 +48,7 @@ function setup(init: { env?: Record<string, string>; owner?: string } = {}) {
     said,
     lines,
     projected,
+    started,
     run,
     paste: (t: string) => {
       pasted = t;
@@ -352,5 +355,86 @@ describe("creds key migrate", () => {
     await t.run("migrate", "--apply");
     expect((await t.keys.list()).map((k) => k.address)).toEqual(["y@env-0"]);
     expect(t.out()).toContain("skipped exa@env-0: operator tool key");
+  });
+});
+
+describe("creds key rotate", () => {
+  const seed = (t: ReturnType<typeof setup>, extra: object = {}) =>
+    t.keys.put({
+      site: "anthropic",
+      account: "prod",
+      owner: "wren",
+      secret: "synthetic-old",
+      purposes: ["default", "drafts"],
+      status: "live",
+      madeAt: "2026-09-01T00:00:00.000Z",
+      via: "anthropic@william",
+      vendorId: "prod-old",
+      cap: { amount: 50, unit: "calls" },
+      ...extra,
+    });
+
+  it("a vendor with a mint flow starts its run and prints how to watch it", async () => {
+    const t = setup();
+    await seed(t);
+    await t.run("rotate", "anthropic@prod");
+    expect(t.started).toEqual([
+      {
+        workflow: "anthropic-console-api-key",
+        key: "rotate-prod-20261019",
+        plan: {
+          name: "prod-20261019",
+          account: "prod",
+          replaces: "anthropic@prod",
+          login: "anthropic@william",
+        },
+      },
+    ]);
+    expect(t.out()).toContain("autobrowse status anthropic-console-api-key rotate-prod-20261019");
+    // Nothing changed in the vault until the run makes the key.
+    expect((await t.keys.get("anthropic@prod"))?.secret).toBe("synthetic-old");
+  });
+
+  it("--clipboard takes the value by hand: purposes, via and cap carry, previous grows, env follows", async () => {
+    const t = setup();
+    await seed(t);
+    await t.run("project");
+    expect(t.env.values.ANTHROPIC_API_KEY).toBe("synthetic-old");
+    t.paste("ANTHROPIC_API_KEY=synthetic-new\n");
+    await t.run("rotate", "anthropic@prod", "--clipboard");
+    const key = await t.keys.get("anthropic@prod");
+    expect(key).toMatchObject({
+      secret: "synthetic-new",
+      purposes: ["default", "drafts"],
+      via: "anthropic@william",
+      cap: { amount: 50, unit: "calls" },
+    });
+    expect(key?.vendorId).toBeUndefined();
+    expect(key?.previous).toEqual([
+      { id: keyId("synthetic-old"), vendorId: "prod-old", revokedAt: "2026-10-19T12:00:00.000Z" },
+    ]);
+    expect(t.env.values.ANTHROPIC_API_KEY).toBe("synthetic-new");
+    expect(Object.values(t.env.values)).not.toContain("synthetic-old");
+    expect(t.started).toEqual([]);
+    expect(t.out()).toContain("revoke the old key at anthropic by hand");
+    expect(t.out()).not.toContain("synthetic-");
+  });
+
+  it("a vendor with no flow refuses without --clipboard, naming the command", async () => {
+    const t = setup();
+    await seed(t, { site: "exa", account: "main" });
+    await expect(t.run("rotate", "exa@main")).rejects.toThrow(
+      "autobrowse creds key rotate exa@main --clipboard",
+    );
+    t.paste("synthetic-exa-new");
+    await t.run("rotate", "exa@main", "--clipboard");
+    expect((await t.keys.get("exa@main"))?.secret).toBe("synthetic-exa-new");
+  });
+
+  it("an unknown address stops, and another owner's key is not found", async () => {
+    const t = setup();
+    await expect(t.run("rotate", "anthropic@nope")).rejects.toThrow("no key anthropic@nope");
+    await seed(t, { owner: "someone" });
+    await expect(t.run("rotate", "anthropic@prod", "--clipboard")).rejects.toThrow("no key");
   });
 });

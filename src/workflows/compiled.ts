@@ -14,6 +14,7 @@ import { pathToFileURL } from "node:url";
 import * as restate from "@restatedev/restate-sdk";
 import type { SecretAudit } from "credvault";
 import type { FlowRunner } from "../browser/flow.js";
+import type { KeyKeeper } from "../deps/keys.js";
 import type { SecretSink } from "../deps/sink.js";
 import { type HostDeps, makeRunObjectFrom, type RunObjectDefinition } from "../engine/object.js";
 import type { AdvanceOptions } from "../engine/run.js";
@@ -128,6 +129,8 @@ export function makeCompiledRunObject(o: {
   opts?: AdvanceOptions;
   /** The worker's secret sink (.env or SSM) for `keep` ops. */
   sink?: SecretSink;
+  /** The owner's key vault, for flows that mint an API key. */
+  keys?: KeyKeeper;
   /** Where every secret fill is recorded (see auth/guard). */
   audit?: SecretAudit;
 }): RunObjectDefinition<AnyWorkflow> {
@@ -144,6 +147,7 @@ export function makeCompiledRunObject(o: {
         workflow: found.workflow,
         deps: compiledDeps(o.browser, {
           ...(o.sink ? { sink: o.sink } : {}),
+          ...(o.keys ? { keys: o.keys } : {}),
           ...(o.audit ? { audit: o.audit } : {}),
         }),
         ref,

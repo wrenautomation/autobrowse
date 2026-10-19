@@ -3,7 +3,7 @@ type: object
 cluster: sites
 universe: live
 status: verified
-verified: 2026-10-17 @ x-token-loss
+verified: 2026-10-19 @ 59847e7
 entity: src/sites/oauth.ts
 ---
 
@@ -23,6 +23,7 @@ Refused tokens (designs/2026-10-16-refused-tokens.md): a refusal (invalid_grant,
 - Renewal: `RENEW_WITHIN_MS` 14 days, `Renewal`, `RenewalPlan`, `renewals` (lapsing + refused), `renewDue`, `renewWording`, `nextLapse` — `src/sites/renew.ts:21-188`
 - Refused: `TokenRefused { token, why, site, account }` — `src/sites/oauth.ts:102`; `revokeGrant` — `src/sites/oauth.ts:191`; `RefusedToken`, `RefusedTokens { list, refuse, claim, start, end, stale, clear }`, `GIVE_UP_DAYS` 2, `dueToday`, `fileRefusedTokens`, `refusedLine` — `src/sites/refused.ts:13-180`; kept and said in `sitesFor` (`record`, `withRenew`, `revoke`) — `src/sites/wire.ts:232-408`; queued and awaited by `sitesService` (`queueRemake`, `awaitRemake`, `call`, `revoke`) — `src/sites/service.ts:95-140`; `mintedTokensFor` — `src/app/services.ts`; notices via `opsLane` — `src/app/ops.ts`
 - Store: `SecretSink.put(name, value, o)` — `src/deps/sink.ts:9-12`; `envStoreFor` / `sinkFor` (SSM `/autobrowse/config` via credvault `EnvStore`, `.env` locally) — `src/app/services.ts:958,769`; `autobrowse env` (`src/app/cli-env.ts`)
+- Not a token: an API key kept as a credential `<vendor>@<label>` ([[credential]]). Four handlers of `sitesService` serve those to wren's Accounts page (`keys`, `keySpend`, `keyRevoke`, `keyRotate`, `keysHere` / `keyCall` in `src/sites/service.ts`; shapes in `src/sites/keys.ts`); `keyRotate` starts a run, it mints nothing itself
 - Loopback redirect `OAUTH_PORT` 9400; a `keep` op in a recording lands here too
 
 ## Connected to

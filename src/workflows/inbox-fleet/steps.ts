@@ -8,6 +8,7 @@
  * yes covers both.
  */
 import { createHash } from "node:crypto";
+import { parseVendorKeyName } from "credvault";
 import { NeedsHuman } from "../../browser/session.js";
 import type { DnsRecord } from "../../clients/dynadot.js";
 import { InboxInsidersError } from "../../clients/inbox-insiders.js";
@@ -73,7 +74,14 @@ const usd = (n: number) => `$${n.toFixed(2)}`;
 
 async function client<T>(get: () => Promise<T | null>, key: string): Promise<T> {
   const c = await get();
-  if (!c) throw new NeedsHuman(`no ${key}: \`autobrowse env set ${key}\`, then approve`);
+  if (!c) {
+    // An API key name is the vault's (`env set` refuses it); any other name is an env value.
+    const vendor = parseVendorKeyName(key)?.vendor;
+    const fix = vendor
+      ? `autobrowse creds key add ${vendor}@<label> --clipboard`
+      : `autobrowse env set ${key}`;
+    throw new NeedsHuman(`no ${key}: \`${fix}\`, then approve`);
+  }
   return c;
 }
 

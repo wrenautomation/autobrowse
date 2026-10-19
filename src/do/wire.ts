@@ -15,6 +15,7 @@ import type { AgentSessions } from "../agent/sessions.js";
 import type { SiteLogin } from "../auth/login.js";
 import { SITE_LOGINS } from "../auth/sites.js";
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
+import type { KeyKeeper } from "../deps/keys.js";
 import { localShell, type Shell } from "../deps/shell.js";
 import type { SecretSink } from "../deps/sink.js";
 import { BROWSER_FLOWS } from "../engine/browser-service.js";
@@ -35,6 +36,8 @@ export interface DoerParts {
   catalog: CompiledCatalog;
   browser: FlowRunner;
   sink: SecretSink;
+  /** The owner's key vault, for compiled flows that mint an API key. */
+  keys?: KeyKeeper;
   /** The site facade; none = no site abilities. */
   sites?: SiteFacade;
   /** The site modules behind the facade (request shapes); the built-in list unless said. */
@@ -113,7 +116,11 @@ export function doerFor(p: DoerParts): Verb {
       if (!allowsWorkflow(scope, name)) throw refuse(name);
       const found = await p.catalog.get(name);
       if (!found) throw new Error(`no compiled workflow named ${name}`);
-      return runCompiled(found.workflow, p.browser, { plan, sink: p.sink });
+      return runCompiled(found.workflow, p.browser, {
+        plan,
+        sink: p.sink,
+        ...(p.keys ? { keys: p.keys } : {}),
+      });
     },
     runFlow: async (name, input) => {
       if (!allowsSite(scope, name.split("/")[0] ?? name)) throw refuse(name);

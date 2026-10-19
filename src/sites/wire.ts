@@ -17,6 +17,7 @@ import type { DoneActs } from "../browser/attempt.js";
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import type { Render } from "../browser/render.js";
 import { type HttpClient, httpClient } from "../clients/http.js";
+import type { KeyKeeper } from "../deps/keys.js";
 import type { SecretSink } from "../deps/sink.js";
 import { BROWSER_FLOWS } from "../engine/browser-service.js";
 import type { Approver } from "../gates/payment.js";
@@ -51,6 +52,8 @@ export interface SiteParts {
   catalog: CompiledCatalog;
   browser: FlowRunner;
   sink: SecretSink;
+  /** The owner's key vault, for compiled flows that mint an API key. */
+  keeper?: KeyKeeper;
   oauthPort: number;
   /** The sites served; every built-in one unless said. */
   sites?: readonly SiteApi[];
@@ -209,6 +212,7 @@ export function sitesFor(p: SiteParts): SiteFacade {
         runCompiled(workflow, p.browser, {
           plan,
           sink: p.sink,
+          ...(p.keeper ? { keys: p.keeper } : {}),
           approve: true,
           ...(as ? { as } : {}),
         }),
