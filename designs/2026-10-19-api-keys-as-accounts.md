@@ -104,3 +104,6 @@ Every read of a key by a call writes a `SecretUse` (existing type) with the key 
 - The Console flow has two steps: `check-key` (reversible, also runs in a dry run) and `create-key` (gated). A new key at an address that exists is refused before the browser opens.
 - A failed projection after a key is minted does not fail the step: a retry would mint a second key. The `done` text says to run `creds key project`.
 - `keyRotate` starts the owner's `Compiled_<owner>` run object with idempotency key `<workflow>/<key>`, the same object the CLI uses.
+- wren: no CLI set a client's mode, so W1 adds `wren keys use <client> <vendor> --purpose <word> --key <ks_ref>` (core `setPurposeKey`). It makes `own` rows only. `gate` and `meter` read the `default` row for mode and bucket; a purpose row never sets a mode of its own.
+- wren: `clearMode`, the Vendors page and the Stripe mode lookups read the `default` purpose row only.
+- wren: a key's seal AAD stays (client, name), not the label. Why: a label change then needs no re-seal; one client's keys of one name are interchangeable to it anyway.
