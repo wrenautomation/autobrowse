@@ -107,3 +107,7 @@ Every read of a key by a call writes a `SecretUse` (existing type) with the key 
 - wren: no CLI set a client's mode, so W1 adds `wren keys use <client> <vendor> --purpose <word> --key <ks_ref>` (core `setPurposeKey`). It makes `own` rows only. `gate` and `meter` read the `default` row for mode and bucket; a purpose row never sets a mode of its own.
 - wren: `clearMode`, the Vendors page and the Stripe mode lookups read the `default` purpose row only.
 - wren: a key's seal AAD stays (client, name), not the label. Why: a label change then needs no re-seal; one client's keys of one name are interchangeable to it anyway.
+- wren: the mirror runs in a new `VaultKeys/box` loop object (hourly, plus after revoke and spend). Why: the three actions need a service anyway, and one exclusive object orders them against the hourly pass. `VaultKeys/box/start` runs once after deploy.
+- wren: `client_secrets` gains `key_id` (set on stage, bind, rotate, put), so a client key's spend joins `vendor_usage.key_id`. Rows saved before it keep null.
+- wren: `vault_keys` is out of the audit log: it is a mirror rewritten hourly, and the vault keeps the log.
+- wren: Accounts is a console record, so clients never see key rows. The operator sees operator and client keys. Status reads "Out of credit"; the date is its own column, "Out of credit until".
