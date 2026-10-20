@@ -117,7 +117,7 @@ export function registerSiteCommands(program: Command, local: LocalBackend, box?
       const checks = await Promise.all(rows.map((r) => checkSite(sites, r, o.account ?? null)));
       for (const line of columns(checks.map(checkRow))) console.log(line);
       // What is refused now, this check's finds included, with since when.
-      const open = (sites.refused?.() ?? []).filter((r) => !name || r.site === name);
+      const open = ((await sites.refused?.()) ?? []).filter((r) => !name || r.site === name);
       for (const r of open) console.log(bad(`refused: ${refusedLine(r)}`));
       if ((name && !checks[0]?.ok) || open.length) process.exitCode = 1;
     });

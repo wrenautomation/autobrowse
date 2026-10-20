@@ -144,8 +144,8 @@ describe("refused tokens", () => {
       [NAME, "acme", null],
     ]);
     // The desk queues it once; a second claim finds nothing new.
-    expect(w.sites.claimRefused?.().map((r) => r.name)).toEqual([NAME]);
-    expect(w.sites.claimRefused?.()).toEqual([]);
+    expect((await w.sites.claimRefused?.())?.map((r) => r.name)).toEqual([NAME]);
+    expect(await w.sites.claimRefused?.()).toEqual([]);
     expect((await w.sites.status("acme")).refused?.[0]?.name).toBe(NAME);
   });
 
@@ -257,7 +257,7 @@ describe("the desk queues re-makes", () => {
     },
     setup: async () => ({ made: [] }),
     caps: (day) => ({ day: day ?? "2026-10-16", used: {}, calls: [] }),
-    claimRefused: () => rows.claim(),
+    claimRefused: async () => rows.claim(),
     revoke: async () => {
       const now = new Date();
       for (const name of [NAME, "ACME_REFRESH_TOKEN__W_WREN_COM"])
@@ -315,8 +315,8 @@ describe("the desk queues re-makes", () => {
         );
         throw new SiteError(409, `${NAME} was refused (invalid_grant); re-consent the account`);
       },
-      claimRefused: () => kept.claim(),
-      refused: () => kept.list(),
+      claimRefused: async () => kept.claim(),
+      refused: async () => kept.list(),
     };
     const awaited: { req: unknown; key?: string }[] = [];
     const base = ctxOf();
@@ -441,7 +441,7 @@ describe("refused, then re-made (local OAuth server)", () => {
     expect(said[0]).toMatch(/^token refused: ACME_REFRESH_TOKEN \(acme\)/);
     expect(consents).toBe(1);
     expect(sink.values[NAME]).toBe("rt-new");
-    expect(sites.refused?.()).toEqual([]);
+    expect(await sites.refused?.()).toEqual([]);
     expect(await sites.call("acme", "GET", "/me", {})).toEqual({ id: "acme-user" });
     // Nothing left to make: the next pass tries nothing.
     expect((await sites.renew?.())?.results).toEqual([]);

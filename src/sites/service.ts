@@ -636,9 +636,9 @@ export function sitesService(
           const claim = facade.claimRefused?.bind(facade);
           if (!claim || !(err instanceof restate.TerminalError) || err.code !== 409) throw err;
           const { queued, ours } = await ctx.run("refused tokens", async () => ({
-            queued: claim(),
+            queued: await claim(),
             ours:
-              (facade.refused?.() ?? []).find(
+              ((await facade.refused?.()) ?? []).find(
                 (r) =>
                   r.site === req.site && !r.gaveUp && err.message.includes(`${r.name} was refused`),
               ) ?? null,
@@ -742,7 +742,7 @@ export function sitesService(
           () =>
             terminalOnSiteError(`${ctx.request().id} ${step}`, async () => ({
               ...(await end(req.site, req.account ?? null)),
-              queued: claim(),
+              queued: await claim(),
             })),
           WRITE_RETRY,
         );

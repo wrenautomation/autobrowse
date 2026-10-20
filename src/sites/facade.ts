@@ -258,10 +258,13 @@ export interface SiteFacade {
    * revokes. Answers the kept names it covered, now dead; the caller makes them again.
    */
   revoke?(site: string, account?: string | null): Promise<{ revoked: string[] }>;
-  /** Open refused-token incidents, oldest first. */
-  refused?(): RefusedToken[];
+  /**
+   * Open refused-token incidents, oldest first. Async like every other method: a facade behind
+   * `holding` answers each call through a hold, so a sync answer would arrive as a Promise.
+   */
+  refused?(): Promise<RefusedToken[]>;
   /** Incidents no re-make was queued for yet, now marked queued: each one once. */
-  claimRefused?(): RefusedToken[];
+  claimRefused?(): Promise<RefusedToken[]>;
 }
 
 export interface CheckRow {

@@ -310,8 +310,8 @@ export function sitesFor(p: SiteParts): SiteFacade {
     ...base,
     list: async () => (await facade.list()).map(withRefused),
     status: async (name) => withRefused(await facade.status(name)),
-    refused: () => refused.list(),
-    claimRefused: () => refused.claim(),
+    refused: async () => refused.list(),
+    claimRefused: async () => refused.claim(),
     async revoke(site, account) {
       if (!facade.revoke) throw new SiteError(501, "no revoke here");
       const { revoked } = await facade.revoke(site, account).catch(async (e) => {
