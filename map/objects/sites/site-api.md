@@ -34,7 +34,7 @@ Callers speak the official REST shape. A route has an `api` leg and, only where 
 
 - **owns:** routes, setup steps, its OAuth spec
 - **owned-by:** [[site-facade]]
-- **joins:** [[token]] (`auth`, `makes`), [[flow]] / [[compiled-workflow]] (browser legs), [[ability]] (`kind: "site"`), [[need]] (`siteNeeds`), [[account]] (`purpose`), [[spend-policy]] (`spends`)
+- **joins:** [[token]] (`auth`, `makes`), [[oauth-piece]] (an `OAuthSpec` reads its provider URLs from `OAUTH_PROVIDERS`), [[flow]] / [[compiled-workflow]] (browser legs), [[ability]] (`kind: "site"`), [[need]] (`siteNeeds`), [[account]] (`purpose`), [[spend-policy]] (`spends`)
 - **looks-like-but-is-not:** [[site-login]]; `Site` the profile name
 
 ## If you change this

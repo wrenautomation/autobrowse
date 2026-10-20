@@ -26,7 +26,7 @@ One copy of the auth and one copy of the Gmail wire, for both repos. Every call 
 ## Connected to
 
 - **owns:** the Gmail wire and the service-account token
-- **joins:** [[sign-in-context]] (Gmail is a code reader), [[mail-piece]], [[settings]] (`googleTokens`, `src/app/services.ts:1299`)
+- **joins:** [[sign-in-context]] (Gmail is a code reader), [[mail-piece]], [[oauth-piece]] (the OAuth wire, sign-in side), [[settings]] (`googleTokens`, `src/app/services.ts:1299`)
 - **looks-like-but-is-not:** [[identity-provider]] (the browser sign-in to Google); a site's OAuth [[token]]
 
 ## If you change this

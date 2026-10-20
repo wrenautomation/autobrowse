@@ -12,6 +12,7 @@
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
 import type { Amount } from "../gates/spend.js";
+import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { WEB_REDIRECT } from "./oauth.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi, SiteError } from "./types.js";
 import type { Seen, VerifyGet, VerifyRead, VerifyRow } from "./verdict.js";
@@ -509,8 +510,8 @@ function budgetOf(i: {
 }
 
 export const metaOAuth: OAuthSpec = {
-  authorizeUrl: `https://www.facebook.com/${META_VERSION}/dialog/oauth`,
-  tokenUrl: `${META_ORIGIN}/${META_VERSION}/oauth/access_token`,
+  authorizeUrl: OAUTH_PROVIDERS.meta.authorize,
+  tokenUrl: OAUTH_PROVIDERS.meta.token,
   scopes: [
     "ads_management",
     "ads_read",
@@ -538,7 +539,7 @@ export const metaOAuth: OAuthSpec = {
   refreshToken: "META_REFRESH_TOKEN",
   accessToken: "META_ACCESS_TOKEN",
   longLived: {
-    url: `${META_ORIGIN}/${META_VERSION}/oauth/access_token`,
+    url: OAUTH_PROVIDERS.meta.token,
     fields: { grant_type: "fb_exchange_token" },
     tokenParam: "fb_exchange_token",
     clientIdParam: "client_id",

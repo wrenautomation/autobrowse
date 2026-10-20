@@ -857,8 +857,8 @@ import { digest, exploreWithAgent } from "autobrowse/agent";
 import { fileStore, memoryFiles } from "autobrowse/files";   // the sealed file store
 ```
 
-**Mail and Google, no browser.** `autobrowse/mail` and `autobrowse/google`
-are pure libraries. They import no Playwright, no Restate and nothing from
+**Mail, Google and OAuth, no browser.** `autobrowse/mail`, `autobrowse/google`
+and `autobrowse/oauth` are pure libraries. They import no Playwright, no Restate and nothing from
 `src/browser`, `src/app` or `src/sites`; `test/pieces.test.ts` checks this.
 They take a `fetch` (or an IMAP login) and do no retries; you set the time
 limit and the retry policy.
@@ -869,6 +869,14 @@ limit and the retry policy.
 - `autobrowse/google`: `serviceAccountToken` signs a delegated token from a
   service-account key. `GmailClient` is the Gmail wire (list, get, send,
   watch, send-as). `gmailClient` is the per-user helper on top of it.
+- `autobrowse/oauth`: the wire of every OAuth sign-in. `OAUTH_PROVIDERS` holds
+  each provider's URLs and client style, and `authorizeUrl` builds the consent
+  link. `exchangeCode` and `refreshGrant` call a provider's token endpoint;
+  `metaUserToken`, `metaPages` and `whoAmI` do Meta's two-step token, its
+  Pages and a who-am-I read per social platform. `mailExchange` and
+  `mailRefresh` sign in to Gmail and Microsoft mail, `appExchange` and
+  `appRefresh` sign in to a connected app from a spec you pass. A failure is an
+  `OAuthError` with a `code` and `revoked`; the token never goes in a message.
 
 ```ts
 import { ImapReader } from "autobrowse/mail";

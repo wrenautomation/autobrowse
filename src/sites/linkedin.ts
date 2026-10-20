@@ -10,6 +10,7 @@ import { z } from "zod";
 import { WREN_PAGE } from "../browser/flows/linkedin-audience.js";
 import { POST_URN } from "../browser/flows/linkedin-post-analytics.js";
 import { HttpError } from "../clients/http.js";
+import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { pollWaits } from "./poll.js";
 import {
   type ApiLeg,
@@ -292,8 +293,8 @@ async function must<T>(res: { ok: boolean; status: number; body: T | null }, wha
 }
 
 export const linkedinOAuth: OAuthSpec = {
-  authorizeUrl: "https://www.linkedin.com/oauth/v2/authorization",
-  tokenUrl: "https://www.linkedin.com/oauth/v2/accessToken",
+  authorizeUrl: OAUTH_PROVIDERS.linkedin.authorize,
+  tokenUrl: OAUTH_PROVIDERS.linkedin.token,
   scopes: ["openid", "profile", "email", "w_member_social"],
   clientId: "LINKEDIN_CLIENT_ID",
   clientSecret: "LINKEDIN_CLIENT_SECRET",

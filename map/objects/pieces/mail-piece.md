@@ -27,7 +27,7 @@ wren reads replies in its own Lambda, so the Mac and its browser stay out of the
 ## Connected to
 
 - **owns:** the IMAP session helpers
-- **joins:** [[google-piece]] (same rules), `test/pieces.test.ts` (the purity check)
+- **joins:** [[google-piece]] and [[oauth-piece]] (same rules; mail sign-in lives in `./oauth`), `test/pieces.test.ts` (the purity check)
 - **looks-like-but-is-not:** the code readers of [[sign-in-context]] (`MessageReader`, `src/auth/codes.ts`), which read one-time codes
 
 ## If you change this

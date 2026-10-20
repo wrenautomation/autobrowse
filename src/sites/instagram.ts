@@ -9,6 +9,7 @@
  */
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
+import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { WEB_REDIRECT } from "./oauth.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { Seen, VerifyGet, VerifyRead } from "./verdict.js";
@@ -126,8 +127,8 @@ const withQuery = (url: string, q: Record<string, string | number | undefined>) 
 };
 
 export const instagramOAuth: OAuthSpec = {
-  authorizeUrl: "https://www.instagram.com/oauth/authorize",
-  tokenUrl: "https://api.instagram.com/oauth/access_token",
+  authorizeUrl: OAUTH_PROVIDERS.instagram.authorize,
+  tokenUrl: OAUTH_PROVIDERS.instagram.token,
   scopes: [
     "instagram_business_basic",
     "instagram_business_content_publish",

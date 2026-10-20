@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
+import { authorizeEndpoint, tokenEndpoint } from "../oauth/providers.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { Seen, VerifyGet, VerifyRead } from "./verdict.js";
 import { arr, isoOf, rec, sameName, str, text, unclear } from "./verify-kit.js";
@@ -124,8 +125,8 @@ const post = async (leg: ApiLeg, path: string, body: unknown) =>
 
 /** Microsoft identity platform, `common` tenant: personal and work accounts alike. */
 export const outlookOAuth: OAuthSpec = {
-  authorizeUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-  tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+  authorizeUrl: authorizeEndpoint("microsoft", "common"),
+  tokenUrl: tokenEndpoint("microsoft", "common"),
   scopes: ["offline_access", "User.Read", "Mail.ReadWrite", "Mail.Send", "Calendars.ReadWrite"],
   clientId: "MICROSOFT_CLIENT_ID",
   clientSecret: "MICROSOFT_CLIENT_SECRET",

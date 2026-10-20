@@ -7,6 +7,7 @@
  */
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
+import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 
 export const DRIVE_ORIGIN = "https://www.googleapis.com";
@@ -29,8 +30,8 @@ async function must<T>(res: { ok: boolean; status: number; body: T | null }, wha
 }
 
 export const driveOAuth: OAuthSpec = {
-  authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-  tokenUrl: "https://oauth2.googleapis.com/token",
+  authorizeUrl: OAUTH_PROVIDERS.google.authorize,
+  tokenUrl: OAUTH_PROVIDERS.google.token,
   scopes: ["https://www.googleapis.com/auth/drive.readonly"],
   clientId: "GOOGLE_OAUTH_CLIENT_ID",
   clientSecret: "GOOGLE_OAUTH_CLIENT_SECRET",

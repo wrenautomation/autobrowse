@@ -9,7 +9,7 @@ entity: src/sites/oauth.ts
 
 # Token
 
-A site API key or OAuth token kept in the env store under a name, per account: minted by `accessTokens` and `runConsent` in `src/sites/oauth.ts`, renewed by `src/sites/renew.ts`, refused ones kept by `src/sites/refused.ts`, kept through the `SecretSink` (`src/deps/sink.ts`).
+A site API key or OAuth token kept in the env store under a name, per account: minted by `accessTokens` and `runConsent` in `src/sites/oauth.ts`, renewed by `src/sites/renew.ts`, refused ones kept by `src/sites/refused.ts`, kept through the `SecretSink` (`src/deps/sink.ts`). The pure part of sign-in (PKCE, provider URLs) lives in [[oauth-piece]] (`src/oauth/`): `pkcePair` is built on its `pkceVerifier`/`pkceChallenge`, and each site's `OAuthSpec` takes `authorizeUrl`/`tokenUrl` from its `OAUTH_PROVIDERS` table.
 
 ## Why this shape
 
@@ -47,6 +47,6 @@ Refused tokens (designs/2026-10-16-refused-tokens.md): a refusal (invalid_grant,
 
 ## See
 
-- Source: `src/sites/oauth.ts`, `src/sites/renew.ts`, `src/sites/refused.ts`
+- Source: `src/oauth/providers.ts`, `src/sites/oauth.ts`, `src/sites/renew.ts`, `src/sites/refused.ts`
 - Design: `designs/2026-09-21-site-apis.md`, `designs/2026-10-16-refused-tokens.md`
 - Tests: `test/refused-tokens.test.ts`, `test/x.test.ts`

@@ -1,5 +1,5 @@
 /**
- * A piece (`./mail`, `./google`, later `./oauth`) is a pure library: no browser, no Restate, no app
+ * A piece (`./mail`, `./google`, `./oauth`) is a pure library: no browser, no Restate, no app
  * code. This walks the static imports of each piece's TypeScript from its entry and fails, with the
  * chain that got there, on a bare import outside the allowlist or a file under a forbidden folder.
  * Type-only imports leave no trace in the build and are skipped.

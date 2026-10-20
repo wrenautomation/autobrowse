@@ -11,6 +11,7 @@
 import { basename, extname } from "node:path";
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
+import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { VerifyRead, VerifyRow } from "./verdict.js";
 import { arr, isoOf, rec, str, text, unclear, withoutLinks } from "./verify-kit.js";
@@ -268,8 +269,8 @@ async function uploadMedia(
 }
 
 export const xOAuth: OAuthSpec = {
-  authorizeUrl: "https://x.com/i/oauth2/authorize",
-  tokenUrl: `${X_ORIGIN}/2/oauth2/token`,
+  authorizeUrl: OAUTH_PROVIDERS.x.authorize,
+  tokenUrl: OAUTH_PROVIDERS.x.token,
   scopes: ["tweet.read", "tweet.write", "users.read", "media.write", "offline.access"],
   clientId: "X_CLIENT_ID",
   clientSecret: "X_CLIENT_SECRET",

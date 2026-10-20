@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
+import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { Seen, VerifyRead, VerifyRow } from "./verdict.js";
 import { arr, isoOf, mimeText, rec, str, text, unclear } from "./verify-kit.js";
@@ -46,8 +47,8 @@ const addressesOf = (v: string): string[] =>
   (v.match(/[^\s<>,;"]+@[^\s<>,;"]+/g) ?? []).map((a) => a.toLowerCase());
 
 export const gmailOAuth: OAuthSpec = {
-  authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-  tokenUrl: "https://oauth2.googleapis.com/token",
+  authorizeUrl: OAUTH_PROVIDERS.google.authorize,
+  tokenUrl: OAUTH_PROVIDERS.google.token,
   scopes: [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.send",

@@ -14,6 +14,16 @@ const expect = {
   "./files": ["fileStore", "memoryFiles", "fileOf"],
   "./mail": ["ImapReader", "InstantlyReader", "RoutedReader", "METADATA_HEADERS"],
   "./google": ["GmailClient", "serviceAccountToken", "loadServiceAccountKey", "gmailClient"],
+  "./oauth": [
+    "tokenPost",
+    "OAuthError",
+    "authorizeUrl",
+    "exchangeCode",
+    "refreshGrant",
+    "whoAmI",
+    "mailExchange",
+    "OAUTH_PROVIDERS",
+  ],
 };
 let bad = 0;
 for (const [sub, names] of Object.entries(expect)) {

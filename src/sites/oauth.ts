@@ -12,6 +12,7 @@ import { createServer } from "node:http";
 import { dirname } from "node:path";
 import { CONSENT_RECEIVED } from "../browser/flows/oauth-consent.js";
 import { type HttpClient, HttpError } from "../clients/http.js";
+import { pkceChallenge, pkceVerifier } from "../oauth/core.js";
 import { type OAuthSpec, SiteError } from "./types.js";
 
 interface TokenBody {
@@ -75,9 +76,8 @@ export const WEB_REDIRECT = "https://wrenautomation.com/oauth/callback";
 
 /** PKCE: a verifier and its S256 challenge. */
 export function pkcePair(): { verifier: string; challenge: string } {
-  const verifier = randomBytes(48).toString("base64url");
-  const challenge = createHash("sha256").update(verifier).digest("base64url");
-  return { verifier, challenge };
+  const verifier = pkceVerifier();
+  return { verifier, challenge: pkceChallenge(verifier) };
 }
 
 export function accountEnv(name: string, account?: string | null): string {

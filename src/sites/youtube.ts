@@ -16,6 +16,7 @@ import { Readable } from "node:stream";
 import { z } from "zod";
 import { currentCall } from "../browser/attempt.js";
 import { HttpError, safeUrls } from "../clients/http.js";
+import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi, SiteError } from "./types.js";
 import { once } from "./uploads.js";
 import type { Seen, VerifyGet, VerifyRead } from "./verdict.js";
@@ -402,8 +403,8 @@ const reportsList = reportingList.extend({
 const oneReport = z.object({ jobId: z.string().min(1), reportId: z.string().min(1) });
 
 export const youtubeOAuth: OAuthSpec = {
-  authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-  tokenUrl: "https://oauth2.googleapis.com/token",
+  authorizeUrl: OAUTH_PROVIDERS.google.authorize,
+  tokenUrl: OAUTH_PROVIDERS.google.token,
   scopes: [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.force-ssl",

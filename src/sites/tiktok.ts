@@ -9,6 +9,7 @@
 import { z } from "zod";
 import { MAX_COMMENTS } from "../browser/flows/tiktok-comments.js";
 import { HttpError } from "../clients/http.js";
+import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { pollWaits } from "./poll.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { Seen, VerifyGet, VerifyRead } from "./verdict.js";
@@ -130,8 +131,8 @@ const withFields = (path: string, fields: string) =>
 export const TIKTOK_REDIRECT = "https://app.wrenautomation.com/oauth/social/tiktok";
 
 export const tiktokOAuth: OAuthSpec = {
-  authorizeUrl: "https://www.tiktok.com/v2/auth/authorize/",
-  tokenUrl: `${TIKTOK_ORIGIN}/v2/oauth/token/`,
+  authorizeUrl: OAUTH_PROVIDERS.tiktok.authorize,
+  tokenUrl: OAUTH_PROVIDERS.tiktok.token,
   scopes: ["user.info.basic", "user.info.stats", "video.list", "video.publish", "video.upload"],
   scopeSeparator: ",",
   clientIdParam: "client_key",

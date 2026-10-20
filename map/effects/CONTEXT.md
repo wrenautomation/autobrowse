@@ -29,7 +29,7 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | what spends and who says yes | [[approval]] | [[spend-policy]], [[card]], [[site-api]] `spends` |
 | a stored file (paper or doc), its sets, upload or text | [[file]] | [[explore-session]] (`uploadFiles`, `read_file`), [[approval]] (a paper's yes), wren `apps/phone` drops |
 | a state file's path or format | [[state-files]] | the owning card |
-| the `./mail` or `./google` exports, a piece's `fetch` or login shape, or its allowed imports | [[mail-piece]], [[google-piece]] | `test/pieces.test.ts`, `scripts/build-check.mjs`, `package.json` `exports`, [[sign-in-context]] (Gmail code reader), `gmailFor` in `src/app/services.ts` |
+| the `./mail`, `./google` or `./oauth` exports, a piece's `fetch` or login shape, a providers-table URL, or its allowed imports | [[mail-piece]], [[google-piece]], [[oauth-piece]] | `test/pieces.test.ts`, `scripts/build-check.mjs`, `package.json` `exports`, [[sign-in-context]] (Gmail code reader), `gmailFor` in `src/app/services.ts` |
 | an env variable | [[settings]] | `compose.yml`, `deploy/prod.env.example`, `README.md` |
 | the backend port | [[backend]] | `src/ui/api.ts`, the SPA client `ui/src/api.ts`, CLI client |
 | `do` routing, the catalog | [[ability]] | [[access-key]] (scope cuts), [[do]] process, wren callers |
@@ -48,6 +48,7 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | wren `Enrichment.render` (`packages/research/src/enrichment/render.ts`) | `web GET /fetch` on `sites` or `desk`: params `url`, `from`, `max`; the `Fetched` answer (`html`, `finalUrl`, `status`, `type`, `cut`, `tier`, `block`, `tries`); tier and block names in `src/reach/ladder.ts` | a renamed param, tier or block name, a changed `Fetched` field |
 | wren `packages/core/src/ask.ts` (`Ask/answer`) | Restate service `claude` (`ask`: question, system, dir, also, commands, model) on the desk | a renamed handler or input field, the desk off (asks wait in Restate) |
 | wren `channel-email` inbox sync and mailbox code (from 2026-10-20) | `./mail` and `./google` (`src/mail/index.ts`, `src/google/index.ts`): `ImapReader`, `RoutedReader`, `InstantlyReader`, `GmailClient`, `serviceAccountToken`, `loadServiceAccountKey` | a renamed or removed export, a changed constructor or `FetchLike` shape, a browser or app import (`test/pieces.test.ts` fails first) |
+| wren OAuth sign-in: `core/oauth`, social connect, mail access, connectors (from 2026-10-20) | `./oauth` (`src/oauth/index.ts`): `tokenPost`, `exchangeCode`, `refreshGrant`, `metaUserToken`, `metaPages`, `whoAmI`, `mailExchange`, `mailRefresh`, `appExchange`, `appRefresh`, `authorizeUrl`, `OAUTH_PROVIDERS` | a changed URL, header, form field or error `code` in any call (wren's wire must stay the same), a renamed export, a browser or app import (`test/pieces.test.ts` fails first) |
 | wren `TokenRenewal`, credvault `syncedEnvStore` | SSM `/autobrowse/config` names (`accountEnv`) | a renamed token or account suffix |
 | `.claude/skills/autobrowse/scripts/*.sh` | `pnpm -s autobrowse explore` and the explore command set | a renamed CLI verb or command field |
 | `src/workflows/*/index.ts` (rendered) | `src/index.ts` exports (`COMPILED_LIB`) | an export removed or renamed |

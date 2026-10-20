@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 import { HttpError } from "../clients/http.js";
+import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { graphWhy } from "./meta.js";
 import { WEB_REDIRECT } from "./oauth.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
@@ -80,8 +81,8 @@ const withQuery = (url: string, q: Record<string, string | number | boolean | un
 };
 
 export const threadsOAuth: OAuthSpec = {
-  authorizeUrl: "https://threads.net/oauth/authorize",
-  tokenUrl: `${THREADS_ORIGIN}/oauth/access_token`,
+  authorizeUrl: OAUTH_PROVIDERS.threads.authorize,
+  tokenUrl: OAUTH_PROVIDERS.threads.token,
   scopes: [
     "threads_basic",
     "threads_content_publish",
