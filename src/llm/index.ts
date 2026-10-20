@@ -1,8 +1,10 @@
 /** `makeLlm(settings)`: the one place a provider is chosen. Null when no key is set; callers degrade. */
 import type { HttpClient } from "../clients/http.js";
+import { statsDirOf } from "../deps/stats.js";
 import { anthropicLlm } from "./anthropic.js";
 import { claudeCodeLlm } from "./claude-code.js";
 import { cohereLlm } from "./cohere.js";
+import { countedLlm, fileLlmCalls, type LlmCalls } from "./ledger.js";
 import { openaiLlm } from "./openai.js";
 import type { Llm } from "./types.js";
 
@@ -26,7 +28,23 @@ export const DEFAULT_MODELS: Record<LlmProvider, string> = {
   "claude-code": "sonnet",
 };
 
-export function makeLlm(s: LlmSettings, http: HttpClient): Llm | null {
+/**
+ * Every call is counted by default (`llm/ledger`): into the stats dir
+ * (`deps/stats`, `~/.config/autobrowse/llm`), which `autobrowse tokens` reads
+ * and a flow run tallies. `calls` names another place; null counts nothing.
+ */
+export function makeLlm(
+  s: LlmSettings,
+  http: HttpClient,
+  o: { calls?: LlmCalls | null } = {},
+): Llm | null {
+  const llm = providerLlm(s, http);
+  const dir = o.calls === undefined ? statsDirOf("llm") : null;
+  const calls = o.calls ?? (dir ? fileLlmCalls(dir) : null);
+  return llm && calls ? countedLlm(llm, calls) : llm;
+}
+
+function providerLlm(s: LlmSettings, http: HttpClient): Llm | null {
   const model = s.model ?? DEFAULT_MODELS[s.provider];
   if (s.provider === "claude-code") return claudeCodeLlm({ model });
   if (s.provider === "anthropic")
@@ -56,6 +74,19 @@ export {
   memoryLedger,
 } from "./budget.js";
 export { fakeLlm } from "./fake.js";
+export {
+  countedLlm,
+  fileLlmCalls,
+  type LlmCall,
+  type LlmCallReport,
+  type LlmCalls,
+  type LlmTally,
+  type LlmUse,
+  llmCallReport,
+  memoryLlmCalls,
+  readLlmCalls,
+  tallied,
+} from "./ledger.js";
 export {
   completeJson,
   extractJson,

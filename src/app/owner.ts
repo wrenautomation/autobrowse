@@ -5,7 +5,7 @@
  * secrets) sees the operator's tools and the owner's accounts, never the
  * operator's accounts.
  */
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { expandHome } from "../google/auth.js";
 import { type AwsConfig, awsConfig, checkOwner, DEFAULT_OWNER, isDefaultOwner } from "../owner.js";
 import {
@@ -168,7 +168,10 @@ export function enterOwner(
 export function boot(from?: string): { root: string; settings: Settings } {
   const { root, names } = loadEnvFile(from);
   enterOwner(process.env, names);
-  return { root, settings: loadSettings() };
+  const settings = loadSettings();
+  // Library defaults (`deps/stats`) land where this owner's reports read them.
+  process.env.AUTOBROWSE_STATS_DIR = dirname(expandHome(settings.credentialsFile));
+  return { root, settings };
 }
 
 /** AWS client config for this process's owner (src/owner.ts): the only way autobrowse makes an AWS client. */

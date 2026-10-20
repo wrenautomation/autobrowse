@@ -27,6 +27,7 @@ import { expandHome } from "../google/auth.js";
 import { readLlmCalls } from "../llm/ledger.js";
 import { named } from "../owner.js";
 import { fileSiteCalls, readSiteCalls } from "../runs/calls.js";
+import { flowRunReport, formatFlowRunReport, readFlowRuns } from "../runs/flows.js";
 import { finishedCalls, fromCaps, fromRestate, newRows } from "../runs/import.js";
 import { baseSite, listRuns, openRuns, readRun, runFile } from "../runs/log.js";
 import { formatSuccessReport, successReport } from "../runs/success.js";
@@ -49,6 +50,7 @@ import {
 import type { LocalBackend } from "./backend.js";
 import type { Settings } from "./config.js";
 import {
+  flowRunsDirFor,
   llmCallsDirFor,
   llmFor,
   recordsFile,
@@ -479,8 +481,15 @@ export function registerRunsCommands(
         models: readLlmCalls(llmCallsDirFor(settings), since),
         ...(o.site ? { site: o.site } : {}),
       });
-      if (o.json) console.log(JSON.stringify(report, null, 2));
-      else for (const line of formatSuccessReport(report)) console.log(line);
+      const flows = flowRunReport(
+        readFlowRuns(flowRunsDirFor(settings), since).filter(
+          (r) => !o.site || r.site === o.site || r.site.startsWith(`${o.site}@`),
+        ),
+      );
+      if (o.json) console.log(JSON.stringify({ ...report, flows }, null, 2));
+      else
+        for (const line of [...formatSuccessReport(report), "", ...formatFlowRunReport(flows)])
+          console.log(line);
     });
 
   success

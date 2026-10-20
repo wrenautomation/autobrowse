@@ -5,6 +5,7 @@
  * the months it covers. Plain appends, not a chain: several processes write
  * here at once and a line under 4 KB lands whole. Never a prompt or a reply.
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Llm, LlmReply, LlmRequest } from "./types.js";
@@ -71,6 +72,21 @@ export function readLlmCalls(dir: string, since: string): LlmCall[] {
   return out;
 }
 
+/** Tokens counted under one `tallied` run: what a flow run spent, whatever model it used. */
+export interface LlmTally {
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+const tallies = new AsyncLocalStorage<LlmTally>();
+
+/** Runs `fn`; every counted call inside it, at any depth, adds to the tally. */
+export function tallied<T>(fn: () => Promise<T>): { tally: LlmTally; done: Promise<T> } {
+  const tally: LlmTally = { calls: 0, inputTokens: 0, outputTokens: 0 };
+  return { tally, done: tallies.run(tally, fn) };
+}
+
 /** The call itself is untouched; a failed one is counted with no tokens and rethrown. */
 export function countedLlm(llm: Llm, calls: LlmCalls, now: () => number = Date.now): Llm {
   return {
@@ -89,14 +105,70 @@ export function countedLlm(llm: Llm, calls: LlmCalls, now: () => number = Date.n
         images: req.images?.length ?? 0,
         promptChars: req.system.length + req.prompt.length,
       });
+      const count = (c: LlmCall): void => {
+        calls.record(c);
+        const t = tallies.getStore();
+        if (!t) return;
+        t.calls++;
+        t.inputTokens += c.inputTokens;
+        t.outputTokens += c.outputTokens;
+      };
       try {
         const r = await llm.complete(req);
-        calls.record(row(true, r));
+        count(row(true, r));
         return r;
       } catch (err) {
-        calls.record(row(false, null));
+        count(row(false, null));
         throw err;
       }
     },
+  };
+}
+
+export interface LlmUse {
+  n: number;
+  failed: number;
+  inputTokens: number;
+  cachedTokens: number;
+  outputTokens: number;
+}
+
+export interface LlmCallReport extends LlmUse {
+  byPurpose: (LlmUse & { purpose: string })[];
+  byModel: (LlmUse & { model: string })[];
+  /** UTC days, oldest first. */
+  byDay: (LlmUse & { day: string })[];
+}
+
+function usageOf(cs: readonly LlmCall[]): LlmUse {
+  const u: LlmUse = { n: 0, failed: 0, inputTokens: 0, cachedTokens: 0, outputTokens: 0 };
+  for (const c of cs) {
+    u.n++;
+    if (!c.ok) u.failed++;
+    u.inputTokens += c.inputTokens;
+    u.cachedTokens += c.cachedTokens;
+    u.outputTokens += c.outputTokens;
+  }
+  return u;
+}
+
+function usageBy<K extends string>(cs: readonly LlmCall[], name: K, key: (c: LlmCall) => string) {
+  const m = new Map<string, LlmCall[]>();
+  for (const c of cs) m.set(key(c), [...(m.get(key(c)) ?? []), c]);
+  return [...m].map(
+    ([k, group]) => ({ [name]: k, ...usageOf(group) }) as LlmUse & Record<K, string>,
+  );
+}
+
+/** Calls and tokens in all, by purpose and model (most input first), and by day. */
+export function llmCallReport(calls: readonly LlmCall[]): LlmCallReport {
+  const most = (a: LlmUse, b: LlmUse) => b.inputTokens - a.inputTokens;
+  return {
+    ...usageOf(calls),
+    byPurpose: usageBy(calls, "purpose", (c) => c.purpose).sort(most),
+    byModel: usageBy(calls, "model", (c) => c.model).sort(most),
+    byDay: usageBy(calls, "day", (c) => c.at.slice(0, 10)).sort((a, b) =>
+      a.day.localeCompare(b.day),
+    ),
   };
 }

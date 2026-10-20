@@ -18,7 +18,7 @@ Spend has to be read back by purpose to judge it. Purpose rides on the request (
 ## Shape
 
 - `LlmCall { at, model, purpose, inputTokens, cachedTokens, outputTokens, ms, ok, images, promptChars }` — `src/llm/ledger.ts:12`; `fileLlmCalls`, `memoryLlmCalls`, `readLlmCalls` — `:33-54`
-- `countedLlm` wraps the app's model so every call is counted — `:75`; wired in `src/app/services.ts:371`
+- `countedLlm` wraps any model — `:91`; `makeLlm` counts into the stats dir by default (`calls: null` = off) — `src/llm/index.ts:36`; `tallied` sums a flow run's calls — `:85`; `llmCallReport` (by purpose, model, day) — `:164`
 - Report: `tokenReport` — `src/runs/tokens.ts:101`; `BASELINES` (Playwright MCP 13.5k, Stagehand 6.9k a call) and `GOOD_PER_CALL` 2.3k — `:20-22`; `readCmds` — `:85`
 
 ## Connected to

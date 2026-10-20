@@ -857,6 +857,20 @@ import { digest, exploreWithAgent } from "autobrowse/agent";
 import { fileStore, memoryFiles } from "autobrowse/files";   // the sealed file store
 ```
 
+**Usage stats, on by default.** `makeLlm` counts every model call and
+`flowRunner` writes one row per run (outcome, time, failing step, captcha
+tries, tokens) under `~/.config/autobrowse`. `autobrowse tokens` and
+`autobrowse success` read them.
+
+```ts
+import { readFlowRuns, flowRunReport, readLlmCalls, llmCallReport, statsDir } from "autobrowse";
+const since = "2026-10-01";
+flowRunReport(readFlowRuns(`${statsDir()}/flows`, since));   // failure rate by flow/site/step, p50/p95
+llmCallReport(readLlmCalls(`${statsDir()}/llm`, since));     // tokens by purpose, model, day
+makeLlm(settings, http, { calls: null });                    // off for one model
+flowRunner(opts, { runs: null });                            // off for one runner; AUTOBROWSE_STATS=off for all
+```
+
 **Mail, Google and OAuth, no browser.** `autobrowse/mail`, `autobrowse/google`
 and `autobrowse/oauth` are pure libraries. They import no Playwright, no Restate and nothing from
 `src/browser`, `src/app` or `src/sites`; `test/pieces.test.ts` checks this.

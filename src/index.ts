@@ -9,6 +9,14 @@
 
 /** Compiled workflows ask for their redacted values through this. */
 export { envSecrets, memorySecrets, type SecretSource } from "credvault";
+export {
+  type CaptchaOutcome,
+  type Eyes,
+  findCaptcha,
+  solveCaptcha,
+} from "./browser/captcha/index.js";
+/** A captcha's eyes from any model that sees: `makeLlm` counts its calls by default. */
+export { eyesOf } from "./browser/captcha/llm-eyes.js";
 export type {
   ActOptions,
   BrowserFlow,
@@ -48,6 +56,7 @@ export {
 export { type KeyKeeper, noKeys } from "./deps/keys.js";
 export { fakeShell, localShell, type Shell, type ShellResult } from "./deps/shell.js";
 export { envFileSink, memorySink, type SecretSink } from "./deps/sink.js";
+export { statsDir } from "./deps/stats.js";
 export { macDesktop } from "./desktop/mac.js";
 export {
   type Desktop,
@@ -85,4 +94,16 @@ export {
   ownerKeys,
 } from "./owner.js";
 export * from "./recorder/index.js";
+export {
+  type FlowGroup,
+  type FlowOutcome,
+  type FlowRunReport,
+  type FlowRunRow,
+  type FlowRuns,
+  fileFlowRuns,
+  flowRunReport,
+  formatFlowRunReport,
+  memoryFlowRuns,
+  readFlowRuns,
+} from "./runs/flows.js";
 export { domainWorkflow } from "./workflows/domain/index.js";

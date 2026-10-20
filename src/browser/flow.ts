@@ -15,8 +15,11 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { FileChooser, Locator, Page } from "playwright";
+import { statsDirOf } from "../deps/stats.js";
 import { expandHome } from "../google/auth.js";
+import { tallied } from "../llm/ledger.js";
 import { redactAria, redactText } from "../recorder/redact.js";
+import { type FlowOutcome, type FlowRuns, fileFlowRuns } from "../runs/flows.js";
 import { currentCall, type DoneActs, markSubmitted } from "./attempt.js";
 import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js";
 import { type Fixes, flowKey } from "./fixes.js";
@@ -322,6 +325,12 @@ export interface RunnerOptions {
    * step, and the trace kept even when the run works (`browser/watch`).
    */
   watch?: string;
+  /**
+   * One line per run, success or not (`runs/flows`): outcome, time, acts,
+   * captcha tries, model tokens. Absent = the stats dir (`deps/stats`,
+   * `~/.config/autobrowse/flows`, read by `autobrowse success`); null = none.
+   */
+  runs?: FlowRuns | null;
 }
 
 const ACT_TIMEOUT_MS = 15_000;
@@ -434,6 +443,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
   const repairer = runner.repairer ?? noRepairer;
   const hands = handsFor(runner.pace === undefined ? HUMAN_PACE : runner.pace);
   const park = runner.park;
+  const runsDir = runner.runs === undefined ? statsDirOf("flows") : null;
+  const runs = runner.runs ?? (runsDir ? fileFlowRuns(runsDir) : null);
   const tab = park
     ? async (site: string): Promise<HeldTab> => {
         const asked = opts.profile ?? site;
@@ -523,6 +534,12 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             .catch(() => false));
         let signingIn = false;
         let triedCaptcha = false;
+        let captchaTries = 0;
+        let captchaSolved: boolean | null = null;
+        const startedAt = Date.now();
+        let outcome: FlowOutcome = "ok";
+        let failure: string | null = null;
+        let submitted = false;
         let active = session.page;
         const learned = runner.learnedScreens ?? memoryScreens();
         const help: ScreenHelp = {
@@ -603,7 +620,10 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
                 ? `${flow.site}/${flow.name} ${actsBefore} ${a.goal}`
                 : null;
             // The send starts here: a failure from now on may have gone through (`attempt.ts`).
-            if (a.irreversible) markSubmitted();
+            if (a.irreversible) {
+              markSubmitted();
+              submitted = true;
+            }
             if (once && runner.done?.has(call as string, once))
               throw new NeedsHuman(
                 `${flow.site}: "${a.goal}" already went through on an earlier try of this step; check it before running again`,
@@ -830,6 +850,10 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           };
           for (let n = 1; n <= attempts; n++) {
             got = await solveCaptcha(active, { hands, eyes });
+            if (got.kind) {
+              captchaTries++;
+              captchaSolved = got.solved;
+            }
             // Nothing there, or a picture with no eyes: another try would say the same.
             if (got.solved || !got.kind || (!eyes && got.kind !== "checkbox")) break;
           }
@@ -881,8 +905,9 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             await settle(session.page, url);
           }
         }
+        const run = tallied(() => flow.run(fp, input));
         try {
-          return await flow.run(fp, input);
+          return await run.done;
         } catch (err) {
           const artifacts: Artifacts = watch ? { steps: watch.dir } : {};
           const shot = join(artifactsDir, `${stamp}.png`);
@@ -951,6 +976,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             ...(artifacts.html ? { html: artifacts.html } : {}),
             ...(watch ? { steps: watch.dir } : {}),
           };
+          outcome = kind;
+          failure = record.error;
           artifacts.failure = join(artifactsDir, `${stamp}.failure.json`);
           writeFileSync(artifacts.failure, JSON.stringify(record, null, 2));
           runner.onFailure?.(record, artifacts.failure);
@@ -964,6 +991,23 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           }
           throw new FlowFailed(`${flow.site}/${flow.name}`, err, artifacts);
         } finally {
+          runs?.record({
+            site: flow.site,
+            flow: flow.name,
+            startedAt: new Date(startedAt).toISOString(),
+            endedAt: new Date().toISOString(),
+            ms: Date.now() - startedAt,
+            outcome,
+            submitted,
+            goal: lastGoal,
+            error: failure,
+            acts,
+            captchaTries,
+            captchaSolved,
+            llmCalls: run.tally.calls,
+            inputTokens: run.tally.inputTokens,
+            outputTokens: run.tally.outputTokens,
+          });
           runner.fixes?.flush();
           learned.flush();
           // A watched run keeps its trace whatever happened; a failure saved one already.

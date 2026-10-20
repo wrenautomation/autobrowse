@@ -136,7 +136,7 @@ import {
 import { type GmailUserClient, gmailClient } from "../google/gmail.js";
 import { type BudgetExceeded, type BudgetedLlm, budgetedLlm, fileLedger } from "../llm/budget.js";
 import { type Llm, makeLlm } from "../llm/index.js";
-import { countedLlm, fileLlmCalls } from "../llm/ledger.js";
+import { fileLlmCalls } from "../llm/ledger.js";
 import { otlpSink, type TraceSink, tracedLlm, withTrace } from "../llm/trace.js";
 import { backboardMemory, type Memory, memoryStore } from "../memory/index.js";
 import { registerDataLogins } from "../mods/login.js";
@@ -401,11 +401,11 @@ export function llmFor(
       cohereApiKey: settings.cohereApiKey,
     },
     http,
+    // Every call is counted (the token report); a trace, when there is a collector, sees the same call.
+    { calls: fileLlmCalls(llmCallsDirFor(settings)) },
   );
-  // Every call is counted (the token report); a trace, when there is a collector, sees the same call.
-  const counted = raw && countedLlm(raw, fileLlmCalls(llmCallsDirFor(settings)));
-  const traces = counted && traceSinkFor(settings, http);
-  const llm = counted && traces ? tracedLlm(counted, traces) : counted;
+  const traces = raw && traceSinkFor(settings, http);
+  const llm = raw && traces ? tracedLlm(raw, traces) : raw;
   if (!llm || settings.llmDailyTokens === 0) return llm;
   return budgetedLlm(llm, {
     dailyTokens: settings.llmDailyTokens,
@@ -630,6 +630,9 @@ export const fixesFor = (settings: Settings): Fixes =>
 
 /** Every model call, one file per month (src/llm/ledger.ts). */
 export const llmCallsDirFor = (settings: Settings): string => join(stateDirFor(settings), "llm");
+
+/** Every flow run (src/runs/flows.ts): `flows/flows-YYYY-MM.jsonl`, the `deps/stats` default after `boot`. */
+export const flowRunsDirFor = (settings: Settings): string => join(stateDirFor(settings), "flows");
 
 /** Every try of a `sites`/`desk` call (src/runs/calls.ts): `calls/calls-YYYY-MM.jsonl`, kept for good. */
 export const siteCallsDirFor = (settings: Settings): string => join(stateDirFor(settings), "calls");
