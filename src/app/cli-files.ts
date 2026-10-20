@@ -8,7 +8,7 @@ import { readFileSync, unlinkSync } from "node:fs";
 import { basename } from "node:path";
 import type { Command } from "commander";
 import { linkTtl, mintDrop, takeDrop } from "../auth/link.js";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import type { Settings } from "./config.js";
 import { auditFor, filesFor, oldPapersDir } from "./services.js";
 
