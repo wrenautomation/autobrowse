@@ -267,6 +267,15 @@ describe("GmailClient", () => {
     const client = new GmailClient({ fetch: async () => jsonResponse(200, {}) });
     await expect(client.ensureToken(SENDER)).rejects.toBeInstanceOf(ServiceAccountKeyError);
   });
+
+  it("a bad key names the caller's env var", async () => {
+    const client = new GmailClient({
+      keyPath: '{"type": "service_account"',
+      keyEnv: "APP_GOOGLE_KEY",
+      fetch: async () => jsonResponse(200, {}),
+    });
+    await expect(client.ensureToken(SENDER)).rejects.toThrow(/^APP_GOOGLE_KEY holds JSON/);
+  });
 });
 
 describe("service-account tokens", () => {

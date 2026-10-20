@@ -50,6 +50,8 @@ export type Json = Record<string, unknown>;
 export interface GmailClientOptions {
   /** Path of the service-account JSON key; read lazily, only when a real token is minted. */
   keyPath?: string;
+  /** The env var `keyPath` came from, named in a key error (default `GOOGLE_SERVICE_ACCOUNT`). */
+  keyEnv?: string;
   key?: ServiceAccountKey;
   /** Every Gmail call, the token exchange too, goes through this; no time limit or retry is added here. */
   fetch?: FetchLike;
@@ -85,7 +87,7 @@ export class GmailClient {
             throw new ServiceAccountKeyError(
               "GmailClient needs a key, a keyPath or a tokenFactory",
             );
-          key = loadServiceAccountKey(opts.keyPath);
+          key = loadServiceAccountKey(opts.keyPath, opts.keyEnv);
         }
         return serviceAccountToken(key, { scopes, subject: sender, fetch: this.fetch });
       });
