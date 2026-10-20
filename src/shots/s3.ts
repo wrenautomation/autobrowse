@@ -25,10 +25,10 @@ export function s3BlobStore(o: { bucket: string; aws: AwsConfig; endpoint?: stri
 }
 
 /**
- * The papers bucket (money/papers.ts `PaperBucket`): put, get, list, delete under one prefix,
- * the record in `x-amz-meta-paper`. Only William's own AWS user may call it (papers.tf).
+ * The files bucket (files/store.ts `FileBucket`): put, get, list, delete under one prefix,
+ * the record in `x-amz-meta-record`. Only William's own AWS user may call it (papers.tf).
  */
-export function s3PaperBucket(o: { bucket: string; aws: AwsConfig }) {
+export function s3FileBucket(o: { bucket: string; aws: AwsConfig }) {
   const client = import("@aws-sdk/client-s3").then((sdk) => ({ s3: new sdk.S3Client(o.aws), sdk }));
   return {
     async put(key: string, data: Buffer, meta: string) {
@@ -38,7 +38,7 @@ export function s3PaperBucket(o: { bucket: string; aws: AwsConfig }) {
           Bucket: o.bucket,
           Key: key,
           Body: data,
-          Metadata: { paper: meta },
+          Metadata: { record: meta },
         }),
       );
     },
@@ -46,7 +46,7 @@ export function s3PaperBucket(o: { bucket: string; aws: AwsConfig }) {
       const { s3, sdk } = await client;
       try {
         const got = await s3.send(new sdk.GetObjectCommand({ Bucket: o.bucket, Key: key }));
-        const meta = got.Metadata?.paper;
+        const meta = got.Metadata?.record;
         if (!got.Body || !meta) return null;
         return { data: Buffer.from(await got.Body.transformToByteArray()), meta };
       } catch (err) {

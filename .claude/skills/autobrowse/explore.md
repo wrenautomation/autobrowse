@@ -56,7 +56,7 @@ Look:
 Act (journaled):
 - `{"cmd":"open","url":"https://…"}`
 - `{"cmd":"click","hints":{"role":"button","name":"Create"},"goal":"…"}`
-- `{"cmd":"fill","hints":{…},"value":"…"}`, `select`, `press` (`"key":"Enter"`), `upload`.
+- `{"cmd":"fill","hints":{…},"value":"…"}`, `select`, `press` (`"key":"Enter"`), `upload` (`"files":["path"]` or a stored file, below).
 - `{"cmd":"type","text":"…"}`, `{"cmd":"key","key":"Escape"}` — into whatever is focused.
 - `{"cmd":"place","hints":{…},"secret":"code"}` — types a secret the session holds (signup.md); the value never reaches you. `"secret":"profile.taxId"` fills a field of the Mac's wallet profile (signup.md).
 - `{"cmd":"read","hints":{…},"as":"fieldName"}` — text off the page into the flow's output.
@@ -66,6 +66,13 @@ Act (journaled):
 - `{"cmd":"note","text":"…"}` — a comment in the journal.
 - `{"cmd":"eval","js":"…"}` — last resort; not journaled as a click, so the recording misses it.
 - `{"cmd":"batch","cmds":[{…},{…}]}` — up to 30 commands in order, one answer, one `changed`. No `close`, `pause`, `resume`, `save` or nested batch.
+
+Files (the Mac's sealed store, `autobrowse files`): start with `--files <set>[,<set>]`
+(`start.sh <site> <url> <port> --files coop`) to have a named set at the ready; the
+start log lists each file, as `files` does. Any stored file works by name, set or not.
+- `{"cmd":"files"}` — the session's files (`"all":true`: every one): name, kind, type, size, note.
+- `{"cmd":"upload","hints":{…},"files":["file:resume"]}` — from memory, never a temp file. A `doc` goes at once; a `paper` (an ID document) asks William once per file and host.
+- `{"cmd":"read_file","name":"work-history"}` — a doc's text, to fill fields by hand. A paper has none.
 
 Desktop, `{"cmd":"os","act":{…}}`: `{"kind":"apps"}`, `{"kind":"open","app":"Finder"}`,
 `{"kind":"tree"}`, `{"kind":"click","role":"AXButton","name":"OK"}`,

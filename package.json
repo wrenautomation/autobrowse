@@ -45,6 +45,10 @@
       "types": "./dist/llm/index.d.ts",
       "import": "./dist/llm/index.js"
     },
+    "./files": {
+      "types": "./dist/files/index.d.ts",
+      "import": "./dist/files/index.js"
+    },
     "./layout": {
       "types": "./dist/browser/layout.d.ts",
       "import": "./dist/browser/layout.js"
@@ -107,6 +111,7 @@
     "hono": "4.13.8",
     "impit": "0.14.5",
     "libmime": "5.4.7",
+    "mammoth": "1.13.0",
     "nodemailer": "10.0.15",
     "obs-websocket-js": "5.0.8",
     "patchright": "1.63.0",
@@ -117,6 +122,7 @@
     "smol-toml": "1.8.0",
     "tldts": "7.4.16",
     "tsx": "4.23.13",
+    "unpdf": "1.8.1",
     "zod": "4.6.5"
   },
   "license": "PolyForm-Strict-1.0.0"

@@ -88,7 +88,7 @@ export type Op =
   | { kind: "press"; key: string }
   /**
    * Files into a file input, or through the chooser a button opens: paths or refs, or bytes
-   * held in memory (a paper), which reach the page without touching the disk.
+   * held in memory (a stored file), which reach the page without touching the disk.
    */
   | { kind: "upload"; files: string[] | FilePayload[] };
 

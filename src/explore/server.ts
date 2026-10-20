@@ -71,6 +71,16 @@ import {
   treeText,
 } from "../desktop/types.js";
 import {
+  describeFile,
+  type FileLine,
+  type FileRecord,
+  type FileStore,
+  fileLine,
+  filePayload,
+  fileRef,
+  filesInSets,
+} from "../files/store.js";
+import {
   type Approver,
   activates,
   amountNear,
@@ -87,7 +97,6 @@ import type { Amount } from "../gates/spend.js";
 import type { Llm } from "../llm/types.js";
 import { bankCodeSecret, codeWindowOpen } from "../money/bank-code.js";
 import { type Charge, type Receipt, receiptOutcome, stillAsking } from "../money/charges.js";
-import { describePaper, type Paper, paperPayload, paperRef } from "../money/papers.js";
 import {
   ADDRESS_FIELDS,
   type Address,
@@ -191,6 +200,14 @@ export const commandSchema = z.discriminatedUnion("cmd", [
     cmd: z.literal("upload"),
     files: z.array(z.string().min(1)).min(1),
     goal: z.string().optional(),
+  }),
+  /** The files this session has (`--files <set>`), or with `all` every stored one: name, kind, type, size, note. */
+  z.object({ cmd: z.literal("files"), all: z.boolean().optional() }),
+  /** A doc's text (a resume, a transcript), to fill form fields by hand; a paper has none. Audited. */
+  z.object({
+    cmd: z.literal("read_file"),
+    name: z.string().min(1),
+    limit: z.number().int().positive().optional(),
   }),
   /** Keyboard into whatever is focused; not journaled as a locator act. */
   z.object({ cmd: z.literal("type"), text: z.string() }),
@@ -487,10 +504,13 @@ export interface ExploreOptions {
    */
   profiles?: (id: string | null) => Promise<Profile | null>;
   /**
-   * Identity documents, where they live (the Mac): `upload{files:["paper:<name>"]}`
-   * puts one on the page after a person says yes once per paper and host. Absent: refused.
+   * Stored files, where they live (the Mac): `upload{files:["file:<name>"]}` puts one on the
+   * page from memory (a paper after a person says yes once per file and host), `read_file`
+   * gives a doc's text. Absent: refused.
    */
-  papers?: (name: string) => Promise<{ paper: Paper; data: Buffer } | null>;
+  files?: Pick<FileStore, "list" | "get" | "sets">;
+  /** Named sets (`--files <set>`) the session starts with; any file may still be used by name. */
+  fileSets?: string[];
   /**
    * Which card each host was given: written when a card is placed, read when a
    * site charges the card it keeps, so every charge names its card's ending.
@@ -595,6 +615,8 @@ export interface Explorer {
   resumedFrom: { acts: number; url: string | null } | null;
   /** The run the history is writing now; null without `runs` or between `done` and the next command. */
   runId(): string | null;
+  /** The files the session started with (`fileSets`). */
+  files: FileLine[];
 }
 export type ExploreCommand = Command;
 
@@ -646,6 +668,11 @@ const BUTTON_LABELS = `[...document.querySelectorAll("button,[role=button],input
   .slice(0, 300)`;
 
 export async function startExplore(opts: ExploreOptions): Promise<Explorer> {
+  // An unknown set fails before a browser opens.
+  if (opts.fileSets?.length && !opts.files)
+    throw new Error("--files: no files here (they live on the Mac: autobrowse files add)");
+  const files =
+    opts.fileSets?.length && opts.files ? await filesInSets(opts.files, opts.fileSets) : [];
   const ready = new Promise<{ fp: FlowPage; finish: () => void }>((resolve, reject) => {
     const flow = defineFlow<undefined, void>({
       site: opts.site,
@@ -666,7 +693,7 @@ export async function startExplore(opts: ExploreOptions): Promise<Explorer> {
     void runner.run(flow, undefined).catch(reject);
   });
   const { fp, finish: finishFlow } = await ready;
-  return serve(opts, fp, finishFlow);
+  return serve(opts, fp, finishFlow, files);
 }
 
 /** One `os` act against the desktop; the tree comes back as text like `aria` does. */
@@ -716,6 +743,7 @@ async function serve(
   opts: ExploreOptions,
   fp: FlowPage,
   finishFlow: () => void,
+  sessionFiles: FileRecord[],
 ): Promise<Explorer> {
   const now = opts.now ?? Date.now;
   const t0 = now();
@@ -1119,51 +1147,56 @@ async function serve(
       );
     return value;
   };
-  /** Paper-and-host pairs a person said yes to this session. */
-  const papersYes = new Set<string>();
+  /** File-and-host pairs a person said yes to this session (papers only). */
+  const filesYes = new Set<string>();
+  /** One file use in the audit: never its bytes or text. */
+  const auditFile = (name: string, by: string, allowed: boolean) =>
+    opts.audit?.record({
+      at: new Date().toISOString(),
+      credential: `file:${name}`,
+      field: "secret",
+      site: opts.site,
+      url: urlWithoutQuery(page.url()),
+      by,
+      allowed,
+    });
   /**
-   * An upload's files: paths as given, or every `paper:<name>` as bytes from memory, after a
-   * person's yes for that paper on this host, audited either way. Papers and paths don't mix.
+   * An upload's files: paths as given, or every `file:<name>` as bytes from memory, audited
+   * either way. A paper first needs a person's yes for that file on this host; a doc does not.
+   * Stored files and paths don't mix.
    */
   const uploadFiles = async (files: string[], wait: boolean) => {
-    const names = files.map(paperRef);
+    const old = files.find((f) => f.startsWith("paper:"));
+    if (old) throw new Error(`upload: ${old} is now file:${old.slice(6)} (autobrowse files list)`);
+    const names = files.map(fileRef);
     if (names.every((n) => n === null)) return files;
     if (names.some((n) => n === null))
-      throw new Error("upload: papers and paths in separate uploads");
-    if (!opts.papers)
-      throw new Error("upload: no papers here (they live on the Mac: autobrowse papers add)");
+      throw new Error("upload: stored files (file:<name>) and paths in separate uploads");
+    if (!opts.files)
+      throw new Error("upload: no files here (they live on the Mac: autobrowse files add)");
     const host = new URL(page.url()).host;
     const out: FilePayload[] = [];
     for (const name of names as string[]) {
-      const audit = (allowed: boolean) =>
-        opts.audit?.record({
-          at: new Date().toISOString(),
-          credential: `paper:${name}`,
-          field: "secret",
-          site: opts.site,
-          url: urlWithoutQuery(page.url()),
-          by: `upload paper:${name}`,
-          allowed,
-        });
-      const got = await opts.papers(name);
+      const by = `upload file:${name}`;
+      const got = await opts.files.get(name);
       if (!got) {
-        await audit(false);
-        throw new Error(`upload: no paper ${name} (autobrowse papers list)`);
+        await auditFile(name, by, false);
+        throw new Error(`upload: no file ${name} (autobrowse files list)`);
       }
       const key = `${name}@${host}`;
-      if (!papersYes.has(key)) {
-        const what = `upload ${describePaper(got.paper)} to ${host || "this page"}`;
+      if (got.file.kind === "paper" && !filesYes.has(key)) {
+        const what = `upload ${describeFile(got.file)} to ${host || "this page"}`;
         try {
           if (!approvals) throw new PaymentGate(what, "no-approver");
-          await approvals.decide(`paper ${key}`, { what, url: page.url(), site: opts.site }, wait);
+          await approvals.decide(`file ${key}`, { what, url: page.url(), site: opts.site }, wait);
         } catch (err) {
-          await audit(false);
+          await auditFile(name, by, false);
           throw err;
         }
-        papersYes.add(key);
+        filesYes.add(key);
       }
-      await audit(true);
-      out.push(paperPayload(got.paper, got.data));
+      await auditFile(name, by, true);
+      out.push(filePayload(got.file, got.data));
     }
     return out;
   };
@@ -1653,6 +1686,38 @@ async function serve(
         };
       case "url":
         return { url: page.url() };
+      case "files": {
+        if (!opts.files)
+          throw new Error("files: none here (they live on the Mac: autobrowse files add)");
+        // A session without sets, or `all`, sees every file: sets are a convenience, not a fence.
+        const files = c.all || !opts.fileSets?.length ? await opts.files.list() : sessionFiles;
+        return {
+          files: files.map(fileLine),
+          sets: Object.keys(await opts.files.sets()),
+          use: 'upload{files:["file:<name>"]}; read_file{name} for a doc\'s text',
+        };
+      }
+      case "read_file": {
+        const by = "read_file";
+        if (!opts.files)
+          throw new Error("read_file: no files here (they live on the Mac: autobrowse files add)");
+        const got = await opts.files.get(c.name);
+        if (!got) {
+          await auditFile(c.name, by, false);
+          throw new Error(`read_file: no file ${c.name} (autobrowse files list)`);
+        }
+        await auditFile(c.name, by, true);
+        const f = got.file;
+        if (f.kind === "paper") return { name: f.name, text: null, why: "no text: an ID document" };
+        if (!f.text) return { name: f.name, text: null, why: "no text: an image or a scan" };
+        const limit = c.limit ?? 40_000;
+        return {
+          name: f.name,
+          note: f.note,
+          text: f.text.slice(0, limit),
+          ...(f.text.length > limit ? { more: f.text.length - limit } : {}),
+        };
+      }
       case "pages":
         return {
           pages: page
@@ -1980,5 +2045,6 @@ async function serve(
     done: ended,
     resumedFrom,
     runId: () => (history && !history.ended() ? history.id : null),
+    files: sessionFiles.map(fileLine),
   };
 }

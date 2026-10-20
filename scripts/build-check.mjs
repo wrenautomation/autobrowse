@@ -11,6 +11,7 @@ const expect = {
   "./agent": ["digest", "exploreWithAgent", "agentSessions"],
   "./flows": ["consentFlow", "googleOauthConsent"],
   "./llm": ["makeLlm", "fakeLlm"],
+  "./files": ["fileStore", "memoryFiles", "fileOf"],
 };
 let bad = 0;
 for (const [sub, names] of Object.entries(expect)) {

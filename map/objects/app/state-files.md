@@ -21,6 +21,7 @@ Plain files a person can open, one concern each; secrets sealed; shared truth in
 |---|---|---|
 | `~/.config/autobrowse/credentials.json` | sealed sign-ins (`src/app/config.ts:225`) | [[credential]] |
 | `~/.config/autobrowse/wallet.sealed` | sealed cards (`:223`) | [[card]] |
+| `~/.config/autobrowse/files/` | sealed files and sets: `index.sealed` + `<name>.sealed` (`:230`); the old `papers/` moves to `papers-retired/` once (`files migrate`) | [[file]] |
 | `~/.config/autobrowse/accounts.json` | identities and purposes (`:243`) | [[account]] |
 | `~/.config/autobrowse/access.json` | hashed agent keys (`:136`) | [[access-key]] |
 | `~/.config/autobrowse/fixes.json` | kept repairs (`:112`) | [[fix]] |
@@ -41,6 +42,7 @@ Plain files a person can open, one concern each; secrets sealed; shared truth in
 | SSM `/autobrowse/config` | site tokens, env store (credvault `EnvStore`) | [[token]] |
 | SSM `/autobrowse/owners/<o>/config` | the same, for owner `<o>` (`src/owner.ts:25`) | [[owner]], [[token]] |
 | SSM `/wallet/cards`, `/wallet/profiles` | wallet backup (`src/money/wallet.ts:244`, `src/money/profile.ts:184`) | [[card]] |
+| S3 `PAPERS_BUCKET` `files/<name>`, `files.sets` | files backup (`src/files/store.ts:333`); the old `papers/` objects stay | [[file]] |
 | S3 shots bucket | shipped screenshots (`src/shots/ship.ts:109`); owner `<o>` under `owners/<o>/` (`src/owner.ts:26`) | [[owner]] |
 | Keychain `autobrowse`, `autobrowse-wallet` | seal keys (`src/auth/keep.ts:9-17`) | [[credential]], [[card]] |
 | Keychain `autobrowse-owner-<o>` | owner `<o>`'s seal key (`src/auth/keep.ts:14`) | [[owner]] |

@@ -79,6 +79,7 @@ import {
   cardsOnFileFor,
   chargesFor,
   credentialsFor,
+  filesForExplore,
   gmailFor,
   grantedAheadFor,
   identitiesFor,
@@ -90,7 +91,6 @@ import {
   missingEntries,
   modsDirFor,
   paceFor,
-  papersForUpload,
   profilesForPlace,
   runsDirFor,
   sinkFor,
@@ -273,7 +273,14 @@ export function explorerOpener(
   port: number,
   extra?: Pick<
     ExploreOptions,
-    "tokenFile" | "secrets" | "secretHosts" | "idleMinutes" | "journalFile" | "driver" | "goal"
+    | "tokenFile"
+    | "secrets"
+    | "secretHosts"
+    | "idleMinutes"
+    | "journalFile"
+    | "driver"
+    | "goal"
+    | "fileSets"
   > & {
     /** false: a wall on `open` stays a wall (a signup page must not sign in as a stored account). */
     signIn?: boolean;
@@ -283,7 +290,7 @@ export function explorerOpener(
   const cards = cardsFor(settings);
   const cardCode = cardCodeFor(settings);
   const profiles = profilesForPlace(settings);
-  const papers = papersForUpload(settings);
+  const files = filesForExplore(settings);
   return async (site, port, { signIn = true, ...extra } = {}) =>
     startExplore({
       site,
@@ -297,7 +304,7 @@ export function explorerOpener(
       ...(cardCode ? { cardCode } : {}),
       grantedAhead: grantedAheadFor(settings),
       ...(profiles ? { profiles } : {}),
-      ...(papers ? { papers } : {}),
+      ...(files ? { files } : {}),
       charges: chargesFor(settings, gmailFor(settings)),
       llm: llmFor(settings), // writes `records` code when the driver sends none
       pace: paceFor(settings), // an agent browses at a person's pace: sites watch for the other kind

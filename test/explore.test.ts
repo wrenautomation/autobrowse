@@ -15,8 +15,8 @@ import {
   shortUrl,
   startExplore,
 } from "../src/explore/server.js";
+import { fileOf, memoryFiles } from "../src/files/store.js";
 import type { Charge, Receipt } from "../src/money/charges.js";
-import { memoryPapers, paperOf } from "../src/money/papers.js";
 import type { Contacts } from "../src/money/profile.js";
 import { parseCardLine } from "../src/money/wallet.js";
 import { loadRecording } from "../src/recorder/store.js";
@@ -34,7 +34,7 @@ const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
   "base64",
 );
-const papers = memoryPapers();
+const files = memoryFiles();
 
 const PAGE = `data:text/html,${encodeURIComponent(
   `<label>Domain <input id="d"></label><label>Password <input type="password" id="p"></label><button id="go" onclick="document.title='clicked';this.after(Object.assign(document.createElement('p'),{textContent:'Payment successful'}))">Buy now</button><button id="co" onclick="document.title='checkout'">Checkout</button><input type="submit" id="done" value="Complete Order" onclick="event.preventDefault();document.title='ordered'"><p id="key">sk-ant-minted-key-1234567890abcdefghijklmnopqrstuvwxyz</p>`,
@@ -90,7 +90,7 @@ describe("explore mode", () => {
         if (label && label !== "main") throw new Error(`no card "${label}" in the wallet`);
         return { ...visa, tell: { email: "card-owner@x.co" } };
       },
-      papers: (name) => papers.get(name),
+      files,
       charges: async (c, r, tell) => {
         charges.push([c, r, tell]);
         return ["email", "text"];
@@ -360,9 +360,14 @@ describe("explore mode", () => {
     expect(charges.at(-1)?.[0].card).toMatch(/Visa credit ending 4242/);
     expect(charges.at(-1)?.[2]).toEqual({ email: "card-owner@x.co" });
   });
-  it("uploads a paper from memory after one yes per paper and host", async () => {
-    await papers.put(
-      paperOf(PNG, { name: "licence-front", kind: "drivers-licence", side: "front" }),
+  it("uploads a paper from memory after one yes per file and host", async () => {
+    await files.put(
+      await fileOf(PNG, {
+        name: "licence-front",
+        kind: "paper",
+        id: "drivers-licence",
+        side: "front",
+      }),
       PNG,
     );
     await send({
@@ -371,21 +376,74 @@ describe("explore mode", () => {
     });
     answer = true;
     const up = await send(
-      { cmd: "upload", hints: { css: "#f" }, files: ["paper:licence-front"] },
+      { cmd: "upload", hints: { css: "#f" }, files: ["file:licence-front"] },
       true,
     );
     expect(up.status).toBe(200);
-    expect(asks.at(-1)).toBe("upload licence-front: drivers-licence front, png 0 KB to this page");
+    expect(asks.at(-1)).toBe(
+      "upload licence-front: paper drivers-licence front, png 0 KB; drivers-licence front to this page",
+    );
     expect(
       (await send({ cmd: "eval", js: "[f.files[0].name, f.files[0].size].join(' ')" })).body.result,
     ).toBe(`drivers-licence-front.png ${PNG.length}`);
     const asked = asks.length;
-    await send({ cmd: "upload", hints: { css: "#f" }, files: ["paper:licence-front"] }, true);
+    await send({ cmd: "upload", hints: { css: "#f" }, files: ["file:licence-front"] }, true);
     expect(asks).toHaveLength(asked);
-    const missing = await send({ cmd: "upload", hints: { css: "#f" }, files: ["paper:passport"] });
-    expect(missing.body.error).toMatch(/no paper passport/);
-    const uses = (await audit.recent()).filter((u) => u.credential.startsWith("paper:"));
-    expect(uses.map((u) => u.allowed)).toEqual([true, true, false]);
+    const missing = await send({ cmd: "upload", hints: { css: "#f" }, files: ["file:passport"] });
+    expect(missing.body.error).toMatch(/no file passport/);
+    const old = await send({ cmd: "upload", hints: { css: "#f" }, files: ["paper:licence-front"] });
+    expect(old.body.error).toMatch(/is now file:licence-front/);
+    const mixed = await send({
+      cmd: "upload",
+      hints: { css: "#f" },
+      files: ["file:licence-front", "/tmp/x.png"],
+    });
+    expect(mixed.body.error).toMatch(/separate uploads/);
+    const uses = (await audit.recent()).filter((u) => u.credential === "file:licence-front");
+    expect(uses.map((u) => u.allowed)).toEqual([true, true]);
+    const paperText = await send({ cmd: "read_file", name: "licence-front" });
+    expect(paperText.body).toMatchObject({ text: null, why: "no text: an ID document" });
+  });
+  it("a doc uploads with no yes, and read_file gives its text", async () => {
+    const resume = Buffer.from("# Resume\n\nSynthetic Person. Worked at Example Co, 2024-2026.\n");
+    await files.put(
+      await fileOf(resume, {
+        name: "resume",
+        kind: "doc",
+        note: "a test resume",
+        filename: "r.md",
+      }),
+      resume,
+    );
+    await send({
+      cmd: "open",
+      url: `data:text/html,${encodeURIComponent('<input type="file" id="f">')}`,
+    });
+    const asked = asks.length;
+    answer = null; // nobody would answer: a doc needs no yes
+    const up = await send({ cmd: "upload", hints: { css: "#f" }, files: ["file:resume"] });
+    answer = true;
+    expect(up.status).toBe(200);
+    expect(asks).toHaveLength(asked);
+    expect(
+      (await send({ cmd: "eval", js: "[f.files[0].name, f.files[0].type].join(' ')" })).body.result,
+    ).toBe("resume.md text/markdown");
+    const listed = await send({ cmd: "files" });
+    expect(listed.body.files).toContainEqual({
+      name: "resume",
+      kind: "doc",
+      type: "md",
+      size: "0 KB",
+      note: "a test resume",
+    });
+    expect(JSON.stringify(listed.body)).not.toContain("Example Co");
+    const read = await send({ cmd: "read_file", name: "resume" });
+    expect(read.body).toMatchObject({ name: "resume", note: "a test resume" });
+    expect(read.body.text).toContain("Worked at Example Co");
+    const cut = await send({ cmd: "read_file", name: "resume", limit: 8 });
+    expect(cut.body).toMatchObject({ text: "# Resume", more: resume.length - 1 - 8 });
+    const uses = (await audit.recent()).filter((u) => u.credential === "file:resume");
+    expect(uses.map((u) => u.by)).toEqual(["upload file:resume", "read_file", "read_file"]);
   });
   it("an act answers what changed on the page; a batch runs in order and stops at the first failure", async () => {
     const grow = `data:text/html,${encodeURIComponent(

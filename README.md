@@ -166,10 +166,17 @@ a row; it is work.
   picks one). It is the person's own, not a site's login, so any host may
   have it. A billing email, phone or tax id field is set to the card owner's
   on its own when a card lands and before a spend click.
-  `upload{files:["paper:licence-front"]}` puts an identity document on a
-  page after one yes per paper and host, from memory. `autobrowse papers add`
-  stores one; `papers ask` prints a phone link that seals the photo in the
-  phone's browser so only this Mac opens it (designs/2026-10-12-papers.md).
+  `autobrowse files` is one sealed store of files for forms. A `paper` is an
+  ID document; a `doc` is anything else, such as a resume, with its text read
+  once when you add it. `files add <name> <file>` stores one (`--id
+  drivers-licence --side front` marks a paper, `--note` says what a doc is);
+  `files ask <name>` prints a phone link that seals it in the phone's browser
+  so only this Mac opens it. `files set coop resume transcript` names a set,
+  and `explore … --files coop` starts with it at the ready.
+  `upload{files:["file:resume"]}` puts a file on a page from memory; a paper
+  needs one yes per file and host. `read_file{name}` gives a doc's text.
+  `files migrate` moves an old `papers` dir in once
+  (designs/2026-10-20-files.md).
 - **Track.** `autotrack` (its own repo) records every input and screen on a
   laptop and ships it to a private bucket (`TRACK_BUCKET`). `autobrowse autotrack
   enroll <device>` makes that device a write-only key and prints its install
@@ -847,6 +854,7 @@ import { SITE_LOGINS, signInContext, signInToGoogle } from "autobrowse/auth";
 await signInToGoogle(signInContext({ fp, site: "google", cred, credentials, codes }));
 import { consentFlow, googleOauthConsent } from "autobrowse/flows";
 import { digest, exploreWithAgent } from "autobrowse/agent";
+import { fileStore, memoryFiles } from "autobrowse/files";   // the sealed file store
 ```
 
 Adding a site is one module: a `SiteApi` (routes with `request` schema,

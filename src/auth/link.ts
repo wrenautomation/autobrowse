@@ -101,8 +101,9 @@ export interface Drop {
 }
 
 /**
- * A link the other way (designs/2026-10-12-papers.md): `<base>/u/<id>#<key>`. Its page seals a
- * file in the sender's browser under the key and posts only ciphertext; `takeDrop` opens it.
+ * A link the other way (`files ask`, designs/2026-10-12-papers.md and 2026-10-20-files.md):
+ * `<base>/u/<id>#<key>`. Its page seals a file in the sender's browser under the key and posts
+ * only ciphertext; `takeDrop` opens it.
  */
 export async function mintDrop(
   base: string,

@@ -113,7 +113,7 @@ Actions, with "cmd" set to exactly one of these words:
   {"cmd":"place","ref":n,"secret":"name","goal":"why"}   (a SECRET by its name goes into the field; you never see or type its value)
   {"cmd":"select","ref":n,"value":"...","goal":"why"}
   {"cmd":"press","ref":n,"key":"Enter","goal":"why"}
-  {"cmd":"upload","ref":n,"files":["path"],"goal":"why"}
+  {"cmd":"upload","ref":n,"files":["path"],"goal":"why"}   ("file:<name>" for a stored file by its name)
   {"cmd":"open","url":"https://..."}
   {"cmd":"key","key":"Escape"}
   {"cmd":"captcha"}   (solve the captcha on the page, any kind; says solved or why not)

@@ -48,7 +48,7 @@ The RL view (`steps`) is a second pure pass over the same acts. It points at fil
 ## If you change this
 
 - **Hits:** the recorder's heartbeat writer (the body), `autotrack src/events.ts`, `autotrack src/config.ts`, `autotrack src/ship.ts` and the installers (the format, the code, the key layout), `deploy/terraform/track.tf`, the IAM users under `/track/`, `test/autotrack.test.ts`, `test/autotrack-signals.test.ts`, `test/autotrack-label.test.ts`, `test/autotrack-steps.test.ts`, `test/autotrack-heartbeat.test.ts`, `test/autotrack-fixture.ts` and `test/fixtures/track/`. `Stats` and the quality fields are read here by name: a renamed counter in `autotrack src/stats.ts` reads as zero, not as an error. A new event kind or field the labeller reads (`join.ts`, `signals.ts`, `label.ts` prompt) needs `PROMPT_VERSION` bumped or old cache entries stay.
-- **Does not hit:** the shots bucket; the papers bucket.
+- **Does not hit:** the shots bucket; the files bucket.
 
 ## Surfaces
 

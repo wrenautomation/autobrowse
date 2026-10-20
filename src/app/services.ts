@@ -1,7 +1,7 @@
 /** Composition root: settings → clients → workflow deps → Restate services. Secrets stay inside the clients. */
 
 import { Resolver } from "node:dns/promises";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { SSMClient } from "@aws-sdk/client-ssm";
@@ -1001,35 +1001,46 @@ export async function profilesFor(
 }
 
 /**
- * Identity documents (`autobrowse papers`): sealed under the wallet's key on the Mac, backed up
- * to PAPERS_BUCKET when set (deploy/terraform papers.tf; only William's AWS user reaches it).
+ * Files for forms (`autobrowse files`): papers and docs, sealed under the wallet's key on the
+ * Mac, backed up to PAPERS_BUCKET when set (deploy/terraform papers.tf; only William's AWS user
+ * reaches it). `migrating`: the old papers dir may still be there (`files migrate` reads it).
  */
-export async function papersFor(settings: Settings) {
-  operatorOnly(settings, "papers");
-  if (process.platform !== "darwin") throw new Error("papers live on the Mac only");
-  const { backedUpPapers, bucketPapers, filePapers } = await import("../money/papers.js");
-  const local = filePapers(
-    expandHome(settings.papersDir),
-    aesGcmCipher(keychainKey(WALLET_KEYCHAIN)),
-  );
-  const bucket = settings.papersBucket;
+export async function filesFor(settings: Settings, o: { migrating?: boolean } = {}) {
+  operatorOnly(settings, "files");
+  if (process.platform !== "darwin") throw new Error("files live on the Mac only");
+  const dir = expandHome(settings.filesDir);
+  if (!o.migrating && existsSync(join(oldPapersDir(dir), "index.sealed")))
+    throw new Error(
+      `papers not moved yet: autobrowse files migrate (${oldPapersDir(dir)} → ${dir})`,
+    );
+  const { backedUpFiles, bucketFiles, fileStore } = await import("../files/store.js");
+  const local = fileStore(dir, aesGcmCipher(keychainKey(WALLET_KEYCHAIN)));
+  const bucket = settings.filesBucket;
   if (!bucket) {
     const none = () => {
-      throw new Error("no PAPERS_BUCKET: these papers have no backup (deploy/terraform papers.tf)");
+      throw new Error("no PAPERS_BUCKET: these files have no backup (deploy/terraform papers.tf)");
     };
     return { ...local, backedUp: false, restore: none, backup: none };
   }
-  const { s3PaperBucket } = await import("../shots/s3.js");
+  const { s3FileBucket } = await import("../shots/s3.js");
   return {
-    ...backedUpPapers(local, bucketPapers(s3PaperBucket({ bucket, aws: awsFor(settings) }))),
+    ...backedUpFiles(local, bucketFiles(s3FileBucket({ bucket, aws: awsFor(settings) }))),
     backedUp: true,
   };
 }
 
-/** Explore's papers for `upload{files:["paper:<name>"]}`: on the Mac only, like the wallet. */
-export function papersForUpload(settings: Settings): ExploreOptions["papers"] {
+/** Where `autobrowse papers` kept them: `papers/` beside the files dir. */
+export const oldPapersDir = (filesDir: string): string => join(dirname(filesDir), "papers");
+
+/** Explore's files for `upload{files:["file:<name>"]}` and `read_file`: on the Mac only, like the wallet. */
+export function filesForExplore(settings: Settings): ExploreOptions["files"] {
   if (process.platform !== "darwin" || !isDefaultOwner(settings.owner)) return undefined;
-  return async (name) => (await papersFor(settings)).get(name);
+  const store = () => filesFor(settings);
+  return {
+    list: async () => (await store()).list(),
+    get: async (name) => (await store()).get(name),
+    sets: async () => (await store()).sets(),
+  };
 }
 
 /** Explore's card picker: the Mac's wallet under WALLET_DEBIT_HOSTS; elsewhere none (card places are refused). */

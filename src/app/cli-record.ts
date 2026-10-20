@@ -61,6 +61,10 @@ export function registerRecordCommands(
       "--login <sites>",
       'other sites whose stored login this session may type, comma separated (a "Connect Instagram" popup): place{secret:"instagram.password"} (also .username, .code from its codes inbox or our phone, .phone/.phoneLocal = our phone), only on that site\'s hosts',
     )
+    .option(
+      "--files <sets>",
+      'named file sets (autobrowse files sets), comma separated: the session starts with them at the ready; upload{files:["file:<name>"]}, read_file{name}',
+    )
     .action(
       async (
         site: string,
@@ -75,6 +79,7 @@ export function registerRecordCommands(
           signup?: string;
           login?: string;
           fresh?: boolean;
+          files?: string;
         },
       ) => {
         const { tokenFileFor, journalFileFor } = await import("../explore/server.js");
@@ -91,11 +96,18 @@ export function registerRecordCommands(
           idleMinutes: o.hold ? 0 : Number(o.idle),
           signIn: !o.signup,
           ...(await withLogins(await exploreSecrets(site, o), o.login)),
+          ...(o.files ? { fileSets: listOf(o.files) } : {}),
         });
         // The token lives in an owner-only file, not in this output: logs get pasted, files do not.
         console.log(
           `exploring ${site} on http://127.0.0.1:${ex.port}\ntoken file ${tokenFile}\ncurl -s -X POST -H "Authorization: Bearer $(cat ${tokenFile})" http://127.0.0.1:${ex.port}/ -d '{"cmd":"aria"}'`,
         );
+        if (ex.files.length)
+          console.log(
+            `files at the ready (upload{files:["file:<name>"]}, read_file{name}):\n${ex.files
+              .map((f) => `  ${f.name}: ${f.kind}, ${f.type} ${f.size}; ${f.note}`)
+              .join("\n")}`,
+          );
         const back = ex.resumedFrom;
         if (back)
           console.log(
@@ -112,6 +124,12 @@ export function registerRecordCommands(
         console.log(`explore ${site} closed`);
       },
     );
+
+  const listOf = (v: string) =>
+    v
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
 
   /** What `place` may type in an explore session: codes from an inbox, a minted password. */
   const exploreSecrets = async (

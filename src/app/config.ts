@@ -226,10 +226,10 @@ const schema = z.object({
   credentialsFile: z.string().min(1).default("~/.config/autobrowse/credentials.json"),
   /** William's cards, sealed with their own keychain key; backed up to SSM /wallet (no machine role reads it). */
   walletFile: z.string().min(1).default("~/.config/autobrowse/wallet.sealed"),
-  /** Identity documents (`autobrowse papers`), sealed under the wallet's key; one file each. */
-  papersDir: z.string().min(1).default("~/.config/autobrowse/papers"),
-  /** The papers backup (deploy/terraform papers.tf): only William's AWS user reaches it. Unset = no backup. */
-  papersBucket: z.string().min(1).optional(),
+  /** Files for forms (`autobrowse files`: papers and docs), sealed under the wallet's key; one file each. */
+  filesDir: z.string().min(1).default("~/.config/autobrowse/files"),
+  /** The files backup (deploy/terraform papers.tf): only William's AWS user reaches it. Unset = no backup. */
+  filesBucket: z.string().min(1).optional(),
   /** Where autotrack sessions land (deploy/terraform track.tf): `track enroll|list|import` read it. */
   trackBucket: z.string().min(1).optional(),
   /** Hosts a debit card may pay on (banking, government), comma separated; empty = debit never. */
@@ -414,8 +414,9 @@ export const ENV_KEYS = {
   autoHeal: "AUTO_HEAL",
   credentialsFile: "CREDENTIALS_FILE",
   walletFile: "WALLET_FILE",
-  papersDir: "PAPERS_DIR",
-  papersBucket: "PAPERS_BUCKET",
+  filesDir: "FILES_DIR",
+  // The bucket kept its name (and terraform's) from when it held papers only.
+  filesBucket: "PAPERS_BUCKET",
   trackBucket: "TRACK_BUCKET",
   walletDebitHosts: "WALLET_DEBIT_HOSTS",
   credentialsCipher: "CREDENTIALS_CIPHER",
@@ -466,7 +467,7 @@ export const OWNER_PATHS = {
   accessFile: "access.json",
   needsDoneFile: "needs-done.json",
   walletFile: "wallet.sealed",
-  papersDir: "papers",
+  filesDir: "files",
   profilesDir: "profiles",
   artifactsDir: "artifacts",
   recordingsDir: "recordings",

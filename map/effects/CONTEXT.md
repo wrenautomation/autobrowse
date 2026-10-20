@@ -27,6 +27,7 @@ Open the row for the thing you are about to change. Each row names the cards tha
 | what is counted per model call | [[llm-call]] | every `purpose` caller, `src/runs/tokens.ts`, `src/runs/success.ts` |
 | what a site call's try records | [[site-call-ledger]] | [[site-call]] (`sitesService`), `src/runs/success.ts`, `src/runs/import.ts` |
 | what spends and who says yes | [[approval]] | [[spend-policy]], [[card]], [[site-api]] `spends` |
+| a stored file (paper or doc), its sets, upload or text | [[file]] | [[explore-session]] (`uploadFiles`, `read_file`), [[approval]] (a paper's yes), wren `apps/phone` drops |
 | a state file's path or format | [[state-files]] | the owning card |
 | an env variable | [[settings]] | `compose.yml`, `deploy/prod.env.example`, `README.md` |
 | the backend port | [[backend]] | `src/ui/api.ts`, the SPA client `ui/src/api.ts`, CLI client |
