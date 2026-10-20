@@ -60,6 +60,8 @@ const T = { timeout: 10_000 };
 const RECAPTCHA = {
   anchor: 'iframe[src*="recaptcha/api2/anchor"], iframe[src*="recaptcha/enterprise/anchor"]',
   bframe: 'iframe[src*="recaptcha/api2/bframe"], iframe[src*="recaptcha/enterprise/bframe"]',
+  anchorUrl: /recaptcha\/(api2|enterprise)\/anchor/,
+  bframeUrl: /recaptcha\/(api2|enterprise)\/bframe/,
   box: "#recaptcha-anchor",
   ticked: '#recaptcha-anchor[aria-checked="true"]',
   challenge: "#rc-imageselect, .rc-imageselect-challenge",
@@ -70,6 +72,8 @@ const RECAPTCHA = {
 const HCAPTCHA = {
   anchor: 'iframe[src*="hcaptcha.com"][src*="frame=checkbox"]',
   bframe: 'iframe[src*="hcaptcha.com"][src*="frame=challenge"]',
+  anchorUrl: /hcaptcha\.com\/.*[#&?]frame=checkbox/,
+  bframeUrl: /hcaptcha\.com\/.*[#&?]frame=challenge/,
   box: "#checkbox",
   ticked: '#checkbox[aria-checked="true"]',
   challenge: ".challenge-container, .challenge",
@@ -140,20 +144,55 @@ async function shown(page: Page, selector: string): Promise<Locator | null> {
   return null;
 }
 
-/** The inside of a vendor's iframe, wherever on the page it sits. */
-async function inside(page: Page, iframe: string): Promise<FrameLocator> {
+/** A vendor frame's inside: what the solvers look in. */
+type Inside = Pick<FrameLocator, "locator">;
+
+/**
+ * A vendor's iframe, by its tag in the page or any frame, or else by the
+ * frame list: hCaptcha's enterprise build (`secure-api.js`, on Lever)
+ * mounts its frames where no selector reaches, like Turnstile's shadow root.
+ * A frame counts when its element is visible and has a size on the page.
+ */
+async function vendorFrame(page: Page, iframe: string, url: RegExp): Promise<Inside | null> {
   const el = await shown(page, iframe);
-  if (!el) throw new Error("the captcha frame went away");
-  return el.contentFrame();
+  if (el) return el.contentFrame();
+  for (const f of page.frames()) {
+    if (!url.test(f.url())) continue;
+    // hCaptcha mounts its challenge frame early and hides it: a size alone is not shown.
+    const seen = await f
+      .frameElement()
+      .then(async (e) => {
+        const box = await e.boundingBox();
+        return !!box && box.width > 0 && box.height > 0 && (await e.isVisible());
+      })
+      .catch(() => false);
+    if (seen) return f;
+  }
+  return null;
 }
+
+/** The inside of a vendor's iframe, wherever on the page it sits. */
+async function inside(page: Page, iframe: string, url: RegExp): Promise<Inside> {
+  const f = await vendorFrame(page, iframe, url);
+  if (!f) throw new Error("the captcha frame went away");
+  return f;
+}
+
+const challengeOpen = async (page: Page, parts: typeof RECAPTCHA | typeof HCAPTCHA) =>
+  (await vendorFrame(page, parts.bframe, parts.bframeUrl)) !== null;
 
 /** The captcha on the page, the challenge before its checkbox (an open challenge is what is asked now). */
 export async function findCaptcha(page: Page): Promise<Captcha | null> {
   const on = async (selector: string) => (await shown(page, selector)) !== null;
-  if (await on(RECAPTCHA.bframe)) return { kind: "grid", vendor: "recaptcha" };
-  if (await on(HCAPTCHA.bframe)) return { kind: "grid", vendor: "hcaptcha" };
-  if (await on(RECAPTCHA.anchor)) return { kind: "checkbox", vendor: "recaptcha" };
-  if (await on(HCAPTCHA.anchor)) return { kind: "checkbox", vendor: "hcaptcha" };
+  const has = async (selector: string, url: RegExp) =>
+    (await vendorFrame(page, selector, url)) !== null;
+  if (await has(RECAPTCHA.bframe, RECAPTCHA.bframeUrl))
+    return { kind: "grid", vendor: "recaptcha" };
+  if (await has(HCAPTCHA.bframe, HCAPTCHA.bframeUrl)) return { kind: "grid", vendor: "hcaptcha" };
+  if (await has(RECAPTCHA.anchor, RECAPTCHA.anchorUrl))
+    return { kind: "checkbox", vendor: "recaptcha" };
+  if (await has(HCAPTCHA.anchor, HCAPTCHA.anchorUrl))
+    return { kind: "checkbox", vendor: "hcaptcha" };
   if (await turnstileShown(page)) return { kind: "checkbox", vendor: "turnstile" };
   if (await holdButton(page)) return { kind: "hold", vendor: "human" };
   if (await on(GENERIC.slider)) return { kind: "slider", vendor: "generic" };
@@ -225,7 +264,7 @@ async function tick(
 ): Promise<Step> {
   if (vendor === "turnstile") {
     if (await shown(page, TURNSTILE.frame)) {
-      const frame = await inside(page, TURNSTILE.frame);
+      const frame = await inside(page, TURNSTILE.frame, /challenges\.cloudflare\.com/);
       await hands.click(frame.locator(TURNSTILE.box).first(), T).catch(() => undefined);
     } else {
       // Shadow-rooted: the box sits at the widget's left edge, half way down.
@@ -261,13 +300,13 @@ async function tick(
     return "again";
   }
   const parts = vendor === "hcaptcha" ? HCAPTCHA : RECAPTCHA;
-  const frame = await inside(page, parts.anchor);
+  const frame = await inside(page, parts.anchor, parts.anchorUrl);
   await hands.think(page);
   await hands.click(frame.locator(parts.box), T);
   const until = Date.now() + settleMs;
   while (Date.now() < until) {
     if (await visible(frame.locator(parts.ticked))) return "ticked";
-    if (await shown(page, parts.bframe)) return "again";
+    if (await challengeOpen(page, parts)) return "again";
     await page.waitForTimeout(400);
   }
   return "again";
@@ -296,7 +335,7 @@ async function pickSquares(
   settleMs: number,
 ): Promise<Step> {
   const parts = vendor === "hcaptcha" ? HCAPTCHA : RECAPTCHA;
-  const frame = await inside(page, parts.bframe);
+  const frame = await inside(page, parts.bframe, parts.bframeUrl);
   // reCAPTCHA fades new squares in where clicked ones were: look again until none is left.
   for (let look = 0; look < 4; look++) {
     const tiles = frame.locator(parts.tiles);
@@ -334,7 +373,7 @@ async function pickSquares(
   await hands.click(frame.locator(parts.verify).first(), T);
   const until = Date.now() + settleMs;
   while (Date.now() < until) {
-    if (!(await shown(page, parts.bframe))) return "ticked";
+    if (!(await challengeOpen(page, parts))) return "ticked";
     await page.waitForTimeout(500);
   }
   // Still open: a wrong pick or a fresh challenge; the next round looks again.
@@ -396,7 +435,7 @@ const pngWidth = (png: Buffer) => png.readUInt32BE(16);
  */
 async function canvasTask(
   page: Page,
-  frame: FrameLocator,
+  frame: Inside,
   hands: Hands,
   eyes: Eyes,
   settleMs: number,
@@ -437,7 +476,7 @@ async function canvasTask(
   await hands.click(submit, T);
   const until = Date.now() + settleMs;
   while (Date.now() < until) {
-    if (!(await shown(page, HCAPTCHA.bframe))) return "ticked";
+    if (!(await challengeOpen(page, HCAPTCHA))) return "ticked";
     await page.waitForTimeout(500);
   }
   return "again";

@@ -55,6 +55,31 @@ describe("captcha", () => {
     expect(await findCaptcha(page)).toEqual({ kind: "checkbox", vendor: "recaptcha" });
   });
 
+  it("finds hCaptcha's enterprise challenge by the frame list when no selector reaches it", async () => {
+    const challenge = {
+      url: () =>
+        "https://newassets.hcaptcha.com/captcha/v1/abc/static/hcaptcha.html#frame=challenge&id=x",
+      locator: pageShowing().locator,
+      frameElement: async () => ({
+        boundingBox: async () => ({ x: 10, y: 20, width: 280, height: 420 }),
+        isVisible: async () => true,
+      }),
+    };
+    const page = { ...pageShowing(), frames: () => [pageShowing().frames()[0], challenge] };
+    expect(await findCaptcha(page as unknown as Page)).toEqual({
+      kind: "grid",
+      vendor: "hcaptcha",
+    });
+    const hidden = {
+      ...challenge,
+      frameElement: async () => ({
+        boundingBox: async () => ({ x: 10, y: 20, width: 280, height: 420 }),
+        isVisible: async () => false,
+      }),
+    };
+    expect(await findCaptcha({ ...page, frames: () => [hidden] } as unknown as Page)).toBeNull();
+  });
+
   it("an open challenge is what is asked, before its checkbox", async () => {
     expect(
       await findCaptcha(pageShowing("recaptcha/api2/bframe", "recaptcha/api2/anchor")),
