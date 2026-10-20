@@ -2,11 +2,11 @@
 import type { CredentialStore } from "credvault";
 import type { FlowRunner } from "../../browser/flow.js";
 import type { CloudflareClient } from "../../clients/cloudflare.js";
-import type { GmailUserClient } from "../../clients/gmail.js";
 import type { GoogleAdminClient } from "../../clients/google-admin.js";
 import type { InstantlyClient } from "../../clients/instantly.js";
 import type { RosterStore } from "../../clients/roster.js";
 import type { WrenClient } from "../../clients/wren.js";
+import type { GmailUserClient } from "../../google/gmail.js";
 
 export interface DomainDeps {
   cloudflare: CloudflareClient;

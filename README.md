@@ -857,6 +857,28 @@ import { digest, exploreWithAgent } from "autobrowse/agent";
 import { fileStore, memoryFiles } from "autobrowse/files";   // the sealed file store
 ```
 
+**Mail and Google, no browser.** `autobrowse/mail` and `autobrowse/google`
+are pure libraries. They import no Playwright, no Restate and nothing from
+`src/browser`, `src/app` or `src/sites`; `test/pieces.test.ts` checks this.
+They take a `fetch` (or an IMAP login) and do no retries; you set the time
+limit and the retry policy.
+
+- `autobrowse/mail`: `ImapReader`, `RoutedReader` and `InstantlyReader` read
+  an inbox into the `InboxReader` shape. `imapClient`, `withImap`,
+  `specialFolder` and `inFolder` run one IMAP session.
+- `autobrowse/google`: `serviceAccountToken` signs a delegated token from a
+  service-account key. `GmailClient` is the Gmail wire (list, get, send,
+  watch, send-as). `gmailClient` is the per-user helper on top of it.
+
+```ts
+import { ImapReader } from "autobrowse/mail";
+import { GmailClient, loadServiceAccountKey } from "autobrowse/google";
+const reader = new ImapReader({ host: "imap.example.com", port: 993, user, pass });
+const key = loadServiceAccountKey("~/key.json", "MY_KEY_ENV_NAME");
+const gmail = new GmailClient({ key, fetch });
+const ids = await gmail.searchAll("me@example.com", "from:a@example.com");
+```
+
 Adding a site is one module: a `SiteApi` (routes with `request` schema,
 `api` leg, `browser` leg, `setup` steps that say which env names they make
 and need) and, when it has a login, a `SiteLogin`. `route()` infers the

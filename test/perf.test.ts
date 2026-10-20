@@ -4,8 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileCredentials } from "credvault";
 import { describe, expect, it } from "vitest";
-import { gmailClient } from "../src/clients/gmail.js";
-import { httpClient } from "../src/clients/http.js";
 import type { RunEvent } from "../src/engine/events.js";
 import {
   cursorOf,
@@ -15,6 +13,7 @@ import {
   type RunRow,
   trimRows,
 } from "../src/engine/rows.js";
+import { gmailClient } from "../src/google/gmail.js";
 import { eventBus } from "../src/ui/bus.js";
 
 const row = (key: string, status: RunRow["status"], updatedAt: string): RunRow => ({
@@ -106,7 +105,7 @@ describe("cached reads", () => {
     const client = gmailClient({
       tokenFor: () => async () => "tok",
       scopes: { settings: "s", send: "s", read: "r" },
-      http: httpClient({ fetch }),
+      fetch,
     });
     const first = await client.recent("me@x.dev", new Date(0));
     expect(first.map((m) => m.text.trim())).toEqual(["code 123456", "code 123456"]);

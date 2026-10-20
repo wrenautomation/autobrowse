@@ -15,7 +15,7 @@ import { type CredentialStore, type EnvListing, expiring } from "credvault";
 import { type Identity, identityFor } from "../auth/identities.js";
 import type { SiteLogin } from "../auth/login.js";
 import { signupInbox } from "../auth/signup.js";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import { isDefaultOwner } from "../owner.js";
 import { ringNames } from "../reach/key-ring.js";
 import { gmailOAuth } from "../sites/gmail.js";

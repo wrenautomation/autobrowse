@@ -23,7 +23,7 @@ import { SITE_LOGINS } from "../auth/sites.js";
 import { defineFlow } from "../browser/flow.js";
 import type { RecordsOp, Row } from "../browser/records.js";
 import { httpClient } from "../clients/http.js";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import { readLlmCalls } from "../llm/ledger.js";
 import { named } from "../owner.js";
 import { fileSiteCalls, readSiteCalls } from "../runs/calls.js";

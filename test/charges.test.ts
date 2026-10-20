@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mimeMessage, rawHeader } from "../src/clients/gmail.js";
+import { mimeMessage, rawHeader } from "../src/google/gmail.js";
 import {
   type Charge,
   type ChargeRow,

@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { type HttpClient, safeUrls } from "../clients/http.js";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import { assertProfileFree } from "./browsers.js";
 import type { Egress, Exit } from "./egress.js";
 import { geometry, type Identity, learnIdentity, wearIdentity } from "./identity.js";

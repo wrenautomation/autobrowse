@@ -156,6 +156,26 @@ export function httpClient(opts: HttpOptions = {}): HttpClient {
   };
 }
 
+/**
+ * A `FetchLike` over an `HttpClient`, for a piece that takes `fetch` and keeps no policy of its own:
+ * the client's timeout and retries apply. A connection failure is an `HttpError`, not a `TypeError`.
+ */
+export function fetchOf(http: HttpClient): FetchLike {
+  return async (url, init) => {
+    const body = init?.body;
+    const res = await http.json<unknown>(url, {
+      method: (init?.method ?? "GET") as NonNullable<JsonRequest["method"]>,
+      headers: Object.fromEntries(new Headers(init?.headers)),
+      ...(typeof body === "string" ? { raw: body } : {}),
+    });
+    const empty = res.status === 204 || res.status === 205 || res.status === 304;
+    return new Response(empty ? null : (res.text ?? ""), {
+      status: res.status,
+      headers: res.headers,
+    });
+  };
+}
+
 function parseJson<T>(text: string): T | null {
   if (!text) return null;
   try {

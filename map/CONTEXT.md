@@ -13,6 +13,7 @@ Open `CLAUDE.md`, find the noun in `objects/_index.md`, open its card. A card is
 | `build` | explore → recording → outline → compiled workflow → proof; the agent | `src/explore/`, `src/recorder/`, `src/compiler/`, `src/agent/`, `src/workflows/` |
 | `money` | the payment gate, spend policy, wallet, charges | `src/gates/`, `src/money/` |
 | `access` | agent keys, channels, the `do` verb and its abilities | `src/access/`, `src/channels/`, `src/do/` |
+| `pieces` | the pure libraries wren imports: mail readers, Google auth and Gmail wire | `src/mail/`, `src/google/` |
 | `app` | settings, composition, the backend port, files on disk | `src/app/`, `src/ui/`, `~/.config/autobrowse` |
 
 ## Universes

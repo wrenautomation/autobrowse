@@ -15,7 +15,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { FileChooser, Locator, Page } from "playwright";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import { redactAria, redactText } from "../recorder/redact.js";
 import { currentCall, type DoneActs, markSubmitted } from "./attempt.js";
 import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js";

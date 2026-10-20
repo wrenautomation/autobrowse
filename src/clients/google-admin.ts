@@ -3,7 +3,7 @@
  * domain ownership through Site Verification, acting as the super admin.
  * Everything here is get-before-create, so a step can run twice.
  */
-import { authedJson, type TokenSupplier } from "../google-auth.js";
+import { authedJson, type TokenSupplier } from "../google/auth.js";
 import type { HttpClient } from "./http.js";
 
 const DIRECTORY = "https://admin.googleapis.com/admin/directory/v1";

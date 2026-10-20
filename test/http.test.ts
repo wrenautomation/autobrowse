@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { backoff, httpClient, safeUrl } from "../src/clients/http.js";
+import { backoff, fetchOf, httpClient, safeUrl } from "../src/clients/http.js";
 
 function fakeFetch(
   script: Array<{ status: number; body?: string; headers?: Record<string, string> } | Error>,
@@ -117,5 +117,39 @@ describe("safeUrl", () => {
   it("drops the query", () => {
     expect(safeUrl("https://a.test/x/y?token=1#f")).toBe("https://a.test/x/y");
     expect(safeUrl("nope")).toBe("<url>");
+  });
+});
+
+describe("fetchOf", () => {
+  it("is a fetch over the client: method, headers and body go out, status and text come back", async () => {
+    const seen: Array<{ method?: string; headers: Headers; body: unknown }> = [];
+    const c = httpClient({
+      fetch: async (_url, init) => {
+        seen.push({
+          ...(init?.method ? { method: init.method } : {}),
+          headers: new Headers(init?.headers),
+          body: init?.body,
+        });
+        return new Response('{"ok":true}', { status: 201 });
+      },
+    });
+    const res = await fetchOf(c)("https://x.test/p", {
+      method: "PATCH",
+      headers: { Authorization: "Bearer t", "Content-Type": "application/json" },
+      body: '{"a":1}',
+    });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(seen[0]?.method).toBe("PATCH");
+    expect(seen[0]?.headers.get("authorization")).toBe("Bearer t");
+    expect(seen[0]?.headers.get("content-type")).toBe("application/json");
+    expect(seen[0]?.body).toBe('{"a":1}');
+  });
+
+  it("keeps the client's retries and returns an empty answer as an empty Response", async () => {
+    const { fetch, calls } = fakeFetch([{ status: 503 }, { status: 204 }]);
+    const res = await fetchOf(client(fetch))("https://x.test/p");
+    expect(res.status).toBe(204);
+    expect(calls).toHaveLength(2);
   });
 });

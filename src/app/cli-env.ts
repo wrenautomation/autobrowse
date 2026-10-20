@@ -20,7 +20,7 @@ import {
   toExports,
   upsertDotenv,
 } from "credvault";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import { isDefaultOwner } from "../owner.js";
 import type { Settings } from "./config.js";
 

@@ -1,5 +1,5 @@
 /** Gates and outcomes by mail, from a fleet inbox to the operator. */
-import type { GmailUserClient } from "../clients/gmail.js";
+import type { GmailUserClient } from "../google/gmail.js";
 import { render } from "./render.js";
 import type { Channel } from "./types.js";
 

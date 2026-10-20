@@ -5,7 +5,7 @@ import pino from "pino";
 import { fileKeys } from "../access/keys.js";
 import type { FailureRecord } from "../browser/session.js";
 import { httpClient } from "../clients/http.js";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import { isDefaultOwner } from "../owner.js";
 import { startUiServer } from "../ui/server.js";
 import { backendFor } from "./backend.js";

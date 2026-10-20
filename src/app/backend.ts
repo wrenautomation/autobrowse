@@ -45,7 +45,7 @@ import {
   tokenFileFor,
 } from "../explore/server.js";
 import type { Approver } from "../gates/payment.js";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import type { Llm } from "../llm/types.js";
 import { type ModsPort, modsPort } from "../mods/install.js";
 import { modWorkflowRoots } from "../mods/mod.js";

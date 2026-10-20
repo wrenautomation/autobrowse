@@ -315,7 +315,7 @@ describe("gmail site: push", () => {
 
 describe("messageText", () => {
   it("keeps link targets of an HTML-only mail and drops its CSS", async () => {
-    const { messageText } = await import("../src/clients/gmail.js");
+    const { messageText } = await import("../src/google/gmail.js");
     const html =
       '<style>.a{b:c}</style><p>Hi</p><a class="x" href="https://t.test/c/1?a=1&amp;b=2">Confirm</a>';
     const text = messageText({

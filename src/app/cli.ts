@@ -12,7 +12,7 @@ import { httpClient } from "../clients/http.js";
 import type { GateName } from "../engine/effects.js";
 import { cursorOf } from "../engine/rows.js";
 import { summarize } from "../engine/run.js";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import { ownerKeys } from "../owner.js";
 import { accent, bad, bold, columns, dim, good, warn } from "../style.js";
 import { DEFAULT_TLDS, domainIdeas } from "../workflows/domain/ideas.js";
@@ -495,7 +495,7 @@ program
   )
   .action(async (address: string, first: string, last: string) => {
     const { googleAdminFor } = await import("./services.js");
-    const { SCOPES } = await import("../google-auth.js");
+    const { SCOPES } = await import("../google/auth.js");
     // Only the user scope: a name needs nothing more.
     await googleAdminFor(settings, undefined, [SCOPES.directoryUser]).setName(
       address.toLowerCase(),
@@ -513,7 +513,7 @@ program
   .action(async (address: string, file: string) => {
     const { readFile } = await import("node:fs/promises");
     const { googleAdminFor } = await import("./services.js");
-    const { SCOPES } = await import("../google-auth.js");
+    const { SCOPES } = await import("../google/auth.js");
     const mimeType = /\.jpe?g$/i.test(file) ? "image/jpeg" : "image/png";
     const admin = googleAdminFor(settings, undefined, [SCOPES.directoryUser]);
     const image = await readFile(file);
@@ -694,7 +694,7 @@ program
   .option("--dry", "name them only")
   .action(async (o: { dry?: boolean }) => {
     const { reapOrphans, reapTempDirs } = await import("../browser/reap.js");
-    const { expandHome } = await import("../google-auth.js");
+    const { expandHome } = await import("../google/auth.js");
     const gone = await reapOrphans(expandHome(settings.profilesDir), o.dry ? { dry: true } : {});
     if (!gone.length) console.log("no orphaned browsers");
     if (!o.dry) console.log(`${await reapTempDirs()} stale temp folders removed`);
@@ -709,7 +709,7 @@ const browsers = program
   .option("--json", "as JSON, warnings included")
   .action(async (o: { json?: boolean }) => {
     const { browsersNow, warnings } = await import("../browser/browsers.js");
-    const { expandHome } = await import("../google-auth.js");
+    const { expandHome } = await import("../google/auth.js");
     const v = await browsersNow(expandHome(settings.profilesDir));
     if (o.json) return console.log(JSON.stringify({ ...v, warnings: warnings(v) }, null, 2));
     const ago = (s: number) =>
@@ -745,7 +745,7 @@ browsers
   .option("--force", "a browser a live CLI owns")
   .action(async (target: string, o: { forget?: boolean; force?: boolean }) => {
     const { browsersNow } = await import("../browser/browsers.js");
-    const { expandHome } = await import("../google-auth.js");
+    const { expandHome } = await import("../google/auth.js");
     const { tokenFileFor } = await import("../explore/server.js");
     const v = await browsersNow(expandHome(settings.profilesDir));
     const hits = v.browsers.filter((b) => String(b.pid) === target || b.profile === target);

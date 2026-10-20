@@ -8,7 +8,7 @@ import { join } from "node:path";
 import type { Command } from "commander";
 import { fileFixes } from "../browser/fixes.js";
 import { fileScreens } from "../browser/screens.js";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import {
   autobrowseVersion,
   checkMod,

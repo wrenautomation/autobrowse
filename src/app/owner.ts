@@ -6,7 +6,7 @@
  * operator's accounts.
  */
 import { join } from "node:path";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import { type AwsConfig, awsConfig, checkOwner, DEFAULT_OWNER, isDefaultOwner } from "../owner.js";
 import {
   DEFAULT_OWNERS_DIR,

@@ -12,6 +12,8 @@ const expect = {
   "./flows": ["consentFlow", "googleOauthConsent"],
   "./llm": ["makeLlm", "fakeLlm"],
   "./files": ["fileStore", "memoryFiles", "fileOf"],
+  "./mail": ["ImapReader", "InstantlyReader", "RoutedReader", "METADATA_HEADERS"],
+  "./google": ["GmailClient", "serviceAccountToken", "loadServiceAccountKey", "gmailClient"],
 };
 let bad = 0;
 for (const [sub, names] of Object.entries(expect)) {

@@ -6,7 +6,7 @@
  */
 import { createInterface } from "node:readline/promises";
 import type { Command } from "commander";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import { autobrowseVersion } from "../mods/install.js";
 import type { Profile } from "../money/profile.js";
 import { buildWalk } from "../walks/build.js";

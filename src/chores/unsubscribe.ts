@@ -9,8 +9,8 @@
 
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import { defineFlow } from "../browser/flow.js";
-import { mimeMessage } from "../clients/gmail.js";
 import type { HttpClient } from "../clients/http.js";
+import { mimeMessage } from "../google/gmail.js";
 
 /** The Gmail routes this reads through (`sites.call("gmail", …)`). */
 export interface Mailbox {

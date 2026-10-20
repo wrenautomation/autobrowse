@@ -30,7 +30,7 @@ import { type LinkField, linkLabel, linkTtl, mintCredentialLink } from "../auth/
 import { EMAIL_CODE } from "../auth/login.js";
 import { dropRole, giveRole } from "../auth/roles.js";
 import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 
 /** A copied secret lives on the clipboard for a minute, then is emptied if untouched. */
 const CLIPBOARD_MS = 60_000;

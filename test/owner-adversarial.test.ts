@@ -17,7 +17,7 @@ import { awsFor, enterOwner, ownerFromArgv } from "../src/app/owner.js";
 import { envStoreFor, phoneFor, shipperFor } from "../src/app/services.js";
 import { KEYCHAIN, keychainOf, WALLET_KEYCHAIN } from "../src/auth/keep.js";
 import { DEFAULT_DB } from "../src/devices/phone.js";
-import { expandHome } from "../src/google-auth.js";
+import { expandHome } from "../src/google/auth.js";
 import { awsConfig, awsConfigFromEnv, checkOwner, named, ownerKeys } from "../src/owner.js";
 import { accessAuth } from "../src/ui/auth.js";
 

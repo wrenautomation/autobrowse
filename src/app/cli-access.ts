@@ -4,7 +4,7 @@
  */
 import type { Command } from "commander";
 import { fileKeys, type ScopeRules, VERBS, type Verb } from "../access/keys.js";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import type { Settings } from "./config.js";
 
 const list = (v: string | undefined) =>

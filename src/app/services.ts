@@ -90,9 +90,8 @@ import {
 import { awsDomain } from "../clients/aws-domain.js";
 import { cloudflare, verifyCloudflareToken } from "../clients/cloudflare.js";
 import { dynadot } from "../clients/dynadot.js";
-import { type GmailUserClient, gmailClient } from "../clients/gmail.js";
 import { type GoogleAdminClient, googleAdmin } from "../clients/google-admin.js";
-import { type HttpClient, HttpError, httpClient, safeUrl } from "../clients/http.js";
+import { fetchOf, type HttpClient, HttpError, httpClient, safeUrl } from "../clients/http.js";
 import { inboxInsiders } from "../clients/inbox-insiders.js";
 import { type InstantlyClient, instantly } from "../clients/instantly.js";
 import { type LinqClient, linqClient } from "../clients/linq.js";
@@ -133,7 +132,8 @@ import {
   SCOPES,
   serviceAccountToken,
   type TokenSupplier,
-} from "../google-auth.js";
+} from "../google/auth.js";
+import { type GmailUserClient, gmailClient } from "../google/gmail.js";
 import { type BudgetExceeded, type BudgetedLlm, budgetedLlm, fileLedger } from "../llm/budget.js";
 import { type Llm, makeLlm } from "../llm/index.js";
 import { countedLlm, fileLlmCalls } from "../llm/ledger.js";
@@ -1364,7 +1364,7 @@ export function gmailFor(settings: Settings, http = httpClient()): GmailUserClie
   return gmailClient({
     tokenFor: googleTokens(settings),
     scopes: { settings: SCOPES.gmailSettings, send: SCOPES.gmailSend, read: SCOPES.gmailRead },
-    http,
+    fetch: fetchOf(http),
   });
 }
 

@@ -5,7 +5,7 @@ import type { Command } from "commander";
 import { urlWithoutQuery } from "../auth/guard.js";
 import type { SecretValues } from "../auth/signup.js";
 import { DEFAULT_IDLE_MINUTES } from "../explore/lease.js";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import { explorerOpener, type LocalBackend } from "./backend.js";
 import type { Settings } from "./config.js";
 import { headed } from "./screen.js";

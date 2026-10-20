@@ -11,7 +11,7 @@ import { importSession } from "../autotrack/import.js";
 import { labelKey } from "../autotrack/label.js";
 import { listSessions, type TrackWriter } from "../autotrack/store.js";
 import { httpClient } from "../clients/http.js";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import type { Llm } from "../llm/index.js";
 import { openaiLlm } from "../llm/openai.js";
 import { isDefaultOwner } from "../owner.js";

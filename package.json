@@ -49,6 +49,14 @@
       "types": "./dist/files/index.d.ts",
       "import": "./dist/files/index.js"
     },
+    "./mail": {
+      "types": "./dist/mail/index.d.ts",
+      "import": "./dist/mail/index.js"
+    },
+    "./google": {
+      "types": "./dist/google/index.d.ts",
+      "import": "./dist/google/index.js"
+    },
     "./layout": {
       "types": "./dist/browser/layout.d.ts",
       "import": "./dist/browser/layout.js"
@@ -109,6 +117,7 @@
     "credvault": "0.13.0",
     "entities": "8.1.0",
     "hono": "4.13.8",
+    "imapflow": "2.2.4",
     "impit": "0.14.5",
     "libmime": "5.4.7",
     "mammoth": "1.13.0",

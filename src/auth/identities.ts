@@ -10,7 +10,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
-import { expandHome } from "../google-auth.js";
+import { expandHome } from "../google/auth.js";
 import { PROVIDERS } from "./providers.js";
 
 /** Where the account signs in; decides which sites' consents it can be for. */
