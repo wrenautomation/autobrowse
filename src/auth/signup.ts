@@ -156,6 +156,8 @@ export function loginSecrets(
   const { codes, phone } = o;
   const fields = ["username", "password", "code", "phone", "phoneLocal"];
   const inboxCodes = new Map<string, SecretValues>();
+  // The domain of each login's address, once read: a work account signs in on its own domain.
+  const domains = new Map<string, string>();
   const own = (name: string) => {
     const [site, field] = [
       name.slice(0, name.lastIndexOf(".")),
@@ -170,6 +172,8 @@ export function loginSecrets(
       if (hit.field === "phone") return phone ?? null;
       if (hit.field === "phoneLocal") return phone ? localPhone(phone) : null;
       const cred = await store.get(hit.site);
+      const domain = cred?.username.split("@")[1]?.toLowerCase();
+      if (domain) domains.set(hit.site, domain);
       if (hit.field !== "code")
         return (hit.field === "username" ? cred?.username : cred?.password) ?? null;
       // An authenticator the store holds answers first; a mailed code is the fallback.
@@ -189,10 +193,19 @@ export function loginSecrets(
     },
     hosts: (host, secret) => {
       const hit = own(secret);
-      if (hit) return signupHosts(hit.site)(host);
+      if (hit) return signupHosts(hit.site)(host) || orgHost(host, domains.get(hit.site));
       return rest?.hosts ? rest.hosts(host) : true;
     },
   };
+}
+
+/**
+ * A host under the address's own domain: a school or company account's sign-in page
+ * (Microsoft sends w@uni.edu to adfs.uni.edu). The password is that domain's anyway.
+ */
+function orgHost(host: string, domain: string | undefined): boolean {
+  const h = host.toLowerCase();
+  return !!domain && (h === domain || h.endsWith(`.${domain}`));
 }
 
 /**
@@ -218,8 +231,18 @@ export const SIGNUP_ALSO_HOSTS: Readonly<Record<string, readonly string[]>> = {
   trello: ["id.atlassian.com"],
   jira: ["id.atlassian.com"],
   confluence: ["id.atlassian.com"],
-  microsoft: ["login.live.com", "account.live.com", "account.microsoft.com"],
-  outlook: ["login.live.com", "account.live.com", "account.microsoft.com"],
+  microsoft: [
+    "login.live.com",
+    "login.microsoftonline.com",
+    "account.live.com",
+    "account.microsoft.com",
+  ],
+  outlook: [
+    "login.live.com",
+    "login.microsoftonline.com",
+    "account.live.com",
+    "account.microsoft.com",
+  ],
 };
 
 /**

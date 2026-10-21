@@ -198,6 +198,17 @@ describe("loginSecrets", () => {
     expect(await l.secrets("instagram.code")).toBeNull();
   });
 
+  it("a work account's password also goes on its own domain's sign-in page", async () => {
+    const store = memoryCredentials();
+    await store.put("outlook@uni", { username: "w@uni.example", password: "pw" });
+    const l = loginSecrets(store, ["outlook@uni"]);
+    expect(await l.secrets("outlook@uni.password")).toBe("pw");
+    expect(l.hosts("login.microsoftonline.com", "outlook@uni.password")).toBe(true);
+    expect(l.hosts("adfs.uni.example", "outlook@uni.password")).toBe(true);
+    expect(l.hosts("uni.example.evil.test", "outlook@uni.password")).toBe(false);
+    expect(l.hosts("notuni.example", "outlook@uni.password")).toBe(false);
+  });
+
   it("<site>.code: the newest code that login's own inbox got after the session opened", async () => {
     const store = memoryCredentials();
     await store.put("instagram", { username: "wren", password: "p", codesInbox: "ig@wren.test" });
