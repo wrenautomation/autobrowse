@@ -871,6 +871,17 @@ makeLlm(settings, http, { calls: null });                    // off for one mode
 flowRunner(opts, { runs: null });                            // off for one runner; AUTOBROWSE_STATS=off for all
 ```
 
+**Resume by call key.** A run under `withCall(key, ...)` that stops (a person,
+a crash, a failure) saves its page under `~/.config/autobrowse/resume`. The
+next run under the same key opens that page first, and a `walk` goes on from
+the screen there. Success deletes the record; records expire after 7 days.
+
+```ts
+import { withCall, flowRunner } from "autobrowse";
+await withCall(`apply ${jobId}`, () => runner.run(applyFlow, input)); // rerun with the same key to resume
+flowRunner(opts, { resume: false });                                  // off for one runner; AUTOBROWSE_RESUME=off for all
+```
+
 **Mail, Google and OAuth, no browser.** `autobrowse/mail`, `autobrowse/google`
 and `autobrowse/oauth` are pure libraries. They import no Playwright, no Restate and nothing from
 `src/browser`, `src/app` or `src/sites`; `test/pieces.test.ts` checks this.

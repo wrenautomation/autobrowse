@@ -15,11 +15,11 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { FileChooser, Locator, Page } from "playwright";
-import { statsDirOf } from "../deps/stats.js";
+import { resumeDir, statsDirOf } from "../deps/stats.js";
 import { expandHome } from "../google/auth.js";
 import { tallied } from "../llm/ledger.js";
 import { redactAria, redactText } from "../recorder/redact.js";
-import { type FlowOutcome, type FlowRuns, fileFlowRuns } from "../runs/flows.js";
+import { type FlowOutcome, type FlowRunRow, type FlowRuns, fileFlowRuns } from "../runs/flows.js";
 import { currentCall, type DoneActs, markSubmitted } from "./attempt.js";
 import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js";
 import { type Fixes, flowKey } from "./fixes.js";
@@ -44,6 +44,7 @@ import {
   type RepairReport,
   snapshotPage,
 } from "./repair.js";
+import { fileResumes, keptUrl, type Resumes, sameHost } from "./resume.js";
 import {
   INTERRUPTS,
   isOn,
@@ -55,6 +56,7 @@ import {
   type Screen,
   type ScreenHelp,
   type ScreenReader,
+  type Trail,
 } from "./screens.js";
 import {
   type Artifacts,
@@ -331,6 +333,12 @@ export interface RunnerOptions {
    * `~/.config/autobrowse/flows`, read by `autobrowse success`); null = none.
    */
   runs?: FlowRuns | null;
+  /**
+   * Where a keyed run (`withCall`) stopped, so the next try of the same call opens that page
+   * and its walks go on from there (`browser/resume`). Absent = files in the owner's state dir
+   * (`deps/stats`, `~/.config/autobrowse/resume`); false = every try starts at step 1.
+   */
+  resume?: Resumes | false;
 }
 
 const ACT_TIMEOUT_MS = 15_000;
@@ -338,6 +346,22 @@ const ACT_TIMEOUT_MS = 15_000;
 const POLL_MS = 250;
 /** Clicks past what is in the way before one act gives up: a new screen or two, not a new flow. */
 const MAX_DETOURS = 3;
+
+/** One flow-run row (`runs/flows`), timed from `startedAt` to now. */
+function runRow(
+  flow: { site: Site; name: string },
+  startedAt: number,
+  r: Omit<FlowRunRow, "site" | "flow" | "startedAt" | "endedAt" | "ms">,
+): FlowRunRow {
+  return {
+    site: flow.site,
+    flow: flow.name,
+    startedAt: new Date(startedAt).toISOString(),
+    endedAt: new Date().toISOString(),
+    ms: Date.now() - startedAt,
+    ...r,
+  };
+}
 
 /** The same page, fragment aside. */
 function samePage(current: string, url: string): boolean {
@@ -445,6 +469,11 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
   const park = runner.park;
   const runsDir = runner.runs === undefined ? statsDirOf("flows") : null;
   const runs = runner.runs ?? (runsDir ? fileFlowRuns(runsDir) : null);
+  const resumesDir = runner.resume === undefined ? resumeDir() : null;
+  const resumes =
+    runner.resume === false
+      ? null
+      : (runner.resume ?? (resumesDir ? fileResumes(resumesDir) : null));
   const tab = park
     ? async (site: string): Promise<HeldTab> => {
         const asked = opts.profile ?? site;
@@ -486,13 +515,30 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
       const key = (await opts.profileName?.(asked)) ?? asked;
       return locks.withLock(key, async () => {
         // Opening the browser is the first thing the network or the machine can break.
+        const opening = Date.now();
         const parked = (await runner.park?.take(key)) ?? null;
         const held =
           parked ??
           (await openSession(flow.site, profile ? { ...opts, profile } : opts).catch(
             (err: unknown) => {
-              if (isTransientBrowserError(err))
-                throw new FlowInterrupted(`${flow.site}/${flow.name}`, err, {});
+              const transient = isTransientBrowserError(err);
+              // A run that never got a browser is still a run: the row says it broke here.
+              runs?.record(
+                runRow(flow, opening, {
+                  outcome:
+                    err instanceof NeedsHuman ? "human" : transient ? "interrupted" : "failed",
+                  submitted: false,
+                  goal: "open the browser",
+                  error: redactText(err instanceof Error ? err.message : String(err)),
+                  acts: 0,
+                  captchaTries: 0,
+                  captchaSolved: null,
+                  llmCalls: 0,
+                  inputTokens: 0,
+                  outputTokens: 0,
+                }),
+              );
+              if (transient) throw new FlowInterrupted(`${flow.site}/${flow.name}`, err, {});
               throw err;
             },
           ));
@@ -518,6 +564,19 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         const stamp = `${flow.site}-${flow.name}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
         let lastGoal: string | null = null;
         const call = currentCall();
+        // Where an earlier try of this call stopped, on this profile: its first open goes there.
+        const saved = call && resumes ? resumes.get(call) : null;
+        const resume = saved?.profile === key ? saved : null;
+        let resumeTo = resume?.url ?? null;
+        let resumed = false;
+        let firstOpen: string | null = null;
+        const screensDone: Record<string, string[]> = structuredClone(resume?.screensDone ?? {});
+        const trail: Trail = {
+          before: (w) => resume?.screensDone[w] ?? [],
+          passed: (w, screen) => {
+            screensDone[w] = [...(screensDone[w] ?? []), screen];
+          },
+        };
         // What the last act or read looked for: a heal finds the one op that broke by it.
         let lastHints: Hints | null = null;
         let acts = 0;
@@ -547,6 +606,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           snapshot: () => snapshotPage(active),
           learned,
           reader: runner.screenReader ?? null,
+          trail,
         };
         // The URL whose overlays were last looked for: once per page, not per act.
         let overlaysAt: string | null = null;
@@ -859,9 +919,18 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           }
           return got;
         }
-        async function openPage(url: string, o: { allowWall?: boolean }): Promise<void> {
+        async function openPage(asked: string, o: { allowWall?: boolean }): Promise<void> {
           active = session.page;
-          const stay = keepPage && samePage(session.page.url(), url);
+          firstOpen ??= asked;
+          // The first open of a resumed try goes where the last try stopped, on the same site.
+          const url = resumeTo && sameHost(resumeTo, asked) ? resumeTo : asked;
+          resumed ||= url !== asked;
+          resumeTo = null;
+          // A kept tab already on the saved page stays: its query may hold what the saved URL drops.
+          const stay =
+            keepPage &&
+            (samePage(session.page.url(), url) ||
+              (url !== asked && keptUrl(session.page.url(), null) === keptUrl(url, null)));
           keepPage = false;
           if (!stay) await settle(session.page, url);
           if (OFFLINE_PAGE.test(session.page.url()))
@@ -905,9 +974,25 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             await settle(session.page, url);
           }
         }
+        /**
+         * Keep where this try stopped for the next try of the call. A resumed try that failed in
+         * its own code without moving (same page, no new screen) drops the record instead: the
+         * saved page is what broke it, so the next try starts at step 1.
+         */
+        function keepResume(call: string, kind: FailureRecord["kind"]): void {
+          const url = keptUrl(session.page.url(), firstOpen);
+          const moved =
+            !resumed ||
+            url !== resume?.url ||
+            JSON.stringify(screensDone) !== JSON.stringify(resume?.screensDone ?? {});
+          if (kind === "failed" && !moved) resumes?.clear(call);
+          else if (url) resumes?.put(call, { url, profile: key, screensDone, at: Date.now() });
+        }
         const run = tallied(() => flow.run(fp, input));
         try {
-          return await run.done;
+          const out = await run.done;
+          if (call) resumes?.clear(call);
+          return out;
         } catch (err) {
           const artifacts: Artifacts = watch ? { steps: watch.dir } : {};
           const shot = join(artifactsDir, `${stamp}.png`);
@@ -978,6 +1063,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           };
           outcome = kind;
           failure = record.error;
+          if (call && resumes) keepResume(call, kind);
           artifacts.failure = join(artifactsDir, `${stamp}.failure.json`);
           writeFileSync(artifacts.failure, JSON.stringify(record, null, 2));
           runner.onFailure?.(record, artifacts.failure);
@@ -991,23 +1077,20 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           }
           throw new FlowFailed(`${flow.site}/${flow.name}`, err, artifacts);
         } finally {
-          runs?.record({
-            site: flow.site,
-            flow: flow.name,
-            startedAt: new Date(startedAt).toISOString(),
-            endedAt: new Date().toISOString(),
-            ms: Date.now() - startedAt,
-            outcome,
-            submitted,
-            goal: lastGoal,
-            error: failure,
-            acts,
-            captchaTries,
-            captchaSolved,
-            llmCalls: run.tally.calls,
-            inputTokens: run.tally.inputTokens,
-            outputTokens: run.tally.outputTokens,
-          });
+          runs?.record(
+            runRow(flow, startedAt, {
+              outcome,
+              submitted,
+              goal: lastGoal,
+              error: failure,
+              acts,
+              captchaTries,
+              captchaSolved,
+              llmCalls: run.tally.calls,
+              inputTokens: run.tally.inputTokens,
+              outputTokens: run.tally.outputTokens,
+            }),
+          );
           runner.fixes?.flush();
           learned.flush();
           // A watched run keeps its trace whatever happened; a failure saved one already.

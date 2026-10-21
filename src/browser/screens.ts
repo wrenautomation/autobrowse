@@ -120,6 +120,16 @@ export interface ScreenHelp {
   snapshot(): Promise<string>;
   learned: LearnedScreens;
   reader: ScreenReader | null;
+  /** The screens walks got past in this durable call, kept across its tries (`browser/resume`). */
+  trail?: Trail;
+}
+
+/** Screens a walk got past, by `<site>/<walk>`: what a resumed try already did. */
+export interface Trail {
+  /** What earlier tries of this call got past in this walk. */
+  before(walk: string): readonly string[];
+  /** The walk got past this screen: its act ran. */
+  passed(walk: string, screen: string): void;
 }
 
 const base = (site: string) => site.split("@")[0] ?? site;
@@ -424,8 +434,13 @@ export async function walk<C extends ScreenCtx>(c: C, w: Walk<C>): Promise<strin
   const { fp } = c;
   const main = fp.page;
   const fail = w.fail ?? ((reason: string) => fp.human(reason));
-  const path: string[] = [];
-  const urls: string[] = [];
+  const trail = fp.screens?.trail;
+  const id = `${w.site}/${w.name}`;
+  // A resumed try starts its path with what earlier tries got past; stuck counts this try only,
+  // since a person may have fixed the page in between.
+  const path: string[] = [...(trail?.before(id) ?? [])];
+  const urls: string[] = path.map(() => "");
+  const from = path.length;
   for (let step = 0; step < (w.maxSteps ?? MAX_STEPS); step++) {
     if (fp.page !== main && fp.page.isClosed?.()) fp.switchTo(main);
     const seen = await observe(c, w.screens);
@@ -434,7 +449,7 @@ export async function walk<C extends ScreenCtx>(c: C, w: Walk<C>): Promise<strin
     if (s.goal) return s.name;
     const at = fp.url();
     if (
-      path.length >= 2 &&
+      path.length - from >= 2 &&
       path.at(-1) === s.name &&
       path.at(-2) === s.name &&
       !(s.repeats && urls.at(-1) !== at)
@@ -448,6 +463,7 @@ export async function walk<C extends ScreenCtx>(c: C, w: Walk<C>): Promise<strin
       answer.failed?.();
       throw err;
     }
+    trail?.passed(id, s.name);
     // Kept only once the page moved on: an answer that changed nothing taught nothing.
     if ((await leave(c, s, at)) || fp.page.isClosed?.()) answer.worked?.();
   }

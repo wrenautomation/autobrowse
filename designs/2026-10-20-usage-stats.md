@@ -21,4 +21,4 @@ Every caller gets token use and failure rates with no setup, from library code a
 - 10-20: One knob per part (`calls`, `runs`), each with a code parameter and the env switch. William: "should be code parameter to disable it imo, but env var is fine".
 - 10-20: `boot()` sets `AUTOBROWSE_STATS_DIR` to the owner's state dir, so CLI and desk rows land where that owner's reports read.
 - 10-20: Tests run with `AUTOBROWSE_STATS=off` (vitest env), so no test writes to the home folder.
-- 10-20: Not done: a run that fails while the browser opens (before the flow starts) writes no row. Its error goes to the caller as before.
+- 10-20: Not done: a run that fails while the browser opens (before the flow starts) writes no row. Its error goes to the caller as before. Done later on 10-20: `designs/2026-10-20-batched-plans-and-resume.md` §3.
