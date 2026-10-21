@@ -173,6 +173,261 @@ describe("exploreWithAgent", () => {
   });
 });
 
+/** A one-screen form: the page's state is a script the test and each act may change. */
+interface FormPage {
+  url: string;
+  dialogs: number;
+  alerts: number;
+  invalid: number;
+  paused: boolean;
+  /** Names a locator no longer finds, or finds disabled. */
+  gone: Set<string>;
+  disabled: Set<string>;
+}
+
+const FORM = [
+  '- textbox "First name"',
+  '- textbox "Last name"',
+  '- combobox "Country"',
+  '- checkbox "I agree"',
+  '- button "Next"',
+  '- textbox "Broken"',
+].join("\n");
+
+function formExplorer(after: (c: ExploreCommand, page: FormPage) => void = () => {}) {
+  const page: FormPage = {
+    url: "https://site.test/apply",
+    dialogs: 0,
+    alerts: 0,
+    invalid: 0,
+    paused: false,
+    gone: new Set(),
+    disabled: new Set(),
+  };
+  const calls: ExploreCommand[] = [];
+  const ex: Explorer = {
+    port: 0,
+    token: "t",
+    paused: () => page.paused,
+    resumed: async () => {},
+    done: Promise.resolve(),
+    async exec(c) {
+      calls.push(c);
+      switch (c.cmd) {
+        case "url":
+          return { url: page.url };
+        case "aria":
+          return { aria: FORM };
+        case "count":
+          return { count: page.gone.has(c.hints.name ?? "") ? 0 : 1 };
+        case "eval":
+          if (c.hints) return { result: !page.disabled.has(c.hints.name ?? "") };
+          return { result: { dialogs: page.dialogs, alerts: page.alerts, invalid: page.invalid } };
+        case "fill":
+        case "select":
+        case "click":
+          if (c.hints.name === "Broken") throw new Error("locator.fill: Timeout 10000ms exceeded.");
+          after(c, page);
+          return { url: page.url };
+        default:
+          return { ok: true };
+      }
+    },
+  };
+  /** The acts the browser ran, in order: what the journal holds. */
+  const acts = () =>
+    calls.flatMap((c) =>
+      c.cmd === "fill" || c.cmd === "select" || c.cmd === "click"
+        ? [`${c.cmd} ${c.hints.name}`]
+        : [],
+    );
+  return { ex, calls, page, acts };
+}
+
+const fill = (ref: number, value: string) => ({ cmd: "fill", ref, value, goal: "answer" });
+const done = { thought: "sent", actions: [{ cmd: "done", summary: "sent", achieved: true }] };
+
+describe("exploreWithAgent batches", () => {
+  it("runs a whole plan for one screen on one model call, one journal entry per act", async () => {
+    const { ex, calls, acts } = formExplorer();
+    const llm = fakeLlm([
+      {
+        thought: "the form; fill it and go on",
+        actions: [
+          fill(1, "Jane"),
+          fill(2, "Doe"),
+          { cmd: "select", ref: 3, value: "Canada", goal: "country" },
+          { cmd: "click", ref: 4, goal: "agree" },
+          { cmd: "click", ref: 5, goal: "next" },
+        ],
+      },
+      done,
+    ]);
+    const ledger = memoryStepLedger();
+    const r = await exploreWithAgent({ explorer: ex, llm, goal: "apply", ledger });
+    expect(r.achieved).toBe(true);
+    expect(llm.requests).toHaveLength(2);
+    expect(acts()).toEqual([
+      "fill First name",
+      "fill Last name",
+      "select Country",
+      "click I agree",
+      "click Next",
+    ]);
+    expect(r.steps.map((s) => [s.n, s.batch, s.step?.action.cmd, s.missed])).toEqual([
+      [1, 1, "fill", null],
+      [2, 1, "fill", null],
+      [3, 1, "select", null],
+      [4, 1, "click", null],
+      [5, 1, "click", null],
+      [6, 6, "done", null],
+    ]);
+    // The model's spend is on the batch's first act.
+    expect(r.steps.map((s) => s.usage.inputTokens)).toEqual([10, 0, 0, 0, 0, 10]);
+    expect(r.usage).toEqual({ inputTokens: 20, outputTokens: 10 });
+    // One thought per page, as an unbatched run journals it.
+    expect(calls.filter((c) => c.cmd === "note")).toHaveLength(2);
+    // Each act after the first is checked first: found, then shown and enabled.
+    expect(calls.filter((c) => c.cmd === "count").map((c) => "hints" in c && c.hints.name)).toEqual(
+      ["Last name", "Country", "I agree", "Next"],
+    );
+    await new Promise((ok) => setTimeout(ok, 0));
+    expect(ledger.rows.map((x) => [x.n, x.cmd, x.missed])).toEqual([
+      [1, "fill", null],
+      [2, "fill", null],
+      [3, "select", null],
+      [4, "click", null],
+      [5, "click", null],
+      [6, "done", null],
+    ]);
+    expect(llm.requests[0]?.system).toContain("1 to 6 actions");
+    expect(llm.requests[1]?.prompt).toContain("5. click [5] → ok");
+    expect(llm.requests[1]?.prompt).not.toContain("NOT RUN");
+  });
+
+  it.each([
+    ["gone", (p: FormPage) => p.gone.add("Last name"), /the next target was gone/],
+    ["gone", (p: FormPage) => p.disabled.add("Last name"), /the next target was gone/],
+    ["navigated", (p: FormPage) => (p.url = "https://site.test/apply/2"), /the URL changed/],
+    ["dialog", (p: FormPage) => p.dialogs++, /a dialog opened/],
+    ["invalid", (p: FormPage) => p.invalid++, /an alert or an invalid field/],
+    ["invalid", (p: FormPage) => p.alerts++, /an alert or an invalid field/],
+  ] as const)("ends the batch on a miss: %s", async (kind, change, said) => {
+    const { ex, acts } = formExplorer((c, page) => {
+      if (c.cmd === "fill" && c.hints.name === "First name") change(page);
+    });
+    const llm = fakeLlm([
+      { thought: "fill the form", actions: [fill(1, "Jane"), fill(2, "Doe"), fill(2, "Again")] },
+      done,
+    ]);
+    const ledger = memoryStepLedger();
+    const r = await exploreWithAgent({ explorer: ex, llm, goal: "apply", ledger });
+    expect(acts()).toEqual(["fill First name"]);
+    expect(r.steps.map((s) => [s.step?.action.cmd, s.missed])).toEqual([
+      ["fill", kind],
+      ["done", null],
+    ]);
+    await new Promise((ok) => setTimeout(ok, 0));
+    expect(ledger.rows[0]?.missed).toBe(kind);
+    const next = llm.requests[1]?.prompt ?? "";
+    expect(next).toMatch(said);
+    expect(next).toContain(
+      'NOT RUN: fill [2] "Doe"; fill [2] "Again" (the plan stopped after step 1',
+    );
+  });
+
+  it("ends the batch on an act that throws", async () => {
+    const { ex, acts } = formExplorer();
+    const llm = fakeLlm([{ thought: "fill", actions: [fill(6, "x"), fill(1, "Jane")] }, done]);
+    const r = await exploreWithAgent({ explorer: ex, llm, goal: "apply" });
+    expect(acts()).toEqual(["fill Broken"]);
+    expect(r.steps[0]).toMatchObject({ missed: "error", error: expect.stringMatching(/Timeout/) });
+    expect(llm.requests[1]?.prompt).toContain(
+      'NOT RUN: fill [1] "Jane" (the plan stopped after step 1: the act failed)',
+    );
+  });
+
+  it("ends the batch after a button click, whatever the model planned after it", async () => {
+    const { ex, calls, acts } = formExplorer();
+    const llm = fakeLlm([
+      {
+        thought: "next, then more",
+        actions: [fill(1, "Jane"), { cmd: "click", ref: 5, goal: "next" }, fill(2, "Doe")],
+      },
+      done,
+    ]);
+    const r = await exploreWithAgent({ explorer: ex, llm, goal: "apply" });
+    expect(acts()).toEqual(["fill First name", "click Next"]);
+    expect(r.steps.map((s) => s.missed)).toEqual([null, null, null]);
+    // The click is never checked against what follows it: nothing follows it.
+    expect(calls.filter((c) => c.cmd === "count")).toHaveLength(1);
+    expect(llm.requests[1]?.prompt).toContain(
+      'NOT RUN: fill [2] "Doe" (a click like step 2 is always the last action run)',
+    );
+  });
+
+  it("stops between acts when a person pauses", async () => {
+    const { ex, acts } = formExplorer((_c, page) => {
+      page.paused = true;
+    });
+    const llm = fakeLlm([{ thought: "fill", actions: [fill(1, "Jane"), fill(2, "Doe")] }, done]);
+    await exploreWithAgent({ explorer: ex, llm, goal: "apply" });
+    expect(acts()).toEqual(["fill First name"]);
+    expect(llm.requests[1]?.prompt).toContain("(a person paused the run)");
+  });
+
+  it("keeps done and human alone in their reply", async () => {
+    const { ex, acts } = formExplorer();
+    const llm = fakeLlm([
+      {
+        thought: "fill and finish",
+        actions: [fill(1, "Jane"), { cmd: "done", summary: "s", achieved: true }],
+      },
+      { thought: "ask", actions: [{ cmd: "human", reason: "money" }, fill(1, "Jane")] },
+      done,
+    ]);
+    const r = await exploreWithAgent({ explorer: ex, llm, goal: "apply" });
+    expect(acts()).toEqual([]);
+    expect(r.steps[0]?.step).toBeNull();
+    expect(r.steps[0]?.error).toMatch(/done and human must be the only action/);
+    expect(r.achieved).toBe(true);
+  });
+
+  it("runs at most maxBatch acts and stays within the step budget", async () => {
+    const plan = {
+      thought: "fill",
+      actions: [fill(1, "a"), fill(2, "b"), fill(1, "c"), fill(2, "d")],
+    };
+    const two = formExplorer();
+    const llm2 = fakeLlm([plan, done]);
+    await exploreWithAgent({ explorer: two.ex, llm: llm2, goal: "apply", maxBatch: 2 });
+    expect(two.acts()).toEqual(["fill First name", "fill Last name"]);
+    expect(llm2.requests[1]?.prompt).toContain(
+      'NOT RUN: fill [1] "c"; fill [2] "d" (more than 2 actions, or past the step budget)',
+    );
+    const budget = formExplorer();
+    const r = await exploreWithAgent({
+      explorer: budget.ex,
+      llm: fakeLlm([plan]),
+      goal: "apply",
+      maxSteps: 3,
+    });
+    expect(budget.acts()).toHaveLength(3);
+    expect(r.summary).toMatch(/no verdict after 3 steps/);
+  });
+
+  it("at maxBatch 1 works as before: one act a call, no checks", async () => {
+    const { ex, calls, acts } = formExplorer();
+    const llm = fakeLlm([{ thought: "fill", actions: [fill(1, "Jane"), fill(2, "Doe")] }, done]);
+    const r = await exploreWithAgent({ explorer: ex, llm, goal: "apply", maxBatch: 1 });
+    expect(acts()).toEqual(["fill First name"]);
+    expect(r.steps.map((s) => s.batch)).toEqual([1, 2]);
+    expect(calls.some((c) => c.cmd === "count" || c.cmd === "eval")).toBe(false);
+    expect(llm.requests[0]?.system).toContain("exactly one action");
+    expect(llm.requests[0]?.system).not.toContain("Plan several actions");
+  });
+});
+
 describe("clip", () => {
   it("cuts long strings anywhere in a result and leaves the rest alone", () => {
     const long = "x".repeat(10);

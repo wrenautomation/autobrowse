@@ -21,6 +21,8 @@ export interface StepRow {
   cmd: string;
   ok: boolean;
   error: string | null;
+  /** Why the batch ended after this act with acts left (`gone`, `navigated` …); null when it did not. */
+  missed: string | null;
   /** The whole step: observe, model, act. */
   ms: number;
   /** Where the step ran: the page URL's host, never its path. */

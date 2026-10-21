@@ -79,3 +79,6 @@ A flow that is not a walk gets only the saved URL. It resumes when its own code 
 - 10-20: `maxBatch` is 6 by default. William asked for 5 to 8, configurable, and no 20-step plans.
 - 10-20: Resume works through screens and the call key. It does not jump into a function. Restate-style replay of each act was rejected: after the browser closes, the page state is gone, so a replayed "skip" does nothing.
 - 10-20: Resume is on by default when there is a call key. Without a key, there is nothing to match the run to.
+- 10-20 (build §1): A miss goes on the `StepRecord` (`missed`) and the ledger row, not into the explore journal as a note. A note closes a compiled step, so a note there would change compile.
+- 10-20 (build §1): The first act of a batch has no precondition check. The page was read for that plan, and a bad ref fails as today. Thus `maxBatch` 1 makes the same explorer calls as before.
+- 10-20 (build §1): `missed` is set only when acts were left. A batch that a button click ends is no miss; the acts after it show as NOT RUN. A pause by a person also ends a batch.

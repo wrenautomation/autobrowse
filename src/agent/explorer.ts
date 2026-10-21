@@ -1,11 +1,12 @@
 /**
  * The exploration agent: given a goal, it drives one explore session
- * itself, observe → one command → observe, until it says done. Every
+ * itself, observe → a few commands → observe, until it says done. Every
  * act it makes lands in the session's journal, so what it found becomes
  * a recording and then, through the compiler, a deterministic flow. The
- * model proposes one step at a time; the code executes, bounds, and
- * records. A person can `pause` the session (over loopback), act by
- * hand or with commands, and `resume`; the agent re-observes and goes on.
+ * model plans the acts for one screen (a batch); the code executes,
+ * bounds, and records, and ends a batch early when the page moves. A
+ * person can `pause` the session (over loopback), act by hand or with
+ * commands, and `resume`; the agent re-observes and goes on.
  */
 import { z } from "zod";
 import { desktopOpSchema } from "../desktop/types.js";
@@ -19,40 +20,62 @@ import { hostOf, type StepLedger } from "./ledger.js";
 /** A ref number from the digest; the code turns it back into locator hints. */
 const ref = z.number().int().positive();
 
-/** What the model may do in one step: an explore act, or a verdict. */
+/** One act the model may plan: an explore act, or a verdict. */
+const actionSchema = z.discriminatedUnion("cmd", [
+  z.object({ cmd: z.literal("open"), url: z.string().url() }),
+  z.object({ cmd: z.literal("click"), ref, goal: z.string() }),
+  z.object({ cmd: z.literal("fill"), ref, value: z.string(), goal: z.string() }),
+  /** A named secret into a field: the code fills it, the model never sees it. */
+  z.object({ cmd: z.literal("place"), ref, secret: z.string().min(1), goal: z.string() }),
+  z.object({ cmd: z.literal("select"), ref, value: z.string(), goal: z.string() }),
+  z.object({ cmd: z.literal("press"), ref, key: z.string(), goal: z.string() }),
+  z.object({
+    cmd: z.literal("upload"),
+    ref,
+    files: z.array(z.string()).min(1),
+    goal: z.string(),
+  }),
+  z.object({ cmd: z.literal("key"), key: z.string() }),
+  /** Any captcha on the page: solved by the hands and, for a picture, a model that sees. */
+  z.object({ cmd: z.literal("captcha") }),
+  /** Read a control's or heading's text and keep it under a name; the compiled flow reads it too. */
+  z.object({ cmd: z.literal("read"), ref, as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/) }),
+  /** A secret the site minted goes to the sink under an env name; the model never sees it. */
+  z.object({ cmd: z.literal("keep"), ref, env: z.string().regex(/^[A-Z][A-Z0-9_]*$/) }),
+  /** The goal is met (or cannot be): say what happened. */
+  /** Outside the browser: an app, a menu, a key, a shell command on this machine. */
+  z.object({ cmd: z.literal("os"), act: desktopOpSchema, goal: z.string() }),
+  z.object({ cmd: z.literal("done"), summary: z.string(), achieved: z.boolean() }),
+  /** Something only a person can do (a captcha, a choice with money on it). */
+  z.object({ cmd: z.literal("human"), reason: z.string() }),
+]);
+
+/** One step as kept: the batch's thought and one act. */
 export const stepSchema = z.object({
   /** One sentence: what the page shows and why this step. */
   thought: z.string(),
-  action: z.discriminatedUnion("cmd", [
-    z.object({ cmd: z.literal("open"), url: z.string().url() }),
-    z.object({ cmd: z.literal("click"), ref, goal: z.string() }),
-    z.object({ cmd: z.literal("fill"), ref, value: z.string(), goal: z.string() }),
-    /** A named secret into a field: the code fills it, the model never sees it. */
-    z.object({ cmd: z.literal("place"), ref, secret: z.string().min(1), goal: z.string() }),
-    z.object({ cmd: z.literal("select"), ref, value: z.string(), goal: z.string() }),
-    z.object({ cmd: z.literal("press"), ref, key: z.string(), goal: z.string() }),
-    z.object({
-      cmd: z.literal("upload"),
-      ref,
-      files: z.array(z.string()).min(1),
-      goal: z.string(),
-    }),
-    z.object({ cmd: z.literal("key"), key: z.string() }),
-    /** Any captcha on the page: solved by the hands and, for a picture, a model that sees. */
-    z.object({ cmd: z.literal("captcha") }),
-    /** Read a control's or heading's text and keep it under a name; the compiled flow reads it too. */
-    z.object({ cmd: z.literal("read"), ref, as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/) }),
-    /** A secret the site minted goes to the sink under an env name; the model never sees it. */
-    z.object({ cmd: z.literal("keep"), ref, env: z.string().regex(/^[A-Z][A-Z0-9_]*$/) }),
-    /** The goal is met (or cannot be): say what happened. */
-    /** Outside the browser: an app, a menu, a key, a shell command on this machine. */
-    z.object({ cmd: z.literal("os"), act: desktopOpSchema, goal: z.string() }),
-    z.object({ cmd: z.literal("done"), summary: z.string(), achieved: z.boolean() }),
-    /** Something only a person can do (a captcha, a choice with money on it). */
-    z.object({ cmd: z.literal("human"), reason: z.string() }),
-  ]),
+  action: actionSchema,
 });
 export type Step = z.infer<typeof stepSchema>;
+
+/** What the model replies: a thought and the acts for one screen. A lone `action` is a plan of one. */
+export const planSchema = z.preprocess(
+  (v) =>
+    v && typeof v === "object" && !("actions" in v) && "action" in v
+      ? { ...v, actions: [(v as { action: unknown }).action] }
+      : v,
+  z
+    .object({ thought: z.string(), actions: z.array(actionSchema).min(1) })
+    .refine(
+      (p) =>
+        p.actions.length === 1 || !p.actions.some((a) => a.cmd === "done" || a.cmd === "human"),
+      { message: "done and human must be the only action in their reply", path: ["actions"] },
+    ),
+);
+export type Plan = z.infer<typeof planSchema>;
+
+/** Why a batch ended before its last act: the code saw the page move. */
+export type Miss = "gone" | "navigated" | "dialog" | "invalid" | "error";
 
 export interface StepRecord {
   n: number;
@@ -61,9 +84,13 @@ export interface StepRecord {
   result: unknown;
   error: string | null;
   url: string;
-  /** This step's model spend and wall time (observe, model, act). */
+  /** This step's model spend and wall time (observe, model, act); a batch's spend is on its first act. */
   usage: LlmUsage;
   ms: number;
+  /** The step number of the batch's first act: one model call. */
+  batch: number;
+  /** Set when the batch ended after this act with acts left: why. */
+  missed: Miss | null;
 }
 
 export interface AgentOptions {
@@ -90,6 +117,8 @@ export interface AgentOptions {
   onHuman?: (reason: string) => Promise<boolean>;
   /** Most controls the model sees per step. */
   maxRefs?: number;
+  /** Most acts one model call may plan for one screen (6); at 1, one act per call. */
+  maxBatch?: number;
   onStep?: (r: StepRecord) => void;
 }
 
@@ -100,13 +129,23 @@ export interface AgentResult {
   usage: LlmUsage;
 }
 
-const SYSTEM = `You drive a real web browser to reach a goal, one step at a time.
+/** How a plan of several acts may look: the code holds to the same rules. */
+const BATCH = `Plan several actions only for the screen you see now.
+These may come before other actions: fill, place, select, upload, read, and a click on a C, R, O, S, TAB or X ref.
+Any other action runs last, and the code skips the actions after it: a click on a button or link, press, open, key, captcha, keep, os.
+Put done or human alone in their reply.
+The code stops a plan early when a target is gone, the URL changes, a dialog opens, or an error shows. Then you see the page again and the actions that did not run.`;
+
+/** The system prompt; `maxBatch` above 1 adds the batch rules. */
+const systemFor = (
+  maxBatch: number,
+) => `You drive a real web browser to reach a goal, a few steps at a time.
 Each turn you get the page URL, an outline of the page, and what your recent steps did.
 The outline: containers as role "name": with their contents indented beneath; controls as [n] plus a role code and the name; several on one line separated by " · "; plain text as itself.
 ${LEGEND}.
 "(+N more like these)" folds a long run of look-alike rows; scroll or narrow the goal to see them.
 When the page is the same as last turn, the outline says so and lists only what changed; the [n] refs you saw before still apply.
-Reply with ONE JSON object: {"thought": "...", "action": {...}}.
+Reply with ONE JSON object: {"thought": "...", "actions": [{...}]}, ${maxBatch > 1 ? `1 to ${maxBatch} actions, run in order` : "exactly one action"}.
 Actions, with "cmd" set to exactly one of these words:
   {"cmd":"click","ref":n,"goal":"why"}
   {"cmd":"fill","ref":n,"value":"...","goal":"why"}
@@ -134,27 +173,31 @@ An "iframe:" section is a frame inside the page (a captcha, an embedded sign-in)
 Rules: never invent values; use only the inputs given. Never buy, delete, or submit money-related forms: return human{reason} instead.
 Any captcha ("I'm not a robot", pick the squares, type the letters, drag a slider): use captcha. Only when it says it is not solved twice, return human{reason}.
 Prefer the shortest path. When the tree shows the goal is met, return done with achieved=true.
-If the same step fails twice, try another element or return done with achieved=false.`;
+If the same step fails twice, try another element or return done with achieved=false.${maxBatch > 1 ? `\n${BATCH}` : ""}`;
 
 /** Run the agent until it says done, a person says stop, or the budget runs out. */
 export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
   const steps: StepRecord[] = [...(o.prior ?? [])];
-  const first = steps.length + 1;
   const max = steps.length + (o.maxSteps ?? 25);
+  const maxBatch = Math.max(1, o.maxBatch ?? 6);
+  const system = systemFor(maxBatch);
   const usage: LlmUsage = { inputTokens: 0, outputTokens: 0 };
   let nudged = false;
   /** The page the last journaled thought was on: one note per page keeps compiled steps page-sized. */
   let notedOn: string | null = null;
+  /** The acts the last batch planned and did not run, and why: the next prompt shows them once. */
+  let notRun: string | null = null;
   const inputs = [
     ...Object.entries(o.inputs ?? {}).map(([k, v]) => `${k}: ${v}`),
     ...(o.secrets?.length ? [`SECRETS (use place): ${o.secrets.join(", ")}`] : []),
   ].join("\n");
   const session = o.session ?? `cli-${Date.now().toString(36)}`;
-  /** When the current step began: observe, model, act. */
+  /** When the current step began: observe, model, act; the next act in a batch starts when one lands. */
   let t0 = Date.now();
   /** Every step goes out through here once: the caller's hook and the ledger row. */
   const land = (rec: StepRecord): void => {
     rec.ms = Date.now() - t0;
+    t0 = Date.now();
     steps.push(rec);
     o.onStep?.(rec);
     void o.ledger
@@ -169,12 +212,13 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
         cmd: rec.step?.action.cmd ?? "invalid",
         ok: rec.error === null,
         error: rec.error,
+        missed: rec.missed,
         ms: rec.ms,
         host: hostOf(rec.url),
       })
       .catch(() => undefined);
   };
-  for (let n = first; n <= max; n++) {
+  for (let n = steps.length + 1; n <= max; n = steps.length + 1) {
     await o.explorer.resumed();
     if (o.stopped?.()) return { achieved: false, summary: "stopped by a person", steps, usage };
     t0 = Date.now();
@@ -183,26 +227,32 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
     // The whole outline every step: a model with no memory between calls (claude-code) guessed refs from a delta.
     const page = digest(aria.aria, { maxRefs: o.maxRefs ?? 80 });
     const shown = page.text;
+    // About the last two batches: a batch's acts are one turn to the model.
     const history = steps
-      .slice(-6)
-      .map((s) => `${s.n}. ${describe(s)} → ${s.error ? `FAILED: ${s.error}` : outcome(s)}`)
+      .slice(-Math.max(6, 2 * maxBatch))
+      .map(
+        (s) =>
+          `${s.n}. ${describe(s)} → ${s.error ? `FAILED: ${s.error}` : outcome(s)}${s.missed ? ` (the plan stopped here: ${MISSED[s.missed]})` : ""}`,
+      )
       .join("\n");
-    const prompt = `GOAL: ${o.goal}\n${inputs ? `INPUTS:\n${inputs}\n` : ""}\nSTEP ${n} of ${max}\nURL: ${url.url}\nRECENT STEPS:\n${history || "(none)"}\n\nPAGE:\n${shown}`;
-    let step: Step;
+    const skipped = notRun ? `\nNOT RUN: ${notRun}` : "";
+    notRun = null;
+    const prompt = `GOAL: ${o.goal}\n${inputs ? `INPUTS:\n${inputs}\n` : ""}\nSTEP ${n} of ${max}\nURL: ${url.url}\nRECENT STEPS:\n${history || "(none)"}${skipped}\n\nPAGE:\n${shown}`;
+    let plan: Plan;
     let stepUsage: LlmUsage = { inputTokens: 0, outputTokens: 0 };
     try {
       const reply = await withTrace({ session, step: n }, () =>
-        completeJson(o.llm, stepSchema, {
+        completeJson(o.llm, planSchema, {
           purpose: "agent-step",
-          system: SYSTEM,
+          system,
           prompt,
-          maxTokens: 600,
+          maxTokens: 400 + 200 * maxBatch,
         }),
       );
       usage.inputTokens += reply.usage.inputTokens;
       usage.outputTokens += reply.usage.outputTokens;
       stepUsage = reply.usage;
-      step = reply.value;
+      plan = reply.value;
     } catch (err) {
       if (!(err instanceof LlmOutputInvalid)) throw err;
       // A malformed reply is a failed step the model sees next turn, not the end of the run.
@@ -214,9 +264,12 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
         url: url.url,
         usage: stepUsage,
         ms: 0,
+        batch: n,
+        missed: null,
       });
       continue;
     }
+    const step: Step = { thought: plan.thought, action: plan.actions[0] as Step["action"] };
     const rec: StepRecord = {
       n,
       step,
@@ -225,6 +278,8 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
       url: url.url,
       usage: stepUsage,
       ms: 0,
+      batch: n,
+      missed: null,
     };
     // Giving up with budget left and nothing tried that failed: once, push back.
     if (step.action.cmd === "done" && !step.action.achieved && !nudged && n < max) {
@@ -253,19 +308,146 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
       await o.explorer.exec({ cmd: "note", text: step.thought });
       notedOn = url.url;
     }
-    try {
-      rec.result = clip(await o.explorer.exec(toCommand(step.action, page)));
-    } catch (err) {
-      rec.error = (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "failed";
-      // The person said no to spending (or could not be asked): that ends the goal, not the model's turn.
-      if (err instanceof PaymentGate) {
-        land(rec);
-        return { achieved: false, summary: err.message, steps, usage };
+    // The schema keeps done and human alone, so every act here is one the browser runs.
+    const acts = plan.actions as Act[];
+    const runs = Math.min(acts.length, maxBatch, max - n + 1);
+    /** The page before the act that runs next; read only when a second act may follow. */
+    let was = runs > 1 && !endsBatch(acts[0] as Act, page) ? await stateOf(o.explorer) : null;
+    for (let i = 0; i < runs; i++) {
+      const act = acts[i] as Act;
+      const r: StepRecord =
+        i === 0
+          ? rec
+          : {
+              ...rec,
+              n: steps.length + 1,
+              step: { thought: plan.thought, action: act },
+              usage: { inputTokens: 0, outputTokens: 0 },
+            };
+      try {
+        r.result = clip(await o.explorer.exec(toCommand(act, page)));
+      } catch (err) {
+        r.error = (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "failed";
+        // The person said no to spending (or could not be asked): that ends the goal, not the model's turn.
+        if (err instanceof PaymentGate) {
+          land(r);
+          return { achieved: false, summary: err.message, steps, usage };
+        }
+      }
+      const next = acts[i + 1];
+      if (!next) {
+        land(r);
+        break;
+      }
+      // Why the batch ends after this act, if it does. The code decides, not the model.
+      let why: string | null = null;
+      if (r.error) r.missed = "error";
+      else if (endsBatch(act, page))
+        why = `a ${act.cmd} like step ${r.n} is always the last action run`;
+      else if (i + 1 >= runs) why = `more than ${maxBatch} actions, or past the step budget`;
+      else if (o.explorer.paused() || o.stopped?.()) why = "a person paused the run";
+      else {
+        const now = await stateOf(o.explorer);
+        r.missed =
+          moved(was as PageState, now) ?? ((await usable(o.explorer, next, page)) ? null : "gone");
+        was = now;
+      }
+      land(r);
+      if (r.missed) why = `the plan stopped after step ${r.n}: ${MISSED[r.missed]}`;
+      if (why) {
+        notRun = `${acts
+          .slice(i + 1)
+          .map(describeAct)
+          .join("; ")} (${why})`;
+        break;
       }
     }
-    land(rec);
   }
   return { achieved: false, summary: `no verdict after ${max} steps`, steps, usage };
+}
+
+/** Each miss in words, for the model. */
+const MISSED: Record<Miss, string> = {
+  gone: "the next target was gone, hidden or disabled",
+  navigated: "the URL changed",
+  dialog: "a dialog opened",
+  invalid: "an alert or an invalid field showed",
+  error: "the act failed",
+};
+
+/** Acts that may come before others in a batch: they stay on one screen. */
+const MID_BATCH = new Set<Act["cmd"]>(["fill", "place", "select", "upload", "read"]);
+/** A click on these roles stays on the screen too: it sets a value or shows a part. */
+const TOGGLES = new Set(["checkbox", "radio", "option", "switch", "tab", "combobox"]);
+
+/** Whether an act is a batch's last: a button or link click, press, open, key, captcha, os, keep. */
+function endsBatch(a: Act, page: Digest): boolean {
+  if (MID_BATCH.has(a.cmd)) return false;
+  if (a.cmd !== "click") return true;
+  const role = page.refs.find((r) => r.n === a.ref)?.role;
+  return !role || !TOGGLES.has(role);
+}
+
+/** What a batch watches between acts: where the page is and what it shows. */
+interface PageState {
+  url: string;
+  dialogs: number;
+  alerts: number;
+  invalid: number;
+}
+
+/** Shown dialogs, alerts with text, and fields marked invalid, in the page's main frame. */
+const PAGE_STATE = `(() => {
+  const shown = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
+  };
+  const count = (sel, text) =>
+    [...document.querySelectorAll(sel)].filter((el) => shown(el) && (!text || el.textContent.trim())).length;
+  return {
+    dialogs: count('dialog[open], [role="dialog"], [role="alertdialog"]'),
+    alerts: count('[role="alert"]', true),
+    invalid: count('[aria-invalid="true"]'),
+  };
+})()`;
+
+/** Whether the element can take an act: it has a box, is not hidden, and is not disabled. */
+const USABLE = `(el) => {
+  const r = el.getBoundingClientRect();
+  const shown = r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
+  return shown && !el.matches(":disabled") && el.getAttribute("aria-disabled") !== "true";
+}`;
+
+async function stateOf(ex: Explorer): Promise<PageState> {
+  const { url } = (await ex.exec({ cmd: "url" })) as { url: string };
+  const { result } = (await ex.exec({ cmd: "eval", js: PAGE_STATE })) as {
+    result: Omit<PageState, "url">;
+  };
+  return { url, ...result };
+}
+
+/** The miss an act caused, from the page before and after it; a listbox popup is no dialog. */
+function moved(was: PageState, now: PageState): Miss | null {
+  if (now.url !== was.url) return "navigated";
+  if (now.dialogs > was.dialogs) return "dialog";
+  if (now.alerts > was.alerts || now.invalid > was.invalid) return "invalid";
+  return null;
+}
+
+/**
+ * The next act's precondition, without a model call: its ref is found by
+ * its digest hints (role and exact name, so a fill still meets its field)
+ * and is shown and enabled. An act with no ref has nothing to check.
+ */
+async function usable(ex: Explorer, a: Act, page: Digest): Promise<boolean> {
+  if (!("ref" in a)) return true;
+  const ref = page.refs.find((r) => r.n === a.ref);
+  if (!ref) return false;
+  const hints = hintsFor(ref);
+  const { count } = (await ex.exec({ cmd: "count", hints })) as { count: number };
+  if (count <= (hints.nth ?? 0)) return false;
+  const { result } = (await ex.exec({ cmd: "eval", hints, js: USABLE })) as { result: unknown };
+  return result === true;
 }
 
 type Act = Exclude<Step["action"], { cmd: "done" } | { cmd: "human" }>;
@@ -330,8 +512,10 @@ function outcome(s: StepRecord): string {
 }
 
 function describe(s: StepRecord): string {
-  if (!s.step) return "(no action)";
-  const a = s.step.action;
+  return s.step ? describeAct(s.step.action) : "(no action)";
+}
+
+function describeAct(a: Step["action"]): string {
   const at = "ref" in a ? ` [${a.ref}]` : "";
   const what =
     a.cmd === "os"

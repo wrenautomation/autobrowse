@@ -532,7 +532,7 @@ src/explore/    explore mode: one open browser, a loopback command API, pause/re
 src/runs/       run history (one chained file per explore session) and the token report
 src/walks/      walks: built from runs that reached a goal or taught by hand (teach.ts), run as `<site>/walk-<name>`
 src/mods/       mods: walks, screens, fixes, logins (code with --trust) packed to share; installed under `mods/`, the owner's own win
-src/agent/      the exploration agent (digest, one act a step), sessions (play/pause, persisted), repair, evaluator
+src/agent/      the exploration agent (digest, a batch of acts per screen), sessions (play/pause, persisted), repair, evaluator
 src/workflows/  one dir per workflow; domain + bootstrap hand-written, compiled ones are served as they appear (one `Compiled` object)
 src/ui/         Hono API (+ SSE bus, bearer, rate limit) and the static SPA
 src/calls/      William's calls recorded by OBS over its websocket; the desk's `calls` service (wren designs/2026-10-16-call-recording.md)
