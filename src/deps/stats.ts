@@ -18,3 +18,13 @@ export const statsDirOf = (part: "llm" | "flows"): string | null => {
   const d = statsDir();
   return d ? join(d, part) : null;
 };
+
+/**
+ * Where stopped calls keep their resume records (`browser/resume`): beside the stats, in the
+ * owner's state dir. On by default; `AUTOBROWSE_RESUME=off` turns it off (tests),
+ * `RunnerOptions.resume: false` for one runner.
+ */
+export function resumeDir(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.AUTOBROWSE_RESUME === "off") return null;
+  return join(env.AUTOBROWSE_STATS_DIR || join(homedir(), ".config", "autobrowse"), "resume");
+}

@@ -9,6 +9,17 @@
 
 /** Compiled workflows ask for their redacted values through this. */
 export { envSecrets, memorySecrets, type SecretSource } from "credvault";
+/**
+ * A durable call's key: a run under `withCall` never repeats an irreversible act on a retry,
+ * and its next try resumes where it stopped (`RunnerOptions.resume`).
+ */
+export {
+  type CallTry,
+  currentCall,
+  type DoneActs,
+  fileDoneActs,
+  withCall,
+} from "./browser/attempt.js";
 export {
   type CaptchaOutcome,
   type Eyes,
@@ -36,6 +47,12 @@ export {
   type RepairReport,
   snapshotPage,
 } from "./browser/repair.js";
+export {
+  fileResumes,
+  memoryResumes,
+  type ResumeRecord,
+  type Resumes,
+} from "./browser/resume.js";
 export { NeedsHuman } from "./browser/session.js";
 export * from "./channels/index.js";
 export { httpClient } from "./clients/http.js";
@@ -56,7 +73,7 @@ export {
 export { type KeyKeeper, noKeys } from "./deps/keys.js";
 export { fakeShell, localShell, type Shell, type ShellResult } from "./deps/shell.js";
 export { envFileSink, memorySink, type SecretSink } from "./deps/sink.js";
-export { statsDir } from "./deps/stats.js";
+export { resumeDir, statsDir } from "./deps/stats.js";
 export { macDesktop } from "./desktop/mac.js";
 export {
   type Desktop,

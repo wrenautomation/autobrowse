@@ -79,3 +79,11 @@ A flow that is not a walk gets only the saved URL. It resumes when its own code 
 - 10-20: `maxBatch` is 6 by default. William asked for 5 to 8, configurable, and no 20-step plans.
 - 10-20: Resume works through screens and the call key. It does not jump into a function. Restate-style replay of each act was rejected: after the browser closes, the page state is gone, so a replayed "skip" does nothing.
 - 10-20: Resume is on by default when there is a call key. Without a key, there is nothing to match the run to.
+- 10-20 (build): The saved URL is origin and path. A query key is kept only when the run's first URL on the same origin carried it (the caller chose it, for example `?gh_jid=`). A token the site mints mid-flow (a magic link, an OAuth code) never lands on disk.
+- 10-20 (build): The record dir is `<state>/resume` (`resumeDir`, `deps/stats.ts`): the owner's state dir that `boot()` sets, else `~/.config/autobrowse`. `AUTOBROWSE_RESUME=off` turns it off for a process; tests set it. It is not tied to `AUTOBROWSE_STATS`, because resume is behaviour, not stats.
+- 10-20 (build): A record is used only on the same profile. Another account's saved page is not this call's.
+- 10-20 (build): `screensDone` is keyed by `<site>/<walk>`, so a sign-in walk and the main walk in one flow do not mix. A screen counts as done when its act ran.
+- 10-20 (build): No `after` rule exists on `Screen` yet. The saved screens start the walk's path (the fail message and any later `after` rule see them). Stuck counts only this try's sightings, because a person may have fixed the page in between.
+- 10-20 (build): A resumed try that fails in its own code (`failed`, not `human` or `interrupted`) without a move (same page, no new screen) deletes the record. The saved page is what broke it, so the next try starts at step 1. Without this, a hand-written flow sent to page 3 fails on every retry for 7 days.
+- 10-20 (build): A kept tab on the saved page's origin and path is not reloaded, even when its query differs from the saved URL.
+- 10-20 (build): The open-failure row uses the run's rule: `NeedsHuman` is `human`, a transient error is `interrupted`, else `failed`. The library root now exports `withCall`, `currentCall`, `fileDoneActs`, `fileResumes`, `memoryResumes` and `resumeDir`.

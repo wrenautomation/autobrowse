@@ -85,7 +85,30 @@ export interface DoneActs {
 }
 
 /** A record outlives this long; Restate gives up on a step well before. */
-const KEEP_MS = 7 * 24 * 3_600_000;
+export const KEEP_MS = 7 * 24 * 3_600_000;
+
+/** One call's file in `dir`: the key hashed, so no invocation id lands in a file name. */
+export const callFile = (dir: string, call: string): string =>
+  join(dir, `${createHash("sha256").update(call).digest("hex").slice(0, 32)}.json`);
+
+/** Drop the files in `dir` older than `KEEP_MS`. */
+export function ageOut(dir: string, now: () => number = Date.now): void {
+  for (const f of readdirSync(dir))
+    try {
+      if (now() - statSync(join(dir, f)).mtimeMs > KEEP_MS) rmSync(join(dir, f), { force: true });
+    } catch {
+      // gone already
+    }
+}
+
+/** Write a call's file whole (a temp file, then a rename), owner-only, after an age-out. */
+export function writeCallFile(dir: string, call: string, body: unknown, now = Date.now): void {
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  ageOut(dir, now);
+  const tmp = `${callFile(dir, call)}.tmp`;
+  writeFileSync(tmp, JSON.stringify(body), { mode: 0o600 });
+  renameSync(tmp, callFile(dir, call));
+}
 
 /**
  * One small file per call that did an irreversible act; most calls never
@@ -93,11 +116,12 @@ const KEEP_MS = 7 * 24 * 3_600_000;
  * success, only aged out.
  */
 export function fileDoneActs(dir: string, now: () => number = Date.now): DoneActs {
-  const file = (call: string) =>
-    join(dir, `${createHash("sha256").update(call).digest("hex").slice(0, 32)}.json`);
   const read = (call: string): { at: number; acts: string[] } | null => {
     try {
-      const got = JSON.parse(readFileSync(file(call), "utf8")) as { at: number; acts: string[] };
+      const got = JSON.parse(readFileSync(callFile(dir, call), "utf8")) as {
+        at: number;
+        acts: string[];
+      };
       return now() - got.at < KEEP_MS ? got : null;
     } catch {
       return null;
@@ -107,17 +131,7 @@ export function fileDoneActs(dir: string, now: () => number = Date.now): DoneAct
     has: (call, act) => read(call)?.acts.includes(act) ?? false,
     add(call, act) {
       const acts = [...(read(call)?.acts ?? []), act];
-      mkdirSync(dir, { recursive: true });
-      for (const f of readdirSync(dir))
-        try {
-          if (now() - statSync(join(dir, f)).mtimeMs > KEEP_MS)
-            rmSync(join(dir, f), { force: true });
-        } catch {
-          // gone already
-        }
-      const tmp = `${file(call)}.tmp`;
-      writeFileSync(tmp, JSON.stringify({ at: now(), acts }), { mode: 0o600 });
-      renameSync(tmp, file(call));
+      writeCallFile(dir, call, { at: now(), acts }, now);
     },
   };
 }
