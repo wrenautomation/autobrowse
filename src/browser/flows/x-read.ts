@@ -449,10 +449,14 @@ async function withReplies(fp: FlowPage, id: string, i: Feed) {
       ),
     );
   };
-  const stuck = (why: string) =>
-    new Error(
-      `x/posts: ${fp.url()}: the Replies tab ${why} (calls: ${[...calls].join(", ") || "none"})`,
+  // Timeline-like calls first: the error text is cut short on the way back.
+  const stuck = (why: string) => {
+    const all = [...calls];
+    const near = all.filter((c) => /tweet|timeline|repl|conversation/i.test(c));
+    return new Error(
+      `x/posts: the Replies tab ${why} (calls: ${[...near, `${all.length - near.length} others`].join(", ")}; ${fp.url()})`,
     );
+  };
   fp.page.on("response", onResponse);
   try {
     const profile = /^\d+$/.test(id) ? `${WEB}/i/user/${id}` : `${WEB}/${id}`;

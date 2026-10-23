@@ -371,7 +371,7 @@ describe("x timeline data", () => {
     // No timeline call after the click: an error naming what the page called, not an empty list.
     answers = 0;
     await expect(xPosts.run(fp, { id: "wren_sample" })).rejects.toThrow(
-      /wren_sample\/with_replies: the Replies tab made no timeline call \(calls: none\)/,
+      /the Replies tab made no timeline call \(calls: 0 others; https:\/\/x.com\/wren_sample\/with_replies\)/,
     );
     expect(handlers.size).toBe(0);
   });
