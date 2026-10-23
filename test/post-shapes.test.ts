@@ -162,6 +162,36 @@ describe("tiktok publish init shape", () => {
     });
   });
 
+  it("uploads a file by FILE_UPLOAD: init with its size, then each chunk to the upload URL", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "tt-"));
+    const file = join(dir, "clip.mp4");
+    await writeFile(file, new Uint8Array(25 * 1024 * 1024));
+    const init = routeOf(tiktok, "POST", "/v2/post/publish/video/init/");
+    const { calls, leg } = recorder((url) =>
+      url.includes("/video/init/")
+        ? Response.json({ data: { publish_id: "p1", upload_url: "https://up.test/u" } })
+        : new Response(null, { status: 201 }),
+    );
+    const out = await init.call(
+      { post_info: { title: "t", privacy_level: "PUBLIC_TO_EVERYONE" }, file },
+      leg,
+    );
+    expect(out).toEqual({ data: { publish_id: "p1" } });
+    expect(json(calls[0]).source_info).toEqual({
+      source: "FILE_UPLOAD",
+      video_size: 25 * 1024 * 1024,
+      chunk_size: 10 * 1024 * 1024,
+      total_chunk_count: 2,
+    });
+    const puts = calls.slice(1);
+    expect(puts.map((c) => (c.init.headers as Record<string, string>)["content-range"])).toEqual([
+      `bytes 0-${10 * 1024 * 1024 - 1}/${25 * 1024 * 1024}`,
+      `bytes ${10 * 1024 * 1024}-${25 * 1024 * 1024 - 1}/${25 * 1024 * 1024}`,
+    ]);
+    expect(puts.every((c) => !(c.init.headers as Record<string, string>).authorization)).toBe(true);
+    expect(init.r.request.safeParse({ post_info: {} }).success).toBe(false);
+  });
+
   it("takes TikTok's own privacy names, Friends as MUTUAL_FOLLOW_FRIENDS", () => {
     const init = routeOf(tiktok, "POST", "/v2/post/publish/video/init/");
     const ask = (privacy_level: string) => ({

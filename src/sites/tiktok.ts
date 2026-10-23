@@ -1,10 +1,9 @@
 /**
  * TikTok under its own API's shape (open.tiktokapis.com v2): Login Kit for
  * the token, Display API for the account and its videos, Content Posting
- * API for publishing (an unaudited app can only post as private/self,
- * and only to the app's own testers). Comments have no public API, so
- * those routes are browser-only. Written from the docs 2026-09-21, unproven
- * until a developer app and an account exist.
+ * API for publishing (Direct Post audited 2026-10-23: public posts).
+ * Comments, follows and the nickname have no public API, so those routes
+ * are browser-only.
  */
 import { z } from "zod";
 import { MAX_COMMENTS } from "../browser/flows/tiktok-comments.js";
@@ -14,8 +13,10 @@ import { pollWaits } from "./poll.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { Seen, VerifyGet, VerifyRead } from "./verdict.js";
 import { arr, isoOf, rec, sameName, str, text, unclear } from "./verify-kit.js";
+import { bytesOf } from "./youtube.js";
 
 export const TIKTOK_ORIGIN = "https://open.tiktokapis.com";
+const INIT_URL = `${TIKTOK_ORIGIN}/v2/post/publish/video/init/`;
 
 const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 
@@ -55,33 +56,96 @@ const videoQuery = z.object({
   fields: z.string().default(VIDEO_FIELDS),
   filters: z.object({ video_ids: z.array(z.string().min(1)).min(1).max(20) }),
 });
-const publishInit = z.object({
-  post_info: z.object({
-    title: z.string().max(2200).optional(),
-    privacy_level: z
-      .enum(["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY"])
-      .default("SELF_ONLY"),
-    disable_duet: z.boolean().optional(),
-    disable_comment: z.boolean().optional(),
-    disable_stitch: z.boolean().optional(),
-    video_cover_timestamp_ms: z.number().int().optional(),
-    /** The video is AI-generated content. */
-    is_aigc: z.boolean().optional(),
-    /** Paid partnership: promotes a third party's brand. */
-    brand_content_toggle: z.boolean().optional(),
-    /** Promotes the creator's own business. */
-    brand_organic_toggle: z.boolean().optional(),
-  }),
-  source_info: z.union([
-    z.object({ source: z.literal("PULL_FROM_URL"), video_url: z.string().url() }),
-    z.object({
-      source: z.literal("FILE_UPLOAD"),
-      video_size: z.number().int().positive(),
-      chunk_size: z.number().int().positive(),
-      total_chunk_count: z.number().int().positive(),
+const publishInit = z
+  .object({
+    post_info: z.object({
+      title: z.string().max(2200).optional(),
+      privacy_level: z
+        .enum(["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY"])
+        .default("SELF_ONLY"),
+      disable_duet: z.boolean().optional(),
+      disable_comment: z.boolean().optional(),
+      disable_stitch: z.boolean().optional(),
+      video_cover_timestamp_ms: z.number().int().optional(),
+      /** The video is AI-generated content. */
+      is_aigc: z.boolean().optional(),
+      /** Paid partnership: promotes a third party's brand. */
+      brand_content_toggle: z.boolean().optional(),
+      /** Promotes the creator's own business. */
+      brand_organic_toggle: z.boolean().optional(),
     }),
-  ]),
-});
+    /** A video at a URL on a domain the app verified. Or give `file` and the route uploads it. */
+    source_info: z
+      .object({ source: z.literal("PULL_FROM_URL"), video_url: z.string().url() })
+      .optional(),
+    /** A video file (a path, or a URL it reads): sent by FILE_UPLOAD in chunks. */
+    file: z.string().min(1).optional(),
+  })
+  .refine((b) => !b.source_info !== !b.file, "give one of `source_info` or `file`");
+
+/**
+ * TikTok's chunk for a FILE_UPLOAD: 5 to 64 MB each, the last takes the rest (up to 128 MB). A
+ * file under two chunks goes whole.
+ */
+export const TIKTOK_CHUNK = 10 * 1024 * 1024;
+const VIDEO_TYPES: Record<string, string> = {
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  webm: "video/webm",
+};
+
+/** Init by FILE_UPLOAD, then PUT each chunk in order to TikTok's signed upload URL. */
+async function fileUpload(
+  leg: ApiLeg,
+  rest: Record<string, unknown>,
+  file: string,
+): Promise<unknown> {
+  const bytes = await bytesOf(file);
+  const size = bytes.byteLength;
+  if (size <= 0) throw new HttpError("POST", INIT_URL, 422, "the video is empty");
+  const type =
+    VIDEO_TYPES[/\.(\w+)(?:[?#].*)?$/.exec(file)?.[1]?.toLowerCase() ?? ""] ?? "video/mp4";
+  const whole = size < 2 * TIKTOK_CHUNK;
+  const chunk = whole ? size : TIKTOK_CHUNK;
+  const count = whole ? 1 : Math.floor(size / TIKTOK_CHUNK);
+  const init = (await must(
+    await leg.http.json<unknown>(INIT_URL, {
+      method: "POST",
+      headers: bearer(leg),
+      body: {
+        ...rest,
+        source_info: {
+          source: "FILE_UPLOAD",
+          video_size: size,
+          chunk_size: chunk,
+          total_chunk_count: count,
+        },
+      },
+    }),
+    "v2/post/publish/video/init/",
+  )) as { data?: { publish_id?: string; upload_url?: string } };
+  const to = init.data?.upload_url;
+  if (!init.data?.publish_id || !to)
+    throw new HttpError("POST", INIT_URL, 502, "init answered no upload address");
+  for (let i = 0; i < count; i++) {
+    const first = i * chunk;
+    const last = i === count - 1 ? size - 1 : first + chunk - 1;
+    // The upload URL is TikTok's own and signed: the token stays off it.
+    await must(
+      await leg.http.json<unknown>(to, {
+        method: "PUT",
+        headers: {
+          "content-type": type,
+          "content-length": String(last - first + 1),
+          "content-range": `bytes ${first}-${last}/${size}`,
+        },
+        raw: bytes.slice(first, last + 1),
+      }),
+      "v2/post/publish/video/init/ (bytes)",
+    );
+  }
+  return { data: { publish_id: init.data.publish_id } };
+}
 /** `wait`: seconds to keep asking until the post is done or failed (at most 120), as a client's own call does. */
 const publishStatus = z.object({
   publish_id: z.string().min(1),
@@ -208,9 +272,25 @@ export const tiktok: SiteApi = {
     }),
     route({
       method: "POST",
+      path: "/v2/post/publish/creator_info/query/",
+      summary:
+        "What the account may post now: `privacy_level_options` (only SELF_ONLY until the Direct Post audit passes), the comment/duet/stitch locks, the longest video; TikTok wants it read before each post. Reads only",
+      request: z.object({}).strict(),
+      api: async (_b, leg) =>
+        must(
+          await leg.http.json<unknown>(`${TIKTOK_ORIGIN}/v2/post/publish/creator_info/query/`, {
+            method: "POST",
+            headers: bearer(leg),
+            body: {},
+          }),
+          "v2/post/publish/creator_info/query/",
+        ),
+    }),
+    route({
+      method: "POST",
       path: "/v2/post/publish/video/init/",
       summary:
-        "Publish a video from a URL the app's domain owns, or start a chunked upload; answers `publish_id` (unaudited apps: SELF_ONLY)",
+        "Direct Post a video: `file` (a path or URL) goes up by FILE_UPLOAD in chunks; `source_info` PULL_FROM_URL takes a URL on a verified domain. Answers `publish_id`. Read `creator_info` first: it lists the privacy levels the app may use",
       request: publishInit,
       irreversible: true,
       verify: {
@@ -221,15 +301,17 @@ export const tiktok: SiteApi = {
       },
       // The API answers the publish id; the video's own id comes only once it is processed.
       sentAs: (o) => ({ id: str(rec(rec(o).data).publish_id), url: null }),
-      api: async (body, leg) =>
-        must(
-          await leg.http.json<unknown>(`${TIKTOK_ORIGIN}/v2/post/publish/video/init/`, {
-            method: "POST",
-            headers: bearer(leg),
-            body,
-          }),
-          "v2/post/publish/video/init/",
-        ),
+      api: async ({ file, ...body }, leg) =>
+        file
+          ? fileUpload(leg, body, file)
+          : must(
+              await leg.http.json<unknown>(INIT_URL, {
+                method: "POST",
+                headers: bearer(leg),
+                body,
+              }),
+              "v2/post/publish/video/init/",
+            ),
     }),
     route({
       method: "POST",
@@ -258,7 +340,7 @@ export const tiktok: SiteApi = {
       method: "POST",
       path: "/web/posts",
       summary:
-        "A post from a video file (a path, or a URL it downloads) with a caption, on TikTok Studio (an unaudited app's API posts only SELF_ONLY): `privacy` everyone|friends|only-me (default everyone), `comments`, `reuse` (default on), `aiGenerated`; answers `{ id, url, profile, note? }`, id null when the post went out but the profile does not list it yet",
+        "A post from a video file (a path, or a URL it downloads) with a caption, on TikTok Studio (a fallback; `/v2/post/publish/video/init/` posts by the API): `privacy` everyone|friends|only-me (default everyone), `comments`, `reuse` (default on), `aiGenerated`; answers `{ id, url, profile, note? }`, id null when the post went out but the profile does not list it yet",
       request: webPost,
       irreversible: true,
       verify: {
