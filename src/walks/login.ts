@@ -49,7 +49,7 @@ export function walkLogin(
       return shows(goal.url, goal.landmarks, await lookAt(fp.page));
     },
     async signIn(ctx) {
-      const asked = new Date();
+      let asked = new Date();
       const kind = o.code ?? CODES.find((k) => ctx.offers(k));
       // `<cred>.username` and `.password` from the credential; any other secret is the code the page sent.
       const run = () =>
@@ -58,7 +58,11 @@ export function walkLogin(
             const field = key.slice(key.lastIndexOf(".") + 1);
             if (field === "username") return ctx.cred.username;
             if (field === "password") return ctx.cred.password ?? null;
-            return kind ? ctx.code(kind, undefined, asked) : null;
+            if (!kind) return null;
+            const code = await ctx.code(kind, undefined, asked);
+            // A retry (a wrong-code screen sends a new one) waits for a text after this one.
+            asked = new Date();
+            return code;
           },
         }).run(ctx.fp, {});
       // One sign-in at a time asks this inbox, so a code meant for another stays its own.
@@ -70,7 +74,7 @@ export function walkLogin(
 /**
  * Every site's `login` walk in the owner's walks, as its `SiteLogin`. Added
  * after the built-in and data logins, so a hand login wins: a walk replaces
- * one only after it passes the same screens (a push, a wrong code).
+ * one only after it passes the same screens (a wrong code: `again` in the cut).
  */
 export function walkLogins(walksDir: string): SiteLogin[] {
   if (!existsSync(walksDir)) return [];

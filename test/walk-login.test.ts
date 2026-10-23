@@ -23,6 +23,12 @@ const PAGES: Record<string, { url: string; landmarks: string[]; go?: Record<stri
     go: { "click Verify": "home" },
   },
   home: { url: "https://lms.test/d2l/home", landmarks: ["heading My courses"] },
+  // Duo refused the first code: the same page, with a resend.
+  "duo-wrong": {
+    url: "https://sso.lms.test/duo",
+    landmarks: ["heading Enter your passcode", "button Send a new passcode*"],
+    go: { "click Verify": "home" },
+  },
 };
 
 function fake(first: string) {
@@ -136,6 +142,48 @@ describe("a sign-in walk as a SiteLogin", () => {
     expect(typed).toEqual(["User=user-a", "Password=pw-a", "Passcode=123456"]);
     expect(asked).toEqual(["lock sms", "sms"]);
     expect(await login.loggedIn(fp)).toBe(true);
+  });
+
+  it("a wrong code: sends a new one and types the newer text", async () => {
+    const duo = PAGES.duo as (typeof PAGES)[string];
+    const go = duo.go;
+    duo.go = { "click Verify": "duo-wrong" };
+    try {
+      const again: WalkSpec = {
+        ...spec,
+        screens: [
+          ...spec.screens,
+          {
+            name: "passcode-2",
+            looks: "passcode, refused",
+            url: "sso.lms.test/duo",
+            landmarks: ["heading enter your passcode", "button send a new passcode*"],
+            ops: [click("Send a new passcode"), fill("Passcode", "passcode"), click("Verify")],
+            after: ["passcode"],
+            seen: 1,
+          },
+        ],
+      };
+      const { fp, typed } = fake("sso");
+      const afters: (Date | undefined)[] = [];
+      const codes = ["111111", "222222"];
+      const ctx = {
+        fp,
+        cred: { site: "uw", username: "user-a", password: "pw-a" },
+        code: async (_kind: string, _hint: unknown, after?: Date) => {
+          afters.push(after);
+          return codes.shift();
+        },
+        offers: () => true,
+      } as unknown as SignInContext;
+      await walkLogin(again, { code: "sms" }).signIn(ctx);
+      expect(typed).toEqual(["User=user-a", "Password=pw-a", "Passcode=111111", "Passcode=222222"]);
+      // The retry asks for a text after the first code was taken.
+      expect((afters[1] as Date).getTime()).toBeGreaterThanOrEqual((afters[0] as Date).getTime());
+      expect(afters[1]).not.toBe(afters[0]);
+    } finally {
+      duo.go = go;
+    }
   });
 
   it("names the credential its secrets name, when not given", () => {

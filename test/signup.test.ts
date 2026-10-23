@@ -207,6 +207,10 @@ describe("loginSecrets", () => {
     expect(l.hosts("adfs.uni.example", "outlook@uni.password")).toBe(true);
     expect(l.hosts("uni.example.evil.test", "outlook@uni.password")).toBe(false);
     expect(l.hosts("notuni.example", "outlook@uni.password")).toBe(false);
+    // Duo's page takes the texted code, never the password.
+    expect(l.hosts("api-1a2b.duosecurity.com", "outlook@uni.code")).toBe(true);
+    expect(l.hosts("api-1a2b.duosecurity.com", "outlook@uni.password")).toBe(false);
+    expect(l.hosts("duosecurity.com.evil.test", "outlook@uni.code")).toBe(false);
   });
 
   it("<site>.code: the newest code that login's own inbox got after the session opened", async () => {
@@ -229,6 +233,25 @@ describe("loginSecrets", () => {
     expect(await l.secrets("instagram.phone")).toBe("+15875550100");
     expect(await l.secrets("instagram.phoneLocal")).toBe("5875550100");
     expect(asked[0]).toBe("ig@wren.test");
+  });
+
+  it("<site>.code: a login with no codes inbox takes the text our phone got (a Duo passcode)", async () => {
+    const store = memoryCredentials();
+    await store.put("outlook@uni", { username: "w@uni.example", password: "p" });
+    const kinds: string[] = [];
+    const source: CodeSource = {
+      get: async (q) => {
+        kinds.push(q.kind);
+        return q.kind === "sms" ? "1234567" : null;
+      },
+      offers: (kind) => kind === "sms" || kind === "email",
+      inbox: () => null,
+    };
+    const l = loginSecrets(store, ["outlook@uni"], undefined, {
+      codes: { source, since: new Date(0) },
+    });
+    expect(await l.secrets("outlook@uni.code")).toBe("1234567");
+    expect(kinds).toContain("sms");
   });
 
   it("<site>.code: a stored authenticator answers before any inbox", async () => {

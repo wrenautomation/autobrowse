@@ -277,6 +277,75 @@ describe("cut a run into walks", () => {
     ).toThrow(/skip 12 is not in 6-10/);
   });
 
+  it("signs in past a wrong code: the literal guess skipped, the page that came back its own screen", () => {
+    const R = "20261023-170000-ab12";
+    const DUO = "https://sso.lms.test/duo";
+    const PASS = {
+      url: "sso.lms.test/duo",
+      landmarks: ["heading enter your passcode", "button verify"],
+    };
+    const REFUSED = { ...PASS, landmarks: [...PASS.landmarks, "button send a new passcode*"] };
+    const input = (secret: string | null): Action => ({
+      kind: "input",
+      t: 0,
+      url: DUO,
+      target: H("textbox", "Passcode"),
+      value: secret ? "" : "0000000",
+      redacted: false,
+      ...(secret ? { secret } : {}),
+    });
+    const r: RunRow[] = [
+      { ...(rows[0] as RunRow & { kind: "start" }), run: R },
+      act(nav(SSO), null), // 1
+      act(click("Sign in", SSO), SIGN_IN), // 2
+      act(input(null), PASS), // 3: the wrong guess, typed on purpose
+      act(click("Verify", DUO), PASS), // 4
+      act(click("Send a new passcode*", DUO), REFUSED), // 5
+      act(input("uw.code"), REFUSED), // 6
+      act(click("Verify", DUO), REFUSED), // 7
+      act(nav(HOME), null), // 8
+      { kind: "end", at: at(), outcome: "achieved", summary: null, look: look(HOME, "home") },
+    ];
+    const cut = cutSchema.parse({
+      site: "lms",
+      runs: [R],
+      login: {
+        acts: "1-7",
+        credential: "uw",
+        skip: [3],
+        again: [5],
+        insert: [
+          {
+            before: 3,
+            op: {
+              kind: "fill",
+              goal: "fill Passcode",
+              hints: { role: "textbox", name: "Passcode" },
+              value: { from: "secret", key: "uw.code" },
+            },
+          },
+        ],
+      },
+      parts: [],
+    });
+    const login = named(
+      buildCut(cut, new Map([[R, { summary: { ...summary, run: R }, rows: r }]])).walks.map(
+        (b) => b.spec,
+      ),
+      "login",
+    );
+    const duo = login.screens.filter((s) => s.url === PASS.url);
+    const shape = (o: WalkOp) =>
+      o.kind === "click" ? o.hints.name : o.kind === "fill" ? JSON.stringify(o.value) : o.kind;
+    expect(duo.map((s) => s.ops.map(shape))).toEqual([
+      ['{"from":"secret","key":"uw.code"}', "Verify"],
+      ["Send a new passcode*", '{"from":"secret","key":"uw.code"}', "Verify"],
+    ]);
+    expect(duo[1]?.after).toEqual([duo[0]?.name]);
+    expect(duo[1]?.landmarks).toContain("button send a new passcode*");
+    expect(duo[0]?.landmarks).not.toContain("button send a new passcode*");
+  });
+
   it("reads an API on a page a load opened, with no act on it", () => {
     const cut = cutSchema.parse({
       site: "lms",

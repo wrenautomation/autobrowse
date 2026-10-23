@@ -80,6 +80,8 @@ const partSchema = z
       .optional(),
     /** Acts the walk leaves out: a repeat's other rows, a click on nothing (a dialog's body). */
     skip: z.array(act).optional(),
+    /** Acts where the page came back (a wrong code, then a new one): each starts its own screen. */
+    again: z.array(act).optional(),
     /** Ops the run did not journal (an old run's eval), `before` or `after` an act. */
     insert: z
       .array(
@@ -97,8 +99,12 @@ export const cutSchema = z
   .object({
     site: z.string(),
     runs: z.array(z.string().regex(RUN)).min(1),
-    /** The sign-in: built as the walk `login`, run by `walkLogin` with this credential. */
-    login: z.object({ acts, credential: z.string().optional() }).strict().optional(),
+    /** The sign-in: built as the walk `login`, run by `walkLogin` with this credential; skip, again and insert as a part's. */
+    login: partSchema
+      .pick({ acts: true, skip: true, again: true, insert: true })
+      .extend({ credential: z.string().optional() })
+      .strict()
+      .optional(),
     parts: z.array(partSchema),
     /** A walk of walks, in order; each step opens its own start first. */
     workflows: z
@@ -282,6 +288,11 @@ function buildPart(
       throw new Error(`${name}: skip ${n} is not in ${range.from}-${range.to}`);
     at(n).ops = [];
   }
+  for (const n of p.again ?? []) {
+    if (n <= range.from || n > range.to)
+      throw new Error(`${name}: again ${n} is not in ${range.from + 1}-${range.to}`);
+    at(n).again = true;
+  }
   for (const x of p.insert ?? []) {
     const n = (x.before ?? x.after) as number;
     if (n < range.from || n > range.to) continue;
@@ -446,7 +457,8 @@ export function buildCut(
     walks.push(...buildPart(cut.site, name, p, range, r.rows, r.summary, cut, rowsBy, now));
   };
   if (cut.login) {
-    one("login", { acts: cut.login.acts, goal: `sign in to ${baseSite(cut.site)}`, signIn: true });
+    const { credential: _, ...acts } = cut.login;
+    one("login", { ...acts, goal: `sign in to ${baseSite(cut.site)}`, signIn: true });
     const login = walks.at(-1) as BuiltWalk;
     if (cut.login.credential) login.spec = asCredential(login.spec, cut.login.credential);
   }

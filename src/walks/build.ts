@@ -58,6 +58,8 @@ export interface Around {
   irreversible?: boolean;
   /** The plan field its typed value or file becomes. */
   key?: string;
+  /** The page came back (a wrong code): this act starts a new visit of it, its own screen. */
+  again?: boolean;
 }
 
 /** One value the build guessed a source for: what the review shows and changes. */
@@ -129,6 +131,8 @@ interface Visit {
   ops: RawOp[];
   /** A short note right before it: what the person called it. */
   named: string | null;
+  /** A cut said the page came back here (`Around.again`). */
+  again?: boolean;
 }
 
 interface Cut {
@@ -174,8 +178,8 @@ export function visitsOf(
   const into = (op: RawOp) => {
     (cur ? cur.ops : early).push(op);
   };
-  const visit = (look: PageLook) => {
-    cur = { run, look, ops: early.splice(0), named };
+  const visit = (look: PageLook, again = false) => {
+    cur = { run, look, ops: early.splice(0), named, ...(again ? { again } : {}) };
     named = null;
     visits.push(cur);
   };
@@ -237,7 +241,8 @@ export function visitsOf(
     }
     // A cut mark splits the run before this builder sees it (`walks cut`); here it is no op.
     if (a.kind === "submit" || a.kind === "cut") continue;
-    if (r.look && (!cur || !last || !samePage(last, r.look))) visit(r.look);
+    const again = !!cur && !!around?.(a)?.again;
+    if (r.look && (!cur || !last || !samePage(last, r.look) || again)) visit(r.look, again);
     if (r.look) last = r.look;
     if (!cur) {
       // A person's act before any command looked at a page: the page it was on starts the walk.
@@ -539,6 +544,12 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
     }
     const k0 = Number(k.split("#")[1]);
     const after = k0 > 0 ? [names.get(`${c}#${k0 - 1}`) as string] : [];
+    // A page that came back (a wrong code) is known by what only it shows ("Send a new passcode").
+    const before = k0 > 0 ? common(visitsFor(`${c}#${k0 - 1}`).map((x) => x.look)) : [];
+    const pick = pickFor(c);
+    const own = v.again
+      ? common(vs.map((x) => x.look)).filter((l) => !before.includes(l) && !pick.includes(l))
+      : [];
     screens.push({
       name,
       looks:
@@ -546,7 +557,7 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
           ? v.named
           : `${v.look.landmarks.find((l) => l.startsWith("heading ")) ?? "a page"} on ${v.look.url}`,
       url: v.look.url,
-      landmarks: pickFor(c),
+      landmarks: [...pick, ...own],
       ops,
       ...(after.length ? { after } : {}),
       seen: new Set(vs.map((x) => x.run)).size,

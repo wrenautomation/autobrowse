@@ -184,7 +184,8 @@ export function loginSecrets(
             cred,
           )) ?? null
         );
-      const inbox = cred?.codesInbox;
+      // No codes inbox of its own: the address, so a text to our phone still answers (Duo texts it).
+      const inbox = cred?.codesInbox ?? cred?.username;
       if (!codes || !inbox) return null;
       // One reader per inbox, so a resend is a new code rather than the one already placed.
       const read = inboxCodes.get(inbox) ?? codeSecrets(codes.source, inbox, codes.since);
@@ -193,7 +194,12 @@ export function loginSecrets(
     },
     hosts: (host, secret) => {
       const hit = own(secret);
-      if (hit) return signupHosts(hit.site)(host) || orgHost(host, domains.get(hit.site));
+      if (hit)
+        return (
+          signupHosts(hit.site)(host) ||
+          orgHost(host, domains.get(hit.site)) ||
+          (hit.field === "code" && SECOND_FACTOR_HOSTS.test(host))
+        );
       return rest?.hosts ? rest.hosts(host) : true;
     },
   };
@@ -221,6 +227,9 @@ export function signupHosts(site: string, url?: string | null): (host: string) =
     return h.includes(word) || h === own || also.includes(h);
   };
 }
+
+/** A second-factor vendor's page: a sign-in's one-time code goes there, never its password. */
+const SECOND_FACTOR_HOSTS = /(^|\.)duosecurity\.com$/i;
 
 /**
  * Sites whose signup moves to a parent company's identity page, where the
