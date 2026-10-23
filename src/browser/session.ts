@@ -403,6 +403,9 @@ export async function looksLikeWall(page: Page): Promise<Wall | null> {
 export function wallOf(url: string, text: string): Wall | null {
   if (/accounts\.google\.com\/|signin\.aws\.amazon\.com\/|\/(login|sign-?in)(\/|\?|#|$)/i.test(url))
     return { kind: "login", detail: `login page: ${url}` };
+  // A SAML sign-in (AD FS, the university's) and Duo's prompt after it.
+  if (/^https:\/\/[^/]+\/adfs\/ls\/|^https:\/\/api-[0-9a-f]+\.duosecurity\.com\//i.test(url))
+    return { kind: "login", detail: `single sign-on: ${url.split("?")[0]}` };
   // LinkedIn signed out: every member page goes to /authwall ("Join LinkedIn", a Sign in link).
   if (/^https:\/\/www\.linkedin\.com\/authwall(\/|\?|$)/i.test(url))
     return { kind: "login", detail: `signed out: ${url}` };

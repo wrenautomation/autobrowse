@@ -71,6 +71,7 @@ describe("setup", () => {
       "discord",
       "hubspot",
       "intuit",
+      "outlook@uw",
     ]);
     expect((await store.get("cloudflare"))?.via).toBe("google");
     expect(asked.filter((q) => q.startsWith("hidden")).length).toBe(2);
@@ -98,10 +99,11 @@ describe("setup", () => {
       discord: { username: "w@x.com", password: "d" },
       hubspot: { username: "w@x.com", password: "-", via: "google" },
       intuit: { username: "w@x.com", password: "i" },
+      "outlook@uw": { username: "w@uwaterloo.ca", password: "u" },
     });
     const { io, asked, said } = scripted([]);
     await runSetup(io, store, SITE_LOGINS);
     expect(asked).toEqual([]);
-    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(21);
+    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(22);
   });
 });

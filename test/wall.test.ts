@@ -20,6 +20,14 @@ describe("looksLikeWall", () => {
       await looksLikeWall(page("https://myaccount.google.com/signinoptions/password")),
     ).toBeNull();
     expect(await looksLikeWall(page("https://x.com/settings/signin-methods"))).toBeNull();
+    // A university's SAML sign-in, then Duo's prompt.
+    expect(
+      (await looksLikeWall(page("https://adfs.uwaterloo.ca/adfs/ls/?SAMLRequest=x")))?.kind,
+    ).toBe("login");
+    expect(
+      (await looksLikeWall(page("https://api-4ccc589b.duosecurity.com/prompt/ABC?a=1")))?.kind,
+    ).toBe("login");
+    expect(await looksLikeWall(page("https://duo.com/docs/adfs/ls/"))).toBeNull();
     // Signed out of a Google Account: every page lands on its /intro/ twin.
     expect(
       (await looksLikeWall(page("https://myaccount.google.com/intro/personal-info")))?.kind,

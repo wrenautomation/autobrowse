@@ -29,6 +29,7 @@ import {
 import { MICROSOFT_HOST, signInToMicrosoft } from "./microsoft.js";
 import { providerOf } from "./providers.js";
 import { signInToTiktok, TIKTOK_LOGIN_URL } from "./tiktok.js";
+import { learnLogin } from "./uwaterloo.js";
 import { signInToX, X_LOGIN_URL } from "./x.js";
 
 const CLOUDFLARE_HOME = /dash\.cloudflare\.com\/[0-9a-f]{32}/;
@@ -945,6 +946,7 @@ export const SITE_LOGINS: readonly SiteLogin[] = [
   discord,
   hubspot,
   intuit,
+  learnLogin,
 ];
 
 const BUILT_IN = new Set(SITE_LOGINS);

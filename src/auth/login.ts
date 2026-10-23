@@ -646,10 +646,12 @@ export function passwordDomains(
 ): string[] {
   const base = name.split("@")[0] ?? name;
   const login = sites.find((s) => (s.credential ?? s.site) === base) ?? resolveLogin(sites, base);
+  // A login that names this exact credential (`learn` signs in as `outlook@uw`) adds its own.
+  const named = name === base ? [] : sites.filter((s) => s.credential === name);
   const out = new Set<string>();
-  if (login) {
-    out.add(registrable(new URL(login.home).host));
-    for (const d of login.origins ?? []) out.add(d);
+  for (const l of [...(login ? [login] : []), ...named]) {
+    out.add(registrable(new URL(l.home).host));
+    for (const d of l.origins ?? []) out.add(d);
   }
   if (cred.url) out.add(registrable(new URL(cred.url).host));
   return [...out];
