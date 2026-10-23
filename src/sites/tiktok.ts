@@ -222,6 +222,8 @@ export const tiktok: SiteApi = {
     comments: 24,
     // Who we follow, read off the profile's Following dialog: once a day is the need.
     following: 4,
+    // A video's Studio analytics page: a look per video per day.
+    analytics: 60,
   },
   routes: [
     route({
@@ -369,6 +371,15 @@ export const tiktok: SiteApi = {
       request: postComments,
       meter: () => ({ comments: 1 }),
       browser: { flow: "tiktok/post-comments" },
+    }),
+    route({
+      method: "GET",
+      path: "/web/videos/{videoId}/analytics",
+      summary:
+        "A video's numbers off its TikTok Studio analytics page, read from the page's own insight calls (no API; browser; our own videos only): durationSecs, views, uniqueViewers, totalPlaySecs, avgWatchSecs, finishRate, newFollowers, retention, sources, searchTerms, age, gender, location (lists of `{ key, value }`, TikTok's keys and shares), followerShare, nonFollowerShare, newViewerShare, returnViewerShare; null when TikTok shows none (most fields wait for 100 views); `other` names unmapped fields with data. Reads only",
+      request: z.object({ videoId: z.string().regex(/^\d+$/, "a video id") }),
+      meter: () => ({ analytics: 1 }),
+      browser: { flow: "tiktok/video-analytics" },
     }),
     route({
       method: "POST",

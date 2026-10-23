@@ -101,6 +101,7 @@ import { tiktokPostComments } from "../browser/flows/tiktok-comments.js";
 import { tiktokCreatePost } from "../browser/flows/tiktok-create-post.js";
 import { tiktokFollowing } from "../browser/flows/tiktok-following.js";
 import { tiktokOauthConsent } from "../browser/flows/tiktok-oauth-consent.js";
+import { tiktokVideoAnalytics } from "../browser/flows/tiktok-video-analytics.js";
 import { xFollow, xLike, xReply } from "../browser/flows/x-act.js";
 import { xOauthConsent } from "../browser/flows/x-oauth-consent.js";
 import { xFollowing, xPost, xPosts, xProfile, xSearch } from "../browser/flows/x-read.js";
@@ -196,6 +197,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     facebookOauthConsent,
     tiktokOauthConsent,
     tiktokPostComments,
+    tiktokVideoAnalytics,
     tiktokFollowing,
     threadsFollowing,
     tiktokCreatePost,
