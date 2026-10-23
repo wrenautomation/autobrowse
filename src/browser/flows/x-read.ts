@@ -17,7 +17,6 @@
  */
 import { defineFlow, type FlowPage } from "../flow.js";
 import { scrollCollect } from "../scroll-collect.js";
-import { meOf } from "./x-act.js";
 
 /** The little of the DOM these page scripts touch; the project compiles without lib dom. */
 interface El {
@@ -377,7 +376,13 @@ export const xFollowing = defineFlow<{ max_results?: number }, unknown>({
     for (let n = 0; n < RENDER_MS / SETTLE_MS && !me; n++) {
       if (SIGNED_OUT.test(fp.url()))
         return fp.human("X is signed out on this profile: `autobrowse login x@<account>`");
-      me = meOf(await fp.html());
+      // The page's markup is past html()'s cap on /home, so the rail link is read where it is.
+      const href = await fp.page.evaluate(
+        () =>
+          document.querySelector("a[data-testid=AppTabBar_Profile_Link]")?.getAttribute("href") ??
+          null,
+      );
+      me = (href && /^\/([A-Za-z0-9_]{1,15})$/.exec(href)?.[1]) || null;
       if (!me) await fp.wait(SETTLE_MS);
     }
     if (!me) return fp.human("could not tell which X account this profile is signed in as");
