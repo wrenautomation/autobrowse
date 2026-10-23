@@ -167,7 +167,12 @@ const update = z.object({
   daily_budget: minor.optional(),
   lifetime_budget: minor.optional(),
 });
-const object = z.object({ objectId: id, fields: z.string().default("id") });
+const object = z.object({
+  objectId: z.string().regex(/^[0-9]+(_[0-9]+)?$/, "a Graph id (a Page post's is <pageId>_<n>)"),
+  fields: z.string().default("id"),
+  /** The Page that owns the object (its video, photo or post): read with that Page's token. */
+  pageId: id.optional(),
+});
 const search = z.object({
   type: z.enum(["adinterest", "adgeolocation", "adworkposition", "adeducationmajor"]),
   q: z.string().min(1),
@@ -411,6 +416,16 @@ async function pageLeg(leg: ApiLeg, pageId: string): Promise<ApiLeg> {
   return { ...leg, token: await hit.token };
 }
 
+/**
+ * What a Page owns (its posts, videos, photos) reads with the Page's token: Graph refuses the
+ * user token there (code 190). The Page is the one named, or a post id's own (`<pageId>_<n>`).
+ * Any other object reads with the user's.
+ */
+function objectLeg(leg: ApiLeg, objectId: string, named?: string): Promise<ApiLeg> | ApiLeg {
+  const pageId = named ?? /^(\d+)_\d+$/.exec(objectId)?.[1];
+  return pageId ? pageLeg(leg, pageId) : leg;
+}
+
 /** The app's id, from the consent's client id. */
 function appId(leg: ApiLeg): string {
   const v = leg.env("META_CLIENT_ID");
@@ -518,6 +533,8 @@ export const metaOAuth: OAuthSpec = {
     "business_management",
     "pages_show_list",
     "pages_read_engagement",
+    // A Page post's likes, comments and reactions (code 10 without it).
+    "pages_read_user_content",
     "pages_manage_posts",
     "pages_manage_ads",
     // Our Page's webhooks: subscribed_apps for `feed` and `messages`.
@@ -565,6 +582,13 @@ export const meta: SiteApi = {
       summary: "Who the token is",
       request: me,
       api: (q, leg) => get(leg, "me", q),
+    }),
+    route({
+      method: "GET",
+      path: "/me/permissions",
+      summary: "Each scope the consent asked for: granted or declined",
+      request: z.object({}),
+      api: (_q, leg) => get(leg, "me/permissions", {}),
     }),
     route({
       method: "GET",
@@ -684,9 +708,10 @@ export const meta: SiteApi = {
       method: "GET",
       path: "/{objectId}",
       summary:
-        "Any Graph object by id with `fields` (a post's `likes.summary(true),comments.summary(true),shares`)",
+        "Any Graph object by id with `fields` (a post's `likes.summary(true),comments.summary(true),shares`); `pageId` reads a Page's video or photo with its token",
       request: object,
-      api: ({ objectId, fields }, leg) => get(leg, objectId, { fields }),
+      api: async ({ objectId, fields, pageId }, leg) =>
+        get(await objectLeg(leg, objectId, pageId), objectId, { fields }),
     }),
     route({
       method: "GET",
@@ -709,7 +734,7 @@ export const meta: SiteApi = {
       path: "/{pageId}/posts",
       summary: "A Page's posts, newest first",
       request: pagePosts,
-      api: ({ pageId, ...q }, leg) => get(leg, `${pageId}/posts`, q),
+      api: async ({ pageId, ...q }, leg) => get(await pageLeg(leg, pageId), `${pageId}/posts`, q),
     }),
     route({
       method: "GET",

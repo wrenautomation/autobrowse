@@ -313,6 +313,21 @@ describe("meta site", () => {
     ).rejects.toThrow();
   });
 
+  it("reads a Page's posts, a Page post and a named Page's video with the Page's own token", async () => {
+    const { sites, calls } = facade(null);
+    await sites.call("meta", "GET", "/111/posts", { limit: 5 });
+    await sites.call("meta", "GET", "/111_42", { fields: "likes.summary(true)" });
+    await sites.call("meta", "GET", "/77", { fields: "views", pageId: "111" });
+    await sites.call("meta", "GET", "/88", { fields: "name" });
+    expect(calls.map((c) => [c.url.pathname, c.auth])).toEqual([
+      ["/v23.0/111", "Bearer user-token"],
+      ["/v23.0/111/posts", "Bearer page-token"],
+      ["/v23.0/111_42", "Bearer page-token"],
+      ["/v23.0/77", "Bearer page-token"],
+      ["/v23.0/88", "Bearer user-token"],
+    ]);
+  });
+
   it("points the app's webhooks at a callback with the app token and the handshake token", async () => {
     const { sites, calls } = facade(null);
     await sites.call("meta", "POST", "/app/subscriptions", {
