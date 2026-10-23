@@ -406,7 +406,7 @@ export const x: SiteApi = {
       method: "GET",
       path: "/2/users/{id}/tweets",
       summary:
-        "A user's posts, newest first (`max_results`, `since_id` cursor, `exclude=retweets`; `id` may be a handle; free: the signed-in page)",
+        "A user's posts and replies, newest first (`max_results` up to 100, `since_id` cursor, `exclude=replies,retweets`; `id` may be a handle; free: the signed-in page). Each reply has `in_reply_to_status_id`, `referenced_tweets` and `in_reply_to` {username, name}",
       request: timeline,
       prefer: "browser",
       meter: () => ({ posts: 1 }),

@@ -15,6 +15,7 @@
  * views"). Timelines are virtualized, so rows are collected while
  * scrolling (`scrollCollect`).
  */
+import type { Response } from "playwright";
 import { defineFlow, type FlowPage } from "../flow.js";
 import { scrollCollect } from "../scroll-collect.js";
 
@@ -299,10 +300,203 @@ export interface PostsInput extends Feed {
   id: string;
 }
 
+/** A post of the account's own, from the page's data: the API's reply fields with it. */
+export interface TimelineTweet extends Tweet {
+  url: string;
+  conversation_id?: string;
+  in_reply_to_status_id?: string;
+  in_reply_to_user_id?: string;
+  /** The replied-to post's author. */
+  in_reply_to?: { username: string; name: string };
+  referenced_tweets?: Array<{ type: "replied_to"; id: string }>;
+}
+
+/** The little of X's GraphQL timeline item this reads. */
+interface GqlUser {
+  rest_id?: string;
+  core?: { screen_name?: string; name?: string };
+  legacy?: { screen_name?: string; name?: string };
+}
+interface GqlTweet {
+  __typename?: string;
+  tweet?: GqlTweet;
+  rest_id?: string;
+  core?: { user_results?: { result?: GqlUser } };
+  note_tweet?: { note_tweet_results?: { result?: { text?: string } } };
+  views?: { count?: string };
+  legacy?: {
+    id_str?: string;
+    full_text?: string;
+    created_at?: string;
+    conversation_id_str?: string;
+    in_reply_to_status_id_str?: string;
+    in_reply_to_user_id_str?: string;
+    in_reply_to_screen_name?: string;
+    retweeted_status_result?: unknown;
+    reply_count?: number;
+    retweet_count?: number;
+    favorite_count?: number;
+    bookmark_count?: number;
+  };
+}
+
+const unentity = (t: string) =>
+  t.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
+
+const userOfGql = (u: GqlUser | undefined) => {
+  const username = u?.core?.screen_name ?? u?.legacy?.screen_name;
+  return username
+    ? { id: u?.rest_id, username, name: u?.core?.name ?? u?.legacy?.name ?? username }
+    : null;
+};
+
+/**
+ * Every post in one timeline answer (the replied-to posts above each reply
+ * too), with their reply fields. A quoted post is not a row. A pinned entry
+ * comes back `pinned`.
+ */
+export function timelineTweets(body: unknown): TimelineTweet[] {
+  const tweets = new Map<string, TimelineTweet>();
+  const users = new Map<string, { username: string; name: string }>();
+  const replies: Array<[TimelineTweet, string | undefined]> = [];
+  const visit = (node: unknown, pinned: boolean): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const n of node) visit(n, pinned);
+      return;
+    }
+    const o = node as Record<string, unknown>;
+    const pin = pinned || o.type === "TimelinePinEntry";
+    const found = (o.tweet_results as { result?: GqlTweet } | undefined)?.result;
+    const t = found?.__typename === "TweetWithVisibilityResults" ? found.tweet : found;
+    const l = t?.legacy;
+    if (t && l?.id_str) {
+      const author = userOfGql(t.core?.user_results?.result);
+      if (author?.id) users.set(author.id, author);
+      if (author && !tweets.has(l.id_str)) {
+        const row: TimelineTweet = {
+          id: l.id_str,
+          text: unentity(t.note_tweet?.note_tweet_results?.result?.text ?? l.full_text ?? ""),
+          author_username: author.username,
+          author_name: author.name,
+          url: `${WEB}/${author.username}/status/${l.id_str}`,
+          public_metrics: {
+            reply_count: l.reply_count ?? 0,
+            retweet_count: l.retweet_count ?? 0,
+            like_count: l.favorite_count ?? 0,
+            bookmark_count: l.bookmark_count ?? 0,
+            impression_count: Number(t.views?.count ?? 0) || 0,
+          },
+        };
+        const at = l.created_at ? new Date(l.created_at) : null;
+        if (at && !Number.isNaN(at.getTime())) row.created_at = at.toISOString();
+        if (l.conversation_id_str) row.conversation_id = l.conversation_id_str;
+        if (pin) row.pinned = true;
+        if (l.retweeted_status_result) row.reposted_by = author.name;
+        const parent = l.in_reply_to_status_id_str;
+        if (parent) {
+          row.in_reply_to_status_id = parent;
+          row.referenced_tweets = [{ type: "replied_to", id: parent }];
+          if (l.in_reply_to_user_id_str) row.in_reply_to_user_id = l.in_reply_to_user_id_str;
+          replies.push([row, l.in_reply_to_screen_name]);
+        }
+        tweets.set(l.id_str, row);
+      }
+    }
+    for (const [k, v] of Object.entries(o)) {
+      // A quoted or reposted post sits inside its row; it is no row of its own.
+      if (k === "quoted_status_result" || k === "retweeted_status_result" || k === "legacy")
+        continue;
+      visit(v, pin);
+    }
+  };
+  visit(body, false);
+  for (const [row, handle] of replies) {
+    const parent = tweets.get(row.in_reply_to_status_id as string);
+    const user = row.in_reply_to_user_id ? users.get(row.in_reply_to_user_id) : undefined;
+    const username = parent?.author_username ?? user?.username ?? handle;
+    if (username)
+      row.in_reply_to = { username, name: parent?.author_name ?? user?.name ?? username };
+  }
+  return [...tweets.values()];
+}
+
+/** The replies tab's timeline call. */
+const REPLIES_CALL = "/UserTweetsAndReplies";
+
+/**
+ * The account's own posts and replies, newest first, off its Replies tab,
+ * read from the page's own timeline data (each reply's parent and its author
+ * included). Pinned posts and, with `exclude=retweets`, reposts are left out
+ * of nothing but come back marked.
+ */
+async function withReplies(fp: FlowPage, id: string, i: Feed) {
+  let handle = id;
+  if (/^\d+$/.test(id)) {
+    await fp.open(`${WEB}/i/user/${id}`);
+    if (!(await fp.waitForUrl(/x\.com\/(?!i\/)[A-Za-z0-9_]{1,15}(?:[/?#]|$)/, RENDER_MS)))
+      return notFound(`no X user ${id} (${fp.url()})`);
+    handle = /x\.com\/([A-Za-z0-9_]{1,15})/.exec(fp.url())?.[1] ?? id;
+  }
+  const bodies: unknown[] = [];
+  const pending: Array<Promise<void>> = [];
+  const onResponse = (r: Response) => {
+    if (!r.url().includes(REPLIES_CALL)) return;
+    pending.push(
+      r.json().then(
+        (b: unknown) => {
+          bodies.push(b);
+        },
+        () => undefined,
+      ),
+    );
+  };
+  fp.page.on("response", onResponse);
+  try {
+    const url = `${WEB}/${handle}/with_replies`;
+    const state = await landed(fp, url);
+    if (state === "missing") return notFound(`nothing at ${url}`);
+    await Promise.all(pending);
+    const me = handle.toLowerCase();
+    const noReposts = /retweets/.test(i.exclude ?? "");
+    const own = async () => {
+      await Promise.all(pending);
+      return bodies
+        .flatMap(timelineTweets)
+        .filter((t) => t.author_username.toLowerCase() === me && !(noReposts && t.reposted_by))
+        .sort((a, b) => (newer(a.id, b.id) ? -1 : 1));
+    };
+    if (state === "empty" && !(await own()).length) return { data: [], meta: { result_count: 0 } };
+    const { rows } = await scrollCollect(fp, {
+      read: own,
+      key: (t) => t.id,
+      max: i.max_results ?? 10,
+      skip: (t) => t.pinned === true,
+      ...(i.since_id ? { stop: (t: TimelineTweet) => !newer(t.id, i.since_id as string) } : {}),
+    });
+    const data = i.since_id ? rows.filter((t) => newer(t.id, i.since_id as string)) : rows;
+    return {
+      data,
+      ...(/\bauthor_id\b/.test(i.expansions ?? "") ? { includes: { users: authorsOf(data) } } : {}),
+      meta: metaOf(data),
+    };
+  } finally {
+    fp.page.off("response", onResponse);
+  }
+}
+
+/**
+ * As the API: replies come back unless `exclude` names them, each with
+ * `in_reply_to_status_id` and its parent's author (the Replies tab); with
+ * replies excluded, the profile's Posts tab.
+ */
 export const xPosts = defineFlow<PostsInput, unknown>({
   site: "x",
   name: "posts",
-  run: (fp, i) => feed(fp, /^\d+$/.test(i.id) ? `${WEB}/i/user/${i.id}` : `${WEB}/${i.id}`, i),
+  run: (fp, i) =>
+    /replies/.test(i.exclude ?? "")
+      ? feed(fp, /^\d+$/.test(i.id) ? `${WEB}/i/user/${i.id}` : `${WEB}/${i.id}`, i)
+      : withReplies(fp, i.id, i),
 });
 
 export interface SearchInput extends Feed {

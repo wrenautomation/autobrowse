@@ -380,13 +380,15 @@ async function sortRecent(fp: FlowPage): Promise<void> {
 
 /**
  * One page's posts, read by scrolling; none when the page says it is empty.
- * `ready` runs once the first cards show (the Posts tab's sort).
+ * `ready` runs once the first cards show (the Posts tab's sort). `keep` drops
+ * a read post before it counts toward `max`.
  */
 export async function readPosts(
   fp: FlowPage,
   url: string,
   max: number,
   ready?: (fp: FlowPage) => Promise<void>,
+  keep: (p: FeedPost) => boolean = () => true,
 ): Promise<Posts> {
   await go(fp, url);
   if (!(await fp.has({ css: CARD }, RENDER_MS))) {
@@ -403,8 +405,8 @@ export async function readPosts(
       for (const raw of await fp.page.evaluate<RawPost[]>(READ_POSTS)) {
         if (!raw.text.trim()) continue;
         const post = postOf(raw, now);
-        if (post) out.push(post);
-        else dropped.add(raw.text.trim().slice(0, 300));
+        if (!post) dropped.add(raw.text.trim().slice(0, 300));
+        else if (keep(post)) out.push(post);
       }
       return out;
     },
@@ -488,5 +490,79 @@ export const linkedinPost = defineFlow<
     });
     const post = posts.find((p) => idOf(p.urn) === idOf(urn)) ?? posts[0];
     return post ? restPostOf(post, urn) : fp.human(`the post at ${fp.url()} names no urn`);
+  },
+});
+
+/**
+ * When a LinkedIn id was made: its top 41 bits are the epoch ms (activity,
+ * share and ugcPost ids alike). Null for an id that reads as no plausible
+ * instant, so a page's age label stands in.
+ */
+export function idTime(urn: string, now = Date.now()): number | null {
+  const id = idOf(urn);
+  if (!id) return null;
+  const ms = Number(BigInt(id) >> 22n);
+  return ms > Date.UTC(2003, 4, 5) && ms <= now + 86_400_000 ? ms : null;
+}
+
+export interface ListPostsInput {
+  /** `urn:li:person:…` (the signed-in member: the page knows no other's urn) or `urn:li:organization:N`. */
+  author: string;
+  count?: number;
+  start?: number;
+}
+
+/** `GET /rest/posts?q=author` as the API answers it. */
+export interface PostList {
+  elements: Array<RestPost & { createdAt?: number }>;
+  paging: { start: number; count: number };
+  /** Cards that named no post urn. */
+  dropped: number;
+}
+
+/** The profile at `/in/me/`, as `https://www.linkedin.com/in/<vanity>/`. */
+async function myProfile(fp: FlowPage): Promise<string> {
+  await go(fp, `${WEB}/in/me/`);
+  if (!(await fp.waitForUrl(/\/in\/(?!me\/)[^/]+\//, RENDER_MS)))
+    return fp.human(`/in/me/ never reached a profile: ${fp.url()}`);
+  return authorUrlOf(fp.url()) ?? fp.human(`not a profile: ${fp.url()}`);
+}
+
+/** A card with a header line ("… reposted this", "… commented") is not the author's own post. */
+const headed = (p: FeedPost) =>
+  linesOf(p.raw.text)
+    .slice(0, 2)
+    .some((l) => HEADER.test(l));
+
+/**
+ * The author's own posts, newest first, in the API's shape: a member's from
+ * their recent activity (the signed-in member, whoever `author` names), a
+ * Page's from its Posts tab sorted by Recent. Reposts and comments are left
+ * out. `publishedAt` comes from the urn's id, else the age label. Read only.
+ */
+export const linkedinListPosts = defineFlow<ListPostsInput, PostList>({
+  site: "linkedin",
+  name: "list-posts",
+  async run(fp, { author, count = 10, start = 0 }) {
+    const org = /^urn:li:organization:(\d+)$/.exec(author)?.[1];
+    const max = start + count;
+    const read = org
+      ? await readPosts(fp, companyPostsUrl(org), max, sortRecent, (p) => !headed(p))
+      : await (async () => {
+          const me = await myProfile(fp);
+          return readPosts(
+            fp,
+            `${me}recent-activity/all/`,
+            max,
+            undefined,
+            (p) => p.authorUrl === me && !headed(p),
+          );
+        })();
+    const elements = read.posts.slice(start, max).map((p) => {
+      const at = idTime(p.urn) ?? (p.at ? Date.parse(p.at) : undefined);
+      const { publishedAt: _, ...rest } = restPostOf(p, p.urn);
+      return { ...rest, author, ...(at ? { publishedAt: at, createdAt: at } : {}) };
+    });
+    return { elements, paging: { start, count }, dropped: read.dropped };
   },
 });

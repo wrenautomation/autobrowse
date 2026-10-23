@@ -7,7 +7,9 @@ import {
   authorUrlOf,
   companyPostsUrl,
   countOf,
+  idTime,
   linkedinCompanyPosts,
+  linkedinListPosts,
   linkedinPost,
   linkedinSearchPosts,
   postOf,
@@ -353,7 +355,72 @@ describe("linkedin posts: the flows and the routes", () => {
     );
   });
 
+  it("a LinkedIn id's instant is its top 41 bits; a small or future id is none", () => {
+    expect(idTime("urn:li:activity:7385000000000000000")).toBe(1760721206665);
+    expect(idTime("urn:li:ugcPost:7385000000000000000")).toBe(1760721206665);
+    expect(idTime("urn:li:activity:7001")).toBeNull();
+    expect(idTime("urn:li:share:7385000000000000000", Date.UTC(2020, 0, 1))).toBeNull();
+  });
+
+  it("list-posts: the signed-in member's own posts off recent activity, in the API's shape", async () => {
+    const me = `${WEB}/in/wren-sample/`;
+    const mine = (id: string, body: string): RawPost => ({
+      ...SDUI,
+      ids: [`urn:li:activity:${id}`],
+      text: `Feed post\nWren Sample\n1w •\n${body}`,
+      links: [me],
+      actors: [{ name: "Wren Sample", url: me }],
+      body: `${body}\n… more`,
+    });
+    const repost: RawPost = {
+      ...mine("7385000000000000003", "Their post"),
+      text: "Feed post\nWren Sample reposted this\nSample Co\n2d •\nTheir post",
+      actors: [
+        { name: "Wren Sample", url: me },
+        { name: "Sample Co", url: `${WEB}/company/sample-co/` },
+      ],
+    };
+    const { fp, acts, opened } = scripted([
+      [mine("7385000000000000002", "Newest"), repost, SDUI],
+      [mine("7385000000000000002", "Newest"), mine("7385000000000000001", "Older")],
+    ]);
+    fp.url = () => `${me}?miniProfileUrn=x`;
+    const author = "urn:li:person:abc";
+    const out = await linkedinListPosts.run(fp, { author, count: 1, start: 1 });
+    expect(opened).toEqual([`${WEB}/in/me/`, `${me}recent-activity/all/`]);
+    expect(acts).toEqual([]);
+    expect(out).toEqual({
+      elements: [
+        {
+          id: "urn:li:activity:7385000000000000001",
+          author,
+          commentary: "Older",
+          lifecycleState: "PUBLISHED",
+          publishedAt: 1760721206665,
+          createdAt: 1760721206665,
+          authorName: "Wren Sample",
+          authorUrl: me,
+          reactions: 2000,
+          comments: 12,
+          url: `${WEB}/feed/update/urn:li:activity:7385000000000000001/`,
+        },
+      ],
+      paging: { start: 1, count: 1 },
+      dropped: 0,
+    });
+  });
+
+  it("list-posts: a Page's posts off its Posts tab, sorted by Recent", async () => {
+    const { fp, opened } = scripted([[SDUI]]);
+    const out = await linkedinListPosts.run(fp, { author: "urn:li:organization:42" });
+    expect(opened).toEqual([companyPostsUrl("42")]);
+    expect(out.elements.map((e) => [e.id, e.author, e.commentary])).toEqual([
+      ["urn:li:ugcPost:7002", "urn:li:organization:42", "We are hiring recruiters."],
+    ]);
+  });
+
   it("the flows are registered", () => {
+    expect(BROWSER_FLOWS["linkedin/list-posts"]).toBe(linkedinListPosts);
     expect(BROWSER_FLOWS["linkedin/search-posts"]).toBe(linkedinSearchPosts);
     expect(BROWSER_FLOWS["linkedin/company-posts"]).toBe(linkedinCompanyPosts);
     expect(BROWSER_FLOWS["linkedin/post"]).toBe(linkedinPost);
@@ -407,10 +474,18 @@ describe("linkedin posts: the flows and the routes", () => {
     await sites.call("linkedin", "GET", "/company/sample-co/posts", { max: "5" }, as);
     // One post reads its page until the read grants land, in the API's shape.
     await sites.call("linkedin", "GET", "/rest/posts/urn:li:activity:7001", {}, as);
+    await sites.call(
+      "linkedin",
+      "GET",
+      "/rest/posts",
+      { author: "urn:li:person:abc", count: "100" },
+      as,
+    );
     expect(seen).toEqual([
       'search-posts {"keywords":"ria","max":20,"since":"past-week"}',
       'company-posts {"company":"sample-co","max":5}',
       'post {"urn":"urn:li:activity:7001"}',
+      'list-posts {"author":"urn:li:person:abc","count":100,"start":0}',
     ]);
     await expect(
       sites.call("linkedin", "GET", "/search/results/content", { keywords: "x", max: 51 }, as),

@@ -48,6 +48,7 @@ import { linkedinOauthConsent } from "../browser/flows/linkedin-oauth-consent.js
 import { linkedinPostAnalytics } from "../browser/flows/linkedin-post-analytics.js";
 import {
   linkedinCompanyPosts,
+  linkedinListPosts,
   linkedinPost,
   linkedinSearchPosts,
 } from "../browser/flows/linkedin-posts.js";
@@ -166,6 +167,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinDashboard,
     linkedinSearchPosts,
     linkedinCompanyPosts,
+    linkedinListPosts,
     linkedinPost,
     linkedinWithdraw,
     linkedinLike,

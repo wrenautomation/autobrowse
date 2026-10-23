@@ -489,7 +489,8 @@ export const linkedin: SiteApi = {
     route({
       method: "GET",
       path: "/rest/posts",
-      summary: "The member's posts, newest first (`q=author&author=urn:li:person:…&count&start`)",
+      summary:
+        "The member's or Page's own posts, newest first (`q=author&author=urn:li:person:…&count&start`): id, commentary, publishedAt/createdAt (ms). Until the read grants land, the signed-in member's recent activity or the Page's Posts tab",
       request: listPosts,
       // A member's own posts are r_member_social, which LinkedIn grants to partners only.
       needs: (q) => [PAGE_URN.test(q.author) ? "r_organization_social" : "r_member_social"],
@@ -505,9 +506,10 @@ export const linkedin: SiteApi = {
           "rest/posts",
         );
       },
+      meter: () => ({ posts: 1 }),
       browser: {
-        workflow: "linkedin-list-posts",
-        input: (q) => ({ count: q.count, start: q.start }),
+        flow: "linkedin/list-posts",
+        input: (q) => ({ author: q.author, count: q.count, start: q.start }),
       },
     }),
     route({

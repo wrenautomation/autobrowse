@@ -7,10 +7,14 @@ import {
   metricsOf,
   type RawTweet,
   searchUrl,
+  type TimelineTweet,
+  timelineTweets,
   tweetOf,
   userOf,
+  xPosts,
 } from "../src/browser/flows/x-read.js";
 import { scrollCollect } from "../src/browser/scroll-collect.js";
+import { fakePage } from "./auth-fakes.js";
 
 const raw = (o: Partial<RawTweet>): RawTweet => ({
   user: "Stripe\n@stripe\n·\n4h",
@@ -183,5 +187,172 @@ describe("followedOf", () => {
       follows_you: false,
     });
     expect(followedOf({ text: "Someone", hrefs: ["/i/lists/1"] })).toBeNull();
+  });
+});
+
+const user = (rest_id: string, screen_name: string, name: string) => ({
+  result: { rest_id, core: { screen_name, name } },
+});
+const gql = (id: string, by: ReturnType<typeof user>, text: string, more: object = {}) => ({
+  __typename: "Tweet",
+  rest_id: id,
+  core: { user_results: by },
+  views: { count: "120" },
+  legacy: {
+    id_str: id,
+    full_text: text,
+    created_at: "Wed Oct 21 12:00:00 +0000 2026",
+    conversation_id_str: id,
+    reply_count: 1,
+    retweet_count: 2,
+    favorite_count: 3,
+    bookmark_count: 0,
+    ...more,
+  },
+});
+const WREN = user("100", "wren_sample", "Wren");
+const OTHER = user("200", "other_co", "Other Co");
+const item = (result: object) => ({ itemContent: { tweet_results: { result } } });
+/** One answer of the Replies tab: a pin, a reply under its parent, a post quoting another, a repost. */
+const REPLIES_PAGE = {
+  data: {
+    user: {
+      result: {
+        timeline: {
+          timeline: {
+            instructions: [
+              { type: "TimelinePinEntry", entry: { content: item(gql("1000", WREN, "Pinned")) } },
+              {
+                type: "TimelineAddEntries",
+                entries: [
+                  {
+                    content: {
+                      items: [
+                        { item: item(gql("1004", OTHER, "Their post")) },
+                        {
+                          item: item(
+                            gql("1005", WREN, "@other_co Good point &amp; more", {
+                              in_reply_to_status_id_str: "1004",
+                              in_reply_to_user_id_str: "200",
+                              in_reply_to_screen_name: "other_co",
+                              conversation_id_str: "1004",
+                            }),
+                          ),
+                        },
+                      ],
+                    },
+                  },
+                  {
+                    content: item({
+                      __typename: "TweetWithVisibilityResults",
+                      tweet: {
+                        ...gql("1003", WREN, "short"),
+                        note_tweet: {
+                          note_tweet_results: { result: { text: "The whole long text" } },
+                        },
+                        quoted_status_result: { result: gql("900", OTHER, "quoted") },
+                      },
+                    }),
+                  },
+                  {
+                    content: item(
+                      gql("1002", WREN, "RT @other_co: x", {
+                        retweeted_status_result: { result: gql("901", OTHER, "x") },
+                      }),
+                    ),
+                  },
+                  {
+                    content: item(
+                      gql("1001", WREN, "@gone hi", {
+                        in_reply_to_status_id_str: "800",
+                        in_reply_to_user_id_str: "300",
+                        in_reply_to_screen_name: "gone",
+                      }),
+                    ),
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    },
+  },
+};
+
+describe("x timeline data", () => {
+  it("reads each post with its reply fields; the parent's author from the answer, else the handle", () => {
+    const rows = timelineTweets(REPLIES_PAGE);
+    expect(rows.map((t) => [t.id, t.author_username, !!t.pinned, t.reposted_by ?? null])).toEqual([
+      ["1000", "wren_sample", true, null],
+      ["1004", "other_co", false, null],
+      ["1005", "wren_sample", false, null],
+      ["1003", "wren_sample", false, null],
+      ["1002", "wren_sample", false, "Wren"],
+      ["1001", "wren_sample", false, null],
+    ]);
+    expect(rows.find((t) => t.id === "1005")).toEqual({
+      id: "1005",
+      text: "@other_co Good point & more",
+      author_username: "wren_sample",
+      author_name: "Wren",
+      url: "https://x.com/wren_sample/status/1005",
+      created_at: "2026-10-21T12:00:00.000Z",
+      conversation_id: "1004",
+      in_reply_to_status_id: "1004",
+      in_reply_to_user_id: "200",
+      referenced_tweets: [{ type: "replied_to", id: "1004" }],
+      in_reply_to: { username: "other_co", name: "Other Co" },
+      public_metrics: {
+        reply_count: 1,
+        retweet_count: 2,
+        like_count: 3,
+        bookmark_count: 0,
+        impression_count: 120,
+      },
+    });
+    expect(rows.find((t) => t.id === "1003")?.text).toBe("The whole long text");
+    expect(rows.find((t) => t.id === "1001")?.in_reply_to).toEqual({
+      username: "gone",
+      name: "gone",
+    });
+  });
+
+  it("x/posts without replies excluded reads the Replies tab's data, newest first, as the API answers", async () => {
+    type Handler = (r: { url: () => string; json: () => Promise<unknown> }) => void;
+    const handlers = new Set<Handler>();
+    const opened: string[] = [];
+    const { fp, acts } = fakePage({ text: ["Wren"], present: () => true });
+    fp.page = {
+      on: (_e: string, h: Handler) => handlers.add(h),
+      off: (_e: string, h: Handler) => handlers.delete(h),
+      evaluate: async (fn: unknown) => (String(fn).includes("article") ? [raw({})] : 900),
+    } as unknown as FlowPage["page"];
+    fp.open = async (url) => {
+      opened.push(url);
+      if (url.endsWith("/with_replies"))
+        for (const h of handlers)
+          h({
+            url: () => "https://x.com/i/api/graphql/abc/UserTweetsAndReplies?variables=x",
+            json: async () => REPLIES_PAGE,
+          });
+    };
+    fp.url = () =>
+      opened.at(-1)?.includes("/i/user/") ? "https://x.com/wren_sample" : (opened.at(-1) ?? "");
+    fp.scroll = async () => {};
+    fp.wait = async () => {};
+    const out = (await xPosts.run(fp, { id: "100", max_results: 3, exclude: "retweets" })) as {
+      data: TimelineTweet[];
+      meta: unknown;
+    };
+    expect(opened).toEqual(["https://x.com/i/user/100", "https://x.com/wren_sample/with_replies"]);
+    expect(out.data.map((t) => [t.id, t.in_reply_to_status_id ?? null])).toEqual([
+      ["1005", "1004"],
+      ["1003", null],
+      ["1001", "800"],
+    ]);
+    expect(out.meta).toEqual({ result_count: 3, newest_id: "1005", oldest_id: "1001" });
+    expect(acts).toEqual([]);
+    expect(handlers.size).toBe(0);
   });
 });
