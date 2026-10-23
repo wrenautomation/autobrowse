@@ -204,7 +204,8 @@ export function visitsOf(run: string, rows: readonly RunRow[]): Cut {
       else into({ kind: "open", url: a.url });
       continue;
     }
-    if (a.kind === "submit") continue;
+    // A cut mark splits the run before this builder sees it (`walks cut`); here it is no op.
+    if (a.kind === "submit" || a.kind === "cut") continue;
     if (r.look && (!cur || !last || !samePage(last, r.look))) visit(r.look);
     if (r.look) last = r.look;
     if (!cur) {

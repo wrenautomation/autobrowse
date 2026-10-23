@@ -764,5 +764,123 @@ describe("records and ai ops in a walk", () => {
       expect(listed(" a \n\n b ")).toEqual([{ item: "a" }, { item: "b" }]);
       expect(listed("[not json")).toEqual([{ item: "[not json" }]);
     });
+
+    it("gives each row its number as {i}, and a click's nth may be a field", async () => {
+      const answer: WalkSpec = {
+        ...listWalk([
+          {
+            kind: "click",
+            goal: "answer question {i}",
+            hints: { role: "radio", name: "Q{i}", nth: "{nth}" },
+            irreversible: false,
+          },
+        ]),
+        name: "answer",
+        fields: [
+          { key: "i", label: "row", example: "0" },
+          { key: "nth", label: "choice", example: "0" },
+        ],
+      };
+      const { fp } = site();
+      const clicks: Hints[] = [];
+      fp.act = async (_op, h) => {
+        clicks.push(h);
+      };
+      const w = {
+        ...listWalk([each("answers", { walk: "answer" })]),
+        fields: [{ key: "answers", label: "answers", example: "" }],
+      };
+      const loadAnswer = (_site: string, name: string) => (name === "answer" ? answer : null);
+      await walkFlow(w, { load: loadAnswer }).run(fp, { answers: '[{"nth":0},{"nth":5}]' });
+      expect(clicks).toEqual([
+        { role: "radio", name: "Q0", nth: 0 },
+        { role: "radio", name: "Q1", nth: 5 },
+      ]);
+      await expect(
+        walkFlow(w, { load: loadAnswer }).run(fp, { answers: '[{"nth":"x"}]' }),
+      ).rejects.toThrow(
+        "every row failed; first: answer question {i}: {nth} is not a match number",
+      );
+    });
+  });
+
+  describe("eval, download and submit=false", () => {
+    const send = (irreversible: boolean): WalkOp => ({
+      kind: "eval",
+      goal: "press the hidden Submit",
+      js: "document.querySelector('#submit').click()",
+      irreversible,
+    });
+
+    it("runs a script through the runner's act, page-wide when it has no hints", async () => {
+      const { fp, log } = fakeSite({ p: { url: "https://lms.test/q", landmarks: [] } }, "p");
+      const ops: unknown[] = [];
+      const act = fp.act;
+      fp.act = async (op, h, o) => {
+        ops.push([op, h]);
+        return act(op, h, o);
+      };
+      const out = await walkFlow(listWalk([send(true)])).run(fp, {});
+      expect(ops).toEqual([
+        [{ kind: "script", js: "document.querySelector('#submit').click()" }, {}],
+      ]);
+      expect(log).toEqual(["script undefined (irreversible)"]);
+      expect(out.held).toBeUndefined();
+    });
+
+    it("given submit=false, stops before the first irreversible op and keeps what it read", async () => {
+      const { fp, log } = fakeSite({ p: { url: "https://lms.test/q", landmarks: [] } }, "p");
+      const out = await walkFlow(
+        listWalk([
+          { kind: "read", goal: "read the title", hints: hints("heading", "Title"), as: "title" },
+          click("Save"),
+          send(true),
+          click("After"),
+        ]),
+      ).run(fp, { submit: "false" });
+      expect(log).toEqual(["read Title", "click Save"]);
+      expect(out).toMatchObject({
+        held: "press the hidden Submit",
+        read: { title: "text of Title" },
+      });
+      expect(out.screens).toEqual([]);
+    });
+
+    it("downloads a file to the dep, with {field}s in its URL", async () => {
+      const { fp } = fakeSite({ p: { url: "https://lms.test/course/7", landmarks: [] } }, "p");
+      const asked: string[] = [];
+      (fp.page as unknown as { context: () => unknown }).context = () => ({
+        request: {
+          get: async (url: string) => {
+            asked.push(url);
+            return {
+              ok: () => true,
+              status: () => 200,
+              body: async () => Buffer.from("pdf bytes"),
+              headers: () => ({ "content-type": "application/pdf" }),
+            };
+          },
+        },
+      });
+      const got: [string, string, string][] = [];
+      const w = {
+        ...listWalk([
+          { kind: "download", goal: "get the outline", url: "/files/{doc}?ou={ou}", as: "outline" },
+        ]),
+        fields: [
+          { key: "doc", label: "doc", example: "a b.pdf" },
+          { key: "ou", label: "course", example: "7" },
+        ],
+      };
+      const out = await walkFlow(w, {
+        download: async (as, f) => {
+          got.push([as, f.name, f.buffer.toString()]);
+          return "files://outline";
+        },
+      }).run(fp, { doc: "a b.pdf", ou: "7" });
+      expect(asked).toEqual(["https://lms.test/files/a%20b.pdf?ou=7"]);
+      expect(got).toEqual([["outline", "a b.pdf", "pdf bytes"]]);
+      expect(out.read.outline).toBe("files://outline");
+    });
   });
 });

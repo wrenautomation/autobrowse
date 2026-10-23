@@ -67,6 +67,12 @@ export type Action =
   | (Base & { kind: "records"; op: RecordsOp })
   /** A secret read off the page (a minted API key) and put in the secret sink as `env`; the value is never here. */
   | (Base & { kind: "keep"; target: LocatorHints; env: string })
+  /** A script that acted on the page (a click no locator reached); `target`: the element it ran on. */
+  | (Base & { kind: "eval"; target: LocatorHints | null; js: string })
+  /** A file the page links to, fetched with its sign-in and kept as `as`. */
+  | (Base & { kind: "download"; target: LocatorHints | null; href: string | null; as: string })
+  /** Where a part of the run starts (`cut <name>` in explore): `walks cut` makes it its own walk. */
+  | (Base & { kind: "cut"; name: string })
   | (Base & { kind: "note"; text: string })
   | (Base & { kind: "pause" })
   | (Base & { kind: "resume" });

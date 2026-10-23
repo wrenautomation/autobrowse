@@ -403,6 +403,13 @@ export function structure(rec: Recording): Outline {
       case "submit":
         // Follows the click or Enter that caused it.
         break;
+      case "eval":
+      case "download":
+        // No outline op replays a script or a fetch: a walk does (`walks cut`).
+        add({ kind: "human", reason: `a ${a.kind} acted here: build this run as a walk` });
+        break;
+      case "cut":
+        break;
     }
   }
   close();

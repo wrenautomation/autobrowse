@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memoryAudit } from "credvault";
@@ -503,6 +504,48 @@ describe("explore mode", () => {
     expect((await send({ cmd: "records", ...records, code: "return [];" })).body.error).toMatch(
       /no rows/,
     );
+  }, 60_000);
+
+  it("journals a cut mark, a script that acts and a download; a script that only looks is not an act", async () => {
+    const server = createServer((req, res) => {
+      if (req.url === "/file")
+        res.writeHead(200, {
+          "content-type": "text/plain; charset=utf-8",
+          "content-disposition": 'attachment; filename="../notes.txt"',
+        });
+      else res.writeHead(200, { "content-type": "text/html" });
+      res.end(
+        req.url === "/file"
+          ? "the file"
+          : "<a href='/file'>Notes</a><button onclick=\"document.title='hit'\">Go</button>",
+      );
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    try {
+      await send({ cmd: "open", url: `${base}/` });
+      const before = ((await send({ cmd: "journal" })).body as { total: number }).total;
+      expect((await send({ cmd: "cut", name: "Bad Name" })).status).toBe(400);
+      await send({ cmd: "cut", name: "dropbox" });
+      await send({ cmd: "eval", js: "document.title" });
+      await send({ cmd: "eval", js: "document.querySelector('button').click()" });
+      expect((await send({ cmd: "eval", js: "document.title" })).body.result).toBe("hit");
+      const got = (await send({ cmd: "download", as: "notes", hints: { text: "Notes" } })).body;
+      expect(got).toMatchObject({ as: "notes", bytes: 8, type: "text/plain" });
+      expect(await readFile(got.file as string, "utf8")).toBe("the file");
+      expect(got.file).toMatch(/downloads\/notes-_notes\.txt$/);
+      const { actions } = (await send({ cmd: "journal", last: 3 })).body as {
+        actions: Array<Record<string, unknown>>;
+      };
+      expect(actions).toMatchObject([
+        { kind: "cut", name: "dropbox" },
+        { kind: "eval", target: null, js: "document.querySelector('button').click()" },
+        { kind: "download", target: { text: "Notes" }, href: null, as: "notes" },
+      ]);
+      expect(((await send({ cmd: "journal" })).body as { total: number }).total).toBe(before + 3);
+    } finally {
+      server.close();
+    }
   }, 60_000);
 });
 

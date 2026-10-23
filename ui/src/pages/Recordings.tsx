@@ -167,6 +167,12 @@ function Actions({ rec }: { rec: Recording }) {
         return `desktop: ${describeOp(a.op, a.redacted)}`;
       case "keep":
         return `keep ${a.target.name ?? a.target.text ?? a.target.tag} as ${a.env} (in the secret sink, not here)`;
+      case "eval":
+        return `script${a.target ? ` on ${a.target.name ?? a.target.text ?? a.target.tag}` : ""}: ${a.js.slice(0, 80)}`;
+      case "download":
+        return `download ${a.href ?? a.target?.name ?? a.target?.text ?? "a link"} as ${a.as}`;
+      case "cut":
+        return `✂ ${a.name}`;
     }
   };
   return (

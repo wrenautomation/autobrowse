@@ -17,7 +17,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { z } from "zod";
-import { fieldSchema, opSchema, valueSchema } from "../compiler/outline.js";
+import { fieldSchema, hintsSchema, opSchema, valueSchema } from "../compiler/outline.js";
 import { baseSite } from "../runs/log.js";
 
 /** 2 adds profile values, field defaults and options, and `{field}` in URLs, hints and selects. 1 still loads. */
@@ -76,9 +76,21 @@ const WALK_REF = /^([a-z0-9][a-z0-9._-]*\/)?[a-z][a-z0-9-]*$/;
 
 const [clickOp, fillOp, selectOp, pressOp, uploadOp, ...restOps] = opSchema.options;
 
+/** One whole field, `{key}`: its value is the thing (a URL, a match number). */
+const WHOLE_REF = /^\{[a-z][a-zA-Z0-9]*\}$/;
+const AS = /^[a-z][a-zA-Z0-9]*$/;
+
+/** A click's `nth` may be a field (`{nth}`): which of the matches, per row of an `each`. */
+const walkHintsSchema = hintsSchema.extend({
+  nth: z
+    .union([z.number().int().nonnegative(), z.string().regex(WHOLE_REF)])
+    .nullable()
+    .optional(),
+});
+
 /** The outline's ops, plus what a walk adds: a page to open, a captcha, another walk. */
 export const walkOpSchema = z.discriminatedUnion("kind", [
-  clickOp,
+  clickOp.extend({ hints: walkHintsSchema }),
   fillOp.extend({ value: walkValueSchema }),
   selectOp,
   pressOp,
@@ -88,7 +100,27 @@ export const walkOpSchema = z.discriminatedUnion("kind", [
     kind: z.literal("open"),
     goal: z.string(),
     /** A URL, or one whole field (`{link}`) holding a URL: a row's link in an `each`. */
-    url: z.union([z.string().url(), z.string().regex(/^\{[a-z][a-zA-Z0-9]*\}$/)]),
+    url: z.union([z.string().url(), z.string().regex(WHOLE_REF)]),
+  }),
+  /**
+   * A script that acts where no locator reaches (a click a page hides from
+   * pointers): a function of `el` on the element `hints` find, or an
+   * expression on the page with no hints. Gated like a click.
+   */
+  z.object({
+    kind: z.literal("eval"),
+    goal: z.string(),
+    hints: hintsSchema.optional(),
+    js: z.string().min(1),
+    irreversible: z.boolean(),
+  }),
+  /** A file the page links to, fetched with its sign-in: `url` (relative, may hold `{field}`s) or the `href` at `hints`; kept under `as`. */
+  z.object({
+    kind: z.literal("download"),
+    goal: z.string(),
+    hints: hintsSchema.optional(),
+    url: z.string().min(1).optional(),
+    as: z.string().regex(AS),
   }),
   z.object({ kind: z.literal("captcha"), goal: z.string() }),
   /** Another walk, by `name` on this site or `site/name`: a sign-in inside a setup. */
@@ -100,8 +132,9 @@ export const walkOpSchema = z.discriminatedUnion("kind", [
   /**
    * Another walk once per row: the rows of an earlier `records` op, or one per
    * line (or JSON array item) of a plan field. Each run gets the row's fields
-   * as its plan, `with` mapping them (`{ url: "{link}" }`); what it reads
-   * joins the row, kept under `as`. A row that fails keeps its `error`.
+   * as its plan, `with` mapping them (`{ url: "{link}" }`), and `i`: the
+   * row's number from 0. What it reads joins the row, kept under `as`. A row
+   * that fails keeps its `error`.
    */
   z.object({
     kind: z.literal("each"),
@@ -185,6 +218,12 @@ export const walkSpecSchema = z
             message: `names no screen: ${a}`,
           });
       s.ops.forEach((op, j) => {
+        if (op.kind === "download" && !op.url && !op.hints)
+          ctx.addIssue({
+            code: "custom",
+            path: ["screens", i, "ops", j],
+            message: "a download needs url or hints",
+          });
         const v = op.kind === "fill" ? op.value : op.kind === "upload" ? op.file : null;
         if (v?.from === "plan" && !fields.has(v.field))
           ctx.addIssue({
@@ -226,10 +265,14 @@ export const valueSource = (v: WalkValue): string =>
         ? `profile.${v.field}`
         : `secret ${v.key}`;
 
-/** The text of an op that may name `{field}`s: an open URL, a click's hints, a select's value. */
+/** The text of an op that may name `{field}`s: an open or download URL, a click's hints, a select's value. */
 function refText(op: WalkOp): string {
   if (op.kind === "open") return op.url.replace(/%7B/gi, "{").replace(/%7D/gi, "}");
-  if (op.kind === "click") return [op.hints.text, op.hints.name].filter(Boolean).join("\n");
+  if (op.kind === "click")
+    return [op.hints.text, op.hints.name, typeof op.hints.nth === "string" ? op.hints.nth : null]
+      .filter(Boolean)
+      .join("\n");
+  if (op.kind === "download") return op.url ?? "";
   if (op.kind === "select") return op.value;
   return "";
 }

@@ -31,6 +31,7 @@ import {
   type Pace,
   pickOption,
 } from "./human/index.js";
+import { inPage } from "./in-page.js";
 import { type Hints, locate, textOf } from "./locate.js";
 import { KeyedMutex } from "./lock.js";
 import { htmlForFile, NetLog, networkOn } from "./network.js";
@@ -95,7 +96,12 @@ export type Op =
    * Files into a file input, or through the chooser a button opens: paths or refs, or bytes
    * held in memory (a stored file), which reach the page without touching the disk.
    */
-  | { kind: "upload"; files: string[] | FilePayload[] };
+  | { kind: "upload"; files: string[] | FilePayload[] }
+  /** A script: a function of `el` on the target, or an expression on the page when there are no hints. */
+  | { kind: "script"; js: string };
+
+/** No hints at all: an act on the page, not an element. */
+export const pageWide = (h: Hints): boolean => !Object.values(h).some((v) => v != null);
 
 /** A file held in memory, as Playwright's `setInputFiles` takes it. */
 export interface FilePayload {
@@ -406,9 +412,25 @@ async function doOp(
   timeout: number,
   hands: Hands,
 ): Promise<void> {
+  if (op.kind === "script" && pageWide(hints)) {
+    await inPage(page, op.js);
+    return;
+  }
   const target = locate(page, hints);
   await hands.think(page);
   switch (op.kind) {
+    case "script":
+      // A string is an expression to Playwright, never called: wrap it as a function of el.
+      await target
+        .first()
+        .evaluate(
+          new Function("el", `return (${op.js})(el);`) as (el: unknown) => unknown,
+          undefined,
+          {
+            timeout,
+          },
+        );
+      return;
     case "click":
       return hands.click(target, { timeout });
     case "fill":
@@ -785,8 +807,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             const s = await interruptHere(true);
             if (s) await handle(s, goal, hints);
           }
-          // A file input is hidden on purpose.
-          if (op.kind === "upload") return timeout;
+          // A file input is hidden on purpose; a page-wide script has no target.
+          if (op.kind === "upload" || (op.kind === "script" && pageWide(hints))) return timeout;
           let target: Locator;
           try {
             target = locate(active, hints);

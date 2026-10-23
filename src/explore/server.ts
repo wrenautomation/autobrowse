@@ -31,6 +31,7 @@ import { z } from "zod";
 import { writeRecords } from "../agent/records.js";
 import { SecretLeak, urlWithoutQuery } from "../auth/guard.js";
 import type { SecretValues } from "../auth/signup.js";
+import { fetchFile } from "../browser/download.js";
 import {
   chooseOption,
   defineFlow,
@@ -293,6 +294,15 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   /** Read a secret the site just minted straight into the secret sink under `env`; nothing shows it. */
   targetSchema.extend({ cmd: z.literal("keep"), env: z.string().regex(/^[A-Z][A-Z0-9_]*$/) }),
   z.object({ cmd: z.literal("note"), text: z.string() }),
+  /** A part of the run starts here, named: `walks cut` builds each part as its own walk. */
+  z.object({ cmd: z.literal("cut"), name: z.string().regex(/^[a-z][a-z0-9-]*$/) }),
+  /** Fetch a file with the page's sign-in: `url` (relative to the page) or the `href` at `hints`; kept beside the session as `as`. Journaled. */
+  z.object({
+    cmd: z.literal("download"),
+    as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
+    url: z.string().min(1).optional(),
+    hints: hintsSchema.optional(),
+  }),
   /** What this run is for, in words: the history groups runs by it and walks are built from it. */
   z.object({ cmd: z.literal("goal"), text: z.string().min(1).max(500) }),
   /** The goal is met, or cannot be: ends this run in the history. The session stays open; the next command starts a new run. */
@@ -1769,6 +1779,13 @@ async function serve(
                 },
               )
           : await inPage(page, c.js);
+        // A script that clicked or submitted is an act a walk replays; one that only looked is not.
+        if (scriptActs(c.js))
+          journal({
+            kind: "eval",
+            target: c.hints ? toLocatorHints(c.hints) : null,
+            js: c.js,
+          });
         return { result: typeof result === "string" ? out(result, c.raw) : result };
       }
       case "count":
@@ -1831,6 +1848,27 @@ async function serve(
       case "note":
         journal({ kind: "note", text: c.text });
         return { ok: true };
+      case "cut":
+        journal({ kind: "cut", name: c.name });
+        return { ok: true };
+      case "download": {
+        if (!c.url && !c.hints) throw new Error("download: give url or hints");
+        const got = await fetchFile(page, {
+          url: c.url ?? null,
+          hints: (c.hints as Hints) ?? null,
+        });
+        const dir = join(shotsDir, "downloads");
+        mkdirSync(dir, { recursive: true });
+        const file = join(dir, `${c.as}-${got.name}`);
+        writeFileSync(file, got.buffer);
+        journal({
+          kind: "download",
+          target: c.hints ? toLocatorHints(c.hints) : null,
+          href: c.url ?? null,
+          as: c.as,
+        });
+        return { as: c.as, file, bytes: got.buffer.length, type: got.mimeType };
+      }
       case "goal":
         logged((h) => h.goal(c.text));
         return { ok: true, run: history?.id ?? null };

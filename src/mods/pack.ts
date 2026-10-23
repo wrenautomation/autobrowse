@@ -147,16 +147,19 @@ function scrubWalk(w: WalkSpec, x: Scrubber): WalkSpec {
     return { from: "plan" as const, field: key };
   };
   const op = (o: WalkOp, where: string): WalkOp => {
-    if (o.kind === "human") return { ...o, reason: x.text(o.reason, where) };
-    const h = "hints" in o ? { hints: x.hints(o.hints, where) } : {};
+    if (o.kind === "human") return { ...o, reason: x.text(o.reason, where) } as WalkOp;
+    const h = "hints" in o && o.hints ? { hints: x.hints(o.hints, where) } : {};
     const goal = x.text(o.goal, where);
-    if (o.kind === "open") return { ...o, goal, url: x.url(o.url, where) };
+    if (o.kind === "open") return { ...o, goal, url: x.url(o.url, where) } as WalkOp;
     if (o.kind === "fill" && o.value.from === "literal" && x.dirty(o.value.text))
-      return { ...o, ...h, goal, value: field(goal, where, "a typed value naming you") };
+      return { ...o, ...h, goal, value: field(goal, where, "a typed value naming you") } as WalkOp;
     // A literal file is a path on the owner's disk.
     if (o.kind === "upload" && o.file.from === "literal")
-      return { ...o, ...h, goal, file: field(goal, where, "a local file path") };
-    if (o.kind === "select") return { ...o, ...h, goal, value: x.text(o.value, where) };
+      return { ...o, ...h, goal, file: field(goal, where, "a local file path") } as WalkOp;
+    if (o.kind === "select") return { ...o, ...h, goal, value: x.text(o.value, where) } as WalkOp;
+    if (o.kind === "eval") return { ...o, ...h, goal, js: x.text(o.js, where) } as WalkOp;
+    if (o.kind === "download" && o.url)
+      return { ...o, ...h, goal, url: x.text(o.url, where) } as WalkOp;
     return { ...o, ...h, goal } as WalkOp;
   };
   return {

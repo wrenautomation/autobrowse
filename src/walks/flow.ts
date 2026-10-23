@@ -6,7 +6,11 @@
  * flow's. A page no screen knows goes down the runner's ladder (learned
  * screens, then the reader), then to a person.
  */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { SecretValues } from "../auth/signup.js";
+import { type Fetched, fetchFile } from "../browser/download.js";
 import { type BrowserFlow, defineFlow, type FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
 import { checkRows, type RecordsOp, type Row, readRecords } from "../browser/records.js";
@@ -47,7 +51,20 @@ export interface WalkDeps {
   archive?(as: string, html: string): void;
   /** An `ai` op's model call: the prompt with its reads filled in, the answer back. */
   ai?(op: Extract<WalkOp, { kind: "ai" }>, prompt: string): Promise<string>;
+  /** Where a `download` op's file goes; the answer (a path, a ref) is read under its `as`. Missing: a temp file. */
+  download?(as: string, file: Fetched): Promise<string>;
 }
+
+/** A run given `submit=false` stops here, before its first irreversible op: a dry run up to the send. */
+class Held extends Error {}
+
+const tempDownload = async (as: string, file: Fetched): Promise<string> => {
+  const dir = join(tmpdir(), "autobrowse-downloads");
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, `${Date.now()}-${as}-${file.name}`);
+  writeFileSync(path, file.buffer);
+  return path;
+};
 
 /** Model calls one run may make, nested walks included. */
 export const AI_CALLS = 20;
@@ -112,6 +129,8 @@ export interface WalkOutput {
   kept: string[];
   /** Screens acted on, in order, nested walks included. */
   screens: string[];
+  /** Given `submit=false`: the irreversible op it stopped before, not done. */
+  held?: string;
 }
 
 /** A look is fresh this long: every screen's check in one pass shares it. */
@@ -186,10 +205,20 @@ async function walkSpec(
     return out;
   };
   const hintsFor = async (h: WalkOp & { kind: "click" }): Promise<Hints> => {
-    const out = { ...h.hints } as Hints & { text?: string | null; name?: string | null };
+    const { nth, ...rest } = h.hints;
+    const out = { ...rest } as Hints & { text?: string | null; name?: string | null };
     if (out.text) out.text = await fill(out.text, h.goal);
     if (out.name) out.name = await fill(out.name, h.goal);
+    if (typeof nth === "string") {
+      const n = Number(await fill(nth, h.goal));
+      if (!Number.isInteger(n) || n < 0) throw new Error(`${h.goal}: ${nth} is not a match number`);
+      out.nth = n;
+    } else if (nth != null) out.nth = nth;
     return out;
+  };
+  /** Before an irreversible op: a run given `submit=false` stops here. */
+  const gate = (op: { goal: string; irreversible: boolean }) => {
+    if (op.irreversible && input.submit === "false") throw new Held(op.goal);
   };
 
   /** The walk a `walk` or `each` op names: `name` on this site, or `site/name`. */
@@ -206,6 +235,7 @@ async function walkSpec(
   const run = async (op: WalkOp): Promise<void> => {
     switch (op.kind) {
       case "click":
+        gate(op);
         return fp.act({ kind: "click" }, await hintsFor(op), {
           goal: op.goal,
           irreversible: op.irreversible,
@@ -232,6 +262,20 @@ async function walkSpec(
             goal: op.goal,
           },
         );
+      case "eval":
+        gate(op);
+        return fp.act({ kind: "script", js: op.js }, (op.hints ?? {}) as Hints, {
+          goal: op.goal,
+          irreversible: op.irreversible,
+        });
+      case "download": {
+        const got = await fetchFile(fp.page, {
+          url: op.url ? await fill(op.url, op.goal, true) : null,
+          hints: (op.hints ?? null) as Hints | null,
+        });
+        out.read[op.as] = await (deps.download ?? tempDownload)(op.as, got);
+        return;
+      }
       case "read":
         out.read[op.as] = await fp.read(op.hints as Hints);
         return;
@@ -298,8 +342,8 @@ async function walkSpec(
         );
         const done: Row[] = [];
         let failed = 0;
-        for (const row of rows) {
-          const plan: WalkInput = { ...input };
+        for (const [i, row] of rows.entries()) {
+          const plan: WalkInput = { ...input, i: String(i) };
           for (const [k, v] of Object.entries(row)) if (v !== null) plan[k] = v;
           for (const [k, t] of Object.entries(op.with ?? {}))
             plan[k] = t.replace(FIELD_REF, (_, key: string) => row[key] ?? "");
@@ -310,7 +354,8 @@ async function walkSpec(
             done.push({ ...row, ...one.read, ...jsonOf(one.records) });
           } catch (err) {
             // A person needed, or the model cap hit: every next row would stop there too.
-            if (err instanceof NeedsHuman || one.aiCalls > AI_CALLS) throw err;
+            if (err instanceof NeedsHuman || err instanceof Held || one.aiCalls > AI_CALLS)
+              throw err;
             failed++;
             done.push({ ...row, error: (err as Error).message });
           } finally {
@@ -391,7 +436,12 @@ export function walkFlow(spec: WalkSpec, deps: WalkDeps = {}): BrowserFlow<WalkI
         kept: [],
         screens: [],
       };
-      out.goal = await walkSpec(fp, spec, input ?? {}, deps, out, 0);
+      try {
+        out.goal = await walkSpec(fp, spec, input ?? {}, deps, out, 0);
+      } catch (err) {
+        if (!(err instanceof Held)) throw err;
+        out.held = err.message;
+      }
       return out;
     },
   });
