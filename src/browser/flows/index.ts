@@ -137,11 +137,6 @@ export {
 export { type ResetProbeInput, resetMailProbe } from "./reset-mail-probe.js";
 export { followedOfThreads, threadsFollowing } from "./threads-following.js";
 export { threadsOauthConsent } from "./threads-oauth-consent.js";
-export {
-  type TikTokPost,
-  type TikTokPostInput,
-  tiktokCreatePost,
-} from "./tiktok-create-post.js";
 export { followedOfTiktok, tiktokFollowing } from "./tiktok-following.js";
 export { tiktokOauthConsent } from "./tiktok-oauth-consent.js";
 export { xFollow, xLike, xReply } from "./x-act.js";

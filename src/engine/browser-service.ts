@@ -98,7 +98,6 @@ import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { threadsFollowing } from "../browser/flows/threads-following.js";
 import { threadsOauthConsent } from "../browser/flows/threads-oauth-consent.js";
 import { tiktokPostComments } from "../browser/flows/tiktok-comments.js";
-import { tiktokCreatePost } from "../browser/flows/tiktok-create-post.js";
 import { tiktokFollowing } from "../browser/flows/tiktok-following.js";
 import { tiktokOauthConsent } from "../browser/flows/tiktok-oauth-consent.js";
 import { tiktokVideoAnalytics } from "../browser/flows/tiktok-video-analytics.js";
@@ -200,7 +199,6 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     tiktokVideoAnalytics,
     tiktokFollowing,
     threadsFollowing,
-    tiktokCreatePost,
     xOauthConsent,
     xPost,
     xFollowing,

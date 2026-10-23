@@ -121,7 +121,6 @@ describe("browser service", () => {
       "reddit/read",
       "reddit/submit",
       "reddit/subscribe",
-      "tiktok/create-post",
       "tiktok/following",
       "tiktok/oauth-consent",
       "tiktok/post-comments",

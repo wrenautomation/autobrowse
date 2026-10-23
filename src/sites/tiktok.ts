@@ -151,19 +151,6 @@ const publishStatus = z.object({
   publish_id: z.string().min(1),
   wait: z.number().int().min(0).max(120).optional(),
 });
-const webPost = z.object({
-  caption: z.string().max(2200).default(""),
-  /** The video the browser leg uploads: a path on the box, or a URL it downloads. */
-  file: z.string().min(1),
-  /** Who can see it, as Studio names them: Everyone, Friends, Only you. */
-  privacy: z.enum(["everyone", "friends", "only-me"]).default("everyone"),
-  /** "Allow users to: Comment". */
-  comments: z.boolean().default(true),
-  /** "Allow users to: Reuse of content" (duet and stitch together). */
-  reuse: z.boolean().default(true),
-  /** The "AI-generated content" label. */
-  aiGenerated: z.boolean().default(false),
-});
 const following = z.object({ max: z.coerce.number().int().min(1).max(1000).optional() });
 
 const postComments = z.object({
@@ -337,22 +324,6 @@ export const tiktok: SiteApi = {
           await new Promise((ok) => setTimeout(ok, pause));
         }
       },
-    }),
-    route({
-      method: "POST",
-      path: "/web/posts",
-      summary:
-        "A post from a video file (a path, or a URL it downloads) with a caption, on TikTok Studio (a fallback; `/v2/post/publish/video/init/` posts by the API): `privacy` everyone|friends|only-me (default everyone), `comments`, `reuse` (default on), `aiGenerated`; answers `{ id, url, profile, note? }`, id null when the post went out but the profile does not list it yet",
-      request: webPost,
-      irreversible: true,
-      verify: {
-        words: (b) => b.caption,
-        read: async (b, get): Promise<VerifyRead | Seen> =>
-          b.caption ? tiktokVideos(get) : unclear("the post has no caption to look for"),
-        lags: () => LISTS_LATE,
-      },
-      sentAs: (o) => ({ id: str(rec(o).id), url: str(rec(o).url) }),
-      browser: { flow: "tiktok/create-post", uploads: "file" },
     }),
     route({
       method: "GET",

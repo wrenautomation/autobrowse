@@ -56,7 +56,7 @@ describe("profileBusyOf", () => {
     expect(profileBusyOf(new Error("wrapped", { cause: b }))).toBe(b);
     const said = profileBusyOf(
       new Error(
-        "tiktok POST /web/posts: 500 profile google@test is open in pid 11913 (explore:9092)",
+        "tiktok GET /web/following: 500 profile google@test is open in pid 11913 (explore:9092)",
       ),
     );
     expect(said).toMatchObject({ profile: "google@test", pid: 11913, owner: "explore:9092" });
