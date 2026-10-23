@@ -48,5 +48,8 @@ Changing autobrowse's code: `map/CLAUDE.md`.
   lists our browsers and sessions (owner, memory, idle, held); `doctor` warns.
 - One sign-in try per site, then report. Repeated tries get accounts
   flagged (Google, X, Reddit).
+- Verification texts (SMS codes, a Duo passcode) are free to send again.
+  Ask William for none. LEARN's Duo is always a texted passcode. A sign-in
+  your test makes fail on purpose (a wrong code) is fine.
 - A wall you cannot pass (a code only William has, an unsolved captcha):
   say what the step is and wait.
