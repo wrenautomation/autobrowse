@@ -105,15 +105,20 @@ export const walkOpSchema = z.discriminatedUnion("kind", [
   /**
    * A script that acts where no locator reaches (a click a page hides from
    * pointers): a function of `el` on the element `hints` find, or an
-   * expression on the page with no hints. Gated like a click.
+   * expression on the page with no hints. Gated like a click. With `as`, a
+   * function on the page (no hints) whose answer is kept under `as` as text
+   * (JSON when not a string): an API the signed-in page can call.
    */
-  z.object({
-    kind: z.literal("eval"),
-    goal: z.string(),
-    hints: hintsSchema.optional(),
-    js: z.string().min(1),
-    irreversible: z.boolean(),
-  }),
+  z
+    .object({
+      kind: z.literal("eval"),
+      goal: z.string(),
+      hints: hintsSchema.optional(),
+      js: z.string().min(1),
+      irreversible: z.boolean(),
+      as: z.string().regex(AS).optional(),
+    })
+    .refine((o) => !(o.as && o.hints), "an eval with `as` runs on the page: no hints"),
   /** A file the page links to, fetched with its sign-in: `url` (relative, may hold `{field}`s) or the `href` at `hints`; kept under `as`. */
   z.object({
     kind: z.literal("download"),

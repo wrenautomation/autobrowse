@@ -49,6 +49,8 @@ export const opSchema = z.discriminatedUnion("kind", [
     goal: z.string(),
     hints: hintsSchema,
     as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
+    /** A regex (no slashes, any case): keep its first group, else the whole match, of the text; no match keeps nothing. */
+    match: z.string().min(1).optional(),
   }),
   /** A secret read off the page into the sink under an env name; never in the plan, result or journal. */
   z.object({

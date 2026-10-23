@@ -134,6 +134,10 @@ describe("a sign-in walk as a SiteLogin", () => {
     expect(await login.loggedIn(fp)).toBe(true);
   });
 
+  it("names the credential its secrets name, when not given", () => {
+    expect(walkLogin(spec).credential).toBe("lms");
+  });
+
   it("needs a start", () => {
     expect(() => walkLogin({ ...spec, start: null })).toThrow(/needs a start/);
   });

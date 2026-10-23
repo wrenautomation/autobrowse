@@ -245,7 +245,13 @@ export function urlShape(url: string): string {
     const u = new URL(url);
     const path = u.pathname
       .split("/")
-      .map((s) => (/^(\d+|[0-9a-f]{8,}|[0-9a-f-]{32,}|[A-Za-z0-9_-]{24,})$/i.test(s) ? "*" : s))
+      .map((s) =>
+        /^(\d+|[0-9a-f]{8,}|[0-9a-f-]{32,}|[A-Za-z0-9_-]{24,})$/i.test(s) ||
+        // A one-time id in capitals (Duo's `/prompt/<id>`): case matters, so a word with a digit stays.
+        /^(?=.*\d)[A-Z0-9]{12,}$/.test(s)
+          ? "*"
+          : s,
+      )
       .join("/");
     return `${u.host}${path.replace(/\/$/, "")}`;
   } catch {

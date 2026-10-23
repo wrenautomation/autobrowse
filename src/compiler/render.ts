@@ -54,6 +54,10 @@ export function renderOp(op: OutlineOp): string {
     .map(([k, v]) => `${k}: ${typeof v === "number" ? v : q(String(v))}`)
     .join(", ")} }`;
   const locatorNote = plan ? ` // ${renderLocator(plan)}` : " // TODO: no usable hints";
+  if (op.kind === "read" && op.match) {
+    const m = `(await fp.read(${hints})).match(new RegExp(${q(op.match)}, "i"))`;
+    return `    { const m = ${m}; if (m) out.${op.as} = m[1] ?? m[0]; }${locatorNote}`;
+  }
   if (op.kind === "read") return `    out.${op.as} = await fp.read(${hints});${locatorNote}`;
   // Through the input, not the result: the flow's return value is journaled, the sink is not.
   if (op.kind === "keep")

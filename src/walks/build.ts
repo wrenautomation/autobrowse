@@ -10,7 +10,7 @@
  * screen only that run saw, found by the page when it comes up.
  */
 import type { Hints } from "../browser/locate.js";
-import type { PageLook } from "../browser/screens.js";
+import { type PageLook, urlShape } from "../browser/screens.js";
 import { camel, describe, IRREVERSIBLE_CLICK, kebab, stripHints } from "../compiler/structure.js";
 import { paymentGate } from "../gates/payment.js";
 import { type Profile, profileField } from "../money/profile.js";
@@ -146,7 +146,11 @@ const REDIRECT_MS = 3_000;
 const LED_MS = 10_000;
 
 /** One run → its visits. Leading `open`s are where it starts; a pause is one human op. */
-export function visitsOf(run: string, rows: readonly RunRow[]): Cut {
+export function visitsOf(
+  run: string,
+  rows: readonly RunRow[],
+  around?: (a: Action) => Around | undefined,
+): Cut {
   const acts = rows.filter((r): r is Extract<RunRow, { kind: "act" }> => r.kind === "act");
   const ends = rows.filter((r): r is Extract<RunRow, { kind: "end" }> => r.kind === "end");
   const end = ends.at(-1)?.look ?? null;
@@ -219,6 +223,13 @@ export function visitsOf(run: string, rows: readonly RunRow[]): Cut {
       }
       if (!cur) start = a.url;
       else into({ kind: "open", url: a.url });
+      // A cut's ops on a page a load opened (an API read): they run on that page, no look of its own.
+      const said = around?.(a);
+      if (said?.before?.length || said?.after?.length || said?.ops?.length) {
+        last = { url: urlShape(a.url), landmarks: [] };
+        visit(last);
+        into({ kind: "op", act: a });
+      }
       continue;
     }
     // A cut mark splits the run before this builder sees it (`walks cut`); here it is no op.
@@ -257,7 +268,7 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
   for (const input of [...inputs].sort((a, b) =>
     a.summary.endedAt.localeCompare(b.summary.endedAt),
   )) {
-    const cut = visitsOf(input.summary.run, input.rows);
+    const cut = visitsOf(input.summary.run, input.rows, o.around);
     if (cut.refused) skipped.push({ run: input.summary.run, reason: cut.refused });
     else cuts.push({ input, cut });
   }

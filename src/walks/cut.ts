@@ -70,6 +70,8 @@ const partSchema = z
             after: act.optional(),
             as: z.string().regex(KEY),
             hints: hintsSchema,
+            /** Keep this regex's first group of the text (`Submission ID:? (\\d+)`). */
+            match: z.string().min(1).optional(),
           })
           .strict()
           .refine(oneSide, "at or after, one of them"),
@@ -264,7 +266,13 @@ function buildPart(
     at(p.gate).irreversible = true;
   }
   for (const r of p.reads ?? []) {
-    const op: WalkOp = { kind: "read", goal: `read ${r.as}`, hints: r.hints, as: r.as };
+    const op: WalkOp = {
+      kind: "read",
+      goal: `read ${r.as}`,
+      hints: r.hints,
+      as: r.as,
+      ...(r.match ? { match: r.match } : {}),
+    };
     if (r.at) add(r.at, "before", op);
     else if (r.after) add(r.after, "after", op);
   }
@@ -428,14 +436,44 @@ export function buildCut(
     const r = runs.get(range.run) as { summary: RunSummary; rows: RunRow[] };
     walks.push(...buildPart(cut.site, name, p, range, r.rows, r.summary, cut, rowsBy, now));
   };
-  if (cut.login)
+  if (cut.login) {
     one("login", { acts: cut.login.acts, goal: `sign in to ${baseSite(cut.site)}`, signIn: true });
+    const login = walks.at(-1) as BuiltWalk;
+    if (cut.login.credential) login.spec = asCredential(login.spec, cut.login.credential);
+  }
   for (const p of cut.parts) one(p.name, p);
   const byName = new Map(walks.map((w) => [w.spec.name, w.spec]));
   return {
     walks,
     workflows: (cut.workflows ?? []).map((w) => workflowOf(cut.site, w, byName, now)),
   };
+}
+
+/**
+ * A sign-in's secrets as one credential's: `<cred>.username`, `<cred>.password`,
+ * and any other (a bare `passcode`) `<cred>.code`, so a walk run anywhere asks that credential's inbox.
+ */
+function asCredential(spec: WalkSpec, cred: string): WalkSpec {
+  const keyOf = (k: string) => {
+    const field = k.slice(k.lastIndexOf(".") + 1);
+    return `${cred}.${field === "username" || field === "password" ? field : "code"}`;
+  };
+  const keys = [...new Set(spec.secrets.map((x) => keyOf(x.key)))];
+  return walkSpecSchema.parse({
+    ...spec,
+    secrets: keys.map((key) => ({
+      key,
+      label: spec.secrets.find((x) => keyOf(x.key) === key)?.label ?? key,
+    })),
+    screens: spec.screens.map((sc) => ({
+      ...sc,
+      ops: sc.ops.map((op) =>
+        "value" in op && typeof op.value === "object" && op.value?.from === "secret"
+          ? { ...op, value: { ...op.value, key: keyOf(op.value.key) } }
+          : op,
+      ),
+    })),
+  });
 }
 
 const SIGN_IN_HOST =

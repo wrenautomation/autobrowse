@@ -40,6 +40,10 @@ describe("screens", () => {
       "dash.cloudflare.com/*/home",
     );
     expect(urlShape("https://x.com/i/flow/login/")).toBe("x.com/i/flow/login");
+    expect(urlShape("https://api-1a2b.duosecurity.com/prompt/AB3CD4EF5GH6JK7LM8NP")).toBe(
+      "api-1a2b.duosecurity.com/prompt/*",
+    );
+    expect(urlShape("https://x.com/oauth2callback/V2")).toBe("x.com/oauth2callback/V2");
     expect(landmark("Continue as will@gmail.com  using Google")).toBe(
       "continue as <address> using google",
     );

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { compile, writeRendered } from "../src/compiler/index.js";
 import { outlineSchema } from "../src/compiler/outline.js";
 import { polish } from "../src/compiler/polish.js";
-import { render } from "../src/compiler/render.js";
+import { render, renderOp } from "../src/compiler/render.js";
 import { structure } from "../src/compiler/structure.js";
 import { fakeLlm } from "../src/llm/fake.js";
 import type { LocatorHints, Recording } from "../src/recorder/types.js";
@@ -130,6 +130,19 @@ describe("render", () => {
       'out.priceText = await fp.read({ tag: "td", role: "cell", name: "$9.77" });',
     );
     expect(src).toContain("return done(JSON.stringify(out));");
+  });
+
+  it("keeps a read's regex group, and nothing when it does not match", () => {
+    const line = renderOp({
+      kind: "read",
+      goal: "read the price",
+      hints: { role: "cell", name: "$9.77" },
+      as: "price",
+      match: "\\$([\\d.]+)",
+    });
+    expect(line).toContain(
+      '.match(new RegExp("\\\\$([\\\\d.]+)", "i")); if (m) out.price = m[1] ?? m[0];',
+    );
   });
 });
 

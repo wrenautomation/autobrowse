@@ -133,7 +133,7 @@ describe("cut a run into walks", () => {
     const cut: CutFile = cutSchema.parse({
       site: "lms",
       runs: [RUN],
-      login: { acts: "1-4" },
+      login: { acts: "1-4", credential: "uw" },
       parts: [
         {
           name: "dropbox-submit",
@@ -162,7 +162,7 @@ describe("cut a run into walks", () => {
     const login = named(walks, "login");
     expect(login.start).toBe(HOME); // where it lands, never the one-time sign-in URL
     expect(login.irreversible).toBe(false); // "Send a passcode" sends nothing that matters
-    expect(login.secrets.map((s) => s.key)).toEqual(["lms.username"]);
+    expect(login.secrets.map((s) => s.key)).toEqual(["uw.username"]); // the cut's credential
     // Signed in: the page the run went to next, not the Duo page the last act was taken on.
     expect(login.screens.find((s) => s.goal)?.url).toBe("lms.test/d2l/home/*");
 
@@ -243,6 +243,38 @@ describe("cut a run into walks", () => {
         runs,
       ),
     ).toThrow(/skip 12 is not in 6-10/);
+  });
+
+  it("reads an API on a page a load opened, with no act on it", () => {
+    const cut = cutSchema.parse({
+      site: "lms",
+      runs: [RUN],
+      parts: [
+        {
+          name: "folders",
+          acts: "6",
+          params: { ou: "url:ou" },
+          insert: [
+            {
+              after: 6,
+              op: {
+                kind: "eval",
+                goal: "read the folders",
+                js: "async () => (await fetch('/api/folders')).json()",
+                irreversible: false,
+                as: "folders",
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const folders = named(
+      buildCut(cut, runs).walks.map((b) => b.spec),
+      "folders",
+    );
+    expect(folders.start).toContain("ou=%7Bou%7D");
+    expect(ops(folders)).toEqual([expect.objectContaining({ kind: "eval", as: "folders" })]);
   });
 
   it("refuses a workflow step that names no part, and an act outside its part", () => {

@@ -264,6 +264,12 @@ async function walkSpec(
         );
       case "eval":
         gate(op);
+        // A value back (an API answer read in the signed-in page): kept under `as`, as text.
+        if (op.as) {
+          const v: unknown = await fp.page.evaluate(`(${op.js})()`);
+          out.read[op.as] = typeof v === "string" ? v : JSON.stringify(v ?? null);
+          return;
+        }
         return fp.act({ kind: "script", js: op.js }, (op.hints ?? {}) as Hints, {
           goal: op.goal,
           irreversible: op.irreversible,
@@ -276,9 +282,15 @@ async function walkSpec(
         out.read[op.as] = await (deps.download ?? tempDownload)(op.as, got);
         return;
       }
-      case "read":
-        out.read[op.as] = await fp.read(op.hints as Hints);
+      case "read": {
+        const text = await fp.read(op.hints as Hints);
+        if (!op.match) out.read[op.as] = text;
+        else {
+          const m = text.match(new RegExp(op.match, "i"));
+          if (m) out.read[op.as] = m[1] ?? m[0];
+        }
         return;
+      }
       case "keep": {
         if (!deps.sink) fp.human(`${op.goal}: nowhere to keep ${op.env} here`);
         await deps.sink.put(op.env, await fp.read(op.hints as Hints));

@@ -7,7 +7,7 @@ import { NeedsHuman } from "../src/browser/session.js";
 import type { Passkeys } from "../src/browser/webauthn.js";
 import type { SecretSink } from "../src/deps/sink.js";
 import { listed, walkFlow } from "../src/walks/flow.js";
-import { type WalkOp, type WalkSpec, walkSpecSchema } from "../src/walks/spec.js";
+import { type WalkOp, type WalkSpec, walkOpSchema, walkSpecSchema } from "../src/walks/spec.js";
 
 /** A page of the fake site: its address, what lookAt sees, and where an act goes. */
 interface FakePage {
@@ -860,6 +860,45 @@ describe("records and ai ops in a walk", () => {
         read: { title: "text of Title" },
       });
       expect(out.screens).toEqual([]);
+    });
+
+    it("keeps a regex's group of a read, and a page script's answer", async () => {
+      const { fp } = fakeSite({ p: { url: "https://lms.test/q", landmarks: [] } }, "p", {
+        reads: { Result: "File submission successful. Submission ID: 4417" },
+      });
+      const page = fp.page as unknown as { evaluate: (e: unknown) => Promise<unknown> };
+      const landmarks = page.evaluate;
+      page.evaluate = async (e) =>
+        typeof e === "string" && e.includes("/d2l/api/") ? { Items: [{ Id: 9 }] } : landmarks(e);
+      const out = await walkFlow(
+        listWalk([
+          {
+            kind: "read",
+            goal: "read the id",
+            hints: hints("status", "Result"),
+            as: "id",
+            match: "Submission ID:?\\s*(\\d+)",
+          },
+          {
+            kind: "read",
+            goal: "read none",
+            hints: hints("status", "Result"),
+            as: "none",
+            match: "Grade (\\d+)",
+          },
+          {
+            kind: "eval",
+            goal: "read my courses",
+            js: "async () => (await fetch('/d2l/api/lp/1.43/enrollments/myenrollments/')).json()",
+            irreversible: false,
+            as: "courses",
+          },
+        ]),
+      ).run(fp, {});
+      expect(out.read).toEqual({ id: "4417", courses: '{"Items":[{"Id":9}]}' });
+      expect(() =>
+        walkOpSchema.parse({ ...send(false), hints: hints("button", "Go"), as: "x" }),
+      ).toThrow(/no hints/);
     });
 
     it("downloads a file to the dep, with {field}s in its URL", async () => {

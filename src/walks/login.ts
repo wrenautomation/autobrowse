@@ -10,7 +10,7 @@ import type { SiteLogin } from "../auth/login.js";
 import { lookAt } from "../browser/screens.js";
 import { shows } from "./build.js";
 import { walkFlow } from "./flow.js";
-import type { WalkSpec } from "./spec.js";
+import { loadWalk, type WalkSpec } from "./spec.js";
 
 /** Second factors in the order a sign-in tries them, when the site does not say. */
 const CODES: readonly CodeKind[] = ["totp", "sms", "email"];
@@ -33,10 +33,13 @@ export function walkLogin(
       `${spec.site}/walk-${spec.name}: a sign-in walk needs a start (the page it lands on)`,
     );
   const goal = spec.screens.find((s) => s.goal);
+  // The credential its secrets name (`outlook@uw.password`), when not given.
+  const named = spec.secrets.map((x) => x.key).find((k) => /\.(username|password)$/.test(k));
+  const credential = o.credential ?? named?.slice(0, named.lastIndexOf("."));
   return {
     site: o.site ?? spec.site,
     home: spec.start,
-    ...(o.credential ? { credential: o.credential } : {}),
+    ...(credential ? { credential } : {}),
     ...(o.origins ? { origins: o.origins } : {}),
     // Signed in: the page the sign-in landed on, by its look.
     async loggedIn(fp) {
@@ -60,4 +63,14 @@ export function walkLogin(
       await (kind && ctx.serial ? ctx.serial(kind, run) : run());
     },
   };
+}
+
+/** The site's `login` walk as its `SiteLogin`, when `walks cut` built one; else null. */
+export function walkLoginAt(
+  walksDir: string,
+  site: string,
+  o: Parameters<typeof walkLogin>[1] = {},
+): SiteLogin | null {
+  const spec = loadWalk(walksDir, site, "login");
+  return spec?.start ? walkLogin(spec, o) : null;
 }
