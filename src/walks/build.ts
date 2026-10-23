@@ -41,6 +41,23 @@ export interface BuildOptions {
   now?: Date;
   /** Whose run it was: a value typed straight from it becomes a profile value. */
   profile?: Profile | null;
+  /** What a cut file says about one act (`walks/cut.ts`): ops in its place, ops before it, a gate, a field's key. */
+  around?: (a: Action) => Around | undefined;
+  /** Fields declared up front: ones `around` ops name. */
+  fields?: WalkField[];
+}
+
+export interface Around {
+  /** In place of the act's own op; [] drops it. */
+  ops?: WalkOp[];
+  /** Before it, on its page: a read. */
+  before?: WalkOp[];
+  /** After it: a read of what it showed. */
+  after?: WalkOp[];
+  /** Its click (or script) creates, sends or pays; false: a send that is not (a sign-in code). A payment stays gated. */
+  irreversible?: boolean;
+  /** The plan field its typed value or file becomes. */
+  key?: string;
 }
 
 /** One value the build guessed a source for: what the review shows and changes. */
@@ -299,7 +316,7 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
   };
 
   const disagreements: string[] = [];
-  const fields: WalkField[] = [];
+  const fields: WalkField[] = [...(o.fields ?? [])];
   const secrets: { key: string; label: string }[] = [];
   const fieldKey = (() => {
     const seen = new Map<string, number>();
@@ -367,7 +384,7 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
         typed: a.value,
         why: "the same each run",
       };
-    const key = fieldKey(camel(fieldName(a.target)) || "value");
+    const key = o.around?.(a)?.key ?? fieldKey(camel(fieldName(a.target)) || "value");
     const day = relativeDay(a.value, built);
     fields.push({
       key,
@@ -390,70 +407,101 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
       if (r.kind === "captcha") return [{ kind: "captcha", goal: "solve the captcha" }];
       if (r.kind === "human") return [{ kind: "human", reason: r.reason }];
       const a = r.act;
-      switch (a.kind) {
-        case "click": {
-          const hints = hintsOf(a.target);
-          const label = `${a.target.name ?? ""} ${a.target.text ?? ""}`;
-          const gated = IRREVERSIBLE_CLICK.test(label) || paymentGate("click", hints) !== null;
-          irreversible ||= gated;
-          return [
-            { kind: "click", goal: `click ${describe(a.target)}`, hints, irreversible: gated },
-          ];
-        }
-        case "input": {
-          const hints = hintsOf(a.target);
-          irreversible ||= paymentGate("fill", hints) !== null;
-          const { value, typed, why } = sourceOf(a, others);
-          const op: WalkOp = { kind: "fill", goal: `fill ${fieldName(a.target)}`, hints, value };
-          whys.set(op, { typed, why });
-          return [op];
-        }
-        case "select": {
-          const hints = hintsOf(a.target);
-          irreversible ||= paymentGate("select", hints) !== null;
-          const op: WalkOp = { kind: "select", goal: `choose ${a.value}`, hints, value: a.value };
-          whys.set(op, {
-            typed: a.value,
-            why: "a choice",
-            ...(a.options?.length ? { options: a.options } : {}),
-          });
-          return [op];
-        }
-        case "press":
-          return [{ kind: "press", goal: `press ${a.key}`, hints: hintsOf(a.target), key: a.key }];
-        case "upload": {
-          const key = fieldKey(`${camel(describe(a.target)) || "upload"}File`);
-          fields.push({
-            key,
-            label: `file for ${describe(a.target)}`,
-            example: a.files[0] ?? null,
-          });
-          return [
-            {
-              kind: "upload",
-              goal: `upload to ${describe(a.target)}`,
-              hints: hintsOf(a.target),
-              file: { from: "plan", field: key },
-            },
-          ];
-        }
-        case "read":
-          return [
-            {
-              kind: "read",
-              goal: `read ${describe(a.target)}`,
-              hints: hintsOf(a.target),
-              as: a.as,
-            },
-          ];
-        case "keep":
-          return [{ kind: "keep", goal: `keep ${a.env}`, hints: hintsOf(a.target), env: a.env }];
-        case "records":
-          return [a.op];
-        default:
-          return [];
-      }
+      const said = o.around?.(a);
+      return [
+        ...(said?.before ?? []),
+        ...(said?.ops ?? opOf(a, said, others)),
+        ...(said?.after ?? []),
+      ];
     });
+  const opOf = (a: Action, said: Around | undefined, others: readonly Action[]): WalkOp[] => {
+    switch (a.kind) {
+      case "eval": {
+        const gated = !!said?.irreversible;
+        irreversible ||= gated;
+        return [
+          {
+            kind: "eval",
+            goal: a.target ? `script on ${describe(a.target)}` : "script on the page",
+            ...(a.target ? { hints: hintsOf(a.target) } : {}),
+            js: a.js,
+            irreversible: gated,
+          },
+        ];
+      }
+      case "download":
+        return [
+          {
+            kind: "download",
+            goal: `download ${a.as}`,
+            ...(a.target ? { hints: hintsOf(a.target) } : {}),
+            ...(a.href ? { url: a.href } : {}),
+            as: a.as,
+          },
+        ];
+      case "click": {
+        const hints = hintsOf(a.target);
+        const label = `${a.target.name ?? ""} ${a.target.text ?? ""}`;
+        const gated =
+          (said?.irreversible ?? IRREVERSIBLE_CLICK.test(label)) ||
+          paymentGate("click", hints) !== null;
+        irreversible ||= gated;
+        return [{ kind: "click", goal: `click ${describe(a.target)}`, hints, irreversible: gated }];
+      }
+      case "input": {
+        const hints = hintsOf(a.target);
+        irreversible ||= paymentGate("fill", hints) !== null;
+        const { value, typed, why } = sourceOf(a, others);
+        const op: WalkOp = { kind: "fill", goal: `fill ${fieldName(a.target)}`, hints, value };
+        whys.set(op, { typed, why });
+        return [op];
+      }
+      case "select": {
+        const hints = hintsOf(a.target);
+        irreversible ||= paymentGate("select", hints) !== null;
+        const op: WalkOp = { kind: "select", goal: `choose ${a.value}`, hints, value: a.value };
+        whys.set(op, {
+          typed: a.value,
+          why: "a choice",
+          ...(a.options?.length ? { options: a.options } : {}),
+        });
+        return [op];
+      }
+      case "press":
+        return [{ kind: "press", goal: `press ${a.key}`, hints: hintsOf(a.target), key: a.key }];
+      case "upload": {
+        const key = said?.key ?? fieldKey(`${camel(describe(a.target)) || "upload"}File`);
+        fields.push({
+          key,
+          label: `file for ${describe(a.target)}`,
+          example: a.files[0] ?? null,
+        });
+        return [
+          {
+            kind: "upload",
+            goal: `upload to ${describe(a.target)}`,
+            hints: hintsOf(a.target),
+            file: { from: "plan", field: key },
+          },
+        ];
+      }
+      case "read":
+        return [
+          {
+            kind: "read",
+            goal: `read ${describe(a.target)}`,
+            hints: hintsOf(a.target),
+            as: a.as,
+          },
+        ];
+      case "keep":
+        return [{ kind: "keep", goal: `keep ${a.env}`, hints: hintsOf(a.target), env: a.env }];
+      case "records":
+        return [a.op];
+      default:
+        return [];
+    }
+  };
 
   const screens: ScreenSpec[] = [];
   for (const k of order) {
@@ -629,7 +677,7 @@ const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLow
 const ID = /^(?=.*\d)[\w-]{1,64}$/;
 
 /** `value` as a whole path segment or query value of `url` becomes `{key}`. */
-function inUrl(url: string, value: string, key: string): string {
+export function inUrl(url: string, value: string, key: string): string {
   const v = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return url.replace(new RegExp(`([/=])${v}(?=[/?&#]|$)`, "g"), `$1%7B${key}%7D`);
 }

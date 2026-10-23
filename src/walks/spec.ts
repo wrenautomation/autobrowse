@@ -178,7 +178,7 @@ export const walkSpecSchema = z
     built: z.string(),
     /** The runs it was built from, oldest first. */
     from: z.array(z.object({ run: z.string(), outcome: z.string(), endedAt: z.string() })),
-    /** Where it opens; null: it starts on whatever page it is handed (a walk inside a walk). */
+    /** Where it opens, may hold `{field}`s; null: it starts on whatever page it is handed (a walk inside a walk). */
     start: z.string().url().nullable(),
     /** Typed values: the run's value is the example, used when the input does not give one. */
     fields: z.array(walkFieldSchema),
@@ -252,6 +252,13 @@ export const walkSpecSchema = z
             });
       });
     });
+    for (const m of (w.start ?? "").replace(/%7B/gi, "{").replace(/%7D/gi, "}").matchAll(FIELD_REF))
+      if (!fields.has(m[1] as string))
+        ctx.addIssue({
+          code: "custom",
+          path: ["start"],
+          message: `{${m[1]}} is not a declared field`,
+        });
   });
 export type WalkSpec = z.infer<typeof walkSpecSchema>;
 

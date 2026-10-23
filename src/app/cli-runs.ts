@@ -36,6 +36,15 @@ import type { MeteredCall } from "../sites/caps.js";
 import { DESK_SERVICE, SITES_SERVICE } from "../sites/service.js";
 import { accent, columns, dim, good, warn } from "../style.js";
 import { buildWalk } from "../walks/build.js";
+import {
+  buildCut,
+  cutFile,
+  cutJsonSchema,
+  cutRuns,
+  draftCut,
+  loadCut,
+  saveCut,
+} from "../walks/cut.js";
 import { walkFlowName } from "../walks/flow.js";
 import {
   FIELD_REF,
@@ -220,6 +229,43 @@ export function registerRunsCommands(
       if (s.secrets.length) console.log(`  secrets: ${s.secrets.map((x) => x.key).join(", ")}`);
       if (s.irreversible) console.log("  irreversible: walks run needs --yes");
       console.log(`  ${walkFile(walksDir, s.site, s.name)}`);
+    });
+
+  walks
+    .command("cut <site> [run]")
+    .description(
+      "Cut one run into walks: the first time, write a draft cut file (from its cut marks, else guesses); after, build every part it names",
+    )
+    .option("--draft", "write the draft again over the cut file")
+    .option("--schema", "print the cut file's JSON Schema, for an editor")
+    .action((site: string, run: string | undefined, o: { draft?: boolean; schema?: boolean }) => {
+      if (o.schema) {
+        console.log(JSON.stringify(cutJsonSchema(), null, 2));
+        return;
+      }
+      if (!run) throw new Error("name the run: autobrowse walks cut <site> <run>");
+      const file = cutFile(walksDir, site, run);
+      const had = loadCut(file);
+      if (!had || o.draft) {
+        saveCut(file, draftCut(site, run, readRun(runFile(runsDir, site, run))));
+        console.log(
+          `draft: ${file}\n  edit it (names, params, gate, reads), then run this again to build`,
+        );
+        return;
+      }
+      const out = buildCut(had, cutRuns(runsDir, had));
+      for (const b of out.walks) {
+        saveWalk(walksDir, b.spec);
+        const s = b.spec;
+        console.log(
+          `${s.site}/${walkFlowName(s)}: ${s.screens.length} screens${s.fields.length ? `, plan ${s.fields.map((f) => f.key).join(", ")}` : ""}${s.irreversible ? warn(" !") : ""}`,
+        );
+        for (const d of b.disagreements) console.log(`  differs: ${masked(d)}`);
+      }
+      for (const w of out.workflows) {
+        saveWalk(walksDir, w);
+        console.log(`${w.site}/${walkFlowName(w)}: workflow${w.irreversible ? warn(" !") : ""}`);
+      }
     });
 
   walks

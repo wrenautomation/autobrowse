@@ -7,7 +7,7 @@ import { NeedsHuman } from "../src/browser/session.js";
 import type { Passkeys } from "../src/browser/webauthn.js";
 import type { SecretSink } from "../src/deps/sink.js";
 import { listed, walkFlow } from "../src/walks/flow.js";
-import type { WalkOp, WalkSpec } from "../src/walks/spec.js";
+import { type WalkOp, type WalkSpec, walkSpecSchema } from "../src/walks/spec.js";
 
 /** A page of the fake site: its address, what lookAt sees, and where an act goes. */
 interface FakePage {
@@ -198,6 +198,22 @@ describe("walkFlow", () => {
       kept: [],
       screens: ["sign-up", "your-details"],
     });
+  });
+
+  it("fills {field}s in its start", async () => {
+    const { fp, log } = fakeSite(SITE, "other");
+    await walkFlow(
+      spec({
+        start: "https://site.test/signup?ref=%7Bemail%7D",
+        screens: [
+          { name: "done", looks: "any", url: null, landmarks: [], ops: [], goal: true, seen: 0 },
+        ],
+      }),
+    ).run(fp, { email: "a b" });
+    expect(log).toEqual(["open https://site.test/signup?ref=a%20b"]);
+    expect(() => walkSpecSchema.parse(spec({ start: "https://site.test/?x=%7Bnope%7D" }))).toThrow(
+      /\{nope\} is not a declared field/,
+    );
   });
 
   it("stops at once when the page is already the goal", async () => {

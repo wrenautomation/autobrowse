@@ -155,7 +155,6 @@ async function walkSpec(
   depth: number,
   fresh = depth === 0,
 ): Promise<string> {
-  if (fresh && spec.start) await fp.open(spec.start);
   const fields = new Map(spec.fields.map((f) => [f.key, f]));
   const handled = new Set<string>();
   let seen: { at: number; url: string; look: PageLook } | null = null;
@@ -204,6 +203,7 @@ async function walkSpec(
     }
     return out;
   };
+  if (fresh && spec.start) await fp.open(await fill(spec.start, "open the start", true));
   const hintsFor = async (h: WalkOp & { kind: "click" }): Promise<Hints> => {
     const { nth, ...rest } = h.hints;
     const out = { ...rest } as Hints & { text?: string | null; name?: string | null };
