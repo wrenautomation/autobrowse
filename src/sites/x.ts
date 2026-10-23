@@ -106,6 +106,7 @@ const upload = z.object({
 
 const handle = z.string().regex(/^[A-Za-z0-9_]{1,15}$/, "an X handle without the @");
 const follow = z.object({ username: handle, undo: z.boolean().optional() });
+const following = z.object({ max_results: z.coerce.number().int().min(1).max(1000).optional() });
 const like = z.object({ id, undo: z.boolean().optional() });
 
 /**
@@ -289,7 +290,7 @@ export const x: SiteApi = {
   probe: { path: "/2/users/me" },
   auth: { oauth: xOAuth },
   // Well under what a person scrolls in a day; reads look like one reader, not a scraper.
-  caps: { profile: 150, posts: 100, search: 50, follow: 20, like: 50, reply: 30 },
+  caps: { profile: 150, posts: 100, search: 50, follow: 20, like: 50, reply: 30, following: 4 },
   pace: { gapMs: 5_000, jitterMs: 10_000 },
   routes: [
     route({
@@ -353,6 +354,15 @@ export const x: SiteApi = {
         input: (b) => ({ id: b.reply?.in_reply_to_tweet_id, text: b.text }),
       },
       api: (body, leg) => send(leg, "POST", "/2/tweets", body),
+    }),
+    route({
+      method: "GET",
+      path: "/2/users/me/following",
+      summary:
+        "Who the account follows, newest first (`max_results`, default 1000): `data[]` of username, name, follows_you (free: the signed-in page; the free API tier has no follows)",
+      request: following,
+      meter: () => ({ following: 1 }),
+      browser: { flow: "x/following" },
     }),
     route({
       method: "POST",

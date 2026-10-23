@@ -119,6 +119,7 @@ describe("browser service", () => {
       "web/google-place",
       "web/proof-shot",
       "x/follow",
+      "x/following",
       "x/like",
       "x/oauth-consent",
       "x/post",

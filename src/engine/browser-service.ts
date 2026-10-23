@@ -91,7 +91,7 @@ import { tiktokCreatePost } from "../browser/flows/tiktok-create-post.js";
 import { tiktokOauthConsent } from "../browser/flows/tiktok-oauth-consent.js";
 import { xFollow, xLike, xReply } from "../browser/flows/x-act.js";
 import { xOauthConsent } from "../browser/flows/x-oauth-consent.js";
-import { xPost, xPosts, xProfile, xSearch } from "../browser/flows/x-read.js";
+import { xFollowing, xPost, xPosts, xProfile, xSearch } from "../browser/flows/x-read.js";
 import { youtubeCommunityPost } from "../browser/flows/youtube-community-post.js";
 import { youtubeThumbnail } from "../browser/flows/youtube-thumbnail.js";
 import { NeedsHuman } from "../browser/session.js";
@@ -184,6 +184,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     tiktokCreatePost,
     xOauthConsent,
     xPost,
+    xFollowing,
     xPosts,
     xProfile,
     xSearch,

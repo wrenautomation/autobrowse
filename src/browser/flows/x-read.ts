@@ -17,6 +17,7 @@
  */
 import { defineFlow, type FlowPage } from "../flow.js";
 import { scrollCollect } from "../scroll-collect.js";
+import { meOf } from "./x-act.js";
 
 /** The little of the DOM these page scripts touch; the project compiles without lib dom. */
 interface El {
@@ -327,5 +328,72 @@ export const xPost = defineFlow<{ id: string }, { data: Tweet } | NotFound>({
     if (state !== "posts") return notFound(`no X post ${id}`);
     const post = (await tweetsOnPage(fp)).map(tweetOf).find((t) => t?.id === id);
     return post ? { data: post } : notFound(`post ${id} did not render (${fp.url()})`);
+  },
+});
+
+/** One account the signed-in account follows, as its Following page shows it. */
+export interface Followed {
+  username: string;
+  name: string;
+  /** The page's "Follows you". */
+  follows_you: boolean;
+}
+
+/** A Following page cell: "Name\n@handle\nFollows you\nFollowing\nbio", and its profile link. */
+export function followedOf(cell: { text: string; hrefs: string[] }): Followed | null {
+  const username = cell.hrefs
+    .map((h) => /^\/([A-Za-z0-9_]{1,15})$/.exec(h)?.[1])
+    .find((h): h is string => !!h);
+  if (!username) return null;
+  const lines = cell.text.split("\n").map((l) => l.trim());
+  const top = lines[0] ?? "";
+  const name = top && !top.startsWith("@") ? top : username;
+  return { username, name, follows_you: lines.includes("Follows you") };
+}
+
+/** Only the page's own list: the sidebar's "Who to follow" cells are left out. */
+const cellsOnPage = (fp: FlowPage) =>
+  fp.page.evaluate(() =>
+    [...document.querySelectorAll("[data-testid=primaryColumn] [data-testid=UserCell]")].map(
+      (c) => ({
+        text: c.innerText,
+        hrefs: [...c.querySelectorAll("a[href^='/']")].map((a) => a.getAttribute("href") ?? ""),
+      }),
+    ),
+  );
+
+const NOT_FOLLOWING = /isn.t following anyone|aren.t following anyone|be in the know/i;
+
+/**
+ * Who the signed-in account follows, newest first, in v2's `{ data, meta }`. The page has no
+ * numeric ids, so each row is the username and name. The rail's profile link names us.
+ */
+export const xFollowing = defineFlow<{ max_results?: number }, unknown>({
+  site: "x",
+  name: "following",
+  async run(fp, i) {
+    await fp.open(`${WEB}/home`);
+    let me: string | null = null;
+    for (let n = 0; n < RENDER_MS / SETTLE_MS && !me; n++) {
+      if (SIGNED_OUT.test(fp.url()))
+        return fp.human("X is signed out on this profile: `autobrowse login x@<account>`");
+      me = meOf(await fp.html());
+      if (!me) await fp.wait(SETTLE_MS);
+    }
+    if (!me) return fp.human("could not tell which X account this profile is signed in as");
+    await fp.open(`${WEB}/${me}/following`);
+    for (let n = 0; n < RENDER_MS / SETTLE_MS; n++) {
+      if ((await cellsOnPage(fp)).length) break;
+      if (NOT_FOLLOWING.test(await fp.text())) return { data: [], meta: { result_count: 0 } };
+      await fp.wait(SETTLE_MS);
+    }
+    const { rows } = await scrollCollect(fp, {
+      read: async () =>
+        (await cellsOnPage(fp)).map(followedOf).filter((f): f is Followed => f !== null),
+      key: (f) => f.username.toLowerCase(),
+      max: i.max_results ?? 1000,
+    });
+    if (!rows.length) return fp.human(`no accounts read on ${fp.url()}`);
+    return { data: rows, meta: { result_count: rows.length } };
   },
 });

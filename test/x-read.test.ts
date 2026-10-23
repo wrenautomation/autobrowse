@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { FlowPage } from "../src/browser/flow.js";
 import {
   authorsOf,
+  followedOf,
   metaOf,
   metricsOf,
   type RawTweet,
@@ -162,5 +163,25 @@ describe("scrollCollect", () => {
       settleMs: 0,
     });
     expect(got).toEqual({ rows: ["a", "b"], ended: "end" });
+  });
+});
+
+describe("followedOf", () => {
+  it("reads the handle from the profile link and the name from the first line", () => {
+    expect(
+      followedOf({
+        text: "Stripe\n@stripe\nFollows you\nFollowing\nPayments infrastructure",
+        hrefs: ["/stripe", "/stripe/photo"],
+      }),
+    ).toEqual({ username: "stripe", name: "Stripe", follows_you: true });
+  });
+
+  it("keeps the handle as the name when the cell shows none, and needs a profile link", () => {
+    expect(followedOf({ text: "@x_user\nFollowing", hrefs: ["/x_user"] })).toEqual({
+      username: "x_user",
+      name: "x_user",
+      follows_you: false,
+    });
+    expect(followedOf({ text: "Someone", hrefs: ["/i/lists/1"] })).toBeNull();
   });
 });
