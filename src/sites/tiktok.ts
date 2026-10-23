@@ -100,6 +100,8 @@ const webPost = z.object({
   /** The "AI-generated content" label. */
   aiGenerated: z.boolean().default(false),
 });
+const following = z.object({ max: z.coerce.number().int().min(1).max(1000).optional() });
+
 const postComments = z.object({
   videoId: z.string().regex(/^\d+$/, "a video id"),
   username: z.string().min(1).optional(),
@@ -154,6 +156,8 @@ export const tiktok: SiteApi = {
   caps: {
     // A video's comments, read off its page: a pass every 30 minutes at most.
     comments: 24,
+    // Who we follow, read off the profile's Following dialog: once a day is the need.
+    following: 4,
   },
   routes: [
     route({
@@ -265,6 +269,15 @@ export const tiktok: SiteApi = {
       },
       sentAs: (o) => ({ id: str(rec(o).id), url: str(rec(o).url) }),
       browser: { flow: "tiktok/create-post", uploads: "file" },
+    }),
+    route({
+      method: "GET",
+      path: "/web/following",
+      summary:
+        "Every account ours follows, read off the signed-in profile's Following dialog (no public API lists follows): `{ data: [{ username, name }], meta: { result_count, listed } }`; `listed` is the profile's own count (`max`, default 1000). Reads only",
+      request: following,
+      meter: () => ({ following: 1 }),
+      browser: { flow: "tiktok/following" },
     }),
     route({
       method: "GET",

@@ -20,6 +20,8 @@ export interface ScrollCollect<T> {
   idle?: number;
   /** How far one scroll goes, as a share of the window. */
   screens?: number;
+  /** How to scroll once instead of the wheel (a dialog's own list box). */
+  scroll?: () => Promise<void>;
   /** ms to let new rows load after a scroll. */
   settleMs?: number;
 }
@@ -52,8 +54,11 @@ export async function scrollCollect<T>(fp: FlowPage, o: ScrollCollect<T>): Promi
     }
     idle = fresh ? 0 : idle + 1;
     if (idle >= (o.idle ?? IDLE)) break;
-    const height = await fp.page.evaluate<number>("innerHeight").catch(() => 800);
-    await fp.scroll(Math.round(height * (o.screens ?? SCREENS)));
+    if (o.scroll) await o.scroll();
+    else {
+      const height = await fp.page.evaluate<number>("innerHeight").catch(() => 800);
+      await fp.scroll(Math.round(height * (o.screens ?? SCREENS)));
+    }
     await fp.wait(o.settleMs ?? SETTLE_MS);
   }
   return { rows: [...rows.values()], ended: "end" };

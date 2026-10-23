@@ -9,6 +9,7 @@ export {
   quickbooksConnectorKeys,
 } from "./connector-keys.js";
 export { type ConsentWalk, consentFlow } from "./consent-walker.js";
+export { countOf, type Followed } from "./dialog-following.js";
 export {
   type DiscordBotInput,
   type DiscordInviteInput,
@@ -35,9 +36,12 @@ export {
 } from "./google-search.js";
 export { googleWorkspaceLogo } from "./google-workspace-logo.js";
 export {
+  followedOfIg,
+  type IgFollowed,
   type IgPost,
   instagramComment,
   instagramFollow,
+  instagramFollowing,
   instagramLike,
   instagramPost,
   instagramSearch,
@@ -116,12 +120,14 @@ export {
   type SubscribeInput as RedditSubscribeInput,
 } from "./reddit.js";
 export { type ResetProbeInput, resetMailProbe } from "./reset-mail-probe.js";
+export { followedOfThreads, threadsFollowing } from "./threads-following.js";
 export { threadsOauthConsent } from "./threads-oauth-consent.js";
 export {
   type TikTokPost,
   type TikTokPostInput,
   tiktokCreatePost,
 } from "./tiktok-create-post.js";
+export { followedOfTiktok, tiktokFollowing } from "./tiktok-following.js";
 export { tiktokOauthConsent } from "./tiktok-oauth-consent.js";
 export { xFollow, xLike, xReply } from "./x-act.js";
 export { xOauthConsent } from "./x-oauth-consent.js";

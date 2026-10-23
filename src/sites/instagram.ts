@@ -100,6 +100,8 @@ const webSearch = z.object({
   max: z.coerce.number().int().min(1).max(30).default(12),
 });
 
+const following = z.object({ max: z.coerce.number().int().min(1).max(1000).optional() });
+
 const profileName = z.object({
   /** The new display name; the handle and profile link stay as they are. */
   name: z.string().trim().min(1).max(30),
@@ -157,7 +159,7 @@ export const instagram: SiteApi = {
   probe: { path: "/me" },
   auth: { oauth: instagramOAuth },
   // Acts on others' accounts go through the page (no API does them): a person's pace, per account.
-  caps: { follow: 15, like: 40, comment: 10, post: 60, comments: 40, search: 10 },
+  caps: { follow: 15, like: 40, comment: 10, post: 60, comments: 40, search: 10, following: 8 },
   pace: { gapMs: 8_000, jitterMs: 12_000 },
   routes: [
     route({
@@ -451,6 +453,24 @@ export const instagram: SiteApi = {
       request: webSearch,
       meter: () => ({ search: 1 }),
       browser: { flow: "instagram/search" },
+    }),
+    route({
+      method: "GET",
+      path: "/web/following",
+      summary:
+        "Every account ours follows, as the signed-in Following list pages it (the API has no follows): `{ data: [{ username, name }], meta: { result_count } }` (`max`, default 1000). Reads only",
+      request: following,
+      meter: () => ({ following: 1 }),
+      browser: { flow: "instagram/following" },
+    }),
+    route({
+      method: "GET",
+      path: "/web/threads/following",
+      summary:
+        "Every account ours follows on Threads, read off the Threads profile's Following tab (Threads signs in through Instagram; its API lists no follows): `{ data: [{ username, name }], meta: { result_count, listed } }`; `listed` is the profile's own count (`max`, default 1000). Reads only",
+      request: following,
+      meter: () => ({ following: 1 }),
+      browser: { flow: "instagram/threads-following" },
     }),
     route({
       method: "POST",

@@ -29,6 +29,7 @@ import { googleWorkspaceLogo } from "../browser/flows/google-workspace-logo.js";
 import {
   instagramComment,
   instagramFollow,
+  instagramFollowing,
   instagramLike,
   instagramPost,
   instagramSearch,
@@ -85,9 +86,11 @@ import {
   redditSubscribe,
 } from "../browser/flows/reddit.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
+import { threadsFollowing } from "../browser/flows/threads-following.js";
 import { threadsOauthConsent } from "../browser/flows/threads-oauth-consent.js";
 import { tiktokPostComments } from "../browser/flows/tiktok-comments.js";
 import { tiktokCreatePost } from "../browser/flows/tiktok-create-post.js";
+import { tiktokFollowing } from "../browser/flows/tiktok-following.js";
 import { tiktokOauthConsent } from "../browser/flows/tiktok-oauth-consent.js";
 import { xFollow, xLike, xReply } from "../browser/flows/x-act.js";
 import { xOauthConsent } from "../browser/flows/x-oauth-consent.js";
@@ -139,6 +142,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     threadsOauthConsent,
     instagramCreatePost,
     instagramFollow,
+    instagramFollowing,
     instagramLike,
     instagramComment,
     instagramPost,
@@ -181,6 +185,8 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     facebookOauthConsent,
     tiktokOauthConsent,
     tiktokPostComments,
+    tiktokFollowing,
+    threadsFollowing,
     tiktokCreatePost,
     xOauthConsent,
     xPost,

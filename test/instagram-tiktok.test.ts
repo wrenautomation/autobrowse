@@ -3,7 +3,11 @@ import { INSTAGRAM_LOGIN_URL, signInToInstagram } from "../src/auth/instagram.js
 import type { CodeKind, SignInContext } from "../src/auth/login.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";
 import { signInToTiktok, TIKTOK_LOGIN_URL } from "../src/auth/tiktok.js";
+import { countOf } from "../src/browser/flows/dialog-following.js";
+import { followedOfIg } from "../src/browser/flows/instagram-act.js";
 import { instagramOauthConsent } from "../src/browser/flows/instagram-oauth-consent.js";
+import { followedOfThreads } from "../src/browser/flows/threads-following.js";
+import { followedOfTiktok } from "../src/browser/flows/tiktok-following.js";
 import { tiktokOauthConsent } from "../src/browser/flows/tiktok-oauth-consent.js";
 import type { Hints } from "../src/browser/locate.js";
 import { httpClient } from "../src/clients/http.js";
@@ -373,5 +377,55 @@ describe("tiktok publish status", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("instagram following rows", () => {
+  it("keeps the username and a trimmed name; drops a row with no username", () => {
+    expect(followedOfIg({ username: "sam_synth", full_name: " Sam " })).toEqual({
+      username: "sam_synth",
+      name: "Sam",
+    });
+    expect(followedOfIg({ username: "kim_synth", full_name: "" })).toEqual({
+      username: "kim_synth",
+      name: null,
+    });
+    expect(followedOfIg({ full_name: "No Handle" })).toBeNull();
+    expect(followedOfIg(null)).toBeNull();
+  });
+});
+
+describe("tiktok following rows", () => {
+  it("reads the handle from the href and the name from the first line", () => {
+    expect(followedOfTiktok("/@sam_synth", "Sam Synth\n\nsam_synth\n\nFollowing")).toEqual({
+      username: "sam_synth",
+      name: "Sam Synth",
+    });
+    expect(followedOfTiktok("/@kim.synth", "kim.synth\n\nkim.synth")).toEqual({
+      username: "kim.synth",
+      name: null,
+    });
+    expect(followedOfTiktok("/@sam_synth/video/1", "x")).toBeNull();
+  });
+  it("reads a shown count", () => {
+    expect(countOf("82")).toBe(82);
+    expect(countOf("1.2K")).toBe(1200);
+    expect(countOf("163M")).toBe(163_000_000);
+    expect(countOf("1.0M followers")).toBe(1_000_000);
+    expect(countOf("")).toBeNull();
+  });
+});
+
+describe("threads following rows", () => {
+  it("reads the handle from the href and the name from the second line", () => {
+    expect(followedOfThreads("/@sam_synth", "sam_synth\nSam Synth\nFollow")).toEqual({
+      username: "sam_synth",
+      name: "Sam Synth",
+    });
+    expect(followedOfThreads("/@kim.synth", "kim.synth\nFollowing")).toEqual({
+      username: "kim.synth",
+      name: null,
+    });
+    expect(followedOfThreads("/@kim.synth/replies", "x")).toBeNull();
   });
 });

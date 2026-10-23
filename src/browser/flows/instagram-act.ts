@@ -10,6 +10,10 @@
  * (`svg[aria-label=Like][height="24"]`, `Unlike` once liked) and each comment's at 16px; the
  * comment box is `textarea[aria-label="Add a comment…"]` and its Post button a `div[role=button]`.
  * Its `og:description` reads `184K likes, 288 comments - natgeo on October 7, 2026: "caption"`.
+ *
+ * Who we follow (mapped 2026-10-22): the Following dialog pages the page's own
+ * `/api/v1/friendships/<ds_user_id>/following/` call, `{ users: [{ username, full_name }], next_max_id }`.
+ * The flow makes that call from the signed-in page, a page at a time, with a person's pause between.
  */
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
@@ -241,6 +245,7 @@ export function postCodesOf(hrefs: readonly string[]): string[] {
 
 /** The little of the DOM the page script touches; the project compiles without lib dom. */
 declare const document: {
+  cookie: string;
   querySelectorAll(sel: string): Iterable<{ getAttribute(n: string): string | null }>;
 };
 
@@ -271,5 +276,76 @@ export const instagramSearch = defineFlow<SearchInput, { q: string; shortcodes: 
       await fp.wait(SETTLE_MS);
     }
     return { q, shortcodes: [] };
+  },
+});
+
+/** The page's own app id: its calls carry it, and the API refuses one without it. */
+const IG_APP_ID = "936619743392459";
+const FOLLOWING_PAGE = 50;
+const FOLLOWING_PAUSE_MS = 2_000;
+
+export interface IgFollowed {
+  username: string;
+  name: string | null;
+}
+
+/** One `users` row of the following call; null when it has no username. */
+export function followedOfIg(u: unknown): IgFollowed | null {
+  const r = (u ?? {}) as { username?: unknown; full_name?: unknown };
+  if (typeof r.username !== "string" || !r.username) return null;
+  const name = typeof r.full_name === "string" && r.full_name.trim() ? r.full_name.trim() : null;
+  return { username: r.username, name };
+}
+
+interface FollowingPage {
+  status: number;
+  users: unknown[];
+  next: string | null;
+}
+
+export const instagramFollowing = defineFlow<
+  { max?: number },
+  { data: IgFollowed[]; meta: { result_count: number } }
+>({
+  site: "instagram",
+  name: "following",
+  async run(fp, { max }) {
+    const cap = Math.min(Math.max(1, max ?? 1000), 1000);
+    await openIg(fp, `${WEB}/`);
+    const me = await fp.page.evaluate(() => /ds_user_id=(\d+)/.exec(document.cookie)?.[1] ?? null);
+    if (!me)
+      return fp.human("Instagram is signed out on this profile: `autobrowse login instagram`");
+    const rows = new Map<string, IgFollowed>();
+    let after: string | null = null;
+    do {
+      const got: FollowingPage = await fp.page.evaluate(
+        async ({ me, after, count, app }) => {
+          const q = `count=${count}${after ? `&max_id=${encodeURIComponent(after)}` : ""}`;
+          const r = await fetch(`/api/v1/friendships/${me}/following/?${q}`, {
+            headers: { "X-IG-App-ID": app },
+          });
+          const j = r.ok ? ((await r.json()) as { users?: unknown[]; next_max_id?: unknown }) : {};
+          const next = j.next_max_id;
+          return {
+            status: r.status,
+            users: j.users ?? [],
+            next: typeof next === "string" || typeof next === "number" ? String(next) : null,
+          };
+        },
+        { me, after, count: FOLLOWING_PAGE, app: IG_APP_ID },
+      );
+      if (got.status !== 200)
+        return fp.human(
+          `Instagram answered ${got.status} to the following list (page ${rows.size})`,
+        );
+      for (const u of got.users) {
+        const f = followedOfIg(u);
+        if (f && rows.size < cap) rows.set(f.username.toLowerCase(), f);
+      }
+      after = got.next;
+      if (after && rows.size < cap) await fp.wait(FOLLOWING_PAUSE_MS);
+    } while (after && rows.size < cap);
+    const data = [...rows.values()];
+    return { data, meta: { result_count: data.length } };
   },
 });
