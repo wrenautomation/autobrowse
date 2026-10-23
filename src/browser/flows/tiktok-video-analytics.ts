@@ -11,8 +11,9 @@
  * `{ status, value }`, some wrapped in a day's `{ value: { status, value } }`. Status 0 is data; 2 is none (TikTok
  * holds most fields until 100 views). A list answers `[{ key, value }]`.
  * Buckets keep TikTok's keys as they come. Live 2026-10-23 at 0 views: the
- * overview and sources read (keys "For You", "Follow", "Search", ...); the
- * retention shape and the viewer keys are not seen yet.
+ * overview, sources ("For You", "Follow", "Search", ...), age ("18-24" ..
+ * "55+") and gender ("male_vv", "female_vv", "other_vv") read; retention,
+ * location and the follower shares answered none, so their shape is not seen.
  */
 import type { Response } from "playwright";
 import { defineFlow } from "../flow.js";
