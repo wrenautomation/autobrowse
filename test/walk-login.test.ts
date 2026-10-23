@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Page } from "playwright";
 import { describe, expect, it } from "vitest";
 import type { SignInContext } from "../src/auth/login.js";
+import { addSiteLogins, builtInLogin, SITE_LOGINS } from "../src/auth/sites.js";
 import type { FlowPage } from "../src/browser/flow.js";
 import type { Hints } from "../src/browser/locate.js";
 import { NeedsHuman } from "../src/browser/session.js";
@@ -143,6 +144,13 @@ describe("a sign-in walk as a SiteLogin", () => {
 
   it("needs a start", () => {
     expect(() => walkLogin({ ...spec, start: null })).toThrow(/needs a start/);
+  });
+
+  it("never takes the place of a built-in login (learn keeps learnLogin)", () => {
+    const before = SITE_LOGINS.length;
+    addSiteLogins([walkLogin({ ...spec, site: "learn" })]);
+    expect(SITE_LOGINS.length).toBe(before);
+    expect(SITE_LOGINS.filter((l) => l.site === "learn")).toEqual([builtInLogin("learn")]);
   });
 
   it("finds each site's login walk; a broken file is no login", () => {
