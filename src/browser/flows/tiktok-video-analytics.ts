@@ -2,16 +2,17 @@
  * One video's numbers off its TikTok Studio analytics page, read from the
  * page's own `/aweme/v2/data/insight/` answers. TikTok's Display API gives
  * counts only; the curve, the sources and the viewers live here. Never
- * replayed: the page signs its calls. Read only: it opens one page and never
- * clicks.
+ * replayed: the page signs its calls. Read only: it opens one page, clicks its
+ * Viewers tab, and never likes, follows or types.
  *
- * Mapped 2026-10-23 in explore on /tiktokstudio/analytics/<id>: one load asks
- * for every type below. A field answers `{ status, value }`, some wrapped in a
- * day's `{ value: { status, value } }`. Status 0 is data; 2 is none (TikTok
+ * Mapped 2026-10-23 in explore on /tiktokstudio/analytics/<id>. The load asks
+ * for the overview types. The viewer types (age, gender, follower and new
+ * viewer shares) come only once the Viewers tab opens. A field answers
+ * `{ status, value }`, some wrapped in a day's `{ value: { status, value } }`. Status 0 is data; 2 is none (TikTok
  * holds most fields until 100 views). A list answers `[{ key, value }]`.
- * Buckets keep TikTok's keys as they come. Unproven live: our videos had 0
- * views, and the recorder hid the keys, so the key names and the retention
- * shape are not seen yet.
+ * Buckets keep TikTok's keys as they come. Live 2026-10-23 at 0 views: the
+ * overview and sources read (keys "For You", "Follow", "Search", ...); the
+ * retention shape and the viewer keys are not seen yet.
  */
 import type { Response } from "playwright";
 import { defineFlow } from "../flow.js";
@@ -22,6 +23,12 @@ const FIRST_MS = 30_000;
 const POLL_MS = 1_000;
 /** After the first answer, how long later answers may still come. */
 const SETTLE_MS = 4_000;
+/** How long the Viewers tab gets to answer; it is clicked again until it does. */
+const VIEWERS_MS = 20_000;
+const TAB_EVERY_MS = 4_000;
+const CLICK_MS = 3_000;
+/** An answer that carries a viewer type: the Viewers tab has loaded. */
+const VIEWER_TYPE = /^video_(viewer_|uv)/;
 
 export interface Bucket {
   key: string;
@@ -196,6 +203,21 @@ export const tiktokVideoAnalytics = defineFlow<{ videoId: string }, TikTokVideoA
         return fp.human(
           `${fp.url()} made no insight call: the profile may be signed out, may not own ${videoId}, or Studio changed`,
         );
+      await fp.wait(SETTLE_MS);
+      await Promise.all(pending);
+      const viewers = () =>
+        bodies.some((b) => Object.keys(rec(b) ?? {}).some((k) => VIEWER_TYPE.test(k)));
+      for (let waited = 0; !viewers() && waited < VIEWERS_MS; waited += POLL_MS) {
+        if (waited % TAB_EVERY_MS === 0)
+          await fp.page
+            .getByText(/^viewers$/i)
+            .filter({ visible: true })
+            .first()
+            .click({ timeout: CLICK_MS })
+            .catch(() => undefined);
+        await fp.wait(POLL_MS);
+        await Promise.all(pending);
+      }
       await fp.wait(SETTLE_MS);
       await Promise.all(pending);
     } finally {
