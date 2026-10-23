@@ -544,7 +544,7 @@ export const linkedin: SiteApi = {
           ),
           "rest/socialActions/{urn}",
         ),
-      browser: { flow: "linkedin/post-stats" },
+      browser: { workflow: "linkedin-post-stats" },
     }),
     route({
       method: "GET",
