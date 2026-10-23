@@ -326,46 +326,52 @@ describe("x timeline data", () => {
     }) => void;
     const handlers = new Set<Handler>();
     const opened: string[] = [];
-    const { fp, acts } = fakePage({ text: ["Wren"], present: () => true });
+    const { fp } = fakePage({ text: ["Wren"], present: () => true });
     fp.page = {
       on: (_e: string, h: Handler) => handlers.add(h),
       off: (_e: string, h: Handler) => handlers.delete(h),
       evaluate: async (fn: unknown) => (String(fn).includes("article") ? [raw({})] : 900),
     } as unknown as FlowPage["page"];
-    fp.open = async (url) => {
-      opened.push(url);
-      if (url.endsWith("/with_replies"))
+    let url = "";
+    const clicks: string[] = [];
+    let answers = 1;
+    fp.open = async (to) => {
+      opened.push(to);
+      url = to.includes("/i/user/") ? "https://x.com/wren_sample" : to;
+    };
+    // Only the Replies tab's click makes the timeline call.
+    fp.act = async (_a, hints, o) => {
+      clicks.push(`${hints.role} ${hints.name}: ${o?.goal}`);
+      url = `${url}/with_replies`;
+      for (let n = 0; n < answers; n++)
         for (const h of handlers)
           h({
             url: () => "https://x.com/i/api/graphql/abc/UserTweetsAndReplies?variables=x",
             status: () => 200,
             json: async () => REPLIES_PAGE,
           });
+      return { ok: true } as never;
     };
-    fp.url = () =>
-      opened.at(-1)?.includes("/i/user/") ? "https://x.com/wren_sample" : (opened.at(-1) ?? "");
+    fp.url = () => url;
     fp.scroll = async () => {};
     fp.wait = async () => {};
     const out = (await xPosts.run(fp, { id: "100", max_results: 3, exclude: "retweets" })) as {
       data: TimelineTweet[];
       meta: unknown;
     };
-    expect(opened).toEqual(["https://x.com/i/user/100", "https://x.com/wren_sample/with_replies"]);
+    expect(opened).toEqual(["https://x.com/i/user/100"]);
+    expect(clicks).toEqual(["tab /^replies$/i: open the Replies tab"]);
     expect(out.data.map((t) => [t.id, t.in_reply_to_status_id ?? null])).toEqual([
       ["1005", "1004"],
       ["1003", null],
       ["1001", "800"],
     ]);
     expect(out.meta).toEqual({ result_count: 3, newest_id: "1005", oldest_id: "1001" });
-    expect(acts).toEqual([]);
     expect(handlers.size).toBe(0);
-    // Posts shown but no timeline answer of ours: an error naming what the page called.
-    opened.length = 0;
-    fp.open = async (url) => {
-      opened.push(url);
-    };
+    // No timeline call after the click: an error naming what the page called, not an empty list.
+    answers = 0;
     await expect(xPosts.run(fp, { id: "wren_sample" })).rejects.toThrow(
-      /shows posts but 0 timeline answers held none of theirs \(calls: none;/,
+      /wren_sample\/with_replies: the Replies tab made no timeline call \(calls: none\)/,
     );
     expect(handlers.size).toBe(0);
   });

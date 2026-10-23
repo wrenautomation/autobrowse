@@ -423,6 +423,7 @@ export function timelineTweets(body: unknown): TimelineTweet[] {
 
 /** The replies tab's timeline call. */
 const REPLIES_CALL = "/UserTweetsAndReplies";
+const REPLIES_TAB = { role: "tab", name: "/^replies$/i" };
 
 /**
  * The account's own posts and replies, newest first, off its Replies tab,
@@ -431,13 +432,6 @@ const REPLIES_CALL = "/UserTweetsAndReplies";
  * of nothing but come back marked.
  */
 async function withReplies(fp: FlowPage, id: string, i: Feed) {
-  let handle = id;
-  if (/^\d+$/.test(id)) {
-    await fp.open(`${WEB}/i/user/${id}`);
-    if (!(await fp.waitForUrl(/x\.com\/(?!i\/)[A-Za-z0-9_]{1,15}(?:[/?#]|$)/, RENDER_MS)))
-      return notFound(`no X user ${id} (${fp.url()})`);
-    handle = /x\.com\/([A-Za-z0-9_]{1,15})/.exec(fp.url())?.[1] ?? id;
-  }
   const bodies: unknown[] = [];
   const pending: Array<Promise<void>> = [];
   /** The page's GraphQL calls by name, to say what came instead when no timeline answer did. */
@@ -455,12 +449,23 @@ async function withReplies(fp: FlowPage, id: string, i: Feed) {
       ),
     );
   };
+  const stuck = (why: string) =>
+    new Error(
+      `x/posts: ${fp.url()}: the Replies tab ${why} (calls: ${[...calls].join(", ") || "none"})`,
+    );
   fp.page.on("response", onResponse);
   try {
-    const url = `${WEB}/${handle}/with_replies`;
-    const state = await landed(fp, url);
-    if (state === "missing") return notFound(`nothing at ${url}`);
-    await Promise.all(pending);
+    const profile = /^\d+$/.test(id) ? `${WEB}/i/user/${id}` : `${WEB}/${id}`;
+    if ((await landed(fp, profile)) === "missing") return notFound(`nothing at ${profile}`);
+    // Opened straight, /with_replies makes no timeline call (2026-10-22); its tab does.
+    await fp.act({ kind: "click" }, REPLIES_TAB, { goal: "open the Replies tab" });
+    for (let n = 0; n < RENDER_MS / SETTLE_MS && !bodies.length; n++) {
+      await fp.wait(SETTLE_MS);
+      await Promise.all(pending);
+    }
+    const handle = /x\.com\/([A-Za-z0-9_]{1,15})\/with_replies/.exec(fp.url())?.[1];
+    if (!handle) throw stuck("did not open");
+    if (!bodies.length) throw stuck("made no timeline call");
     const me = handle.toLowerCase();
     const noReposts = /retweets/.test(i.exclude ?? "");
     const own = async () => {
@@ -470,15 +475,6 @@ async function withReplies(fp: FlowPage, id: string, i: Feed) {
         .filter((t) => t.author_username.toLowerCase() === me && !(noReposts && t.reposted_by))
         .sort((a, b) => (newer(a.id, b.id) ? -1 : 1));
     };
-    const stuck = (why: string) =>
-      new Error(
-        `x/posts: @${handle}'s Replies tab ${why} (calls: ${[...calls].join(", ") || "none"}; at ${fp.url()})`,
-      );
-    // An empty account still answers its timeline call; no answer at all is no reading.
-    if (state === "empty") {
-      if (!bodies.length) throw stuck("showed no posts and made no timeline call");
-      if (!(await own()).length) return { data: [], meta: { result_count: 0 } };
-    }
     const { rows, ended } = await scrollCollect(fp, {
       read: own,
       key: (t) => t.id,
@@ -487,7 +483,7 @@ async function withReplies(fp: FlowPage, id: string, i: Feed) {
       ...(i.since_id ? { stop: (t: TimelineTweet) => !newer(t.id, i.since_id as string) } : {}),
     });
     // Posts on the page but none read: the page's data changed shape, not an empty account.
-    if (!rows.length && state === "posts" && ended !== "cursor")
+    if (!rows.length && ended !== "cursor" && (await tweetsOnPage(fp)).length)
       throw stuck(`shows posts but ${bodies.length} timeline answers held none of theirs`);
     const data = i.since_id ? rows.filter((t) => newer(t.id, i.since_id as string)) : rows;
     return {
