@@ -313,3 +313,85 @@ export const linkedinPostComments = defineFlow<
     };
   },
 });
+
+/** The post's counts bar: the first one on the page is the post's own, above its comments. */
+export const READ_COUNTS = `(() => {
+  const bar = document.querySelector(".social-details-social-counts");
+  return bar ? bar.innerText : null;
+})()`;
+
+const NUM = "(\\d[\\d,.]*)\\s*([KkMm])?";
+const count = (n: string, k?: string) =>
+  Math.round(
+    Number(n.replace(/,/g, "")) * ({ k: 1_000, m: 1_000_000 }[(k ?? "").toLowerCase()] ?? 1),
+  );
+
+/**
+ * The counts bar's words as counts. Reactions are its first number ("12", or "Ann and 11
+ * others" for 12); comments and reposts carry their word ("3 comments", "1 repost"). A bar
+ * with no reactions starts with its comments.
+ */
+export function postCountsOf(text: string): {
+  reactions: number;
+  comments: number;
+  reposts: number;
+} {
+  const of = (word: string) => {
+    const m = new RegExp(`${NUM}\\s+${word}s?\\b`, "i").exec(text);
+    return m?.[1] ? count(m[1], m[2]) : 0;
+  };
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const first = lines[0] ?? "";
+  const others = new RegExp(`and\\s+${NUM}\\s+others?`, "i").exec(first);
+  const alone = new RegExp(`^${NUM}$`).exec(first);
+  const reactions = others?.[1]
+    ? count(others[1], others[2]) + 1
+    : alone?.[1]
+      ? count(alone[1], alone[2])
+      : first && !/comment|repost/i.test(first)
+        ? 1
+        : 0;
+  return { reactions, comments: of("comment"), reposts: of("repost") };
+}
+
+export interface PostStatsAnswer {
+  likesSummary: { totalLikes: number };
+  commentsSummary: { totalFirstLevelComments: number; aggregatedTotalComments: number };
+  /** Not in the API's Social Actions answer: the page shows it, so it rides along. */
+  reposts: number;
+  /** The bar's words as read, so a miscount can be checked. */
+  raw: string | null;
+}
+
+/**
+ * A post's reaction, comment and repost counts off its page, in Social Actions' shape (`GET
+ * /rest/socialActions/{urn}`), until `r_organization_social` is granted. Read only. A post with
+ * no counts bar has none of either: every count 0. The comment count is the bar's, which counts
+ * replies too, so both comment fields carry it.
+ */
+export const linkedinPostStats = defineFlow<
+  { urn: string },
+  PostStatsAnswer | { found: false; reason: string }
+>({
+  site: "linkedin",
+  name: "post-stats",
+  async run(fp, { urn }) {
+    const no = await ready(fp, postUrl(urn), urn);
+    if (no) return no;
+    let raw: string | null = null;
+    for (let i = 0; i < 3 && raw === null; i++) {
+      raw = await fp.page.evaluate<string | null>(READ_COUNTS).catch(() => null);
+      if (raw === null) await fp.wait(SETTLE_MS);
+    }
+    const c = postCountsOf(raw ?? "");
+    return {
+      likesSummary: { totalLikes: c.reactions },
+      commentsSummary: { totalFirstLevelComments: c.comments, aggregatedTotalComments: c.comments },
+      reposts: c.reposts,
+      raw,
+    };
+  },
+});

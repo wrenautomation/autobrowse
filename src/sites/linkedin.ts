@@ -544,7 +544,7 @@ export const linkedin: SiteApi = {
           ),
           "rest/socialActions/{urn}",
         ),
-      browser: { workflow: "linkedin-post-stats" },
+      browser: { flow: "linkedin/post-stats" },
     }),
     route({
       method: "GET",
@@ -867,7 +867,7 @@ export const linkedin: SiteApi = {
       method: "GET",
       path: "/analytics/post-summary/{urn}",
       summary:
-        "A post's analytics page on Wren's own account (`urn`: activity, share or ugcPost, URL-encoded in the path): impressions, reached, reactions, comments, reposts, saves, sends, profileViewers, followersGained (null when the page shows none), raw. Reads only",
+        "A post's analytics page on Wren's own account (`urn`: activity, share or ugcPost, URL-encoded in the path): impressions, reached, reactions, comments, reposts, saves, sends, profileViewers, followersGained, and on a video videoViews, watchSecs, avgWatchSecs (null when the page shows none), raw. Reads only",
       request: z.object({ urn: z.string().regex(POST_URN, "a post urn") }),
       meter: () => ({ analytics: 1 }),
       browser: { flow: "linkedin/post-analytics" },

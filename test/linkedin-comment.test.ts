@@ -186,3 +186,21 @@ describe("linkedin reply: the comment found by its own id", () => {
     }
   });
 });
+
+describe("a post's counts bar", () => {
+  it("reads reactions first, then comments and reposts by their words", async () => {
+    const { postCountsOf } = await import("../src/browser/flows/linkedin-comment.js");
+    expect(postCountsOf("12\n3 comments\n1 repost")).toEqual({
+      reactions: 12,
+      comments: 3,
+      reposts: 1,
+    });
+    expect(postCountsOf("Ann Lee and 1.2K others\n40 comments")).toEqual({
+      reactions: 1201,
+      comments: 40,
+      reposts: 0,
+    });
+    expect(postCountsOf("1 comment")).toEqual({ reactions: 0, comments: 1, reposts: 0 });
+    expect(postCountsOf("")).toEqual({ reactions: 0, comments: 0, reposts: 0 });
+  });
+});

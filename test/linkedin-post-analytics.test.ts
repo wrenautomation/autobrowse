@@ -202,3 +202,21 @@ describe("linkedin post analytics: the flow and the route", () => {
     expect(r?.meter?.({ urn: URN } as never)).toEqual({ analytics: 1, total: 1 });
   });
 });
+
+describe("a video post's analytics block", () => {
+  it("reads views, watch time and average watch time as the page shows them", async () => {
+    const { secsIn, videoStatsOf } = await import(
+      "../src/browser/flows/linkedin-post-analytics.js"
+    );
+    const text =
+      "Video performance\n\n32\n\nVideo views\n\nWatch time\n\n14m 21s\n\nAverage watch time\n\n26s\n\nProfile activity";
+    expect(videoStatsOf(text)).toEqual({ videoViews: 32, watchSecs: 861, avgWatchSecs: 26 });
+    expect(videoStatsOf("72\n\nImpressions")).toEqual({
+      videoViews: null,
+      watchSecs: null,
+      avgWatchSecs: null,
+    });
+    expect(secsIn("1h 2m")).toBe(3720);
+    expect(secsIn("soon")).toBeNull();
+  });
+});

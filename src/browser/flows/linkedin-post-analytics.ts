@@ -10,7 +10,9 @@
  *
  * Counts are read off the visible text. A count sits on its own line, before
  * its label ("1,204" then "Impressions") or after it ("Reactions" then "12"),
- * or on the label's line ("Reposts 3"). Unproven live: no live read was made.
+ * or on the label's line ("Reposts 3"). Proven live 2026-10-23 on a video post as linkedin@wren
+ * (72 impressions, 16 reached); its demographics block said "not available yet", so that
+ * block is not read.
  */
 import { defineFlow, type FlowPage } from "../flow.js";
 import { go } from "./linkedin-reach.js";
@@ -35,7 +37,15 @@ export interface PostStats {
   followersGained: number | null;
 }
 
-export interface PostAnalytics extends PostStats {
+/** A video post's "Video performance" block; null on any other post. */
+export interface VideoStats {
+  videoViews: number | null;
+  /** All viewers' watch time, in seconds. */
+  watchSecs: number | null;
+  avgWatchSecs: number | null;
+}
+
+export interface PostAnalytics extends PostStats, VideoStats {
   urn: string;
   /** The analytics page read. */
   url: string;
@@ -148,6 +158,33 @@ export function postAnalyticsOf(text: string): PostStats {
   return countsOf(text, LABELS);
 }
 
+/** "14m 21s" is 861, "1h 2m" 3720, "26s" 26; anything else is null. */
+export function secsIn(s: string): number | null {
+  const m = /^(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:(\d+(?:\.\d+)?)s)?$/.exec(s.trim());
+  if (!m || !(m[1] || m[2] || m[3])) return null;
+  return Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
+}
+
+/**
+ * The video block: "32" before "Video views", then "Watch time" and "Average watch time"
+ * each with its time on the next line (seen live 2026-10-23).
+ */
+export function videoStatsOf(text: string): VideoStats {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const at = (label: string) => lines.findIndex((l) => l.toLowerCase() === label);
+  const v = at("video views");
+  const w = at("watch time");
+  const a = at("average watch time");
+  return {
+    videoViews: v > 0 ? countIn(lines[v - 1] ?? "") : null,
+    watchSecs: w >= 0 ? secsIn(lines[w + 1] ?? "") : null,
+    avgWatchSecs: a >= 0 ? secsIn(lines[a + 1] ?? "") : null,
+  };
+}
+
 const hasAnalytics = (s: PostStats) => s.impressions !== null || s.reached !== null;
 
 /** The page's counts once it shows some, or null when it never does. */
@@ -182,6 +219,7 @@ export const linkedinPostAnalytics = defineFlow<PostAnalyticsInput, PostAnalytic
       urn,
       url: fp.url(),
       ...r.stats,
+      ...videoStatsOf(r.text),
       raw: r.text.slice(0, RAW_CAP),
     });
     await go(fp, `${WEB}/analytics/post-summary/${urn}/`);
