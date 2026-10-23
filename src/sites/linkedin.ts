@@ -361,7 +361,9 @@ export const linkedin: SiteApi = {
     follow: 20,
     // Comments as the Page on others' posts (wren's reach loop) and reads of a post's comments.
     comment: 15,
-    comments: 60,
+    // Loads of our own post pages (comments, counts): 60 ran out by evening on 2026-10-23; reads of
+    // our own posts are the lowest-risk load, so 150 (William).
+    comments: 150,
   },
   // William's own profile (shown as "Will Jin"): research reads since 2026-10-06, when the alt was
   // restricted ("just use my main ... unless alt still works"); the alt's pace, nothing sent, never
