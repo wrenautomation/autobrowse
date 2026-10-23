@@ -345,6 +345,8 @@ export interface SocialActions {
 
 /** Counts the comment read saw, by post URN: a counts read takes them this long. */
 const FRESH_MS = 60 * 60_000;
+/** How long, after the page is ready, the bodies of its calls may take. */
+const BODIES_MS = 3_000;
 const seen = new Map<string, { counts: PostCounts; at: number }>();
 
 const num = (v: unknown): number | null =>
@@ -451,7 +453,8 @@ async function withCounts<T>(
   const bodies: string[] = [];
   const pending: Array<Promise<void>> = [];
   const onResponse = (r: Response) => {
-    if (!/linkedin\.com/.test(r.url())) return;
+    // The realtime channel is one body that never ends.
+    if (!/linkedin\.com/.test(r.url()) || /\/realtime\//.test(r.url())) return;
     if (!/json|x-component|text\/plain|text\/html/.test(r.headers()["content-type"] ?? "")) return;
     pending.push(
       r.text().then(
@@ -466,7 +469,8 @@ async function withCounts<T>(
   let out: T;
   try {
     out = await act();
-    await Promise.all(pending);
+    // A body still streaming after the page is ready is not one we wait for.
+    await Promise.race([Promise.all(pending), new Promise((ok) => setTimeout(ok, BODIES_MS))]);
   } finally {
     fp.page.off("response", onResponse);
   }
