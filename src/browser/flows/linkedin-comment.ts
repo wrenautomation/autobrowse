@@ -314,11 +314,33 @@ export const linkedinPostComments = defineFlow<
   },
 });
 
-/** The post's counts bar: the first one on the page is the post's own, above its comments. */
-export const READ_COUNTS = `(() => {
-  const bar = document.querySelector(".social-details-social-counts");
-  return bar ? bar.innerText : null;
+/**
+ * The post's counts, three ways: the counts bar (the first on the page is the post's own, above
+ * its comments), else the count labels of its buttons ("12 reactions"), else the page's lines
+ * that hold a count word. One of them is what `postCountsOf` reads; all three ride back in
+ * `raw` so a miss can be mapped.
+ */
+export const READ_COUNTS = String.raw`(() => {
+  const COUNT = /\d[\d,.]*\s*[KkMm]?\s+(reactions?|comments?|reposts?)\b|and\s+\d[\d,.]*\s*[KkMm]?\s+others?/i;
+  const bar = document.querySelector("[class*=social-details-social-counts], [class*=social-counts]");
+  const labels = [...document.querySelectorAll("main [aria-label]")]
+    .map((e) => e.getAttribute("aria-label") || "")
+    .filter((l) => COUNT.test(l));
+  const main = document.querySelector("main");
+  const lines = ((main && main.innerText) || "").split("\n").map((l) => l.trim())
+    .filter((l) => l.length < 80 && COUNT.test(l));
+  return { bar: bar ? bar.innerText : null, labels: [...new Set(labels)].slice(0, 6), lines: lines.slice(0, 6) };
 })()`;
+
+export interface SeenCounts {
+  bar: string | null;
+  labels: string[];
+  lines: string[];
+}
+
+/** The words to count: the bar's, else the labels', else the page lines'. */
+export const countsTextOf = (seen: SeenCounts): string =>
+  seen.bar ?? (seen.labels.length ? seen.labels : seen.lines).join("\n");
 
 const NUM = "(\\d[\\d,.]*)\\s*([KkMm])?";
 const count = (n: string, k?: string) =>
@@ -327,9 +349,9 @@ const count = (n: string, k?: string) =>
   );
 
 /**
- * The counts bar's words as counts. Reactions are its first number ("12", or "Ann and 11
- * others" for 12); comments and reposts carry their word ("3 comments", "1 repost"). A bar
- * with no reactions starts with its comments.
+ * The counts' words as counts. Reactions say so ("12 reactions") or are the bar's first number
+ * ("12", or "Ann and 11 others" for 12); comments and reposts carry their word ("3 comments",
+ * "1 repost"). A bar with no reactions starts with its comments.
  */
 export function postCountsOf(text: string): {
   reactions: number;
@@ -340,6 +362,8 @@ export function postCountsOf(text: string): {
     const m = new RegExp(`${NUM}\\s+${word}s?\\b`, "i").exec(text);
     return m?.[1] ? count(m[1], m[2]) : 0;
   };
+  const named = of("reaction");
+  if (named) return { reactions: named, comments: of("comment"), reposts: of("repost") };
   const lines = text
     .split("\n")
     .map((l) => l.trim())
@@ -362,8 +386,8 @@ export interface PostStatsAnswer {
   commentsSummary: { totalFirstLevelComments: number; aggregatedTotalComments: number };
   /** Not in the API's Social Actions answer: the page shows it, so it rides along. */
   reposts: number;
-  /** The bar's words as read, so a miscount can be checked. */
-  raw: string | null;
+  /** What the page showed, so a miscount can be checked. */
+  raw: SeenCounts;
 }
 
 /**
@@ -381,17 +405,18 @@ export const linkedinPostStats = defineFlow<
   async run(fp, { urn }) {
     const no = await ready(fp, postUrl(urn), urn);
     if (no) return no;
-    let raw: string | null = null;
-    for (let i = 0; i < 3 && raw === null; i++) {
-      raw = await fp.page.evaluate<string | null>(READ_COUNTS).catch(() => null);
-      if (raw === null) await fp.wait(SETTLE_MS);
+    const none: SeenCounts = { bar: null, labels: [], lines: [] };
+    let seen = none;
+    for (let i = 0; i < 3 && !countsTextOf(seen); i++) {
+      seen = await fp.page.evaluate<SeenCounts>(READ_COUNTS).catch(() => none);
+      if (!countsTextOf(seen)) await fp.wait(SETTLE_MS);
     }
-    const c = postCountsOf(raw ?? "");
+    const c = postCountsOf(countsTextOf(seen));
     return {
       likesSummary: { totalLikes: c.reactions },
       commentsSummary: { totalFirstLevelComments: c.comments, aggregatedTotalComments: c.comments },
       reposts: c.reposts,
-      raw,
+      raw: seen,
     };
   },
 });

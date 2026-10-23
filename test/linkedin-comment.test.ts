@@ -204,3 +204,33 @@ describe("a post's counts bar", () => {
     expect(postCountsOf("")).toEqual({ reactions: 0, comments: 0, reposts: 0 });
   });
 });
+
+describe("the post page's counts read", () => {
+  it("takes the bar, else the buttons' count labels, else the page's count lines", async () => {
+    const { READ_COUNTS, countsTextOf, postCountsOf } = await import(
+      "../src/browser/flows/linkedin-comment.js"
+    );
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      const read = async (html: string) => {
+        await page.setContent(html);
+        return page.evaluate(READ_COUNTS) as Promise<Parameters<typeof countsTextOf>[0]>;
+      };
+      const bar = await read(
+        `<main><ul class="social-details-social-counts"><li>7</li><li>2 comments</li></ul></main>`,
+      );
+      expect(postCountsOf(countsTextOf(bar))).toEqual({ reactions: 7, comments: 2, reposts: 0 });
+      const labels = await read(
+        `<main><button aria-label="7 reactions">7</button><button aria-label="1 comment on Wren's post">1</button><button aria-label="Like">Like</button></main>`,
+      );
+      expect(labels.bar).toBeNull();
+      expect(postCountsOf(countsTextOf(labels))).toEqual({ reactions: 7, comments: 1, reposts: 0 });
+      const lines = await read(`<main><p>Ann Lee and 3 others</p><p>1 repost</p></main>`);
+      expect(postCountsOf(countsTextOf(lines))).toEqual({ reactions: 4, comments: 0, reposts: 1 });
+      expect(countsTextOf(await read("<main><p>Nothing yet</p></main>"))).toBe("");
+    } finally {
+      await browser.close();
+    }
+  });
+});
