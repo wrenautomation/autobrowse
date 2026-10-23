@@ -8,7 +8,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { SecretValues } from "../auth/signup.js";
 import { type Fetched, fetchFile } from "../browser/download.js";
 import { type BrowserFlow, defineFlow, type FlowPage } from "../browser/flow.js";
@@ -71,6 +71,9 @@ const tempDownload = async (as: string, file: Fetched): Promise<string> => {
 export const AI_CALLS = 20;
 /** Rows as JSON in an `ai` prompt, at most. */
 const AI_ROWS_CHARS = 20_000;
+/** How long a `see` waits for the page to show what it names. */
+const SEE_MS = 15_000;
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** A plan value as rows: a JSON array (objects as they are, the rest as `{ item }`), else one `{ item }` per line. */
 export function listed(text: string): Row[] {
@@ -301,6 +304,18 @@ async function walkSpec(
       case "human":
         fp.human(op.reason);
         return;
+      case "see": {
+        const h = op.file
+          ? { text: `/${escapeRe(basename(await fill(op.file, op.goal)))}/` }
+          : {
+              ...op.hints,
+              ...(op.hints?.text ? { text: await fill(op.hints.text, op.goal) } : {}),
+              ...(op.hints?.name ? { name: await fill(op.hints.name, op.goal) } : {}),
+            };
+        if (!(await fp.has(h as Hints, op.ms ?? SEE_MS)))
+          fp.human(`${op.goal}: not on ${fp.url()}`);
+        return;
+      }
       case "pick": {
         const goal = await fill(op.goal, op.goal);
         const raw = await fill(op.choices, goal);

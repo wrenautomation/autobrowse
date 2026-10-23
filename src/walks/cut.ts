@@ -288,8 +288,10 @@ function buildPart(
     add(n, x.before ? "before" : "after", x.op);
     // A `{field}` the op names (a pick's `{choices}`): a field of this walk, unless a nested one runs it.
     if (!inner || n < inner.from || n > inner.to)
+      // A param is declared already, or by the act it names (an upload's file).
       for (const key of fieldRefs(x.op))
-        if (!fields.some((f) => f.key === key)) fields.push({ key, label: key, example: null });
+        if (!(key in (p.params ?? {})) && !fields.some((f) => f.key === key))
+          fields.push({ key, label: key, example: null });
   }
 
   const out: BuiltWalk[] = [];

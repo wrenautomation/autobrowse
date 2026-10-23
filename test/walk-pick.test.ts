@@ -25,6 +25,14 @@ function flowPage(page: Page, clicks: string[]): FlowPage {
     page,
     url: () => page.url(),
     wait: async () => {},
+    has: (h: Hints, ms = 0) =>
+      locate(page, h)
+        .first()
+        .waitFor({ timeout: ms || 1 })
+        .then(
+          () => true,
+          () => false,
+        ),
     async act(_op, h: Hints, o) {
       clicks.push(o.goal);
       await locate(page, h).click();
@@ -83,6 +91,14 @@ const answer = walkSpecSchema.parse({
   ],
 });
 
+/** One screen of ops over the fields `question`, `choices` and `file`. */
+const walkOf = (ops: unknown[]) =>
+  walkSpecSchema.parse({
+    ...answer,
+    fields: [...answer.fields, { key: "file", label: "file", example: null }],
+    screens: [{ ...answer.screens[0], ops }, answer.screens[1]],
+  });
+
 describe("pick", () => {
   let browser: Browser;
   let page: Page;
@@ -132,5 +148,21 @@ describe("pick", () => {
         el.addEventListener("click", (e) => e.preventDefault());
     });
     await expect(run("1", "Red")).rejects.toThrow('answer question 1: ["red"] did not take');
+  });
+
+  it("sees a file by its name, or a field's text; else stops", async () => {
+    page = await browser.newPage();
+    await page.setContent("<p>Files: report (1).pdf</p><p>Saved for Ann</p>");
+    const file = { kind: "see", goal: "the file attached", file: "{file}", ms: 200 };
+    const saved = { kind: "see", goal: "saved", hints: { text: "Saved for {choices}" }, ms: 200 };
+    const fp = flowPage(page, []);
+    await walkFlow(walkOf([file, saved])).run(fp, {
+      question: "1",
+      choices: "Ann",
+      file: "/tmp/x/report (1).pdf",
+    });
+    await expect(
+      walkFlow(walkOf([file])).run(fp, { question: "1", choices: "", file: "/tmp/other.pdf" }),
+    ).rejects.toThrow("the file attached: not on");
   });
 });

@@ -134,6 +134,20 @@ export const walkOpSchema = z.discriminatedUnion("kind", [
     label: z.string().min(1).optional(),
     choices: z.string().min(1),
   }),
+  /**
+   * The page shows `hints` (text and name may hold `{field}`s), or the file
+   * name of `file` (one whole field, as an upload's path), within `ms`; else
+   * the walk stops for a person. A check after an act the page may refuse.
+   */
+  z
+    .object({
+      kind: z.literal("see"),
+      goal: z.string(),
+      hints: hintsSchema.optional(),
+      file: z.string().regex(WHOLE_REF).optional(),
+      ms: z.number().int().positive().optional(),
+    })
+    .refine((o) => !o.hints !== !o.file, "a see names hints or file, one of them"),
   /** A file the page links to, fetched with its sign-in: `url` (relative, may hold `{field}`s) or the `href` at `hints`; kept under `as`. */
   z.object({
     kind: z.literal("download"),
@@ -223,6 +237,8 @@ export const walkSpecSchema = z
     if (!w.screens.some((s) => s.goal))
       ctx.addIssue({ code: "custom", path: ["screens"], message: "no goal screen" });
     const fields = new Set(w.fields.map((f) => f.key));
+    if (fields.size < w.fields.length)
+      ctx.addIssue({ code: "custom", path: ["fields"], message: "a field key is twice" });
     const secrets = new Set(w.secrets.map((s) => s.key));
     const lists = new Set(
       w.screens.flatMap((s) =>
@@ -302,6 +318,8 @@ function refText(op: WalkOp): string {
   if (op.kind === "download") return op.url ?? "";
   if (op.kind === "select") return op.value;
   if (op.kind === "pick") return `${op.region.css}\n${op.choices}`;
+  if (op.kind === "see")
+    return [op.hints?.text, op.hints?.name, op.file].filter(Boolean).join("\n");
   return "";
 }
 
