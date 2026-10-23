@@ -346,7 +346,7 @@ describe("x timeline data", () => {
       for (let n = 0; n < answers; n++)
         for (const h of handlers)
           h({
-            url: () => "https://x.com/i/api/graphql/abc/UserTweetsAndReplies?variables=x",
+            url: () => "https://x.com/i/api/graphql/abc/UserRepliesTimeline?variables=x",
             status: () => 200,
             json: async () => REPLIES_PAGE,
           });

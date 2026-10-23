@@ -421,8 +421,8 @@ export function timelineTweets(body: unknown): TimelineTweet[] {
   return [...tweets.values()];
 }
 
-/** The replies tab's timeline call. */
-const REPLIES_CALL = "/UserTweetsAndReplies";
+/** The Replies tab's timeline call: `UserRepliesTimeline` since 2026-10, `UserTweetsAndReplies` before. */
+const REPLIES_CALL = /\/graphql\/[^/]+\/(UserRepliesTimeline|UserTweetsAndReplies)\b/;
 const REPLIES_TAB = { role: "tab", name: "/^replies$/i" };
 
 /**
@@ -439,7 +439,7 @@ async function withReplies(fp: FlowPage, id: string, i: Feed) {
   const onResponse = (r: Response) => {
     const op = /\/graphql\/[^/]+\/(\w+)/.exec(r.url())?.[1];
     if (op) calls.add(`${op} ${r.status()}`);
-    if (!r.url().includes(REPLIES_CALL)) return;
+    if (!REPLIES_CALL.test(r.url())) return;
     pending.push(
       r.json().then(
         (b: unknown) => {
