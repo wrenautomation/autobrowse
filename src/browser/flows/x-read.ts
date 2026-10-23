@@ -470,7 +470,15 @@ async function withReplies(fp: FlowPage, id: string, i: Feed) {
         .filter((t) => t.author_username.toLowerCase() === me && !(noReposts && t.reposted_by))
         .sort((a, b) => (newer(a.id, b.id) ? -1 : 1));
     };
-    if (state === "empty" && !(await own()).length) return { data: [], meta: { result_count: 0 } };
+    const stuck = (why: string) =>
+      new Error(
+        `x/posts: @${handle}'s Replies tab ${why} (calls: ${[...calls].join(", ") || "none"}; at ${fp.url()})`,
+      );
+    // An empty account still answers its timeline call; no answer at all is no reading.
+    if (state === "empty") {
+      if (!bodies.length) throw stuck("showed no posts and made no timeline call");
+      if (!(await own()).length) return { data: [], meta: { result_count: 0 } };
+    }
     const { rows, ended } = await scrollCollect(fp, {
       read: own,
       key: (t) => t.id,
@@ -480,9 +488,7 @@ async function withReplies(fp: FlowPage, id: string, i: Feed) {
     });
     // Posts on the page but none read: the page's data changed shape, not an empty account.
     if (!rows.length && state === "posts" && ended !== "cursor")
-      throw new Error(
-        `x/posts: @${handle}'s Replies tab shows posts but ${bodies.length} timeline answers held none of theirs (calls: ${[...calls].join(", ") || "none"}; at ${fp.url()})`,
-      );
+      throw stuck(`shows posts but ${bodies.length} timeline answers held none of theirs`);
     const data = i.since_id ? rows.filter((t) => newer(t.id, i.since_id as string)) : rows;
     return {
       data,
