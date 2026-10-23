@@ -61,6 +61,14 @@ const insights = z.object({
   mediaId: id,
   metric: z.string().default("views,likes,replies,reposts,quotes,shares"),
 });
+/** The profile's numbers: a day range for the counts, a breakdown for the followers' make-up. */
+const userInsights = z.object({
+  userId: user,
+  metric: z.string().default("views,likes,replies,reposts,quotes,clicks,followers_count"),
+  since: z.coerce.number().int().positive().optional(),
+  until: z.coerce.number().int().positive().optional(),
+  breakdown: z.enum(["country", "city", "age", "gender"]).optional(),
+});
 const replies = z.object({
   mediaId: id,
   fields: z.string().default("id,text,username,permalink,timestamp"),
@@ -229,6 +237,21 @@ export const threads: SiteApi = {
             headers: bearer(leg),
           }),
           `${mediaId}/insights`,
+        ),
+    }),
+    route({
+      method: "GET",
+      path: "/{userId}/threads_insights",
+      summary:
+        "The profile's metrics (`views,likes,replies,reposts,quotes,clicks,followers_count` over `since`..`until`, unix seconds; `follower_demographics` with a `breakdown`: country, city, age or gender; Meta answers it from 100 followers)",
+      request: userInsights,
+      api: async ({ userId, metric, since, until, breakdown }, leg) =>
+        must(
+          await leg.http.json<unknown>(
+            withQuery(v(`${userId}/threads_insights`), { metric, since, until, breakdown }),
+            { headers: bearer(leg) },
+          ),
+          `${userId}/threads_insights`,
         ),
     }),
     route({
