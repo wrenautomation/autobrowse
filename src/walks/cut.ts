@@ -7,6 +7,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import { urlShape } from "../browser/screens.js";
 import { hintsSchema } from "../compiler/outline.js";
 import { camel, IRREVERSIBLE_CLICK, kebab, stripHints } from "../compiler/structure.js";
 import type { Action } from "../recorder/types.js";
@@ -74,6 +75,8 @@ const partSchema = z
           .refine(oneSide, "at or after, one of them"),
       )
       .optional(),
+    /** Acts the walk leaves out: a repeat's other rows, a click on nothing (a dialog's body). */
+    skip: z.array(act).optional(),
     /** Ops the run did not journal (an old run's eval), `before` or `after` an act. */
     insert: z
       .array(
@@ -265,6 +268,11 @@ function buildPart(
     if (r.at) add(r.at, "before", op);
     else if (r.after) add(r.after, "after", op);
   }
+  for (const n of p.skip ?? []) {
+    if (n < range.from || n > range.to)
+      throw new Error(`${name}: skip ${n} is not in ${range.from}-${range.to}`);
+    at(n).ops = [];
+  }
   for (const x of p.insert ?? []) {
     if (x.before) add(x.before, "before", x.op);
     else if (x.after) add(x.after, "after", x.op);
@@ -279,7 +287,13 @@ function buildPart(
       ...buildPart(
         site,
         each,
-        { ...p, repeat: undefined, gate: undefined, goal: `one row of ${p.repeat.over}` },
+        {
+          ...p,
+          repeat: undefined,
+          gate: undefined,
+          skip: p.skip?.filter((n) => n >= inner.from && n <= inner.to),
+          goal: `one row of ${p.repeat.over}`,
+        },
         inner,
         rows,
         summary,
@@ -301,11 +315,18 @@ function buildPart(
     fields.push({ key: p.repeat.over, label: p.repeat.over, example: null });
   }
 
-  // The part's own rows: a start, its acts, and an end on the page the next act was on.
+  // The part's own rows: a start, its acts, and an end on the page the last act landed on.
+  // A look is taken before an act, so that page's landmarks come from the next act's look or the
+  // run's end, and only when that look is on the same page; else the end knows the page by its URL.
   const start = rows.find((r) => r.kind === "start");
-  const nextLook = all.slice(range.to).find((r) => r.look)?.look;
   const end = [...rows].reverse().find((r) => r.kind === "end");
   const last = mine.at(-1) as ActRow;
+  // A sign-in redirects after its last act (Duo, then the SAML hop): it lands where the run went next.
+  const landedOn = urlShape((p.signIn && all[range.to]?.act.url) || last.act.url);
+  const after = [
+    all[range.to]?.look,
+    range.to === all.length && end?.kind === "end" ? end.look : null,
+  ];
   const part: RunRow[] = [
     ...(start ? [{ ...start, goal: p.goal ?? null }] : []),
     ...mine,
@@ -314,7 +335,7 @@ function buildPart(
       at: last.at,
       outcome: "achieved",
       summary: null,
-      look: nextLook ?? (end?.kind === "end" ? end.look : null),
+      look: after.find((l) => l?.url === landedOn) ?? { url: landedOn, landmarks: [] },
     },
   ];
   const built = walkFromRuns(

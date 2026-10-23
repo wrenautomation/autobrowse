@@ -26,6 +26,8 @@ Data run by one interpreter, not rendered TypeScript: a walk is rebuilt from new
 - Teach: `review` walks the guesses one key each (Enter, f, a, p, s), `choose` moves one value, `packInto` writes a [[mod]] and refuses values that look personal (`personalValues`) — `src/walks/teach.ts:58-233`; the command is `src/app/cli-teach.ts`. Explore takes a look once the DOM goes quiet after a hand act (`lookWhenQuiet`) — `src/explore/server.ts:668`
 - Records and AI ops (from the outline's `opSchema`): `records` runs a model-written, checked extractor on a copy of the page in a sandbox with no network (`src/browser/records.ts`); fewer rows than its floor re-writes it on that page (`deps.rewrite`, `writeRecords` in `src/agent/records.ts`) and saves the walk (`deps.save`); the page HTML goes to `deps.archive`, the rows to `out.records`. `ai` is a capped model call (`AI_CALLS` a run, `cheap`/`smart`) over earlier reads (`deps.ai`). `autobrowse records` writes a one-screen walk around one — `src/app/cli-runs.ts`; design `designs/2026-10-05-records-and-ai-steps.md`
 - Each: `each` runs a nested walk once per row (a `records` op's rows, or a plan field's JSON array or lines, `listed`) with the row as its plan and `with` mapping it. Reads join the row under `as`; a failed row keeps `error`; all rows failing fails the op; a person needed stops it; `max` ≤ `MAX_EACH` 500. An `open` URL may be one whole field (`{link}`) — `src/walks/flow.ts`, `src/walks/spec.ts`
+- Cut: a cut file (`walks/<site>/cuts/<run>.json`, `cutSchema`) cuts one run into parts by `cut` marks or act ranges; per part: `params` (`url:<q>` query values become `{key}`, `upload:`/`typed:`/`click:` acts), `gate`, `reads`, `insert`, `skip`, `repeat` (a nested `<name>-each` walk); `login` is a sign-in part; `workflows` are walks of `open` + `walk` ops. A part's end is the page its last act landed on. `walks cut <site> <run>` drafts it once, then builds — `src/walks/cut.ts`; design `designs/2026-10-23-cut-runs.md`
+- Sign-in: `walkLogin(spec)` makes a `login` walk a `SiteLogin` (credential username and password, the code under `serial`; signed in = its goal screen) — `src/walks/login.ts`
 - Run: `walkFlow` (input, then default, then v1 example, then `deps.ask`; profile values through `deps.profile`) — `src/walks/flow.ts:256`; `walkFor` resolves secrets through stored logins (`walkSecrets`) and profile values on the Mac — `src/app/services.ts:641`, `:605`; the Restate `flow` handler falls back to it — `src/engine/browser-service.ts:160`
 
 ## Connected to
@@ -37,17 +39,17 @@ Data run by one interpreter, not rendered TypeScript: a walk is rebuilt from new
 
 ## If you change this
 
-- **Hits:** [[mod]] (`checkMod`, the scrubber drops examples and personal defaults), `src/walks/build.ts`, `src/walks/flow.ts`, `src/walks/teach.ts`, `src/app/cli-runs.ts` (`walks show` prints value sources), walk files already on disk (`WALK_VERSION`).
+- **Hits:** [[mod]], `src/walks/cut.ts` (cut parts build through `walkFromRuns` with `around`) (`checkMod`, the scrubber drops examples and personal defaults), `src/walks/build.ts`, `src/walks/flow.ts`, `src/walks/teach.ts`, `src/app/cli-runs.ts` (`walks show` prints value sources), walk files already on disk (`WALK_VERSION`).
 - **Does not hit:** compiled workflows; hand-written walks in `src/auth/`.
 
 ## Surfaces
 
 | Surface | Role |
 |---|---|
-| `autobrowse walks build`, `autobrowse teach`, `autobrowse records` | write |
+| `autobrowse walks build`, `walks cut`, `autobrowse teach`, `autobrowse records` | write |
 | `walks run`, Restate `browser/flow`, `walks list/show` | read |
 
 ## See
 
 - Source: `src/walks/`
-- Design: `designs/2026-09-30-runs-and-walks.md`, `designs/2026-10-05-teach-mode.md`
+- Design: `designs/2026-09-30-runs-and-walks.md`, `designs/2026-10-05-teach-mode.md`, `designs/2026-10-23-cut-runs.md`
