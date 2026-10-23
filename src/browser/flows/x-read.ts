@@ -440,7 +440,11 @@ async function withReplies(fp: FlowPage, id: string, i: Feed) {
   }
   const bodies: unknown[] = [];
   const pending: Array<Promise<void>> = [];
+  /** The page's GraphQL calls by name, to say what came instead when no timeline answer did. */
+  const calls = new Set<string>();
   const onResponse = (r: Response) => {
+    const op = /\/graphql\/[^/]+\/(\w+)/.exec(r.url())?.[1];
+    if (op) calls.add(`${op} ${r.status()}`);
     if (!r.url().includes(REPLIES_CALL)) return;
     pending.push(
       r.json().then(
@@ -467,13 +471,18 @@ async function withReplies(fp: FlowPage, id: string, i: Feed) {
         .sort((a, b) => (newer(a.id, b.id) ? -1 : 1));
     };
     if (state === "empty" && !(await own()).length) return { data: [], meta: { result_count: 0 } };
-    const { rows } = await scrollCollect(fp, {
+    const { rows, ended } = await scrollCollect(fp, {
       read: own,
       key: (t) => t.id,
       max: i.max_results ?? 10,
       skip: (t) => t.pinned === true,
       ...(i.since_id ? { stop: (t: TimelineTweet) => !newer(t.id, i.since_id as string) } : {}),
     });
+    // Posts on the page but none read: the page's data changed shape, not an empty account.
+    if (!rows.length && state === "posts" && ended !== "cursor")
+      throw new Error(
+        `x/posts: @${handle}'s Replies tab shows posts but ${bodies.length} timeline answers held none of theirs (calls: ${[...calls].join(", ") || "none"}; at ${fp.url()})`,
+      );
     const data = i.since_id ? rows.filter((t) => newer(t.id, i.since_id as string)) : rows;
     return {
       data,

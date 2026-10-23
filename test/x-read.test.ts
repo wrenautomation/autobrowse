@@ -319,7 +319,11 @@ describe("x timeline data", () => {
   });
 
   it("x/posts without replies excluded reads the Replies tab's data, newest first, as the API answers", async () => {
-    type Handler = (r: { url: () => string; json: () => Promise<unknown> }) => void;
+    type Handler = (r: {
+      url: () => string;
+      status: () => number;
+      json: () => Promise<unknown>;
+    }) => void;
     const handlers = new Set<Handler>();
     const opened: string[] = [];
     const { fp, acts } = fakePage({ text: ["Wren"], present: () => true });
@@ -334,6 +338,7 @@ describe("x timeline data", () => {
         for (const h of handlers)
           h({
             url: () => "https://x.com/i/api/graphql/abc/UserTweetsAndReplies?variables=x",
+            status: () => 200,
             json: async () => REPLIES_PAGE,
           });
     };
@@ -353,6 +358,15 @@ describe("x timeline data", () => {
     ]);
     expect(out.meta).toEqual({ result_count: 3, newest_id: "1005", oldest_id: "1001" });
     expect(acts).toEqual([]);
+    expect(handlers.size).toBe(0);
+    // Posts shown but no timeline answer of ours: an error naming what the page called.
+    opened.length = 0;
+    fp.open = async (url) => {
+      opened.push(url);
+    };
+    await expect(xPosts.run(fp, { id: "wren_sample" })).rejects.toThrow(
+      /shows posts but 0 timeline answers held none of theirs \(calls: none;/,
+    );
     expect(handlers.size).toBe(0);
   });
 });
