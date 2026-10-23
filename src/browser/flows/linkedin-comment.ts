@@ -426,6 +426,52 @@ export function countsIn(texts: string[], ids: string[]): PostCounts | null {
   return null;
 }
 
+/**
+ * The ids the page may key a post's counts by: the URN's own id, the activity its comments name
+ * (`activity:N` in their ids), and an activity in a small object that names the URN's id (a share
+ * or ugcPost URN maps to its activity there). Never the page's first activities: those may be others'.
+ */
+export function idsOf(urn: string, texts: string[], html: string): string[] {
+  const own = /(\d+)$/.exec(urn)?.[1] ?? urn;
+  const ids = new Set([own]);
+  for (const m of html.matchAll(/replaceableComment_urn:li:comment:\(activity:(\d+),/g))
+    ids.add(m[1] as string);
+  const walk = (v: unknown): void => {
+    if (!v || typeof v !== "object") return;
+    if (Array.isArray(v)) {
+      for (const x of v) walk(x);
+      return;
+    }
+    const flat = JSON.stringify(v);
+    if (flat.length < 2_000 && flat.includes(own))
+      for (const m of flat.matchAll(/urn:li:activity:(\d+)/g)) ids.add(m[1] as string);
+    else for (const x of Object.values(v)) walk(x);
+  };
+  for (const t of texts) if (t.includes(own)) for (const j of jsonsOf(t)) walk(j);
+  return [...ids];
+}
+
+/** The URNs that counts objects in the page's data belong to: evidence when none is the post's. */
+export function countsOwners(texts: string[]): string[] {
+  const out = new Set<string>();
+  const walk = (v: unknown): void => {
+    if (!v || typeof v !== "object" || out.size >= 5) return;
+    if (Array.isArray(v)) {
+      for (const x of v) walk(x);
+      return;
+    }
+    const o = v as Record<string, unknown>;
+    if (num(o.numLikes) !== null || num(o.numComments) !== null) {
+      const m = /urn:li:[a-zA-Z]+:\d+/.exec(JSON.stringify(o));
+      out.add(m ? m[0] : "no urn");
+      return;
+    }
+    for (const x of Object.values(o)) walk(x);
+  };
+  for (const t of texts) if (/"num(?:Likes|Comments)"/.test(t)) for (const j of jsonsOf(t)) walk(j);
+  return [...out];
+}
+
 /** The counts bar's labels outside every comment, first of each kind: `12 reactions`, `3 comments`. */
 export const READ_BAR = `(() => {
   const out = {};
@@ -475,10 +521,13 @@ async function withCounts<T>(
     fp.page.off("response", onResponse);
   }
   const html = await fp.html().catch(() => "");
-  const activity = [...html.matchAll(/urn:li:activity:(\d+)/g)].map((m) => m[1] as string);
-  const ids = [...new Set([/(\d+)$/.exec(urn)?.[1] ?? urn, ...activity.slice(0, 3)])];
-  const data = countsIn([...bodies, ...bodies.flatMap(codeBlocksOf), ...codeBlocksOf(html)], ids);
-  if (data) return { out, counts: data, why: "data" };
+  const texts = [...bodies, ...bodies.flatMap(codeBlocksOf), ...codeBlocksOf(html)];
+  const ids = idsOf(urn, texts, html);
+  // Surest id first: a mapped activity may be a reshared post's.
+  for (const id of ids) {
+    const data = countsIn(texts, [id]);
+    if (data) return { out, counts: data, why: "data" };
+  }
   let bar: Partial<PostCounts> = {};
   try {
     bar = await fp.page.evaluate<Partial<PostCounts>>(READ_BAR);
@@ -500,7 +549,7 @@ async function withCounts<T>(
   return {
     out,
     counts: null,
-    why: `no counts in ${bodies.length} calls, the HTML or the bar (${shown} comments shown)`,
+    why: `no counts for ids ${ids.join(", ")} in ${bodies.length} calls, the HTML or the bar (${shown} comments shown); counts objects seen for ${countsOwners(texts).join(", ") || "none"}`,
   };
 }
 

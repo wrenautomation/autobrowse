@@ -4,6 +4,8 @@ import {
   commentElements,
   commentUrnsOf,
   countsIn,
+  countsOwners,
+  idsOf,
   linkedinComment,
   linkedinPostComments,
   linkedinPostStats,
@@ -230,6 +232,21 @@ describe("linkedin post counts from the page", () => {
     // A streamed payload: one JSON value per line behind its id.
     const lines = `0:["$","div",null]\n1:{"urn":"urn:li:ugcPost:${ID}","numLikes":0,"numComments":0}`;
     expect(countsIn([lines], [ID])).toEqual({ reactions: 0, comments: 0, reposts: 0 });
+  });
+
+  it("keys a share by the activity its comments or a small object name, never the page's first activity", () => {
+    const SHARE = "7000000000000000020";
+    const html = `<a href="/feed/update/urn:li:activity:7000000000000000099/">other</a>
+      <article id="replaceableComment_urn:li:comment:(activity:${ACT},7000000000000000030)"></article>`;
+    expect(idsOf(`urn:li:share:${SHARE}`, [], html)).toEqual([SHARE, ACT]);
+    const map = JSON.stringify({
+      data: { shareUrn: `urn:li:share:${SHARE}`, updateUrn: "urn:li:activity:7000000000000000040" },
+    });
+    expect(idsOf(`urn:li:share:${SHARE}`, [map], "")).toEqual([SHARE, "7000000000000000040"]);
+    const counts = JSON.stringify({
+      included: [{ urn: "urn:li:activity:7000000000000000040", numLikes: 1, numComments: 0 }],
+    });
+    expect(countsOwners([counts])).toEqual(["urn:li:activity:7000000000000000040"]);
   });
 
   it("reads the counts bar outside the comments", async () => {
