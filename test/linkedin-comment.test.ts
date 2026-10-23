@@ -3,8 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   commentElements,
   commentUrnsOf,
+  countsIn,
   linkedinComment,
   linkedinPostComments,
+  linkedinPostStats,
+  READ_BAR,
   replyButtonCss,
   targetOf,
   timeOfId,
@@ -181,6 +184,66 @@ describe("linkedin reply: the comment found by its own id", () => {
       expect(found).toEqual([
         "replaceableComment_urn:li:comment:(activity:7000000000000000001,7000000000000000009)",
       ]);
+    } finally {
+      await browser.close();
+    }
+  });
+});
+
+describe("linkedin post counts from the page", () => {
+  // Synthetic ids: the post as a ugcPost, the page's activity for it, another post beside it.
+  const ID = "7000000000000000010";
+  const ACT = "7000000000000000011";
+
+  it("routes the counts read to the page until Community Management is granted; a cached or API answer spends nothing", () => {
+    const r = linkedin.routes.find(
+      (x) => x.method === "GET" && x.path === "/rest/socialActions/{urn}",
+    );
+    expect(r?.browser?.flow).toBe("linkedin/post-stats");
+    expect(BROWSER_FLOWS["linkedin/post-stats"]).toBe(linkedinPostStats);
+    expect(r?.used?.({ urn: "u" } as never, { $read: "page" } as never)).toMatchObject({
+      comments: 1,
+    });
+    expect(r?.used?.({ urn: "u" } as never, { $read: "cache" } as never)).toEqual({ total: 0 });
+    expect(r?.used?.({ urn: "u" } as never, { likesSummary: {} } as never)).toEqual({ total: 0 });
+  });
+
+  it("reads the post's own counts object, by its id or its activity's, never a neighbour's", () => {
+    const body = JSON.stringify({
+      included: [
+        {
+          entityUrn: "urn:li:fsd_socialActivityCounts:urn:li:activity:7000000000000000099",
+          numLikes: 50,
+          numComments: 9,
+        },
+        {
+          entityUrn: `urn:li:fsd_socialActivityCounts:urn:li:activity:${ACT}`,
+          numLikes: 3,
+          numComments: 2,
+          numShares: 1,
+          reactionTypeCounts: [{ count: 2 }, { count: 2 }],
+        },
+      ],
+    });
+    expect(countsIn([body], [ID, ACT])).toEqual({ reactions: 4, comments: 2, reposts: 1 });
+    expect(countsIn([body], [ID])).toBeNull();
+    // A streamed payload: one JSON value per line behind its id.
+    const lines = `0:["$","div",null]\n1:{"urn":"urn:li:ugcPost:${ID}","numLikes":0,"numComments":0}`;
+    expect(countsIn([lines], [ID])).toEqual({ reactions: 0, comments: 0, reposts: 0 });
+  });
+
+  it("reads the counts bar outside the comments", async () => {
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      await page.setContent(`<main>
+        <button aria-label="12 reactions">12</button><button>3 comments</button><span>1 repost</span>
+        <article id="replaceableComment_urn:li:comment:(activity:1,2)"><button aria-label="40 reactions">40</button></article></main>`);
+      expect(await page.evaluate(READ_BAR)).toEqual({ reactions: 12, comments: 3, reposts: 1 });
+      await page.setContent(
+        `<main><span>Ana Test and 4 others</span><span>2 comments</span></main>`,
+      );
+      expect(await page.evaluate(READ_BAR)).toEqual({ reactions: 5, comments: 2 });
     } finally {
       await browser.close();
     }

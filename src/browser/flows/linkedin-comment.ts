@@ -10,7 +10,12 @@
  * comment's Reply carry an aria-label. Each comment is `[id="replaceableComment_urn:li:comment:
  * (activity:1,2)"]`, replies flat beside it, 40px in, under the top comment before them. The list
  * is lazy: scrolling to its last comment loads more. A comment id carries its time (id >> 22, ms).
+ *
+ * A post's counts (Social Actions) come off the same page: the page's own calls and the HTML's
+ * embedded data are listened to, never replayed; the counts bar's labels are the second source.
+ * The hourly comment read keeps what it saw for an hour, so a counts read then loads no page.
  */
+import type { Response } from "playwright";
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
 import { go } from "./linkedin-reach.js";
@@ -298,18 +303,224 @@ export const linkedinPostComments = defineFlow<
   site: "linkedin",
   name: "post-comments",
   async run(fp, { urn, count, start, pages }) {
-    const no = await ready(fp, postUrl(urn), urn);
-    if (no) return no;
-    let raw = await rawComments(fp);
-    for (let still = 0; raw.length < start + count && still < 2; ) {
-      await more(fp);
-      const next = await rawComments(fp);
-      still = next.length > raw.length ? 0 : still + 1;
-      raw = next;
-    }
+    const read = async () => {
+      const no = await ready(fp, postUrl(urn), urn);
+      if (no) return no;
+      let raw = await rawComments(fp);
+      for (let still = 0; raw.length < start + count && still < 2; ) {
+        await more(fp);
+        const next = await rawComments(fp);
+        still = next.length > raw.length ? 0 : still + 1;
+        raw = next;
+      }
+      return raw;
+    };
+    // The same load answers the post's counts read for the next hour (linkedinPostStats).
+    const { out: raw, counts } = await withCounts(fp, urn, read);
+    if (!Array.isArray(raw)) return raw;
+    if (counts) seen.set(urn, { counts, at: Date.now() });
     return {
       elements: commentElements(raw, pages).slice(start, start + count),
       paging: { start, count },
     };
+  },
+});
+
+/** A post's counts, as the page shows them. */
+export interface PostCounts {
+  reactions: number;
+  /** Comments with their replies, as the bar counts them. */
+  comments: number;
+  reposts: number;
+}
+
+/** Social Actions' answer, from the page: `$read` says whether this read loaded one. */
+export interface SocialActions {
+  $URN: string;
+  likesSummary: { totalLikes: number };
+  commentsSummary: { totalFirstLevelComments: number; aggregatedTotalComments: number };
+  $reposts: number;
+  $read: "page" | "cache";
+}
+
+/** Counts the comment read saw, by post URN: a counts read takes them this long. */
+const FRESH_MS = 60 * 60_000;
+const seen = new Map<string, { counts: PostCounts; at: number }>();
+
+const num = (v: unknown): number | null =>
+  typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
+
+/** The JSON values in a body: one JSON document, or one per line (`1:{…}` streamed payloads). */
+function jsonsOf(text: string): unknown[] {
+  try {
+    return [JSON.parse(text)];
+  } catch {
+    return text.split("\n").flatMap((line) => {
+      const body = line.replace(/^[0-9a-zA-Z]+:/, "");
+      if (!/^[[{]/.test(body)) return [];
+      try {
+        return [JSON.parse(body)];
+      } catch {
+        return [];
+      }
+    });
+  }
+}
+
+/** The HTML's embedded data blocks (`<code>` with escaped JSON), unescaped. */
+function codeBlocksOf(html: string): string[] {
+  return [...html.matchAll(/<code[^>]*>([\s\S]*?)<\/code>/g)].map((m) =>
+    (m[1] as string)
+      .replace(/&quot;/g, '"')
+      .replace(/&#92;/g, "\\")
+      .replace(/&#61;/g, "=")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&")
+      .trim(),
+  );
+}
+
+/**
+ * The post's counts out of the page's data: the object that carries `numLikes` or `numComments`
+ * and names one of `ids` (the post's own id; the page may key it by its activity id instead).
+ * Reactions are `numLikes` (every kind), or the kinds' sum when that is more.
+ */
+export function countsIn(texts: string[], ids: string[]): PostCounts | null {
+  let found: PostCounts | null = null;
+  const walk = (v: unknown): void => {
+    if (found || !v || typeof v !== "object") return;
+    if (Array.isArray(v)) {
+      for (const x of v) walk(x);
+      return;
+    }
+    const o = v as Record<string, unknown>;
+    const likes = num(o.numLikes);
+    const comments = num(o.numComments);
+    if (likes !== null || comments !== null) {
+      const flat = JSON.stringify(o);
+      if (ids.some((id) => flat.includes(id))) {
+        const kinds = Array.isArray(o.reactionTypeCounts)
+          ? (o.reactionTypeCounts as Array<{ count?: unknown }>).reduce(
+              (n, k) => n + (num(k?.count) ?? 0),
+              0,
+            )
+          : 0;
+        found = {
+          reactions: Math.max(likes ?? 0, kinds),
+          comments: comments ?? 0,
+          reposts: num(o.numShares) ?? 0,
+        };
+        return;
+      }
+    }
+    for (const k of Object.values(o)) walk(k);
+  };
+  for (const t of texts) {
+    if (!/"num(?:Likes|Comments)"/.test(t)) continue;
+    for (const j of jsonsOf(t)) walk(j);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** The counts bar's labels outside every comment, first of each kind: `12 reactions`, `3 comments`. */
+export const READ_BAR = `(() => {
+  const out = {};
+  const words = { reaction: "reactions", comment: "comments", repost: "reposts" };
+  for (const el of document.querySelectorAll("button, a, span, li")) {
+    if (el.closest(${JSON.stringify(COMMENTS)})) continue;
+    for (const t of [el.getAttribute("aria-label") || "", el.textContent || ""]) {
+      const m = /^\\s*([\\d,]+)\\s+(reaction|comment|repost)s?\\s*$/i.exec(t);
+      const k = m && words[m[2].toLowerCase()];
+      if (k && !(k in out)) out[k] = Number(m[1].replace(/,/g, ""));
+      const o = /\\band ([\\d,]+) others?\\s*$/i.exec(t);
+      if (o && !("reactions" in out)) out.reactions = Number(o[1].replace(/,/g, "")) + 1;
+    }
+  }
+  return out;
+})()`;
+
+/** Listen to the page's calls while `act` runs; then the post's counts from them, the HTML or the bar. */
+async function withCounts<T>(
+  fp: FlowPage,
+  urn: string,
+  act: () => Promise<T>,
+): Promise<{ out: T; counts: PostCounts | null; why: string }> {
+  // No bar is no proof of zero (136e113 saw none): a page with no counts fails, never reads 0.
+  const bodies: string[] = [];
+  const pending: Array<Promise<void>> = [];
+  const onResponse = (r: Response) => {
+    if (!/linkedin\.com/.test(r.url())) return;
+    if (!/json|x-component|text\/plain|text\/html/.test(r.headers()["content-type"] ?? "")) return;
+    pending.push(
+      r.text().then(
+        (t) => {
+          if (/"num(?:Likes|Comments)"|&quot;num(?:Likes|Comments)&quot;/.test(t)) bodies.push(t);
+        },
+        () => undefined,
+      ),
+    );
+  };
+  fp.page.on("response", onResponse);
+  let out: T;
+  try {
+    out = await act();
+    await Promise.all(pending);
+  } finally {
+    fp.page.off("response", onResponse);
+  }
+  const html = await fp.html().catch(() => "");
+  const activity = [...html.matchAll(/urn:li:activity:(\d+)/g)].map((m) => m[1] as string);
+  const ids = [...new Set([/(\d+)$/.exec(urn)?.[1] ?? urn, ...activity.slice(0, 3)])];
+  const data = countsIn([...bodies, ...bodies.flatMap(codeBlocksOf), ...codeBlocksOf(html)], ids);
+  if (data) return { out, counts: data, why: "data" };
+  let bar: Partial<PostCounts> = {};
+  try {
+    bar = await fp.page.evaluate<Partial<PostCounts>>(READ_BAR);
+  } catch {
+    // A page without the bar (a fake) has none to read.
+  }
+  const shown = commentUrnsOf(html).length;
+  if (bar.reactions !== undefined || bar.comments !== undefined || bar.reposts !== undefined) {
+    const comments = bar.comments ?? 0;
+    // A bar that shows no comment count over comments on the page was read wrong.
+    if (comments < shown)
+      return { out, counts: null, why: `bar says ${comments} comments, page shows ${shown}` };
+    return {
+      out,
+      counts: { reactions: bar.reactions ?? 0, comments, reposts: bar.reposts ?? 0 },
+      why: "bar",
+    };
+  }
+  return {
+    out,
+    counts: null,
+    why: `no counts in ${bodies.length} calls, the HTML or the bar (${shown} comments shown)`,
+  };
+}
+
+const answer = (urn: string, c: PostCounts, read: SocialActions["$read"]): SocialActions => ({
+  $URN: urn,
+  likesSummary: { totalLikes: c.reactions },
+  commentsSummary: { totalFirstLevelComments: c.comments, aggregatedTotalComments: c.comments },
+  $reposts: c.reposts,
+  $read: read,
+});
+
+export const linkedinPostStats = defineFlow<
+  { urn: string },
+  SocialActions | { found: false; reason: string }
+>({
+  site: "linkedin",
+  name: "post-stats",
+  async run(fp, { urn }) {
+    const kept = seen.get(urn);
+    if (kept && Date.now() - kept.at < FRESH_MS) return answer(urn, kept.counts, "cache");
+    const { out: no, counts, why } = await withCounts(fp, urn, () => ready(fp, postUrl(urn), urn));
+    if (no) return no;
+    if (!counts) return fp.human(`no counts for ${urn}: ${why} (${fp.url()})`);
+    seen.set(urn, { counts, at: Date.now() });
+    return answer(urn, counts, "page");
   },
 });

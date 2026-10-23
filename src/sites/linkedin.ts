@@ -536,6 +536,11 @@ export const linkedin: SiteApi = {
       summary: "Reaction and comment counts for a post",
       request: byUrn,
       needs: ["r_organization_social"],
+      // The page read loads the post like a comment read; a count the hourly comment read just
+      // saw, or the API's answer, loads nothing.
+      meter: () => ({ comments: 1 }),
+      used: (_q, out) =>
+        (out as { $read?: string } | undefined)?.$read === "page" ? { comments: 1 } : {},
       api: async ({ urn }, leg) =>
         must(
           await leg.http.json<unknown>(
@@ -544,7 +549,7 @@ export const linkedin: SiteApi = {
           ),
           "rest/socialActions/{urn}",
         ),
-      browser: { workflow: "linkedin-post-stats" },
+      browser: { flow: "linkedin/post-stats" },
     }),
     route({
       method: "GET",

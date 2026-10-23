@@ -162,7 +162,7 @@ describe("site facade", () => {
       sites.call("linkedin", "GET", "/rest/socialActions/urn:li:share:1", {}),
     ).rejects.toMatchObject({
       status: 501,
-      message: expect.stringMatching(/workflow linkedin-post-stats not recorded/),
+      message: expect.stringMatching(/linkedin\/post-stats not recorded/),
     });
     await expect(sites.call("linkedin", "DELETE", "/rest/posts", {})).rejects.toMatchObject({
       status: 404,
@@ -173,7 +173,7 @@ describe("site facade", () => {
     expect(row.routes.find((r) => r.path === "/v2/userinfo")?.via).toBe("browser");
     expect(row.routes.find((r) => r.path === "/rest/socialActions/{urn}")).toMatchObject({
       via: "none",
-      missing: "workflow linkedin-post-stats not recorded",
+      missing: "flow linkedin/post-stats not recorded",
     });
     // /rest/posts/{urn} has no browser leg: without a token it says so.
     expect(row.routes.find((r) => r.path === "/rest/posts/{urn}")).toMatchObject({ via: "none" });
