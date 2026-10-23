@@ -105,6 +105,7 @@ import { xFollow, xLike, xReply } from "../browser/flows/x-act.js";
 import { xOauthConsent } from "../browser/flows/x-oauth-consent.js";
 import { xFollowing, xPost, xPosts, xProfile, xSearch } from "../browser/flows/x-read.js";
 import { youtubeCommunityPost } from "../browser/flows/youtube-community-post.js";
+import { youtubeStudioAnalytics } from "../browser/flows/youtube-studio-analytics.js";
 import { youtubeThumbnail } from "../browser/flows/youtube-thumbnail.js";
 import { NeedsHuman } from "../browser/session.js";
 
@@ -224,6 +225,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     outlookOauthConsent,
     youtubeCommunityPost,
     youtubeThumbnail,
+    youtubeStudioAnalytics,
     instagramProfileName,
     xProfileName,
     tiktokProfileName,

@@ -426,7 +426,8 @@ export const youtube: SiteApi = {
   probe: { path: "/youtube/v3/channels", input: { part: "id", mine: true } },
   auth: { oauth: youtubeOAuth },
   // Analytics and Reporting have their own Google quotas: a day's reads per account, kept well under them.
-  caps: { analytics: 1000, reporting: 300 },
+  // Studio reads open a page as the channel: a Short per look, a few dozen a day.
+  caps: { analytics: 1000, reporting: 300, studio: 60 },
   routes: [
     route({
       method: "POST",
@@ -900,6 +901,15 @@ export const youtube: SiteApi = {
         uploads: "image",
         input: (i, env) => ({ ...i, channel: env(YOUTUBE_CHANNEL) }),
       },
+    }),
+    route({
+      method: "GET",
+      path: "/studio/videos/{videoId}/analytics",
+      summary:
+        "A video's totals off its Studio analytics page (browser; the page's own calls): `viewedPct` (a Short's viewed vs swiped away, percent viewed; the Analytics API lacks it), `avgViewSecs`, `avgViewPct`, `views`, each null when the page has none. Reads only",
+      request: z.object({ videoId: z.string().regex(/^[\w-]{6,20}$/, "a video id") }),
+      meter: () => ({ studio: 1 }),
+      browser: { flow: "google/youtube-studio-analytics" },
     }),
     route({
       method: "POST",
