@@ -7,13 +7,14 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { urlShape } from "../browser/screens.js";
+import { reshape, urlShape } from "../browser/screens.js";
 import { hintsSchema } from "../compiler/outline.js";
 import { camel, IRREVERSIBLE_CLICK, kebab, stripHints } from "../compiler/structure.js";
 import type { Action } from "../recorder/types.js";
 import { baseSite, listRuns, type RunRow, type RunSummary, readRun, runFile } from "../runs/log.js";
 import { type Around, type BuiltWalk, inUrl, walkFromRuns } from "./build.js";
 import {
+  fieldRefs,
   WALK_VERSION,
   type WalkField,
   type WalkOp,
@@ -282,8 +283,13 @@ function buildPart(
     at(n).ops = [];
   }
   for (const x of p.insert ?? []) {
-    if (x.before) add(x.before, "before", x.op);
-    else if (x.after) add(x.after, "after", x.op);
+    const n = (x.before ?? x.after) as number;
+    if (n < range.from || n > range.to) continue;
+    add(n, x.before ? "before" : "after", x.op);
+    // A `{field}` the op names (a pick's `{choices}`): a field of this walk, unless a nested one runs it.
+    if (!inner || n < inner.from || n > inner.to)
+      for (const key of fieldRefs(x.op))
+        if (!fields.some((f) => f.key === key)) fields.push({ key, label: key, example: null });
   }
 
   const out: BuiltWalk[] = [];
@@ -310,7 +316,8 @@ function buildPart(
         now,
       ),
     );
-    for (let n = inner.from; n <= inner.to; n++) at(n).ops = [];
+    // The nested walk does these acts and what a cut adds around them.
+    for (let n = inner.from; n <= inner.to; n++) around.set(n, { ops: [] });
     at(inner.from).ops = [
       {
         kind: "each",
@@ -334,7 +341,7 @@ function buildPart(
   const after = [
     all[range.to]?.look,
     range.to === all.length && end?.kind === "end" ? end.look : null,
-  ];
+  ].map((l) => l && reshape(l));
   const part: RunRow[] = [
     ...(start ? [{ ...start, goal: p.goal ?? null }] : []),
     ...mine,

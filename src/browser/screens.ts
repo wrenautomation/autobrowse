@@ -259,6 +259,10 @@ export function urlShape(url: string): string {
   }
 }
 
+/** A look kept under an older `urlShape`, shaped as now (a journal outlives the rule). */
+export const reshape = (look: PageLook): PageLook =>
+  look.url ? { ...look, url: urlShape(`https://${look.url}`) } : look;
+
 /** A landmark as kept: lowercase, addresses and numbers blurred, so a greeting by name still matches. */
 export const landmark = (s: string): string =>
   s

@@ -119,6 +119,21 @@ export const walkOpSchema = z.discriminatedUnion("kind", [
       as: z.string().regex(AS).optional(),
     })
     .refine((o) => !(o.as && o.hints), "an eval with `as` runs on the page: no hints"),
+  /**
+   * Choose options by their text in one region (a quiz question): a checkbox
+   * that differs is clicked, a radio only turned on, then all are read back.
+   * `choices`: one value or a JSON list, with `{field}`s. `region.css` is a
+   * Playwright selector (`xpath=` too) the options chain under; `row` is the
+   * option's ancestor that holds its text, `label` the part of it to read.
+   */
+  z.object({
+    kind: z.literal("pick"),
+    goal: z.string(),
+    region: z.object({ css: z.string().min(1), frame: z.string().nullable().optional() }),
+    row: z.string().min(1).optional(),
+    label: z.string().min(1).optional(),
+    choices: z.string().min(1),
+  }),
   /** A file the page links to, fetched with its sign-in: `url` (relative, may hold `{field}`s) or the `href` at `hints`; kept under `as`. */
   z.object({
     kind: z.literal("download"),
@@ -277,7 +292,7 @@ export const valueSource = (v: WalkValue): string =>
         ? `profile.${v.field}`
         : `secret ${v.key}`;
 
-/** The text of an op that may name `{field}`s: an open or download URL, a click's hints, a select's value. */
+/** The text of an op that may name `{field}`s: an open or download URL, a click's hints, a select's value, a pick. */
 function refText(op: WalkOp): string {
   if (op.kind === "open") return op.url.replace(/%7B/gi, "{").replace(/%7D/gi, "}");
   if (op.kind === "click")
@@ -286,6 +301,7 @@ function refText(op: WalkOp): string {
       .join("\n");
   if (op.kind === "download") return op.url ?? "";
   if (op.kind === "select") return op.value;
+  if (op.kind === "pick") return `${op.region.css}\n${op.choices}`;
   return "";
 }
 

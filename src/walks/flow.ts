@@ -13,6 +13,7 @@ import type { SecretValues } from "../auth/signup.js";
 import { type Fetched, fetchFile } from "../browser/download.js";
 import { type BrowserFlow, defineFlow, type FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
+import { OPTIONS, optionsIn, ROWS, squash } from "../browser/pick.js";
 import { checkRows, type RecordsOp, type Row, readRecords } from "../browser/records.js";
 import { lookAt, type PageLook, type Screen, walk } from "../browser/screens.js";
 import { NeedsHuman } from "../browser/session.js";
@@ -300,6 +301,40 @@ async function walkSpec(
       case "human":
         fp.human(op.reason);
         return;
+      case "pick": {
+        const goal = await fill(op.goal, op.goal);
+        const raw = await fill(op.choices, goal);
+        let list: unknown = raw;
+        try {
+          list = JSON.parse(raw);
+        } catch {}
+        const want = new Set((Array.isArray(list) ? list : [raw]).map((c) => squash(String(c))));
+        want.delete("");
+        if (!want.size) fp.human(`${goal}: no choices`);
+        const selector = `${await fill(op.region.css, goal)} >> ${OPTIONS}`;
+        const frame = op.region.frame ?? null;
+        const read = () => optionsIn(fp.page, selector, frame, op.row ?? ROWS, op.label);
+        const options = await read();
+        const missing = [...want].filter((c) => !options.some((o) => o.text === c));
+        if (missing.length)
+          fp.human(
+            `${goal}: no option ${JSON.stringify(missing)}; it offers ${JSON.stringify(options.map((o) => o.text))}`,
+          );
+        for (const [nth, o] of options.entries()) {
+          const on = want.has(o.text);
+          // A checkbox toggles: click only what differs. A radio only turns on.
+          if (on === o.checked || (!on && o.type === "radio")) continue;
+          await fp.act(
+            { kind: "click" },
+            { css: selector, nth, frame },
+            { goal: `${on ? "pick" : "clear"} "${o.text}"` },
+          );
+        }
+        const wrong = (await read()).filter((o) => o.checked !== want.has(o.text));
+        if (wrong.length)
+          fp.human(`${goal}: ${JSON.stringify(wrong.map((o) => o.text))} did not take`);
+        return;
+      }
       case "records": {
         let { rows, html } = await readRecords(fp, op);
         const problem = checkRows(rows, op);

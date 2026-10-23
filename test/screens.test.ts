@@ -13,6 +13,7 @@ import {
   fileScreens,
   landmark,
   memoryScreens,
+  reshape,
   type Screen,
   type ScreenHelp,
   type ScreenReader,
@@ -44,6 +45,10 @@ describe("screens", () => {
       "api-1a2b.duosecurity.com/prompt/*",
     );
     expect(urlShape("https://x.com/oauth2callback/V2")).toBe("x.com/oauth2callback/V2");
+    // A journal kept under an older rule: its looks are shaped as now when a walk is built.
+    expect(
+      reshape({ url: "api-1a2b.duosecurity.com/prompt/AB3CD4EF5GH6JK7LM8NP", landmarks: ["x"] }),
+    ).toEqual({ url: "api-1a2b.duosecurity.com/prompt/*", landmarks: ["x"] });
     expect(landmark("Continue as will@gmail.com  using Google")).toBe(
       "continue as <address> using google",
     );

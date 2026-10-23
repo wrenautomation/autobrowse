@@ -1,11 +1,14 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Page } from "playwright";
 import { describe, expect, it } from "vitest";
 import type { SignInContext } from "../src/auth/login.js";
 import type { FlowPage } from "../src/browser/flow.js";
 import type { Hints } from "../src/browser/locate.js";
 import { NeedsHuman } from "../src/browser/session.js";
-import { walkLogin } from "../src/walks/login.js";
-import type { WalkOp, WalkSpec } from "../src/walks/spec.js";
+import { walkLogin, walkLogins } from "../src/walks/login.js";
+import { saveWalk, type WalkOp, type WalkSpec } from "../src/walks/spec.js";
 
 const PAGES: Record<string, { url: string; landmarks: string[]; go?: Record<string, string> }> = {
   sso: {
@@ -140,5 +143,21 @@ describe("a sign-in walk as a SiteLogin", () => {
 
   it("needs a start", () => {
     expect(() => walkLogin({ ...spec, start: null })).toThrow(/needs a start/);
+  });
+
+  it("finds each site's login walk; a broken file is no login", () => {
+    const dir = mkdtempSync(join(tmpdir(), "walk-logins-"));
+    try {
+      saveWalk(dir, spec);
+      mkdirSync(join(dir, "other"));
+      writeFileSync(join(dir, "other", "login.json"), "{");
+      mkdirSync(join(dir, "nologin"));
+      expect(walkLogins(dir).map((l) => [l.site, l.credential, l.home])).toEqual([
+        ["lms", "lms", "https://lms.test/d2l/home"],
+      ]);
+      expect(walkLogins(join(dir, "none"))).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

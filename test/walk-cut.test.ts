@@ -222,6 +222,38 @@ describe("cut a run into walks", () => {
     expect(ops(quiz).map((o) => o.kind)).toEqual(["click", "each", "click"]);
   });
 
+  it("picks by text per row: an inserted op's fields go to the nested walk only", () => {
+    const pick = {
+      kind: "pick",
+      goal: "answer question {question}",
+      region: { css: "xpath=//h2[.='Question {question}']/following::fieldset[1]" },
+      row: "tr",
+      choices: "{choices}",
+    };
+    const cut = cutSchema.parse({
+      site: "lms",
+      runs: [RUN],
+      parts: [
+        {
+          name: "quiz-attempt",
+          acts: "12-15",
+          params: { ou: "url:ou", qi: "url:qi" },
+          repeat: { acts: "14", over: "answers" },
+          skip: [14],
+          insert: [{ before: 14, op: pick }],
+          gate: 15,
+        },
+      ],
+    });
+    const walks = buildCut(cut, runs).walks.map((b) => b.spec);
+    const each = named(walks, "quiz-attempt-each");
+    expect(ops(each)).toEqual([pick]);
+    expect(each.fields.map((f) => f.key)).toEqual(["ou", "qi", "question", "choices"]);
+    const quiz = named(walks, "quiz-attempt");
+    expect(quiz.fields.map((f) => f.key).sort()).toEqual(["answers", "ou", "qi"]);
+    expect(ops(quiz).map((o) => o.kind)).toEqual(["click", "each", "click"]);
+  });
+
   it("skips acts: the run's other repeat rows, a stray click", () => {
     const cut = cutSchema.parse({
       site: "lms",

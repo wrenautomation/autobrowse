@@ -5,6 +5,8 @@
  * did once needs no hand-written `signIn`.
  */
 
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import type { CodeKind } from "../auth/codes.js";
 import type { SiteLogin } from "../auth/login.js";
 import { lookAt } from "../browser/screens.js";
@@ -63,6 +65,25 @@ export function walkLogin(
       await (kind && ctx.serial ? ctx.serial(kind, run) : run());
     },
   };
+}
+
+/**
+ * Every site's `login` walk in the owner's walks, as its `SiteLogin`. Added
+ * after the built-in and data logins, so a hand login wins: a walk replaces
+ * one only after it passes the same screens (a push, a wrong code).
+ */
+export function walkLogins(walksDir: string): SiteLogin[] {
+  if (!existsSync(walksDir)) return [];
+  return readdirSync(walksDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && existsSync(join(walksDir, d.name, "login.json")))
+    .flatMap((d) => {
+      try {
+        return walkLoginAt(walksDir, d.name) ?? [];
+      } catch {
+        // A walk file the schema refuses: no login, as with no file.
+        return [];
+      }
+    });
 }
 
 /** The site's `login` walk as its `SiteLogin`, when `walks cut` built one; else null. */

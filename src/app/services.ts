@@ -56,6 +56,7 @@ import {
 import { CRED_ENV, keychainOf, WALLET_KEYCHAIN } from "../auth/keep.js";
 import { type NamedStore, namedStore } from "../auth/roles.js";
 import { loginSecrets, type SecretValues } from "../auth/signup.js";
+import { addSiteLogins } from "../auth/sites.js";
 import { fileDoneActs } from "../browser/attempt.js";
 import type { Eyes } from "../browser/captcha/index.js";
 import { eyesOf } from "../browser/captcha/llm-eyes.js";
@@ -176,6 +177,7 @@ import { fileRefusedTokens } from "../sites/refused.js";
 import { fileUploadSessions } from "../sites/uploads.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import { type WalkDeps, type WalkInput, type WalkOutput, walkFlow } from "../walks/flow.js";
+import { walkLogins } from "../walks/login.js";
 import { loadWalk, saveWalk, type WalkSpec } from "../walks/spec.js";
 import { type BootstrapDeps, bootstrapWorkflow } from "../workflows/bootstrap/index.js";
 import {
@@ -616,9 +618,11 @@ export const modsDirFor = (settings: Settings): string => join(stateDirFor(setti
 /** The owner's own sign-ins as data (src/mods/login.ts): `logins/<site>.json`. */
 export const loginsDirFor = (settings: Settings): string => join(stateDirFor(settings), "logins");
 
-/** Add the owner's data logins, then installed mods', to `SITE_LOGINS`; every entry point, after `boot()`. */
-export const loadDataLogins = (settings: Settings): void =>
+/** Add the owner's data logins, then installed mods', then sign-in walks, to `SITE_LOGINS`; every entry point, after `boot()`. */
+export const loadDataLogins = (settings: Settings): void => {
   registerDataLogins(loginsDirFor(settings), modsDirFor(settings));
+  addSiteLogins(walkLogins(walksDirFor(settings)));
+};
 
 /** The owner's learned screens, then installed mods' (src/mods). */
 export const screensFor = (settings: Settings): LearnedScreens =>

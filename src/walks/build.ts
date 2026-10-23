@@ -10,7 +10,7 @@
  * screen only that run saw, found by the page when it comes up.
  */
 import type { Hints } from "../browser/locate.js";
-import { type PageLook, urlShape } from "../browser/screens.js";
+import { type PageLook, reshape, urlShape } from "../browser/screens.js";
 import { camel, describe, IRREVERSIBLE_CLICK, kebab, stripHints } from "../compiler/structure.js";
 import { paymentGate } from "../gates/payment.js";
 import { type Profile, profileField } from "../money/profile.js";
@@ -151,9 +151,12 @@ export function visitsOf(
   rows: readonly RunRow[],
   around?: (a: Action) => Around | undefined,
 ): Cut {
-  const acts = rows.filter((r): r is Extract<RunRow, { kind: "act" }> => r.kind === "act");
+  const acts = rows
+    .filter((r): r is Extract<RunRow, { kind: "act" }> => r.kind === "act")
+    .map((r) => (r.look ? { ...r, look: reshape(r.look) } : r));
   const ends = rows.filter((r): r is Extract<RunRow, { kind: "end" }> => r.kind === "end");
-  const end = ends.at(-1)?.look ?? null;
+  const ended = ends.at(-1)?.look;
+  const end = ended ? reshape(ended) : null;
   if (acts.some((r) => r.act.kind === "desktop"))
     return { start: null, visits: [], end, refused: "a desktop act (compile its recording)" };
   let start: string | null = null;
