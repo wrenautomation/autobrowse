@@ -481,6 +481,9 @@ async function withReplies(fp: FlowPage, id: string, i: Feed) {
     };
     const { rows, ended } = await scrollCollect(fp, {
       read: own,
+      // The next page is a network call, not rows already in the DOM: give it time.
+      idle: 5,
+      settleMs: 2_000,
       key: (t) => t.id,
       max: i.max_results ?? 10,
       skip: (t) => t.pinned === true,
