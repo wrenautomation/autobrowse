@@ -85,7 +85,7 @@
     "desk": "tsx src/app/desk.ts",
     "autobrowse": "tsx src/app/cli.ts",
     "record": "tsx src/app/cli-record.ts",
-    "gates": "lockf -s /tmp/wren_automation-checks.lock sh -c 'pnpm lint && pnpm typecheck && pnpm test'",
+    "gates": "lockf -s /tmp/wren_automation-checks.lock sh -c 'export TMPDIR=$HOME/Library/Caches/wren_automation/tmp/autobrowse && rm -rf $TMPDIR && mkdir -p $TMPDIR && pnpm lint && pnpm typecheck && pnpm test'",
     "ui:dev": "vite --config ui/vite.config.ts ui",
     "ui:build": "vite build --config ui/vite.config.ts ui",
     "test:live": "LIVE=1 vitest run test/live.test.ts",
