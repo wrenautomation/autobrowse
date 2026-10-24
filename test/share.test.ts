@@ -9,6 +9,7 @@ import {
   queued,
   readShare,
   sendShared,
+  shareFlow,
   shareOff,
   shareTrace,
   writeShare,
@@ -91,6 +92,36 @@ describe("shareTrace", () => {
       "off",
     );
     expect(queued(dir)).toEqual([]);
+  });
+});
+
+describe("shareFlow", () => {
+  it("queues a passed flow's source and proof, scrubbed, without read values or tests", async () => {
+    const { dir, env } = home();
+    const flow = join(dir, "acme-signup");
+    mkdirSync(flow);
+    writeFileSync(
+      join(flow, "outline.json"),
+      JSON.stringify({ name: "acme-signup", site: "acme" }),
+    );
+    writeFileSync(join(flow, "index.ts"), `// tried ${TYPED}\nexport default {};`);
+    writeFileSync(join(flow, "index.test.ts"), "test");
+    const proof = {
+      at: "2026-10-24",
+      status: "done",
+      steps: [{ name: "fill", status: "ok", detail: `typed ${TYPED}` }],
+      output: { orderId: "ORD-99887766" },
+    };
+    expect(await shareFlow(flow, proof, { street: TYPED }, env)).toBe("queued");
+    const [file] = queued(dir);
+    expect(file?.name).toMatch(/\.acme-signup\.flow\.json$/);
+    const body = readFileSync(join(dir, "queue", file?.name ?? ""), "utf8");
+    expect(body).not.toContain("Hunter");
+    expect(body).not.toContain("99887766");
+    const pack = JSON.parse(body);
+    expect(Object.keys(pack.files).sort()).toEqual(["index.ts", "outline.json"]);
+    expect(pack.proof.output).toEqual(["orderId"]);
+    expect(await shareFlow(flow, { ...proof, status: "failed" }, {}, env)).toBe("error");
   });
 });
 

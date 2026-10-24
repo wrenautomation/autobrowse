@@ -21,7 +21,7 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { isPersonalProfile } from "../browser/network.js";
-import { type Known, knownFromTrace, ScrubLeak, scrubTrace } from "./scrub.js";
+import { type Known, knownFromTrace, ScrubLeak, scrubText, scrubTrace } from "./scrub.js";
 
 export const SHARE_URL = "https://share.wrenautomation.com";
 
@@ -151,18 +151,72 @@ export function queued(root = shareRoot()): { name: string; bytes: number }[] {
     .map((name) => ({ name, bytes: statSync(join(dir, name)).size }));
 }
 
-/** Queue a flow pack (a compiled workflow's files and its proof) for the registry's gate. */
-export function shareFlow(
-  pack: { name: string; files: Record<string, string>; proof: unknown },
+/** Flow source files a pack carries; the proof goes in as its own field, tests stay home. */
+const PACK_FILE = /^(?!.*\.test\.)[\w.-]+\.(ts|json)$/;
+
+/** The proof fields a pack reads (structurally `Proof` from workflows/proof). */
+export interface PackProof {
+  at: string;
+  status: string;
+  steps: { name: string; status: string; detail: string }[];
+  output: Record<string, string> | null;
+}
+
+/**
+ * Queue a compiled workflow that just passed its proof, for the registry
+ * (step 5). Source and proof go through the same scrub as a trace, with the
+ * plan's values as known ones; read values stay home (only their keys go).
+ * Never throws.
+ */
+export async function shareFlow(
+  dir: string,
+  proof: PackProof,
+  plan: Record<string, unknown> = {},
   env: NodeJS.ProcessEnv = process.env,
-): ShareResult {
+): Promise<ShareResult> {
   try {
     const root = shareRoot(env);
     if (shareOff(env, root)) return "off";
+    if (proof.status !== "done") return "error";
+    const outline = JSON.parse(readFileSync(join(dir, "outline.json"), "utf8")) as {
+      name: string;
+      site: string;
+    };
+    if (excluded(outline.site, readShare(root))) return "excluded";
+    const known: Known[] = [
+      ...Object.values(plan)
+        .filter((v): v is string | number => typeof v === "string" || typeof v === "number")
+        .map((v) => ({ value: String(v), kind: "typed" })),
+      ...Object.values(proof.output ?? {}).map((value) => ({ value, kind: "read" })),
+      ...((await moreKnown?.()) ?? []),
+    ];
+    let pack: string;
+    try {
+      const files: Record<string, string> = {};
+      for (const f of readdirSync(dir).filter((f) => PACK_FILE.test(f) && f !== "proof.json"))
+        files[f] = scrubText(readFileSync(join(dir, f), "utf8"), known);
+      pack = JSON.stringify({
+        name: outline.name,
+        site: outline.site,
+        files,
+        proof: {
+          at: proof.at,
+          status: proof.status,
+          steps: proof.steps.map((x) => ({ ...x, detail: scrubText(x.detail, known) })),
+          output: Object.keys(proof.output ?? {}),
+        },
+      });
+    } catch (err) {
+      if (err instanceof ScrubLeak) return "leak";
+      throw err;
+    }
+    if (pack.length > 1024 * 1024) return "error";
     const queue = join(root, "queue");
     mkdirSync(queue, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    writeFileSync(join(queue, `${stamp}.${slug(pack.name)}.flow.json`), JSON.stringify(pack));
+    const name = `${stamp}.${slug(outline.name)}.flow.json`;
+    writeFileSync(join(queue, `${name}.part`), pack);
+    renameSync(join(queue, `${name}.part`), join(queue, name));
     return "queued";
   } catch {
     return "error";

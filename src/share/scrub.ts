@@ -297,6 +297,14 @@ export function scrubTrace(zip: Uint8Array, known: Known[]): Uint8Array {
   return zipSync(out, { level: 6 });
 }
 
+/** Plain text (a flow's source, a proof line) with personal data out. Throws `ScrubLeak` like `scrubTrace`. */
+export function scrubText(body: string, known: Known[]): string {
+  const s = scrubber(known);
+  const out = s.text(body);
+  s.check(out);
+  return out;
+}
+
 /** Protocol methods whose params carry what the run typed, and the param. */
 const TYPED_BY: Record<string, string> = {
   fill: "value",

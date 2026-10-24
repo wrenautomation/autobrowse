@@ -52,6 +52,7 @@ import { modWorkflowRoots } from "../mods/mod.js";
 import { fileSpent, type SpentKeys } from "../reach/key-ring.js";
 import { loadRecording } from "../recorder/store.js";
 import type { Recording } from "../recorder/types.js";
+import { shareFlow } from "../share/share.js";
 import { fileCaps } from "../sites/caps.js";
 import { type SiteFacade, sitesFor } from "../sites/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
@@ -179,6 +180,7 @@ export async function proveCompiled(
   if (!found) throw new Error(`compiled workflow ${name} did not load`);
   const proof = await proveWorkflow(found.workflow, browser, plan ? { plan } : {});
   await writeProof(found.dir, proof);
+  if (proof.status === "done") await shareFlow(found.dir, proof, plan);
   return proof;
 }
 
