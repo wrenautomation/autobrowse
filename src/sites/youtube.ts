@@ -15,12 +15,13 @@ import { readFile, stat } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { z } from "zod";
 import { currentCall } from "../browser/attempt.js";
-import { HttpError, safeUrls } from "../clients/http.js";
+import { HttpError, type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi, SiteError } from "./types.js";
 import { once } from "./uploads.js";
 import type { Seen, VerifyGet, VerifyRead } from "./verdict.js";
 import { arr, isoOf, rec, str, text, unclear } from "./verify-kit.js";
+import { googleWords } from "./why.js";
 
 export const YOUTUBE_ORIGIN = "https://www.googleapis.com";
 export const YOUTUBE_ANALYTICS_ORIGIN = "https://youtubeanalytics.googleapis.com";
@@ -92,20 +93,8 @@ const commentText = (snippet: Record<string, unknown>): string =>
 
 const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 
-/** Google's own words on a refusal (`error.message`), its URLs cut to origin and path. */
-function googleWords(body: unknown): string {
-  const m = (body as { error?: { message?: unknown } } | null)?.error?.message;
-  return typeof m === "string" ? safeUrls(m).slice(0, 300) : "";
-}
-
-async function must<T>(
-  res: { ok: boolean; status: number; body: T | null },
-  what: string,
-  origin = YOUTUBE_ORIGIN,
-) {
-  if (!res.ok) throw new HttpError("CALL", `${origin}/${what}`, res.status, googleWords(res.body));
-  return res.body as T;
-}
+const must = <T>(res: JsonResponse<T>, what: string, origin = YOUTUBE_ORIGIN): T =>
+  mustOk(res, `${origin}/${what}`, googleWords);
 
 /** A GET with the request as its query; empty values left out. */
 async function getWith(leg: ApiLeg, origin: string, path: string, query: Record<string, unknown>) {

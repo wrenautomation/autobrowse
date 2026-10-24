@@ -8,7 +8,7 @@
  * unproven until a developer app and an account exist.
  */
 import { z } from "zod";
-import { HttpError } from "../clients/http.js";
+import { type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { WEB_REDIRECT } from "./oauth.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
@@ -107,10 +107,8 @@ const profileName = z.object({
   name: z.string().trim().min(1).max(30),
 });
 
-async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok) throw new HttpError("CALL", `${INSTAGRAM_ORIGIN}/${what}`, res.status);
-  return res.body as T;
-}
+const must = <T>(res: JsonResponse<T>, what: string): T =>
+  mustOk(res, `${INSTAGRAM_ORIGIN}/${what}`);
 const v = (path: string) => `${INSTAGRAM_ORIGIN}/${INSTAGRAM_VERSION}/${path}`;
 /** The signed-in account: its numeric id and username (`GET /me`). */
 async function ownAccount(

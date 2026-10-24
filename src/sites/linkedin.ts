@@ -9,7 +9,7 @@
 import { z } from "zod";
 import { WREN_PAGE } from "../browser/flows/linkedin-audience.js";
 import { POST_URN } from "../browser/flows/linkedin-post-analytics.js";
-import { HttpError } from "../clients/http.js";
+import { type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { pollWaits } from "./poll.js";
 import {
@@ -287,10 +287,8 @@ async function uploadVideo(leg: ApiLeg, owner: string, file: string): Promise<st
   }
 }
 
-async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok) throw new HttpError("CALL", `${LINKEDIN_ORIGIN}/${what}`, res.status);
-  return res.body as T;
-}
+const must = <T>(res: JsonResponse<T>, what: string): T =>
+  mustOk(res, `${LINKEDIN_ORIGIN}/${what}`);
 
 export const linkedinOAuth: OAuthSpec = {
   authorizeUrl: OAUTH_PROVIDERS.linkedin.authorize,

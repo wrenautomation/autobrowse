@@ -54,6 +54,19 @@ export class HttpError extends Error {
   }
 }
 
+/**
+ * The body of an answer that was ok; a failed one becomes the HttpError. `why` reads the
+ * site's own words off the body (a code, a reason), never a token: it is the note in the message.
+ */
+export function mustOk<T>(
+  res: Pick<JsonResponse<T>, "ok" | "status" | "body">,
+  url: string,
+  why: (body: unknown) => string = () => "",
+): T {
+  if (!res.ok) throw new HttpError("CALL", url, res.status, why(res.body));
+  return res.body as T;
+}
+
 /** A platform's 4xx that waiting won't change (402 out of credit, 403 refused); 408 and 429 heal. */
 export const lastingRefusal = (err: unknown): err is HttpError =>
   err instanceof HttpError &&

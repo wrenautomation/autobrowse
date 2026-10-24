@@ -9,7 +9,7 @@
  * `Basic <base64>` header value `langfuse wire` derives from the two keys.
  */
 import { z } from "zod";
-import { HttpError } from "../clients/http.js";
+import { type JsonResponse, mustOk } from "../clients/http.js";
 import { type ApiLeg, route, type SiteApi } from "./types.js";
 
 export const LANGFUSE_ORIGIN = "https://cloud.langfuse.com";
@@ -17,10 +17,7 @@ export const LANGFUSE_ORIGIN = "https://cloud.langfuse.com";
 /** The wired header value is already `Basic <base64(public:secret)>`. */
 const basic = (leg: ApiLeg) => ({ authorization: leg.token });
 
-async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok) throw new HttpError("CALL", `${LANGFUSE_ORIGIN}${what}`, res.status);
-  return res.body as T;
-}
+const must = <T>(res: JsonResponse<T>, what: string): T => mustOk(res, `${LANGFUSE_ORIGIN}${what}`);
 
 /** The window the new observations API insists on; the legacy trace APIs are closed to new orgs. */
 const observations = z.object({

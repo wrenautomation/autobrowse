@@ -7,7 +7,7 @@
  * not this module's: `designs/2026-09-21-desktop-leg.md`.
  */
 import { z } from "zod";
-import { HttpError } from "../clients/http.js";
+import { type JsonResponse, mustOk } from "../clients/http.js";
 import { authorizeEndpoint, tokenEndpoint } from "../oauth/providers.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { Seen, VerifyGet, VerifyRead } from "./verdict.js";
@@ -18,10 +18,7 @@ const V1 = `${OUTLOOK_ORIGIN}/v1.0`;
 
 const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 
-async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok) throw new HttpError("CALL", `${V1}/${what}`, res.status);
-  return res.body as T;
-}
+const must = <T>(res: JsonResponse<T>, what: string): T => mustOk(res, `${V1}/${what}`);
 
 /** The common OData query knobs Graph reads take. */
 const odata = z.object({

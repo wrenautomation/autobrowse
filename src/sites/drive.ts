@@ -6,28 +6,18 @@
  * and read its documents as text; nothing here writes to Drive.
  */
 import { z } from "zod";
-import { HttpError } from "../clients/http.js";
+import { HttpError, type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import { googleReason } from "./why.js";
 
 export const DRIVE_ORIGIN = "https://www.googleapis.com";
 const FILES = `${DRIVE_ORIGIN}/drive/v3/files`;
 
 const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 
-async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok) {
-    const err = (res.body as { error?: { errors?: { reason?: string }[]; status?: string } } | null)
-      ?.error;
-    throw new HttpError(
-      "CALL",
-      `${FILES}/${what}`,
-      res.status,
-      err?.errors?.[0]?.reason ?? err?.status ?? "",
-    );
-  }
-  return res.body as T;
-}
+const must = <T>(res: JsonResponse<T>, what: string): T =>
+  mustOk(res, `${FILES}/${what}`, googleReason);
 
 export const driveOAuth: OAuthSpec = {
   authorizeUrl: OAUTH_PROVIDERS.google.authorize,
