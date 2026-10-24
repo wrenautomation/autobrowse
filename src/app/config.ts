@@ -121,6 +121,20 @@ const schema = z.object({
   shotsMachine: z.string().min(1).optional(),
   /** A worker ships new shots this often, and before an idle stop; 0 = only then. */
   shotsEveryMinutes: z.coerce.number().min(0).default(60),
+  /** Where traces are kept for good: `s3://bucket[/prefix]` or a folder; unset = never swept. */
+  tracesTo: z.string().min(1).optional(),
+  /** Other folders that hold traces (a `flowRunner` caller's `artifactsDir`), comma separated. */
+  traceDirs: z
+    .string()
+    .default("")
+    .transform((v) =>
+      v
+        .split(",")
+        .map((d) => d.trim())
+        .filter(Boolean),
+    ),
+  /** A kept trace stays on this disk this long, then is swept. */
+  tracesKeepDays: z.coerce.number().min(0).default(14),
   logLevel: z.string().default("info"),
   /** Where the Restate endpoint listens; the UI is on `uiPort`. */
   restatePort: z.coerce.number().int().default(9081),
@@ -368,6 +382,9 @@ export const ENV_KEYS = {
   shotsEndpoint: "SHOTS_ENDPOINT",
   shotsMachine: "SHOTS_MACHINE",
   shotsEveryMinutes: "SHOTS_EVERY_MINUTES",
+  tracesTo: "TRACES_TO",
+  traceDirs: "TRACE_DIRS",
+  tracesKeepDays: "TRACES_KEEP_DAYS",
   logLevel: "LOG_LEVEL",
   restatePort: "RESTATE_PORT",
   uiPort: "UI_PORT",

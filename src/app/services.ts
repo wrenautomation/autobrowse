@@ -155,8 +155,9 @@ import { isDefaultOwner, named, ownerKeys } from "../owner.js";
 import { fileKeyUses, fileSpent } from "../reach/key-ring.js";
 import { type KeysDep, ownerKeysIn, reachEnv, vaultSource } from "../reach/key-source.js";
 import { fileSiteCalls } from "../runs/calls.js";
-import { s3BlobStore } from "../shots/s3.js";
+import { s3BlobStore, s3TraceStore } from "../shots/s3.js";
 import { keepArtifact, keepRecording, type ShipReport, shipShots } from "../shots/ship.js";
+import { backupTraces, dirTraceStore, sweepTraces, traceDirName } from "../shots/traces.js";
 import { fileCaps } from "../sites/caps.js";
 import {
   accessTokens,
@@ -580,6 +581,38 @@ export function shipperFor(
       machine: `${ownerKeys(settings.owner).shots}${settings.shotsMachine ?? hostname().replace(/\.local$/, "")}`,
       ...o,
     });
+}
+
+/** Traces kept for good (src/shots/traces.ts): null when no TRACES_TO is set. */
+export function tracesFor(settings: Settings) {
+  const to = settings.tracesTo;
+  if (!to) return null;
+  const machine = settings.shotsMachine ?? hostname().replace(/\.local$/, "");
+  const own = expandHome(settings.artifactsDir);
+  const dirs = [own, ...settings.traceDirs.map(expandHome)].map((dir) => ({
+    name: traceDirName(dir, dir === own),
+    dir,
+  }));
+  const s3 = /^s3:\/\/([^/]+)\/?(.*)$/.exec(to);
+  const store = s3
+    ? s3TraceStore({
+        bucket: s3[1] as string,
+        prefix: `${s3[2] ? `${s3[2].replace(/\/?$/, "/")}` : ""}${ownerKeys(settings.owner).shots}`,
+        aws: awsFor(settings),
+      })
+    : dirTraceStore(expandHome(to));
+  const base = {
+    dirs,
+    ledgerFile: join(stateDirFor(settings), "traces-kept.tsv"),
+    prefix: `traces/${machine}/`,
+  };
+  return {
+    where: store.where,
+    keepDays: settings.tracesKeepDays,
+    backup: (o: { dry?: boolean } = {}) => backupTraces({ ...base, store, ...o }),
+    sweep: (o: { dry?: boolean } = {}) =>
+      sweepTraces({ ...base, keepDays: settings.tracesKeepDays, now: new Date(), ...o }),
+  };
 }
 
 /** Where every secret use is written: next to the credential file, 0600, one JSON line each. */

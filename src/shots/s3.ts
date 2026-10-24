@@ -2,8 +2,10 @@
  * The one file that names the bucket vendor. S3 by default; any S3-compatible
  * store (Cloudflare R2) by `endpoint`, with its keys in the usual AWS names.
  */
+import { open } from "node:fs/promises";
 import type { AwsConfig } from "../owner.js";
 import type { BlobStore } from "./ship.js";
+import type { TraceStore } from "./traces.js";
 
 export function s3BlobStore(o: { bucket: string; aws: AwsConfig; endpoint?: string }): BlobStore {
   // The SDK loads on the first put, not at every CLI start.
@@ -20,6 +22,36 @@ export function s3BlobStore(o: { bucket: string; aws: AwsConfig; endpoint?: stri
       await s3.send(
         new PutObjectCommand({ Bucket: o.bucket, Key: key, Body: body, ContentType: contentType }),
       );
+    },
+  };
+}
+
+/** Traces, streamed (one can be hundreds of MB), in Glacier Instant Retrieval; the bucket encrypts at rest. */
+export function s3TraceStore(o: { bucket: string; prefix: string; aws: AwsConfig }): TraceStore {
+  const client = import("@aws-sdk/client-s3").then(({ S3Client, PutObjectCommand }) => ({
+    s3: new S3Client(o.aws),
+    PutObjectCommand,
+  }));
+  return {
+    where: `s3://${o.bucket}/${o.prefix}`,
+    async putFile(key, path, size) {
+      // Open before the SDK call, so a file gone since the list fails as ENOENT here.
+      const handle = await open(path, "r");
+      const { s3, PutObjectCommand } = await client;
+      try {
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: o.bucket,
+            Key: `${o.prefix}${key}`,
+            Body: handle.createReadStream({ autoClose: false }),
+            ContentLength: size,
+            ContentType: "application/zip",
+            StorageClass: "GLACIER_IR",
+          }),
+        );
+      } finally {
+        await handle.close();
+      }
     },
   };
 }

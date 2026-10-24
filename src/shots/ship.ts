@@ -7,7 +7,7 @@
  *
  * One file is one unit: shipped, then written to the ledger, so a stop
  * mid-way resumes where it left off. A file that changes (a manifest
- * rewritten) ships again. Trace zips stay local: they hold network bodies.
+ * rewritten) ships again. Trace zips go their own way (traces.ts): they hold field values.
  */
 import { appendFile, readdir, readFile, stat } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";

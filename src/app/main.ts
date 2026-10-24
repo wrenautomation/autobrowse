@@ -23,6 +23,7 @@ import {
   linqFor,
   llmFor,
   shipperFor,
+  tracesFor,
 } from "./services.js";
 import { statusOf } from "./status.js";
 
@@ -178,6 +179,28 @@ const shipShots = (why: string): Promise<void> => {
 };
 if (ship && settings.shotsEveryMinutes > 0)
   setInterval(() => void shipShots("timer"), settings.shotsEveryMinutes * 60_000).unref();
+// Traces go to TRACES_TO on the same beat, then the old kept ones leave this disk.
+const keepTraces = tracesFor(settings);
+let keeping = false;
+const traceTick = (): void => {
+  if (!keepTraces || keeping) return;
+  keeping = true;
+  void keepTraces
+    .backup()
+    .then(async (r) => {
+      const swept = await keepTraces.sweep();
+      if (r.shipped || r.refused || swept.removed)
+        log.info({ ...r, unreadable: r.unreadable.length, swept }, "traces");
+    })
+    .catch((err) => log.warn({ err: err instanceof Error ? err.message : String(err) }, "traces"))
+    .finally(() => {
+      keeping = false;
+    });
+};
+if (keepTraces) {
+  setInterval(traceTick, Math.max(settings.shotsEveryMinutes, 15) * 60_000).unref();
+  setTimeout(traceTick, 60_000).unref();
+}
 // autotrack fleet health: the operator's worker checks each device's heartbeat hourly.
 if (isDefaultOwner(settings.owner) && settings.trackBucket) {
   const ops = opsLane(httpClient());
