@@ -79,6 +79,8 @@ describe("checkPack", () => {
     expect(await bad("const x = ;")).toMatch(/does not parse/);
     expect(await bad(`import { y } from "./nope.js";`)).toMatch(/imports \.\/nope\.js/);
     expect(await checkPack({ ...pack(), name: "../x" })).toEqual(["name"]);
+    const { "outline.json": _, ...noOutline } = pack().files;
+    expect(await checkPack({ ...pack(), files: noOutline })).toEqual([]);
     expect(await checkPack({ ...pack(), files: { "../a.ts": "" } })).toEqual(["file ../a.ts"]);
   });
 });

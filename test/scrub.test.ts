@@ -198,6 +198,9 @@ describe("redactPii", () => {
     );
     expect(redactPii("416.555.0199 or +44 20 7946 0958")).toBe("<phone> or <phone>");
     expect(redactPii("M4 6.505l4 10-10 2.63.827")).toBe("M4 6.505l4 10-10 2.63.827");
+    expect(redactPii("Recorded 2026-09-20, call 416-555-0199")).toBe(
+      "Recorded 2026-09-20, call <phone>",
+    );
   });
 
   it("skips short values: a year is not a person", () => {

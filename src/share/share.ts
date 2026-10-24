@@ -20,7 +20,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { isPersonalProfile } from "../browser/network.js";
 import { shareFetch } from "./fetch.js";
 import { type Known, knownFromTrace, ScrubLeak, scrubText, scrubTrace } from "./scrub.js";
@@ -159,6 +159,17 @@ export function queued(root = shareRoot()): { name: string; bytes: number }[] {
  */
 const PACK_FILE = /^[A-Za-z0-9_-]+\.(ts|json)$/;
 
+/**
+ * A flow's name and site: from `outline.json` when the compiler wrote one, else
+ * the folder name and the first `site: "<x>"` in `index.ts` (its `defineFlow`).
+ */
+function flowMeta(dir: string): { name: string; site: string } | null {
+  const at = join(dir, "outline.json");
+  if (existsSync(at)) return JSON.parse(readFileSync(at, "utf8")) as { name: string; site: string };
+  const site = /\bsite:\s*"([a-z0-9@._-]+)"/.exec(readFileSync(join(dir, "index.ts"), "utf8"))?.[1];
+  return site ? { name: basename(dir), site } : null;
+}
+
 /** The proof fields a pack reads (structurally `Proof` from workflows/proof). */
 export interface PackProof {
   at: string;
@@ -183,10 +194,8 @@ export async function shareFlow(
     const root = shareRoot(env);
     if (shareOff(env, root)) return "off";
     if (proof.status !== "done") return "error";
-    const outline = JSON.parse(readFileSync(join(dir, "outline.json"), "utf8")) as {
-      name: string;
-      site: string;
-    };
+    const outline = flowMeta(dir);
+    if (!outline) return "error";
     if (excluded(outline.site, readShare(root))) return "excluded";
     const known: Known[] = [
       ...Object.values(plan)

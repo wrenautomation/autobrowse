@@ -122,6 +122,12 @@ describe("shareFlow", () => {
     expect(Object.keys(pack.files).sort()).toEqual(["index.ts", "outline.json"]);
     expect(pack.proof.output).toEqual(["orderId"]);
     expect(await shareFlow(flow, { ...proof, status: "failed" }, {}, env)).toBe("error");
+
+    const bare = join(dir, "bare-flow");
+    mkdirSync(bare);
+    writeFileSync(join(bare, "index.ts"), 'const f = defineFlow({ site: "acme", name: "x" });');
+    expect(await shareFlow(bare, proof, {}, env)).toBe("queued");
+    expect(queued(dir).some((f) => f.name.endsWith(".bare-flow.flow.json"))).toBe(true);
   });
 });
 

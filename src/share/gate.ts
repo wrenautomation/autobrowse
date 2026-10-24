@@ -156,12 +156,13 @@ export async function checkPack(raw: unknown): Promise<string[]> {
     if (!FILE.test(f) || typeof s !== "string") out.push(`file ${f}`);
   if (out.length) return out;
   if (!("index.ts" in files)) out.push("no index.ts");
-  try {
-    const outline = JSON.parse(files["outline.json"] ?? "") as { name?: string };
-    if (outline.name !== p.name) out.push("outline name");
-  } catch {
-    out.push("no outline.json");
-  }
+  if ("outline.json" in files)
+    try {
+      const outline = JSON.parse(files["outline.json"] ?? "") as { name?: string };
+      if (outline.name !== p.name) out.push("outline name");
+    } catch {
+      out.push("outline.json does not parse");
+    }
   if (p.proof?.status !== "done") out.push("proof did not pass");
   for (const [f, s] of Object.entries(files)) {
     if (redactPii(s) !== s) out.push(`${f}: personal data`);
