@@ -47,9 +47,9 @@ function ownersDir(files: Record<string, string> = {}) {
 describe("names", () => {
   it("the default owner keeps every legacy name; another gets its own", () => {
     expect(named("sites")).toBe("sites");
-    expect(named("sites", "wren")).toBe("sites");
+    expect(named("sites", "me")).toBe("sites");
     expect(named("sites", "acme")).toBe("sites_acme");
-    expect(ownerKeys("wren")).toEqual({ ssm: "/autobrowse/config", shots: "", inputs: "inputs/" });
+    expect(ownerKeys("me")).toEqual({ ssm: "/autobrowse/config", shots: "", inputs: "inputs/" });
     expect(ownerKeys("acme")).toEqual({
       ssm: "/autobrowse/owners/acme/config",
       shots: "owners/acme/",
@@ -65,7 +65,7 @@ describe("names", () => {
   });
 
   it("an owner's seal key never lands on the wallet's", () => {
-    expect(keychainOf("wren")).toBe(KEYCHAIN);
+    expect(keychainOf("me")).toBe(KEYCHAIN);
     expect(keychainOf("wallet").service).not.toBe(WALLET_KEYCHAIN.service);
     expect(keychainOf("acme").service).toBe("autobrowse-owner-acme");
   });
@@ -98,7 +98,7 @@ describe("names", () => {
 
 describe("AWS", () => {
   it("the default owner uses the process's credentials", () => {
-    expect(awsConfig({ owner: "wren", region: "us-east-1" })).toEqual({ region: "us-east-1" });
+    expect(awsConfig({ owner: "me", region: "us-east-1" })).toEqual({ region: "us-east-1" });
   });
 
   it("another owner fails closed without the role, and shares one session per role and region", () => {
@@ -208,9 +208,9 @@ describe("enterOwner", () => {
   });
 
   it("the default owner's env is left alone", () => {
-    const env: NodeJS.ProcessEnv = { ...operator(), AUTOBROWSE_OWNER: "wren" };
+    const env: NodeJS.ProcessEnv = { ...operator(), AUTOBROWSE_OWNER: "me" };
     enterOwner(env, ["FROM_OPERATOR_FILE"]);
-    expect(env).toEqual({ ...operator(), AUTOBROWSE_OWNER: "wren" });
+    expect(env).toEqual({ ...operator(), AUTOBROWSE_OWNER: "me" });
   });
 
   it("an owner's file may not set the operator's things; the error names keys, never values", () => {

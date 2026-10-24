@@ -105,9 +105,9 @@ export {
   type AwsConfig,
   awsConfig,
   checkOwner,
-  DEFAULT_OWNER,
   isDefaultOwner,
   named,
+  operator,
   ownerKeys,
 } from "./owner.js";
 export * from "./recorder/index.js";

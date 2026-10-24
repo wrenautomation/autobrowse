@@ -27,7 +27,7 @@ export const planSchema = z.object({
   contactEmail: z.string().email().describe("Email address"),
   useCaseDescription: z.string().min(1).describe("Use case description"),
   elasticIpAddress: z.string().min(1).describe("Elastic IP address"), // e.g. "34.233.233.146"
-  reverseDnsRecord: z.string().min(1).describe("Reverse DNS record"), // e.g. "probe.wrenautomation.com"
+  reverseDnsRecord: z.string().min(1).describe("Reverse DNS record"), // e.g. "mail.example.com"
 });
 export type Plan = z.infer<typeof planSchema>;
 

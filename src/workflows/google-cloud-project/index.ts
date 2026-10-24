@@ -17,7 +17,7 @@ import {
 
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
-  name: z.string().min(1).describe("Project name"), // e.g. "wren"
+  name: z.string().min(1).describe("Project name"), // e.g. "my-project"
   keepAs: z.string().default("GOOGLE_CLOUD_PROJECT").describe("Env name the project id is kept as"),
 });
 export type Plan = z.infer<typeof planSchema>;

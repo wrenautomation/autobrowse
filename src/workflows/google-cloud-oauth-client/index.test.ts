@@ -8,10 +8,10 @@ describe("google-cloud-oauth-client", () => {
   it("parses the recorded example", () => {
     expect(
       planSchema.parse({
-        project: "wren-509223",
+        project: "my-project-123456",
         api: "youtube.googleapis.com",
         appName: "Wren Automation",
-        email: "jinwilliam.jin@gmail.com",
+        email: "you@example.com",
         clientName: "autobrowse",
         redirectUri: "http://127.0.0.1:9400/oauth/callback",
       }).dryRun,
@@ -21,10 +21,10 @@ describe("google-cloud-oauth-client", () => {
   it("dry run plans and stops before anything irreversible", async () => {
     const plan = planSchema.parse({
       dryRun: true,
-      project: "wren-509223",
+      project: "my-project-123456",
       api: "youtube.googleapis.com",
       appName: "Wren Automation",
-      email: "jinwilliam.jin@gmail.com",
+      email: "you@example.com",
       clientName: "autobrowse",
       redirectUri: "http://127.0.0.1:9400/oauth/callback",
     });

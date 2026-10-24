@@ -4,7 +4,7 @@ import { BROWSER_SERVICE, type BrowserService } from "../engine/browser-service.
 import type { RunObject } from "../engine/object.js";
 import { REGISTRY_KEY, type RunsRegistry, registryOf } from "../engine/registry.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
-import { DEFAULT_OWNER, named } from "../owner.js";
+import { named, operator } from "../owner.js";
 import { DESK_SERVICE, SITES_SERVICE, type SitesService } from "../sites/service.js";
 import { COMPILED_OBJECT, compiledKey, HAND_WRITTEN } from "../workflows/compiled.js";
 
@@ -20,7 +20,7 @@ export function ingress(opts: IngressOptions) {
     url: opts.url,
     ...(opts.authToken ? { headers: { authorization: `Bearer ${opts.authToken}` } } : {}),
   });
-  const owner = opts.owner ?? DEFAULT_OWNER;
+  const owner = opts.owner ?? operator();
   const compiled = { name: named(COMPILED_OBJECT.name, owner) };
   return {
     /** A run of `workflow`: hand-written ones have an object each; compiled ones share `Compiled`. */

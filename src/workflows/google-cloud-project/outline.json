@@ -6,7 +6,7 @@
     {
       "key": "name",
       "label": "Project name",
-      "example": "wren"
+      "example": "my-project"
     }
   ],
   "secrets": [],

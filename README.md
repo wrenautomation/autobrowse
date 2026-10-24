@@ -499,7 +499,8 @@ ever used again.
 
 One autobrowse serves many businesses, one per process. `--owner <name>` or
 `AUTOBROWSE_OWNER` picks whose accounts, files, SSM path and Restate names
-load; the default `wren` keeps every existing name. An owner's files live in
+load. The default owner is the operator: its names carry no suffix, and
+`AUTOBROWSE_OPERATOR` names it (`me` on a fresh install; Wren sets `wren`). An owner's files live in
 `~/.config/autobrowse/owners/<name>/` (its `.env` holds its accounts), its
 secrets under SSM `/autobrowse/owners/<name>/`, its services as
 `sites_<name>`, `Runs_<name>`, …. Every AWS call it makes assumes the owners

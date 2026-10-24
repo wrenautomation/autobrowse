@@ -8,7 +8,7 @@ const plan = (dryRun: boolean) =>
     contactEmail: "owner@example.com",
     useCaseDescription: "SMTP verification probes from one host; no mail sent.",
     elasticIpAddress: "34.233.233.146",
-    reverseDnsRecord: "probe.wrenautomation.com",
+    reverseDnsRecord: "mail.example.com",
   });
 
 const deps = (runs: FormInput[]) => ({

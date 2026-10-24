@@ -15,9 +15,9 @@ import { homedir, tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { type AwsConfig, awsConfigFromEnv, DEFAULT_OWNER, ownerKeys } from "../owner.js";
+import { type AwsConfig, awsConfigFromEnv, operator, ownerKeys } from "../owner.js";
 
-export const INPUTS_PREFIX = ownerKeys(DEFAULT_OWNER).inputs;
+export const INPUTS_PREFIX = ownerKeys(operator()).inputs;
 
 const TYPES: Record<string, string> = {
   ".png": "image/png",

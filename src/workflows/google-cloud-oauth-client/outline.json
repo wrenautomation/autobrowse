@@ -6,7 +6,7 @@
     {
       "key": "project",
       "label": "Google Cloud project id",
-      "example": "wren-509223"
+      "example": "my-project-123456"
     },
     {
       "key": "api",
@@ -21,7 +21,7 @@
     {
       "key": "email",
       "label": "The account's email (support contact and test user)",
-      "example": "jinwilliam.jin@gmail.com"
+      "example": "you@example.com"
     },
     {
       "key": "clientName",

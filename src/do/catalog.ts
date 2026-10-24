@@ -52,12 +52,16 @@ export function fieldsOf(schema: unknown, path = ""): Field[] {
   return Object.entries(shape as Record<string, unknown>).map(([name, v]) => {
     let t = v as { def?: { type?: string; innerType?: unknown }; options?: unknown };
     while (t?.def?.innerType) t = t.def.innerType as typeof t;
-    const values = Array.isArray(t?.options) ? t.options.map(String) : undefined;
+    const opts = Array.isArray(t?.options) ? (t.options as unknown[]) : undefined;
+    // An enum's options are its values; a union's are schemas: name their types instead.
+    const values = opts?.every((o) => typeof o !== "object") ? opts.map(String) : undefined;
+    const types = values ? [] : [...new Set((opts ?? []).map((o) => (o as typeof t).def?.type))];
+    const type = types.length ? types.join("|") : t?.def?.type;
     return {
       name,
       ...(path.includes(`{${name}}`) ? { inPath: true } : {}),
       ...(values ? { values } : {}),
-      ...(t?.def?.type ? { type: t.def.type } : {}),
+      ...(type ? { type } : {}),
     };
   });
 }

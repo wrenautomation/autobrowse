@@ -164,6 +164,7 @@ no instance-metadata access; not built yet.
 | 14 | Idle stop only in the default owner's worker | The box is the operator's; an owner's worker stopping it would stop everyone's |
 | 15 | The once-per-process fence covers the default owner | A process entered for `acme` that lost `AUTOBROWSE_OWNER` loaded the operator's settings (found by the adversarial tests) |
 | 16 | An owner's file may not set process names | `HOME` moved its fixed files into another owner's tree; `NODE_OPTIONS` runs code |
+| 17 | 2026-10-24: `AUTOBROWSE_OPERATOR` names the default owner (`me` when unset), read at call time | A fresh install was named `wren`. Key rows store the name, so Wren sets `wren`; a rename would move its rows and wren's mirror |
 
 ## Where to attack
 

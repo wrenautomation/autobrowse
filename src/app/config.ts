@@ -8,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { parseDotenv } from "credvault";
 import { z } from "zod";
 import { DEFAULT_DB } from "../devices/phone.js";
-import { checkOwner, DEFAULT_OWNER, isDefaultOwner, OWNER_NAME } from "../owner.js";
+import { checkOwner, isDefaultOwner, OWNER_NAME, operator } from "../owner.js";
 
 /** An IANA zone Chrome knows (`America/New_York`, or an alias like `Asia/Kolkata`); a typo would leave the browser on UTC unsaid. */
 const timeZone = z.string().refine(
@@ -32,7 +32,7 @@ const schema = z.object({
   owner: z
     .string()
     .regex(OWNER_NAME, "lowercase letters, digits and _, starting with a letter")
-    .default(DEFAULT_OWNER),
+    .default(() => operator()),
   /** Each non-default owner's files: `<ownersDir>/<owner>/`. */
   ownersDir: z.string().min(1).default(DEFAULT_OWNERS_DIR),
   /** The shared owners role (terraform output owner_role_arn): a non-default owner's AWS calls assume it. */

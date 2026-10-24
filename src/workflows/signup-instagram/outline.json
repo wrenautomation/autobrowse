@@ -6,12 +6,12 @@
     {
       "key": "fullName",
       "label": "Name Full name",
-      "example": "Wren Automation"
+      "example": "Acme"
     },
     {
       "key": "username",
       "label": "Username",
-      "example": "wrenautomation"
+      "example": "acme"
     }
   ],
   "secrets": [

@@ -7,7 +7,7 @@
  */
 import { dirname, join } from "node:path";
 import { expandHome } from "../google/auth.js";
-import { type AwsConfig, awsConfig, checkOwner, DEFAULT_OWNER, isDefaultOwner } from "../owner.js";
+import { type AwsConfig, awsConfig, checkOwner, isDefaultOwner, operator } from "../owner.js";
 import {
   DEFAULT_OWNERS_DIR,
   ENV_KEYS,
@@ -137,7 +137,7 @@ export function enterOwner(
   env: NodeJS.ProcessEnv,
   fromOperatorFile: Iterable<string> = [],
 ): string {
-  const owner = checkOwner(env.AUTOBROWSE_OWNER || DEFAULT_OWNER);
+  const owner = checkOwner(env.AUTOBROWSE_OWNER || operator(env));
   const live = env === process.env;
   // Once per process, whoever the owner: only the default owner may be entered again, as itself.
   const was = live ? entered() : null;

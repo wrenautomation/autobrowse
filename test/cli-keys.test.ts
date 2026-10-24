@@ -8,7 +8,7 @@ import { ownerKeysIn } from "../src/reach/key-source.js";
 const NOW = Date.UTC(2026, 9, 19, 12);
 
 function setup(init: { env?: Record<string, string>; owner?: string } = {}) {
-  const owner = init.owner ?? "wren";
+  const owner = init.owner ?? "me";
   const keys = memoryKeys();
   const env = memoryEnvStore(init.env ?? {});
   const said: string[] = [];
@@ -68,11 +68,11 @@ describe("creds key add", () => {
     await t.run("add", "exa@main", "--clipboard", "--purpose", "default", "research");
     const key = await t.keys.get("exa@main");
     expect(key?.secret).toBe("synthetic-a");
-    expect(key?.owner).toBe("wren");
+    expect(key?.owner).toBe("me");
     expect(key?.purposes).toEqual(["default", "research"]);
     expect(t.env.values.EXA_API_KEY).toBe("synthetic-a");
     expect(t.projected).toEqual([["exa"]]);
-    expect(t.out()).toContain(`added exa@main (id ${keyId("synthetic-a")}) for wren`);
+    expect(t.out()).toContain(`added exa@main (id ${keyId("synthetic-a")}) for me`);
     expect(t.out()).toContain("put EXA_API_KEY");
     expect(t.out()).not.toContain("synthetic-a");
   });
@@ -160,7 +160,7 @@ describe("creds key ls, spend, revoke, purpose, audit", () => {
       site: "exa",
       url: "https://api.exa.ai/search",
       by: "search",
-      owner: "wren",
+      owner: "me",
       keyId: keyId("synthetic-a"),
       allowed: true,
     });
@@ -333,7 +333,7 @@ describe("creds key migrate", () => {
     await t.keys.put({
       site: "y",
       account: "env-0",
-      owner: "wren",
+      owner: "me",
       secret: "synthetic-other",
       purposes: [],
       status: "live",
@@ -363,7 +363,7 @@ describe("creds key rotate", () => {
     t.keys.put({
       site: "anthropic",
       account: "prod",
-      owner: "wren",
+      owner: "me",
       secret: "synthetic-old",
       purposes: ["default", "drafts"],
       status: "live",

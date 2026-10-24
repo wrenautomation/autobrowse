@@ -21,6 +21,12 @@ const IN_CLONE = basename(dirname(SHIPPED_DIR)) === "src";
 export const userWorkflowsDir = (env = process.env, home = homedir()): string =>
   env.AUTOBROWSE_WORKFLOWS || join(home, ".config/autobrowse/workflows");
 
+/**
+ * Marks a flow folder as its owner's only (its defaults name a real person or account).
+ * The build leaves it out of the package; it is never shared.
+ */
+export const PRIVATE_MARK = ".private";
+
 /** Where the compiler writes, and the import the rendered files use for the library. */
 export const COMPILED_DIR = IN_CLONE ? SHIPPED_DIR : userWorkflowsDir();
 export const COMPILED_LIB = IN_CLONE ? "../../index.js" : PACKAGE;

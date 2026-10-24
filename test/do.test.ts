@@ -83,6 +83,9 @@ describe("abilities", () => {
     ]);
     expect(list[1]?.missing).toBe("workflow tube-list-videos not recorded");
     expect(fieldsOf(z.string())).toEqual([]);
+    expect(fieldsOf(z.object({ id: z.union([z.string(), z.number()]) })).map(fieldLine)).toEqual([
+      "id (string|number)",
+    ]);
     const fields = fieldsOf(
       z.object({
         resource: z.enum(["videos", "channels"]),
@@ -281,7 +284,7 @@ describe("do", () => {
   it("runs in its own owner's accounts: no owner or its own runs, another owner is refused", async () => {
     const d = deps();
     const verb = doer(d);
-    await expect(verb.do({ goal: "google-name", owner: "wren" })).resolves.toMatchObject({
+    await expect(verb.do({ goal: "google-name", owner: "me" })).resolves.toMatchObject({
       status: "done",
     });
     await expect(verb.do({ goal: "google-name", owner: null })).resolves.toMatchObject({
@@ -294,7 +297,7 @@ describe("do", () => {
     await expect(theirs.do({ goal: "google-name", owner: "acme" })).resolves.toMatchObject({
       status: "done",
     });
-    await expect(theirs.do({ goal: "google-name", owner: "wren" })).rejects.toMatchObject({
+    await expect(theirs.do({ goal: "google-name", owner: "me" })).rejects.toMatchObject({
       status: 409,
     });
     expect(d.calls).toEqual(["workflow google-name {}", "workflow google-name {}"]);

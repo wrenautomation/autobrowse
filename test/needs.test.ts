@@ -201,7 +201,7 @@ describe("an owner's needs", () => {
       "token-perplexity",
     ])
       expect(owner).not.toContain(id);
-    expect(ids(ctx({}, { owner: "wren" }))).toEqual(ids(ctx({})));
+    expect(ids(ctx({}, { owner: "me" }))).toEqual(ids(ctx({})));
   });
 
   it("every command runs as the owner and names the owner's env file", () => {
@@ -215,7 +215,7 @@ describe("an owner's needs", () => {
       site: "gmail",
       step: "consent",
     });
-    expect(commandFor("autobrowse creds paste x", "wren")).toBe("autobrowse creds paste x");
+    expect(commandFor("autobrowse creds paste x", "me")).toBe("autobrowse creds paste x");
     expect(commandFor("autobrowse --owner acme creds paste x", "acme")).toBe(
       "autobrowse --owner acme creds paste x",
     );

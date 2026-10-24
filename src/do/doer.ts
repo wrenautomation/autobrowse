@@ -10,7 +10,7 @@
 import { settleSession } from "../agent/builder.js";
 import type { AgentSessions } from "../agent/sessions.js";
 import type { Llm, LlmUsage } from "../llm/index.js";
-import { DEFAULT_OWNER } from "../owner.js";
+import { operator } from "../owner.js";
 import type { CompiledRun } from "../sites/facade.js";
 import type { Method } from "../sites/types.js";
 import { type Ability, parseSiteAbility } from "./catalog.js";
@@ -238,7 +238,7 @@ export function doer(d: DoerDeps): Doer {
   return {
     async do(req) {
       if (!req.goal.trim()) throw new DoError(400, "an empty goal");
-      const runs = d.owner ?? DEFAULT_OWNER;
+      const runs = d.owner ?? operator();
       if (req.owner != null && req.owner !== runs)
         throw new DoError(409, `this autobrowse runs as owner ${runs}, not ${req.owner}`);
       const [abilities, sites, earlier] = await Promise.all([

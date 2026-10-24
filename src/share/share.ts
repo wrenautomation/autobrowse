@@ -22,6 +22,7 @@ import {
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { isPersonalProfile } from "../browser/network.js";
+import { PRIVATE_MARK } from "../workflows/roots.js";
 import { shareFetch } from "./fetch.js";
 import { type Known, knownFromTrace, ScrubLeak, scrubText, scrubTrace } from "./scrub.js";
 
@@ -194,6 +195,7 @@ export async function shareFlow(
     const root = shareRoot(env);
     if (shareOff(env, root)) return "off";
     if (proof.status !== "done") return "error";
+    if (existsSync(join(dir, PRIVATE_MARK))) return "excluded";
     const outline = flowMeta(dir);
     if (!outline) return "error";
     if (excluded(outline.site, readShare(root))) return "excluded";

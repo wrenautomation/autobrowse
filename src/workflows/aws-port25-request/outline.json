@@ -16,7 +16,7 @@
     {
       "key": "reverseDnsRecord",
       "label": "Reverse DNS record - optional",
-      "example": "probe.wrenautomation.com"
+      "example": "mail.example.com"
     }
   ],
   "secrets": [],

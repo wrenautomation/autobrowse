@@ -88,7 +88,7 @@ describe("once per process", () => {
     const dir = ownersDir({ acme: "ACME_ONLY=1\n" });
     withOnlyEnv({ AUTOBROWSE_OWNER: "acme", OWNERS_DIR: dir }, () => {
       m.enterOwner(process.env);
-      process.env.AUTOBROWSE_OWNER = "wren";
+      process.env.AUTOBROWSE_OWNER = "me";
       expect(() => m.enterOwner(process.env)).toThrow(/once/);
     });
   });
@@ -109,7 +109,7 @@ describe("once per process", () => {
     const m = await fresh();
     const dir = ownersDir({ acme: "ACME_ONLY=1\n" });
     withOnlyEnv({ OWNERS_DIR: dir, CLOUDFLARE_API_TOKEN: "op-cf" }, () => {
-      expect(m.enterOwner(process.env)).toBe("wren");
+      expect(m.enterOwner(process.env)).toBe("me");
       process.env.AUTOBROWSE_OWNER = "acme";
       expect(() => m.enterOwner(process.env)).toThrow(/once/);
     });
@@ -374,7 +374,7 @@ describe("names that only look valid", () => {
 
   it("no two owners share a Restate name, prefix, Keychain item or directory", () => {
     const owners = [
-      "wren",
+      "me",
       "a",
       "ab",
       "a_b",
@@ -396,11 +396,11 @@ describe("names that only look valid", () => {
     expect(new Set([...keychains, WALLET_KEYCHAIN.service]).size).toBe(owners.length + 1);
     expect(keychains.filter((k) => k === KEYCHAIN.service)).toEqual([KEYCHAIN.service]);
 
-    const others = owners.filter((o) => o !== "wren");
+    const others = owners.filter((o) => o !== "me");
     const dirs = others.map((o) => ownerDir("/owners", o));
     expect(new Set(dirs).size).toBe(dirs.length);
 
-    const wren = ownerKeys("wren");
+    const wren = ownerKeys("me");
     for (const x of others) {
       const kx = ownerKeys(x);
       expect(kx.ssm.startsWith("/autobrowse/owners/")).toBe(true);
@@ -431,7 +431,7 @@ describe("AWS sessions", () => {
     expect(at("bob").credentials).not.toBe(acme);
     expect(at("acme", "eu-west-1").credentials).not.toBe(acme);
     expect(at("acme", "us-east-1", `${ROLE}-2`).credentials).not.toBe(acme);
-    expect(at("wren")).toEqual({ region: "us-east-1" });
+    expect(at("me")).toEqual({ region: "us-east-1" });
     for (const ownerRoleArn of [undefined, ""])
       expect(() => awsConfig({ owner: "acme", ownerRoleArn, region: "us-east-1" })).toThrow(
         /AUTOBROWSE_OWNER_ROLE_ARN/,
@@ -536,7 +536,7 @@ describe("needs", () => {
       "autobrowse --owner acme needs done x; then pnpm autobrowse --owner acme creds paste github",
     );
     expect(commandFor(once, "acme")).toBe(once);
-    expect(commandFor(how, "wren")).toBe(how);
+    expect(commandFor(how, "me")).toBe(how);
     expect(commandFor(how, undefined)).toBe(how);
   });
 });

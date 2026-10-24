@@ -4,7 +4,7 @@
  * projection, not a source of truth: a run's own state is the truth.
  */
 import * as restate from "@restatedev/restate-sdk";
-import { DEFAULT_OWNER, named } from "../owner.js";
+import { named, operator } from "../owner.js";
 import type { RunEvent } from "./events.js";
 import { runId } from "./events.js";
 import {
@@ -41,11 +41,11 @@ export {
 } from "./rows.js";
 
 /** The owner's registry: `Runs` for the default owner, `Runs_<owner>` for any other. */
-export const registryOf = (owner: string = DEFAULT_OWNER) => ({
+export const registryOf = (owner: string = operator()) => ({
   name: named(REGISTRY.name, owner),
 });
 
-export const runsRegistryFor = (owner: string = DEFAULT_OWNER) =>
+export const runsRegistryFor = (owner: string = operator()) =>
   restate.object({
     name: registryOf(owner).name,
     handlers: {

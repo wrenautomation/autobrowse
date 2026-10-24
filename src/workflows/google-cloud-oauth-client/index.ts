@@ -16,10 +16,10 @@ import {
 
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
-  project: z.string().min(1).describe("Google Cloud project id"), // e.g. "wren-509223"
+  project: z.string().min(1).describe("Google Cloud project id"), // e.g. "my-project-123456"
   api: z.string().min(1).describe("API to enable (service name)"), // e.g. "youtube.googleapis.com"
   appName: z.string().min(1).describe("App name on the consent screen"), // e.g. "Wren Automation"
-  email: z.string().min(1).describe("The account's email (support contact and test user)"), // e.g. "jinwilliam.jin@gmail.com"
+  email: z.string().min(1).describe("The account's email (support contact and test user)"), // e.g. "you@example.com"
   clientName: z.string().min(1).describe("OAuth client name"), // e.g. "autobrowse"
   redirectUri: z.string().min(1).describe("Authorized redirect URI"), // e.g. "http://127.0.0.1:9400/oauth/callback"
   idEnv: z.string().default("GOOGLE_OAUTH_CLIENT_ID").describe("Env name the client id is kept as"),

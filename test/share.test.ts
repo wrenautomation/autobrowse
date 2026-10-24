@@ -128,6 +128,8 @@ describe("shareFlow", () => {
     writeFileSync(join(bare, "index.ts"), 'const f = defineFlow({ site: "acme", name: "x" });');
     expect(await shareFlow(bare, proof, {}, env)).toBe("queued");
     expect(queued(dir).some((f) => f.name.endsWith(".bare-flow.flow.json"))).toBe(true);
+    writeFileSync(join(bare, ".private"), "");
+    expect(await shareFlow(bare, proof, {}, env)).toBe("excluded");
   });
 });
 

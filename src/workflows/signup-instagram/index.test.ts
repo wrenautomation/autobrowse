@@ -9,16 +9,14 @@ const deps = () => ({
 
 describe("signup-instagram", () => {
   it("parses the recorded example", () => {
-    expect(
-      planSchema.parse({ fullName: "Wren Automation", username: "wrenautomation" }).dryRun,
-    ).toBe(false);
+    expect(planSchema.parse({ fullName: "Acme", username: "acme" }).dryRun).toBe(false);
   });
 
   it("dry run plans and stops before anything irreversible", async () => {
     const plan = planSchema.parse({
       dryRun: true,
-      fullName: "Wren Automation",
-      username: "wrenautomation",
+      fullName: "Acme",
+      username: "acme",
     });
     const out = await runFlow(memoryEffects().fx, workflow, deps(), plan);
     expect(out.status).toBe("planned");

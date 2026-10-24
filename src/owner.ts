@@ -8,12 +8,17 @@ import { checkOwner, OWNER_NAME, ownerCredentials } from "credvault";
 
 export { checkOwner, OWNER_NAME };
 
-export const DEFAULT_OWNER = "wren";
+/**
+ * The operator: the default owner, whose names carry no suffix. Read at call time, after
+ * the `.env` loads. Wren's `.env` sets `wren` (key rows carry it); a fresh install is `me`.
+ */
+export const operator = (env: NodeJS.ProcessEnv = process.env): string =>
+  env.AUTOBROWSE_OPERATOR || "me";
 
-export const isDefaultOwner = (owner: string): boolean => owner === DEFAULT_OWNER;
+export const isDefaultOwner = (owner: string): boolean => owner === operator();
 
 /** A Restate name for this owner: the name itself for the default owner, `<name>_<owner>` otherwise (Restate forbids only `/`). */
-export const named = (base: string, owner: string = DEFAULT_OWNER): string =>
+export const named = (base: string, owner: string = operator()): string =>
   isDefaultOwner(owner) ? base : `${base}_${checkOwner(owner)}`;
 
 /** Where an owner's things sit in SSM and S3. */
@@ -64,7 +69,7 @@ export function awsConfig(o: {
 /** The same, from the environment, for code that runs without settings (a worker's file fetch). */
 export const awsConfigFromEnv = (env: NodeJS.ProcessEnv = process.env): AwsConfig =>
   awsConfig({
-    owner: env.AUTOBROWSE_OWNER || DEFAULT_OWNER,
+    owner: env.AUTOBROWSE_OWNER || operator(env),
     ownerRoleArn: env.AUTOBROWSE_OWNER_ROLE_ARN,
     region: env.AWS_REGION || "us-east-1",
   });

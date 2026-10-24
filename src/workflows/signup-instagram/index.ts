@@ -19,8 +19,8 @@ import {
 
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
-  fullName: z.string().min(1).describe("Name Full name"), // e.g. "Wren Automation"
-  username: z.string().min(1).describe("Username"), // e.g. "wrenautomation"
+  fullName: z.string().min(1).describe("Name Full name"), // e.g. "Acme"
+  username: z.string().min(1).describe("Username"), // e.g. "acme"
 });
 export type Plan = z.infer<typeof planSchema>;
 
