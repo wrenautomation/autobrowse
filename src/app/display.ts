@@ -6,13 +6,13 @@
  */
 import type { Settings } from "./config.js";
 
-export interface Screen {
+export interface Display {
   headless: boolean;
 }
 
-export function screenOf(settings: Pick<Settings, "browserHeadless">): Screen {
+export function displayOf(settings: Pick<Settings, "browserHeadless">): Display {
   return { headless: settings.browserHeadless };
 }
 
 /** A fixed choice where a person asked for one (`--headed`, `record`). */
-export const headed: Screen = Object.freeze({ headless: false });
+export const headed: Display = Object.freeze({ headless: false });

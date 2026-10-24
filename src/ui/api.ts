@@ -94,7 +94,7 @@ const SITE = /^[a-z][a-z0-9-]*(@[a-z0-9][a-z0-9.@_-]*)?$/i;
 /** What a client may change while the worker runs; each applies to whatever opens next. */
 const liveSettings = z.object({ headless: z.boolean() });
 export type LiveSettings = z.infer<typeof liveSettings>;
-const settingsView = (deps: ApiDeps): LiveSettings => ({ headless: deps.screen.headless });
+const settingsView = (deps: ApiDeps): LiveSettings => ({ headless: deps.display.headless });
 
 const agentStart = z.object({
   site: z.string().regex(SITE),
@@ -264,13 +264,13 @@ export function api(deps: ApiDeps): Hono<Env> {
     deps.linq?.secret ? next() : bearerAuth(deps.token)(c, next),
   );
 
-  /** Fixed at boot except the workflow list (compiles), the model spend (every call) and the screen. */
+  /** Fixed at boot except the workflow list (compiles), the model spend (every call) and the display. */
   app.get("/api/status", async (c) =>
     c.json(
       deps.status
         ? {
             ...deps.status,
-            browser: { ...deps.status.browser, headless: deps.screen.headless },
+            browser: { ...deps.status.browser, headless: deps.display.headless },
             workflows: (await workflows())
               .map((w) => w.name)
               .filter((n) => allowsWorkflow(scopeOf(c), n)),
@@ -293,7 +293,7 @@ export function api(deps: ApiDeps): Hono<Env> {
   app.put("/api/settings", async (c) => {
     const body = await readJson(c, liveSettings);
     if (!body.ok) return body.res;
-    deps.screen.headless = body.data.headless;
+    deps.display.headless = body.data.headless;
     return c.json(settingsView(deps));
   });
 

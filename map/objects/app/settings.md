@@ -26,7 +26,7 @@ One zod schema with defaults is the whole contract between the box, compose, `.e
 
 - **owned-by:** the process
 - **joins:** every `*For(settings)` in `src/app/services.ts`, [[state-files]], [[app]]
-- **looks-like-but-is-not:** the env store of site tokens (`autobrowse env`, [[token]]); the UI's one live setting (`Screen`, `src/app/screen.ts:9`)
+- **looks-like-but-is-not:** the env store of site tokens (`autobrowse env`, [[token]]); the UI's one live setting (`Display`, `src/app/display.ts:9`)
 
 ## If you change this
 

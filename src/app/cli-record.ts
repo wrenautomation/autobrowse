@@ -9,7 +9,7 @@ import { DEFAULT_IDLE_MINUTES } from "../explore/lease.js";
 import { expandHome } from "../google/auth.js";
 import { explorerOpener, type LocalBackend } from "./backend.js";
 import type { Settings } from "./config.js";
-import { headed } from "./screen.js";
+import { headed } from "./display.js";
 import { browserOptions, COMPILED_DIR, llmFor } from "./services.js";
 
 /** POST one command to an explore session; `wait=1` holds the request across a payment gate. */

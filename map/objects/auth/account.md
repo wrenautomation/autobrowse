@@ -27,7 +27,7 @@ Purposes decide which account a site call or consent runs as when nobody names o
 - **owns:** purposes
 - **owned-by:** [[app]] (`identitiesFor`, `src/app/services.ts:454`)
 - **joins:** [[credential]] (the row is its view), [[site-facade]] (`accountFor`, `policyAccount` `src/sites/wire.ts:86-107`), [[need]] (`accountNeeds`), `Policy` (`src/app/owed.ts:41`)
-- **looks-like-but-is-not:** `Identity` in `src/browser/identity.ts:16` (the browser's UA); an access key
+- **looks-like-but-is-not:** `Fingerprint` in `src/browser/fingerprint.ts:16` (the browser's UA); an access key
 
 ## If you change this
 

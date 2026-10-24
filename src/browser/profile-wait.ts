@@ -59,7 +59,7 @@ export const PROFILE_WAIT_DEFAULTS = {
 
 /** What a busy try answers in the journal instead of throwing: a retry would count against the write's one try. */
 interface BusyAnswer {
-  profileBusy: { profile: string; owner: string; pid: number };
+  profileBusy: { profile: string; opener: string; pid: number };
 }
 
 const isBusyAnswer = (v: unknown): v is BusyAnswer =>
@@ -73,8 +73,8 @@ export const takeable = (e: ExplorerRow, idleMs: number): boolean =>
   !e.held && e.driver !== "person" && e.idleMs >= idleMs;
 
 /** The port of an explore or agent session that owns a browser (`explore:9092`), else null. */
-const explorePort = (owner: string): number | null => {
-  const m = /^(?:explore|agent):(\d+)$/.exec(owner);
+const explorePort = (opener: string): number | null => {
+  const m = /^(?:explore|agent):(\d+)$/.exec(opener);
   return m ? Number(m[1]) : null;
 };
 
@@ -98,7 +98,7 @@ const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * True when the profile is free now. Logged either way it acts.
  */
 export async function takeIdleExplore(busy: ProfileBusy, o: ProfileWait = {}): Promise<boolean> {
-  const port = explorePort(busy.owner);
+  const port = explorePort(busy.opener);
   if (port === null) return false;
   const dir = o.explorersDir ?? join(tmpdir(), "autobrowse");
   const procs = await (o.procs ?? listProcs)().catch(() => [] as Proc[]);
@@ -112,7 +112,7 @@ export async function takeIdleExplore(busy: ProfileBusy, o: ProfileWait = {}): P
   } catch (err) {
     o.log?.("profile take failed", {
       profile: busy.profile,
-      owner: busy.owner,
+      opener: busy.opener,
       error: String(err),
     });
     return false;
@@ -125,7 +125,7 @@ export async function takeIdleExplore(busy: ProfileBusy, o: ProfileWait = {}): P
   for (let i = 0; i < 80 && held(); i++) await pause(250);
   o.log?.("profile taken from idle explore", {
     profile: busy.profile,
-    owner: busy.owner,
+    opener: busy.opener,
     idleMinutes: idle,
     journal: "kept",
   });
@@ -161,8 +161,8 @@ export async function waitForProfile<T>(
           busy = profileBusyOf(again);
           if (!busy) throw again;
         }
-      w.log?.("profile busy, waiting", { step, profile: busy.profile, owner: busy.owner });
-      return { profileBusy: { profile: busy.profile, owner: busy.owner, pid: busy.pid } };
+      w.log?.("profile busy, waiting", { step, profile: busy.profile, opener: busy.opener });
+      return { profileBusy: { profile: busy.profile, opener: busy.opener, pid: busy.pid } };
     }
   };
   let waited = 0;
@@ -173,11 +173,11 @@ export async function waitForProfile<T>(
       | BusyAnswer;
     if (!isBusyAnswer(got)) return got;
     if (waited >= w.boundMs) {
-      const { profile, owner } = got.profileBusy;
+      const { profile, opener } = got.profileBusy;
       const took =
         waited < 60_000 ? `${Math.round(waited / 1000)} s` : `${Math.round(waited / 60_000)} min`;
       throw new restate.TerminalError(
-        `${NOT_SENT}profile ${profile} is busy (${owner}); waited ${took} for it, try again`,
+        `${NOT_SENT}profile ${profile} is busy (${opener}); waited ${took} for it, try again`,
         { errorCode: PROFILE_BUSY_STATUS },
       );
     }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadSettings } from "../src/app/config.js";
-import { headed, screenOf } from "../src/app/screen.js";
+import { displayOf, headed } from "../src/app/display.js";
 import { browserOptions } from "../src/app/services.js";
 
 const settings = loadSettings({
@@ -9,12 +9,12 @@ const settings = loadSettings({
   BROWSER_HEADLESS: "true",
 });
 
-describe("screen", () => {
-  it("browser options read the screen when a browser opens, not when they were built", () => {
-    const screen = screenOf(settings);
-    const opts = browserOptions(settings, screen);
+describe("display", () => {
+  it("browser options read the display when a browser opens, not when they were built", () => {
+    const display = displayOf(settings);
+    const opts = browserOptions(settings, display);
     expect(opts.headless).toBe(true);
-    screen.headless = false;
+    display.headless = false;
     expect(opts.headless).toBe(false);
   });
 

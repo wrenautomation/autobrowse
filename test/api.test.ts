@@ -115,7 +115,7 @@ async function setup(token?: string, extra: Partial<Parameters<typeof api>[0]> =
     workflows: [domainWorkflow],
     ingress,
     bus,
-    screen: { headless: true },
+    display: { headless: true },
     accounts: fakeAccounts,
     do: {
       do: async (req) => ({
@@ -545,10 +545,10 @@ describe("api", () => {
     expect(sent).toHaveLength(1);
   });
 
-  it("reads and replaces the live settings; status shows the screen as it is now", async () => {
-    const screen = { headless: true };
+  it("reads and replaces the live settings; status shows the display as it is now", async () => {
+    const display = { headless: true };
     const { app } = await setup(undefined, {
-      screen,
+      display,
       status: { llm: "fake", browser: { tier: "local", headless: true }, workflows: [] } as never,
     });
     expect(await (await app.request("/api/settings")).json()).toEqual({ headless: true });
@@ -560,7 +560,7 @@ describe("api", () => {
       }),
     );
     expect(await put.json()).toEqual({ headless: false });
-    expect(screen.headless).toBe(false);
+    expect(display.headless).toBe(false);
     expect((await (await app.request("/api/status")).json()).browser.headless).toBe(false);
     const bad = await app.request(
       new Request("http://x/api/settings", {
@@ -570,7 +570,7 @@ describe("api", () => {
       }),
     );
     expect(bad.status).toBe(400);
-    expect(screen.headless).toBe(false);
+    expect(display.headless).toBe(false);
   });
 
   it("finds a waiting run under pages of newer ones", async () => {

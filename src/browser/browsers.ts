@@ -22,11 +22,11 @@ export const RAM_WARN_SHARE = 0.5;
 export const EXPLORERS_WARN = 4;
 
 /** `desk`, `worker`, `explore:<port>`, `agent:<port>`, `teach:<port>`, `cli`, `orphan`, or `other` (launched by none of ours). */
-export type Owner = string;
+export type Opener = string;
 
 export interface BrowserRow {
   pid: number;
-  owner: Owner;
+  opener: Opener;
   profile: string;
   /** Seconds. */
   age: number;
@@ -54,16 +54,16 @@ export interface BrowsersView {
   ramMb: number;
 }
 
-const explorerOwner = (e: ExploreInfo): Owner =>
+const explorerOpener = (e: ExploreInfo): Opener =>
   `${e.driver === "person" ? "teach" : e.driver.startsWith("agent") ? "agent" : "explore"}:${e.port}`;
 
 /** Who launched the browser `pid`: the first ancestor that is ours, by explore info or command line. */
-export function ownerOf(
+export function openerOf(
   pid: number,
   profile: string,
   procs: Proc[],
   explorers: ExploreInfo[],
-): Owner {
+): Opener {
   const byPid = new Map(procs.map((p) => [p.pid, p]));
   const root = byPid.get(pid);
   if (!root) return "gone";
@@ -71,7 +71,7 @@ export function ownerOf(
     const ex = explorers.find(
       (e) => e.pid === p?.pid && (profile === e.site || profile.startsWith(`${e.site}@`)),
     );
-    if (ex) return explorerOwner(ex);
+    if (ex) return explorerOpener(ex);
     if (/app\/desk\.[jt]s\b/.test(p.command)) return "desk";
     if (/app\/main\.[jt]s\b/.test(p.command)) return "worker";
     if (/app\/cli\.[jt]s\b|\/autobrowse(\s|$)/.test(p.command)) return "cli";
@@ -128,7 +128,7 @@ export function viewOf(
     (p.rss ?? 0) + (kids.get(p.pid) ?? []).reduce((s, k) => s + treeKb(k), 0);
   const browsers = browserRoots(procs, profilesDir).map((p) => ({
     pid: p.pid,
-    owner: ownerOf(p.pid, p.profile, procs, explorers),
+    opener: openerOf(p.pid, p.profile, procs, explorers),
     profile: p.profile,
     age: p.age ?? 0,
     mb: Math.round(treeKb(p) / 1024),
@@ -154,7 +154,7 @@ export function viewOf(
 /** One line per thing wrong, each naming its fix. */
 export function warnings(v: BrowsersView): string[] {
   const out: string[] = [];
-  for (const b of v.browsers.filter((x) => x.owner === "orphan"))
+  for (const b of v.browsers.filter((x) => x.opener === "orphan"))
     out.push(`orphan browser on ${b.profile} (pid ${b.pid}): autobrowse reap`);
   for (const e of v.explorers) {
     if (!e.held && e.idleMinutes >= IDLE_WARN_MINUTES)
@@ -172,12 +172,12 @@ export function warnings(v: BrowsersView): string[] {
   for (const [profile, rows] of byProfile)
     if (rows.length > 1)
       out.push(
-        `profile ${profile} open twice: ${rows.map((b) => `pid ${b.pid} (${b.owner})`).join(", ")}; stop one`,
+        `profile ${profile} open twice: ${rows.map((b) => `pid ${b.pid} (${b.opener})`).join(", ")}; stop one`,
       );
   for (const s of v.strangers)
     out.push(`profile ${s.profile} is locked by pid ${s.pid}, not ours: close that Chrome`);
   for (const b of v.browsers.filter((x) => x.mb > BROWSER_WARN_MB))
-    out.push(`${b.profile} (pid ${b.pid}, ${b.owner}) uses ${b.mb} MB: autobrowse browsers`);
+    out.push(`${b.profile} (pid ${b.pid}, ${b.opener}) uses ${b.mb} MB: autobrowse browsers`);
   if (v.ramMb && v.totalMb > v.ramMb * RAM_WARN_SHARE)
     out.push(
       `browsers use ${v.totalMb} MB, ${Math.round((100 * v.totalMb) / v.ramMb)}% of RAM: autobrowse browsers`,
@@ -197,12 +197,12 @@ export class ProfileBusy extends Error {
   constructor(
     readonly profile: string,
     readonly pid: number,
-    /** `explore:<port>`, `desk`, `cli`, … (`ownerOf`). */
-    readonly owner: Owner,
+    /** `explore:<port>`, `desk`, `cli`, … (`openerOf`). */
+    readonly opener: Opener,
     /** The profile's directory: where its `SingletonLock` is. */
     readonly profileDir: string,
   ) {
-    super(`profile ${profile} is open in pid ${pid} (${owner})`);
+    super(`profile ${profile} is open in pid ${pid} (${opener})`);
     this.name = "ProfileBusy";
   }
 }
@@ -244,7 +244,7 @@ export async function assertProfileFree(
   throw new ProfileBusy(
     profile,
     pid,
-    ownerOf(pid, profile, procs, readExplorers(procs)),
+    openerOf(pid, profile, procs, readExplorers(procs)),
     profileDir,
   );
 }

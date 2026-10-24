@@ -7,7 +7,7 @@ import {
   HELD_WARN_HOURS,
   IDLE_WARN_MINUTES,
   lockHolder,
-  ownerOf,
+  openerOf,
   viewOf,
   warnings,
 } from "../src/browser/browsers.js";
@@ -53,22 +53,22 @@ const explorers = [ex9090];
 
 describe("who owns a browser", () => {
   it("names the process that launched it", () => {
-    const owner = (pid: number, profile: string) => ownerOf(pid, profile, procs, explorers);
-    expect(owner(10, "x@wren")).toBe("desk");
-    expect(owner(20, "youtube")).toBe("worker");
-    expect(owner(30, "x")).toBe("explore:9090");
-    expect(owner(31, "google")).toBe("cli");
-    expect(owner(40, "npm")).toBe("orphan");
-    expect(owner(50, "langfuse")).toBe("other");
+    const opener = (pid: number, profile: string) => openerOf(pid, profile, procs, explorers);
+    expect(opener(10, "x@wren")).toBe("desk");
+    expect(opener(20, "youtube")).toBe("worker");
+    expect(opener(30, "x")).toBe("explore:9090");
+    expect(opener(31, "google")).toBe("cli");
+    expect(opener(40, "npm")).toBe("orphan");
+    expect(opener(50, "langfuse")).toBe("other");
   });
   it("an agent's or a person's explore server", () => {
-    const as = (driver: string) => ownerOf(30, "x", procs, [{ ...ex9090, driver }]);
+    const as = (driver: string) => openerOf(30, "x", procs, [{ ...ex9090, driver }]);
     expect(as("agent:claude")).toBe("agent:9090");
     expect(as("person")).toBe("teach:9090");
   });
   it("in a container the worker is init: its browser is no orphan", () => {
     const boxed = [{ pid: 1, ppid: 0, command: "node dist/app/main.js" }, chrome(7, 1, "x")];
-    expect(ownerOf(7, "x", boxed, [])).toBe("worker");
+    expect(openerOf(7, "x", boxed, [])).toBe("worker");
   });
   it("reads ps elapsed time", () => {
     expect(etimeSeconds("05:07")).toBe(307);

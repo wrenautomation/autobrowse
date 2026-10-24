@@ -738,7 +738,7 @@ program
 const browsers = program
   .command("browsers")
   .description(
-    "Every browser of ours on this machine (owner, age, memory) and every explore server (idle, held); warnings name their fix",
+    "Every browser of ours on this machine (opener, age, memory) and every explore server (idle, held); warnings name their fix",
   )
   .option("--json", "as JSON, warnings included")
   .action(async (o: { json?: boolean }) => {
@@ -753,7 +753,13 @@ const browsers = program
           ? `${Math.floor(s / 3600)}h`
           : `${Math.floor(s / 60)}m`;
     const rows = [
-      ...v.browsers.map((b) => [String(b.pid), bold(b.owner), b.profile, ago(b.age), `${b.mb} MB`]),
+      ...v.browsers.map((b) => [
+        String(b.pid),
+        bold(b.opener),
+        b.profile,
+        ago(b.age),
+        `${b.mb} MB`,
+      ]),
       ...v.explorers.map((e) => [
         `:${e.port}`,
         bold(e.site),
@@ -787,7 +793,7 @@ browsers
     const b = hits[0];
     const port =
       v.explorers.find((e) => String(e.port) === target)?.port ??
-      Number(/^(?:explore|agent|teach):(\d+)$/.exec(b?.owner ?? "")?.[1] ?? 0);
+      Number(/^(?:explore|agent|teach):(\d+)$/.exec(b?.opener ?? "")?.[1] ?? 0);
     if (port) {
       const token = (await readFile(tokenFileFor(port), "utf8")).trim();
       const r = await fetch(`http://127.0.0.1:${port}/`, {
@@ -801,16 +807,16 @@ browsers
       );
     }
     if (!b) throw new Error(`no browser or explore server matches ${target}`);
-    if (b.owner === "desk" || b.owner === "worker")
+    if (b.opener === "desk" || b.opener === "worker")
       throw new Error(
-        `${b.profile} is the ${b.owner}'s: it may hold a gate's half-filled page; it closes itself`,
+        `${b.profile} is the ${b.opener}'s: it may hold a gate's half-filled page; it closes itself`,
       );
-    if (b.owner === "cli" && !o.force)
+    if (b.opener === "cli" && !o.force)
       throw new Error(`a live autobrowse CLI owns ${b.profile}: --force to stop it anyway`);
-    if (b.owner !== "orphan" && b.owner !== "cli")
-      throw new Error(`${b.profile} (pid ${b.pid}) is not ours to stop (${b.owner})`);
+    if (b.opener !== "orphan" && b.opener !== "cli")
+      throw new Error(`${b.profile} (pid ${b.pid}) is not ours to stop (${b.opener})`);
     process.kill(b.pid, "SIGTERM");
-    console.log(`stopped ${b.profile} (pid ${b.pid}, ${b.owner})`);
+    console.log(`stopped ${b.profile} (pid ${b.pid}, ${b.opener})`);
   });
 registerDoCommands(program, local);
 registerAuthCommands(program, settings, (workflow, key, plan) =>

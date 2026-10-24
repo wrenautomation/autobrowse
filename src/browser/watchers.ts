@@ -289,9 +289,9 @@ export class Watchers {
   private paused(l: Live, busy: ProfileBusy): void {
     const first = l.state.paused === null;
     l.state.open = false;
-    l.state.paused = `profile ${busy.profile} is open in ${busy.owner}`;
+    l.state.paused = `profile ${busy.profile} is open in ${busy.opener}`;
     l.retryAt = this.now() + 60_000;
-    if (first) this.d.log?.("watch paused", { id: l.state.id, owner: busy.owner });
+    if (first) this.d.log?.("watch paused", { id: l.state.id, opener: busy.opener });
   }
 
   /** The tab or its browser went: try again later, a minute first, doubling to half an hour. */

@@ -13,7 +13,7 @@ import { type HttpClient, safeUrls } from "../clients/http.js";
 import { expandHome } from "../google/auth.js";
 import { assertProfileFree } from "./browsers.js";
 import type { Egress, Exit } from "./egress.js";
-import { geometry, type Identity, learnIdentity, wearIdentity } from "./identity.js";
+import { type Fingerprint, geometry, learnFingerprint, wearFingerprint } from "./fingerprint.js";
 import { keepSessionCookies, keptDomains } from "./keep-session.js";
 import type { Hints } from "./locate.js";
 import { notReachable, type OwnBrowser, ownEndpoint, runsInOwn } from "./own.js";
@@ -269,8 +269,8 @@ const LOCAL_ARGS = ["--disable-blink-features=AutomationControlled", ...NO_GPU_A
  */
 const PROXIED_ARGS = ["--webrtc-ip-handling-policy=disable_non_proxied_udp"];
 
-/** The headed identity of this host's Chrome, learned on the first headless launch. */
-let headedIdentity: Identity | null = null;
+/** The headed fingerprint of this host's Chrome, learned on the first headless launch. */
+let headedFingerprint: Fingerprint | null = null;
 
 async function launchLocal(
   profileDir: string,
@@ -280,7 +280,7 @@ async function launchLocal(
   const proxy = exit?.proxy ?? null;
   const headless = opts.headless ?? true;
   const { args: sizeArgs, ...size } = geometry(headless);
-  // Headless says the headed identity (identity.ts). Not through Playwright's
+  // Headless says the headed fingerprint (fingerprint.ts). Not through Playwright's
   // `userAgent`: that rebuilds the client hints from the UA string and sends
   // `Sec-CH-UA-Arch: "x86"` and platform version "10_15_7" from an arm Mac on 26.x.
   const uaArgs = (ua: string | null) => (headless && ua ? [`--user-agent=${ua}`] : []);
@@ -308,20 +308,20 @@ async function launchLocal(
     }
     return (await chromium()).launchPersistentContext(profileDir, o);
   };
-  const context = await launch(base(headedIdentity?.userAgent ?? null));
+  const context = await launch(base(headedFingerprint?.userAgent ?? null));
   if (!headless) return context;
-  if (headedIdentity) {
-    wearIdentity(context, headedIdentity);
+  if (headedFingerprint) {
+    wearFingerprint(context, headedFingerprint);
     return context;
   }
   // Headless Chrome says "HeadlessChrome/153…" and sites like YouTube Studio refuse it as an
   // unsupported browser. The version is only known once launched: learn it, relaunch as the headed one.
-  const learned = await learnIdentity(context.pages()[0] ?? (await context.newPage()));
+  const learned = await learnFingerprint(context.pages()[0] ?? (await context.newPage()));
   if (!learned.headless) return context;
-  headedIdentity = learned.identity;
+  headedFingerprint = learned.fingerprint;
   await context.close();
-  const relaunched = await launch(base(headedIdentity.userAgent));
-  wearIdentity(relaunched, headedIdentity);
+  const relaunched = await launch(base(headedFingerprint.userAgent));
+  wearFingerprint(relaunched, headedFingerprint);
   return relaunched;
 }
 

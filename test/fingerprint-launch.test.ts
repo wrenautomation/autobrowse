@@ -33,10 +33,10 @@ vi.mock("../src/browser/reap.js", () => ({
 vi.mock("../src/browser/webauthn.js", () => ({
   virtualAuthenticator: () => ({ export: async () => [] }),
 }));
-vi.mock("../src/browser/identity.js", async (orig) => ({
-  ...(await orig<typeof import("../src/browser/identity.js")>()),
-  // The launched browser already says the headed identity: no relaunch.
-  learnIdentity: async () => ({ headless: false, identity: {} }),
+vi.mock("../src/browser/fingerprint.js", async (orig) => ({
+  ...(await orig<typeof import("../src/browser/fingerprint.js")>()),
+  // The launched browser already says the headed fingerprint: no relaunch.
+  learnFingerprint: async () => ({ headless: false, fingerprint: {} }),
 }));
 
 const opts = (o: Partial<BrowserOptions> = {}): BrowserOptions => ({

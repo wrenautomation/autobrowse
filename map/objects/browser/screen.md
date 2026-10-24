@@ -28,7 +28,7 @@ Sign-ins branch. Determinism is per known screen, not per fixed sequence: a walk
 
 - **owned-by:** a walk ([[site-login]], [[identity-provider]]); the runner for interrupts (`RunnerOptions.learnedScreens`, `src/browser/flow.ts:241`)
 - **joins:** [[hints]], [[state-files]], [[resume-record]]
-- **looks-like-but-is-not:** [[fix]] (per op, per flow); `Screen` in `src/app/screen.ts:9` (headed or headless)
+- **looks-like-but-is-not:** [[fix]] (per op, per flow); `Display` in `src/app/display.ts:9` (headed or headless)
 
 ## If you change this
 

@@ -26,13 +26,13 @@ function ctxOf() {
   return { ctx, steps, slept };
 }
 
-const busyBy = (owner: string) => new ProfileBusy("google@test", 4242, owner, "");
+const busyBy = (opener: string) => new ProfileBusy("google@test", 4242, opener, "");
 
 /** `fn` that finds the profile busy `n` times, then answers `ok`. */
-function busyThen(n: number, owner = "cli") {
+function busyThen(n: number, opener = "cli") {
   const tries = { n: 0 };
   const fn = async () => {
-    if (tries.n++ < n) throw busyBy(owner);
+    if (tries.n++ < n) throw busyBy(opener);
     return "ok";
   };
   return { fn, tries };
@@ -59,7 +59,7 @@ describe("profileBusyOf", () => {
         "tiktok POST /web/posts: 500 profile google@test is open in pid 11913 (explore:9092)",
       ),
     );
-    expect(said).toMatchObject({ profile: "google@test", pid: 11913, owner: "explore:9092" });
+    expect(said).toMatchObject({ profile: "google@test", pid: 11913, opener: "explore:9092" });
     expect(profileBusyOf(new Error("socket hang up"))).toBeNull();
   });
 });
@@ -151,8 +151,8 @@ describe("the lease", () => {
     const closeExplore = async () => {
       throw new Error("must not close");
     };
-    for (const owner of ["desk", "cli", "teach:9120"])
-      expect(await takeIdleExplore(busyBy(owner), { closeExplore })).toBe(false);
+    for (const opener of ["desk", "cli", "teach:9120"])
+      expect(await takeIdleExplore(busyBy(opener), { closeExplore })).toBe(false);
   });
 
   it("an active session keeps its profile", async () => {

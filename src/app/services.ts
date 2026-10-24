@@ -203,10 +203,10 @@ import {
   workspaceInboxWorkflow,
 } from "../workflows/workspace-inbox/index.js";
 import type { Settings } from "./config.js";
+import { type Display, displayOf, headed } from "./display.js";
 import { holding, type Idle, idleTracker } from "./idle.js";
 import { type OpsLane, opsLane } from "./ops.js";
 import { awsFor } from "./owner.js";
-import { headed, type Screen, screenOf } from "./screen.js";
 import type { DeviceLink } from "./setup.js";
 
 function required<T>(value: T | undefined, env: string): T {
@@ -253,9 +253,9 @@ export async function profileForSite(settings: Settings, site: string): Promise<
 export async function browserFor(
   settings: Settings,
   site: string,
-  screen?: Screen,
+  display?: Display,
 ): Promise<BrowserOptions> {
-  const opts = screen ? browserOptions(settings, screen) : browserOptions(settings);
+  const opts = display ? browserOptions(settings, display) : browserOptions(settings);
   const profile = await profileForSite(settings, site);
   return profile ? { ...opts, profile } : opts;
 }
@@ -280,8 +280,8 @@ export async function lookForSiteAccount(o: {
       why: [`no reset page mapped for ${o.site} (src/auth/exists.ts)`],
     };
   const gmail = gmailFor(o.settings);
-  const screen = o.headed ? headed : screenOf(o.settings);
-  const browser = { ...(await browserFor(o.settings, o.site, screen)), profile: o.site };
+  const display = o.headed ? headed : displayOf(o.settings);
+  const browser = { ...(await browserFor(o.settings, o.site, display)), profile: o.site };
   const run = flowRunner(browser, {
     login: loginFor(o.settings, gmail),
     captcha: captchaFor(o.settings),
@@ -300,13 +300,13 @@ export async function lookForSiteAccount(o: {
 
 export function browserOptions(
   settings: Settings,
-  screen: Screen = screenOf(settings),
+  display: Display = displayOf(settings),
 ): BrowserOptions {
   const store = credentialsFor(settings);
   return {
     // Read when a browser opens, so the switch applies to the next one.
     get headless() {
-      return screen.headless;
+      return display.headless;
     },
     // The site's account's passkeys ride along in its session.
     passkeys: async (site) => {
@@ -474,7 +474,7 @@ export interface App {
   /** Busy while a flow or site call runs; touched by every event. The idle stop reads it. */
   idle: Idle;
   /** Headed or headless for every browser opened from now; the API flips it. */
-  screen: Screen;
+  display: Display;
   /** The sealed credential store (env layer first); the Accounts page and `creds` write to it. */
   credentials: CredentialStore;
   /** Set by the host once the agent exists: every failure record goes here (healing). */
@@ -1203,20 +1203,20 @@ export function cardsFor(settings: Settings): ExploreOptions["cards"] {
   if (process.platform !== "darwin" || !isDefaultOwner(settings.owner)) return undefined;
   return async ({ host, label, subscription }) => {
     const { pickCard } = await import("../money/wallet.js");
-    const { contactsOf, ownerOf } = await import("../money/profile.js");
+    const { contactsOf, profileOf } = await import("../money/profile.js");
     const card = await pickCard(await walletFor(settings), {
       host,
       label,
       subscription,
       policy: { debitHosts: settings.walletDebitHosts },
     });
-    // The billing address is the owner's: a checkout's address fields come from the profile.
-    const owner = ownerOf(await (await profilesFor(settings)).list(), card.owner);
+    // The billing address is the profile's: a checkout's address fields come from the profile.
+    const profile = profileOf(await (await profilesFor(settings)).list(), card.profile);
     return {
       ...card,
-      ...(owner?.address ? { billing: owner.address } : {}),
-      tell: contactsOf(card, owner),
-      ...(owner?.taxId ? { taxId: owner.taxId } : {}),
+      ...(profile?.address ? { billing: profile.address } : {}),
+      tell: contactsOf(card, profile),
+      ...(profile?.taxId ? { taxId: profile.taxId } : {}),
     };
   };
 }
@@ -1234,12 +1234,12 @@ export function grantedAheadFor(settings: Settings): NonNullable<ExploreOptions[
   return (site) => grants.live(site, new Date()) !== null;
 }
 
-/** The owner's profiles for `place{secret:"profile.<field>"}`: on the Mac only, like the wallet. */
+/** The profiles for `place{secret:"profile.<field>"}`: on the Mac only, like the wallet. */
 export function profilesForPlace(settings: Settings): ExploreOptions["profiles"] {
   if (process.platform !== "darwin" || !isDefaultOwner(settings.owner)) return undefined;
   return async (id) => {
-    const { ownerOf } = await import("../money/profile.js");
-    return ownerOf(await (await profilesFor(settings)).list(), id ?? undefined);
+    const { profileOf } = await import("../money/profile.js");
+    return profileOf(await (await profilesFor(settings)).list(), id ?? undefined);
   };
 }
 
@@ -1811,7 +1811,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
   const channel = channels([...list, bus, memoryChannel(memory)]);
   const idle = idleTracker();
   bus.subscribe(() => idle.touch());
-  const screen = screenOf(settings);
+  const display = displayOf(settings);
 
   const guards = parseGuards(settings.guards);
   const failures: { hook: App["onFailure"] } = { hook: null };
@@ -1829,7 +1829,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       ["SIGINT", 130],
     ] as const)
       process.once(signal, () => void park.closeAll().finally(() => process.exit(code)));
-  const browserOpts = browserOptions(settings, screen);
+  const browserOpts = browserOptions(settings, display);
   const browser = holding(
     idle,
     flowRunner(browserOpts, {
@@ -1981,7 +1981,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
     sink,
     sites,
     idle,
-    screen,
+    display,
     credentials: credentialsFor(settings),
     get onFailure() {
       return failures.hook;

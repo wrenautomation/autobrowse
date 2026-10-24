@@ -32,12 +32,12 @@ export function registerWalletCommands(program: Command, settings: Settings): vo
     .command("list")
     .description("Every profile, with the cards that bill to it")
     .action(async () => {
-      const { describeProfile, ownerOf } = await import("../money/profile.js");
+      const { describeProfile, profileOf } = await import("../money/profile.js");
       const all = await (await profilesFor(settings)).list();
       const cards = await (await walletFor(settings)).list();
       if (!all.length) return console.log("no profiles (autobrowse profile set <id> --name …)");
       for (const p of all) {
-        const own = cards.filter((c) => ownerOf(all, c.owner)?.id === p.id).map(cardEnding);
+        const own = cards.filter((c) => profileOf(all, c.profile)?.id === p.id).map(cardEnding);
         console.log(`${describeProfile(p)}\n  cards: ${own.join("; ") || "none"}`);
       }
     });
@@ -144,7 +144,7 @@ export function registerWalletCommands(program: Command, settings: Settings): vo
       console.log(labels.length ? `backed up ${labels.join(", ")}` : "the wallet is empty");
     });
   wallet
-    .command("own <label> <profile>")
+    .command("bill-to <label> <profile>")
     .description(
       "Say which profile a card bills to (its address fills a checkout's billing fields)",
     )
@@ -152,13 +152,13 @@ export function registerWalletCommands(program: Command, settings: Settings): vo
       const w = await walletFor(settings);
       const card = await w.get(label);
       if (!card) throw new Error(`no card ${label}`);
-      await w.put({ ...card, owner: profile });
+      await w.put({ ...card, profile });
       console.log(`${label} bills to ${profile}`);
     });
   wallet
     .command("tell <label>")
     .description(
-      "Where this card's receipts and charge texts go; unset, the owner profile's, else this machine's",
+      "Where this card's receipts and charge texts go; unset, its profile's, else this machine's",
     )
     .option("--email <address>")
     .option("--phone <+number>")
@@ -171,7 +171,7 @@ export function registerWalletCommands(program: Command, settings: Settings): vo
       const next = cardSchema.parse({ ...card, ...o });
       await w.put(next);
       console.log(
-        `${label}: receipts ${next.email ?? "(owner's)"}, texts ${next.phone ? phoneEnding(next.phone) : "(owner's)"}`,
+        `${label}: receipts ${next.email ?? "(profile's)"}, texts ${next.phone ? phoneEnding(next.phone) : "(profile's)"}`,
       );
     });
   wallet

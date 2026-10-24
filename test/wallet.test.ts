@@ -15,9 +15,9 @@ import {
   contactsOf,
   fileProfiles,
   holdsBilling,
-  ownerOf,
   type Profile,
   profileField,
+  profileOf,
   profileSchema,
   profileSecret,
 } from "../src/money/profile.js";
@@ -27,6 +27,7 @@ import {
   cardEnding,
   cardField,
   cardFromFields,
+  cardSchema,
   cardSecret,
   defaultLabel,
   describeCard,
@@ -236,7 +237,7 @@ describe("profiles", () => {
     postal: "T6R 0K9",
     country: "CA",
   };
-  it("a card's billing fields come from its owner's address; its own postal wins", () => {
+  it("a card's billing fields come from its profile's address; its own postal wins", () => {
     const c = card("visa", "credit");
     expect(cardField(c, "city", home)).toBe("Edmonton");
     expect(cardField(c, "region", home)).toBe("Alberta");
@@ -272,22 +273,27 @@ describe("profiles", () => {
     expect(holdsBilling("phone", "", "+15551234567")).toBe(false);
     expect(holdsBilling("taxId", "123456789 rt0001", "123456789RT0001")).toBe(true);
   });
-  it("a card bills to its owner, else the only profile", () => {
+  it("a card stored before 0.8.0 keeps its billing profile", () => {
+    const old = { ...card("c", "credit"), owner: "wren" };
+    expect(cardSchema.parse(old).profile).toBe("wren");
+    expect(cardSchema.parse(old)).not.toHaveProperty("owner");
+  });
+  it("a card bills to its profile, else the only profile", () => {
     const a = { id: "william", name: "W" };
     const b = { id: "wren", name: "Wren" };
-    expect(ownerOf([a], undefined)?.id).toBe("william");
-    expect(ownerOf([a, b], undefined)).toBeNull();
-    expect(ownerOf([a, b], "wren")?.id).toBe("wren");
+    expect(profileOf([a], undefined)?.id).toBe("william");
+    expect(profileOf([a, b], undefined)).toBeNull();
+    expect(profileOf([a, b], "wren")?.id).toBe("wren");
   });
-  it("a charge is told to the card's own contacts, else its owner's", () => {
-    const owner = profileSchema.parse({
+  it("a charge is told to the card's own contacts, else its profile's", () => {
+    const profile = profileSchema.parse({
       id: "william",
       name: "W",
       email: "me@x.co",
       phone: "+15551234567",
     });
-    expect(contactsOf({}, owner)).toEqual({ email: "me@x.co", phone: "+15551234567" });
-    expect(contactsOf({ email: "cards@x.co" }, owner)).toEqual({
+    expect(contactsOf({}, profile)).toEqual({ email: "me@x.co", phone: "+15551234567" });
+    expect(contactsOf({ email: "cards@x.co" }, profile)).toEqual({
       email: "cards@x.co",
       phone: "+15551234567",
     });

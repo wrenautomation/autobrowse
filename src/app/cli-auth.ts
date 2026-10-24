@@ -39,8 +39,8 @@ const CLIPBOARD_MS = 60_000;
 import { macClipboard } from "./cli-env.js";
 import { type KeysCliDeps, registerKeyCommands } from "./cli-keys.js";
 import type { Settings } from "./config.js";
+import { headed } from "./display.js";
 import { askSecretTwice } from "./prompt.js";
-import { headed } from "./screen.js";
 import {
   auditFor,
   browserFor,

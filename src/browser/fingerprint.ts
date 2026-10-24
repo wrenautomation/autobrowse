@@ -13,7 +13,7 @@ import type { BrowserContext, Frame, Page } from "playwright";
 
 type Brand = { brand: string; version: string };
 
-export interface Identity {
+export interface Fingerprint {
   userAgent: string;
   /** `navigator.platform`: "MacIntel", "Linux x86_64", "Win32". */
   platform: string;
@@ -36,13 +36,13 @@ export interface Identity {
 const unheadless = (list: Brand[]) =>
   list.map((b) => (b.brand === "HeadlessChrome" ? { ...b, brand: "Google Chrome" } : b));
 
-/** Where the identity is read: https (client hints need a secure context), answered locally. */
-const PROBE_URL = "https://identity.autobrowse.invalid/";
+/** Where the fingerprint is read: https (client hints need a secure context), answered locally. */
+const PROBE_URL = "https://fingerprint.autobrowse.invalid/";
 
-/** Read the identity off a page of this host's Chrome; `headless` says whether it needs wearing. */
-export async function learnIdentity(
+/** Read the fingerprint off a page of this host's Chrome; `headless` says whether it needs wearing. */
+export async function learnFingerprint(
   page: Page,
-): Promise<{ headless: boolean; identity: Identity }> {
+): Promise<{ headless: boolean; fingerprint: Fingerprint }> {
   await page.route(PROBE_URL, (r) => r.fulfill({ contentType: "text/html", body: "" }));
   await page.goto(PROBE_URL);
   await page.unroute(PROBE_URL);
@@ -70,10 +70,10 @@ export async function learnIdentity(
       high,
     };
   });
-  const h = seen.high as Partial<Identity["metadata"]>;
+  const h = seen.high as Partial<Fingerprint["metadata"]>;
   return {
     headless: seen.ua.includes("HeadlessChrome"),
-    identity: {
+    fingerprint: {
       userAgent: seen.ua.replace("HeadlessChrome", "Chrome"),
       platform: seen.platform,
       acceptLanguage: seen.languages.join(","),
@@ -98,7 +98,7 @@ export async function learnIdentity(
  * requests made before this lands, but alone it sends the detailed hints
  * (arch, OS version) blank.
  */
-export function wearIdentity(context: BrowserContext, id: Identity): void {
+export function wearFingerprint(context: BrowserContext, id: Fingerprint): void {
   const wear = (target: Page | Frame) =>
     context
       .newCDPSession(target)

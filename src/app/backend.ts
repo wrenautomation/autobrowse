@@ -63,9 +63,9 @@ import { proofLine, proveWorkflow, writeProof } from "../workflows/proof.js";
 import { linkOnce, SHIPPED_DIR, shippedRoots } from "../workflows/roots.js";
 import type { Ingress } from "./client.js";
 import type { Settings } from "./config.js";
+import { type Display, displayOf } from "./display.js";
 import { fileDone } from "./needs.js";
 import { needsContextFor, type Owed, owedOf, type Policy, policyOf } from "./owed.js";
-import { type Screen, screenOf } from "./screen.js";
 import {
   type App,
   approverFor,
@@ -140,7 +140,7 @@ export interface Backend {
   /** Sites served under their official API's shape, with their key/token setup. */
   sites?: SiteFacade;
   /** The one live setting: headed or headless for the next browser. */
-  screen: Screen;
+  display: Display;
   /** Stored sign-ins by site (never the values), add/change, prove with a sign-in. */
   accounts: Accounts;
   /** One verb over everything: route a goal to what does it, or have the agent build it. */
@@ -271,7 +271,7 @@ export function healer(
 export function explorerOpener(
   settings: Settings,
   sink: SecretSink = sinkFor(settings),
-  screen: Screen = screenOf(settings),
+  display: Display = displayOf(settings),
 ): (
   site: string,
   port: number,
@@ -298,7 +298,7 @@ export function explorerOpener(
   return async (site, port, { signIn = true, ...extra } = {}) =>
     startExplore({
       site,
-      browser: await browserFor(settings, site, screen),
+      browser: await browserFor(settings, site, display),
       recordingsDir: expandHome(settings.recordingsDir),
       port,
       ...(signIn ? { login: loginFor(settings, gmailFor(settings)) } : {}),
@@ -326,11 +326,11 @@ export function agentFor(
   o: {
     sink?: SecretSink;
     notify?: (line: string) => Promise<void>;
-    screen?: Screen;
+    display?: Display;
     emit?: (event: RunEvent) => Promise<void>;
   } = {},
 ): AgentSessions {
-  const open = explorerOpener(settings, o.sink, o.screen);
+  const open = explorerOpener(settings, o.sink, o.display);
   return agentSessions({
     llm,
     dir: join(expandHome(settings.recordingsDir), ".sessions"),
@@ -360,7 +360,7 @@ export type BackendParts = Pick<
   | "workflows"
   | "proofs"
   | "sites"
-  | "screen"
+  | "display"
   | "credentials"
 >;
 
@@ -377,8 +377,8 @@ export function localParts(settings: Settings, o: { headless?: boolean } = {}): 
     linkOnce,
   );
   const gmail = gmailFor(settings);
-  const screen = o.headless === undefined ? screenOf(settings) : { headless: o.headless };
-  const browser = flowRunner(browserOptions(settings, screen), {
+  const display = o.headless === undefined ? displayOf(settings) : { headless: o.headless };
+  const browser = flowRunner(browserOptions(settings, display), {
     login: loginFor(settings, gmail),
     captcha: captchaFor(settings),
     pace: paceFor(settings),
@@ -388,7 +388,7 @@ export function localParts(settings: Settings, o: { headless?: boolean } = {}): 
     catalog,
     browser,
     sink,
-    screen,
+    display,
     sites: sitesFor({
       catalog,
       browser,
@@ -437,7 +437,7 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
   const agent = o.llm
     ? agentFor(settings, o.llm, {
         sink: app.sink,
-        screen: app.screen,
+        display: app.display,
         ...(o.notify ? { notify: o.notify } : {}),
         // Sessions are rows in the Runs registry and on the live feed, like any run.
         emit: async (event) => {
@@ -473,7 +473,7 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
     do: verb,
     abilities: verb.abilities,
     doAs: (scope) => doerFor({ ...verbParts, scope }),
-    screen: app.screen,
+    display: app.display,
     accounts: accountsOf({ store: app.credentials, logins: SITE_LOGINS, runner: app.browser }),
     ...(agent
       ? {

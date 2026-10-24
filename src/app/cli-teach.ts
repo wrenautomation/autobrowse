@@ -15,7 +15,7 @@ import { loadWalk, saveWalk, walkFile } from "../walks/spec.js";
 import { guessLine, packInto, review } from "../walks/teach.js";
 import { explorerOpener } from "./backend.js";
 import type { Settings } from "./config.js";
-import { headed } from "./screen.js";
+import { headed } from "./display.js";
 import { profilesForPlace, runsDirFor, walksDirFor } from "./services.js";
 
 export function registerTeachCommand(program: Command, settings: Settings): void {

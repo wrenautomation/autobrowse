@@ -26,7 +26,7 @@ import type { Cipher } from "credvault";
 import { z } from "zod";
 import { type Address, addressField } from "./profile.js";
 
-export const cardSchema = z.object({
+const cardFields = z.object({
   label: z.string().regex(/^[a-z0-9-]+$/, "label: lowercase letters, digits, dashes"),
   kind: z.enum(["credit", "debit"]),
   holder: z.string().min(1),
@@ -36,10 +36,10 @@ export const cardSchema = z.object({
   cvc: z.string().regex(/^\d{3,4}$/),
   postal: z.string().optional(),
   /** The profile it bills to (`autobrowse profile`); absent: the only profile. */
-  owner: z.string().optional(),
-  /** Its receipts and invoices go here, else the owner's email (`wallet tell`). */
+  profile: z.string().optional(),
+  /** Its receipts and invoices go here, else the profile's email (`wallet tell`). */
   email: z.string().trim().email().optional(),
-  /** Its charges are texted here, else the owner's phone. */
+  /** Its charges are texted here, else the profile's phone. */
   phone: z
     .string()
     .trim()
@@ -47,7 +47,15 @@ export const cardSchema = z.object({
     .optional(),
   addedAt: z.string(),
 });
-export type Card = z.infer<typeof cardSchema>;
+/** A card stored before 0.8.0 named its profile `owner`. */
+export const cardSchema = z.preprocess(
+  (v) =>
+    v && typeof v === "object" && "owner" in v && !("profile" in v)
+      ? (({ owner, ...rest }) => ({ ...rest, profile: owner }))(v as { owner: unknown })
+      : v,
+  cardFields,
+);
+export type Card = z.infer<typeof cardFields>;
 
 /** Luhn: a mistyped digit fails here, not at a checkout. */
 export function luhn(number: string): boolean {

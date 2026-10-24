@@ -3,7 +3,7 @@
  * class beside the cards (William, 2026-09-25): sealed under the wallet's
  * keychain item, backed up to SSM /wallet/profiles (the machine roles'
  * `NeverTheWallet` Deny covers it), never on the box. A card names its
- * owner; a checkout's billing fields come from that owner's address.
+ * profile; a checkout's billing fields come from that profile's address.
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import {
@@ -68,18 +68,18 @@ export interface Contacts {
   phone?: string;
 }
 
-/** A card's own contacts first, then its owner's. */
+/** A card's own contacts first, then its profile's. */
 export function contactsOf(
   card: { email?: string | undefined; phone?: string | undefined },
-  owner: Profile | null,
+  profile: Profile | null,
 ): Contacts {
-  const email = card.email ?? owner?.email;
-  const phone = card.phone ?? owner?.phone;
+  const email = card.email ?? profile?.email;
+  const phone = card.phone ?? profile?.phone;
   return { ...(email ? { email } : {}), ...(phone ? { phone } : {}) };
 }
 
 /**
- * What a billing form's contact fields hold: the card owner's, never the
+ * What a billing form's contact fields hold: the card's profile's, never the
  * site's login email or whatever it prefilled (William, 2026-10-04).
  */
 export interface BillingContacts extends Contacts {
@@ -270,8 +270,8 @@ export function backedUpProfiles(local: ProfileStore, backup: ProfileStore): Pro
   };
 }
 
-/** The profile a card bills to: its owner, else the only profile there is. */
-export function ownerOf(all: readonly Profile[], owner: string | undefined): Profile | null {
-  if (owner) return all.find((p) => p.id === owner) ?? null;
+/** The profile a card bills to: the one it names, else the only profile there is. */
+export function profileOf(all: readonly Profile[], id: string | undefined): Profile | null {
+  if (id) return all.find((p) => p.id === id) ?? null;
   return all.length === 1 ? (all[0] ?? null) : null;
 }
