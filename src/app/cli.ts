@@ -290,6 +290,15 @@ program
   });
 
 program
+  .command("worker")
+  .description(
+    "Serve the workflows: Restate endpoint on RESTATE_PORT (9081), UI and API on UI_PORT (9080); tier 2",
+  )
+  .action(async () => {
+    await import("./main.js");
+  });
+
+program
   .command("try <workflow>")
   .description(
     "Run a workflow in this process, no Restate: real browser, in-memory journal. Gates answer approved unless --ask. The proof a compiled recording works.",

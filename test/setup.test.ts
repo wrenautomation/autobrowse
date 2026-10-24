@@ -49,7 +49,11 @@ describe("setup", () => {
       "", // tiktok skipped
       "", // microsoft skipped
     ]);
-    const out = await runSetup(io, store, SITE_LOGINS);
+    const out = await runSetup(io, store, SITE_LOGINS, {
+      tier: 1,
+      all: true,
+      set: { llm: true, codesInbox: true },
+    });
     expect(out.stored).toEqual(["google", "cloudflare"]);
     expect(out.skipped).toEqual([
       "google@admin",
@@ -102,8 +106,90 @@ describe("setup", () => {
       "outlook@uw": { username: "w@uwaterloo.ca", password: "u" },
     });
     const { io, asked, said } = scripted([]);
-    await runSetup(io, store, SITE_LOGINS);
+    await runSetup(io, store, SITE_LOGINS, {
+      tier: 1,
+      all: true,
+      set: { llm: true, codesInbox: true },
+    });
     expect(asked).toEqual([]);
     expect(said.filter((l) => l.endsWith(": stored")).length).toBe(22);
+  });
+
+  function envSink() {
+    const put: Record<string, string> = {};
+    return {
+      put,
+      env: {
+        put: async (n: string, v: string) => {
+          put[n] = v;
+        },
+      },
+    };
+  }
+  it("tier 0 asks for nothing but the tier", async () => {
+    const store = memoryCredentials();
+    const { put, env } = envSink();
+    const { io, asked, said } = scripted(["0"]);
+    const out = await runSetup(io, store, SITE_LOGINS, { env, has: () => true, mac: true });
+    expect(asked).toEqual(["Which tier? [0/1/2] (default 0) "]);
+    expect(out.stored).toEqual([]);
+    expect(put).toEqual({});
+    expect(said.at(-1)).toContain("--no-llm");
+  });
+  it("tier 1 asks for the model and the picked sites only, a provider when a site uses its button", async () => {
+    const store = memoryCredentials();
+    const { put, env } = envSink();
+    const { io, asked } = scripted([
+      "", // claude-code: yes
+      "github, Cloudflare, nope",
+      "y", // cloudflare via google
+      "me@x.co",
+      "", // github: not via google
+      "me@x.co",
+      "pw",
+      "", // no authenticator
+      "", // google: skipped
+      "codes@x.co",
+      "+1 (555) 123-4567",
+    ]);
+    const out = await runSetup(io, store, SITE_LOGINS, {
+      tier: 1,
+      env,
+      has: (b) => b === "claude",
+      mac: true,
+    });
+    expect(out.stored).toEqual(["cloudflare", "github"]);
+    expect(out.skipped).toEqual(["google"]);
+    expect(put).toEqual({
+      LLM_PROVIDER: "claude-code",
+      CODES_INBOX: "codes@x.co",
+      PHONE_NUMBER: "+15551234567",
+    });
+    expect(asked.some((q) => q.includes("instantly"))).toBe(false);
+  });
+  it("tier 1 without claude takes an Anthropic key, hidden", async () => {
+    const { put, env } = envSink();
+    const { io, asked } = scripted(["sk-test", ""]);
+    await runSetup(io, memoryCredentials(), SITE_LOGINS, {
+      tier: 1,
+      env,
+      has: () => false,
+      set: { codesInbox: true },
+    });
+    expect(asked[0]?.startsWith("hidden")).toBe(true);
+    expect(put).toEqual({ LLM_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "sk-test" });
+  });
+  it("tier 2 points the worker at a local Restate", async () => {
+    const { put, env } = envSink();
+    const { io, said } = scripted([""]);
+    await runSetup(io, memoryCredentials(), SITE_LOGINS, {
+      tier: 2,
+      env,
+      has: () => false,
+      set: { llm: true, codesInbox: true },
+    });
+    expect(put.RESTATE_ADMIN_URL).toBe("http://localhost:9070");
+    expect(put.RESTATE_ENDPOINT_URL).toBe("http://localhost:9081");
+    expect(said.some((l) => l.includes("brew install restatedev/tap/restate"))).toBe(true);
   });
 });

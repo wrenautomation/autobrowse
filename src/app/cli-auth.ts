@@ -30,6 +30,7 @@ import { type LinkField, linkLabel, linkTtl, mintCredentialLink } from "../auth/
 import { EMAIL_CODE } from "../auth/login.js";
 import { dropRole, giveRole } from "../auth/roles.js";
 import { defineFlow, type FlowPage, flowRunner } from "../browser/flow.js";
+import { envFileSink } from "../deps/sink.js";
 import { expandHome } from "../google/auth.js";
 
 /** A copied secret lives on the clipboard for a minute, then is emptied if untouched. */
@@ -87,11 +88,18 @@ export function registerAuthCommands(
   program
     .command("setup")
     .description(
-      "Ask once for what is missing (root credentials), store it sealed; the rest is automated",
+      "Ask once for what the tier needs and is missing (model, your accounts, codes, Restate); secrets stored sealed",
     )
-    .action(async () => {
+    .option("--tier <n>", "0 public pages, no keys; 1 + model and your accounts; 2 + durable runs")
+    .option("--all", "ask for every known site in turn (an operator's roster); implies tier 1")
+    .action(async (o: { tier?: string; all?: boolean }) => {
       const { createInterface } = await import("node:readline/promises");
       const { runSetup, terminalPrompter } = await import("./setup.js");
+      const tier = o.tier === undefined ? (o.all ? 1 : undefined) : Number(o.tier);
+      if (tier !== undefined && tier !== 0 && tier !== 1 && tier !== 2)
+        throw new Error("--tier is 0, 1 or 2");
+      const onPath = (bin: string) =>
+        (process.env.PATH ?? "").split(":").some((d) => d && existsSync(join(d, bin)));
       const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
       try {
         await runSetup(
@@ -99,7 +107,22 @@ export function registerAuthCommands(
           credentialsFor(settings),
           SITE_LOGINS,
           {
+            ...(tier === undefined ? {} : { tier }),
+            all: o.all ?? false,
             devices: devicesFor(settings),
+            env: envFileSink(expandHome(settings.envFile)),
+            set: {
+              llm:
+                settings.llmProvider === "claude-code" ||
+                (settings.llmProvider === "anthropic" && !!settings.anthropicApiKey) ||
+                (settings.llmProvider === "openai" && !!settings.openaiApiKey) ||
+                settings.llmProvider === "cohere",
+              codesInbox: !!settings.codesInbox,
+              phone: !!settings.phoneNumber,
+              restate: !!settings.restateAdminUrl,
+            },
+            has: onPath,
+            mac: process.platform === "darwin",
           },
         );
       } finally {
