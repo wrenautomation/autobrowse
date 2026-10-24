@@ -44,4 +44,17 @@ resource "aws_s3_bucket_lifecycle_configuration" "shots" {
       days = 7
     }
   }
+  # Traces (src/shots/traces.ts) land in Glacier IR; after 90 days (its minimum) they go to
+  # Deep Archive, ~4x cheaper. Reading one back then takes up to 12 h (a restore).
+  rule {
+    id     = "traces-deep-archive"
+    status = "Enabled"
+    filter {
+      prefix = "traces/"
+    }
+    transition {
+      days          = 90
+      storage_class = "DEEP_ARCHIVE"
+    }
+  }
 }

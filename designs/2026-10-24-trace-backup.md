@@ -26,4 +26,6 @@ Traces are William's "super important data". Keep every one for good, off this M
 - 2026-10-24: restic (client-side key, AWS-blind) rejected for now: zips do not chunk-dedup, a new binary and key on each machine. Switch if William wants AWS unable to read traces.
 - 2026-10-24: Glacier IR over Deep Archive: instant reads for a debug, ~$0.004/GB-month. Deep Archive is ~4x cheaper with a 12 h restore.
 - 2026-10-24: no lossy compaction (frame drop, re-encode). Sweep after backup frees the disk; the backup keeps full fidelity.
-- Open (William): internships failure volume (~8.5 GB/day) grows the backup ~250 GB/month, ~$1/month more each month. Fewer frames per trace or fewer failures cut it.
+- Closed (William, keep them): internships failure volume (~8.5 GB/day) grows the backup ~250 GB/month, ~$1/month more each month. Fewer frames per trace or fewer failures cut it.
+- 2026-10-24: William: retry traces stay ("redundant traces are useful"). Lifecycle rule `traces-deep-archive`: `traces/` moves to Deep Archive after 90 days (Glacier IR's minimum). A year of traces ≈ $3/month, not $12. Older than 90 days = up to 12 h to restore.
+
