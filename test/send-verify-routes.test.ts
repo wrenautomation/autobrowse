@@ -85,7 +85,7 @@ describe("every irreversible route has a verify", () => {
   );
 
   it("finds the routes", () => {
-    expect(irreversible.length).toBeGreaterThanOrEqual(45);
+    expect(irreversible.length).toBeGreaterThanOrEqual(46);
   });
 
   for (const { site, route } of irreversible) {
@@ -270,11 +270,11 @@ describe("tiktok", () => {
     post_info: { title: "A clip about caching", privacy_level: "PUBLIC_TO_EVERYONE" },
     source_info: { source: "PULL_FROM_URL", video_url: "https://example.com/a.mp4" },
   };
-  const UPLOAD = { post_info: INIT.post_info, file: "/tmp/a.mp4" };
+  const WEB = { caption: "A clip about caching", file: "/tmp/a.mp4" };
 
   for (const [name, path, raw] of [
     ["API publish", "/v2/post/publish/video/init/", INIT],
-    ["file upload", "/v2/post/publish/video/init/", UPLOAD],
+    ["web post", "/web/posts", WEB],
   ] as const) {
     it(`${name}: the video in the list is found, read by POST`, async () => {
       const r = await run("tiktok", "POST", path, raw, {
@@ -1147,10 +1147,19 @@ describe("sentAs", () => {
     ).toBe("https://www.linkedin.com/feed/update/urn:li:share:1/");
   });
 
-  it("tiktok: the publish id", () => {
+  it("tiktok: the publish id, and the web post id and link", () => {
     expect(
       sentAs("tiktok", "POST", "/v2/post/publish/video/init/", { data: { publish_id: "p1" } }),
     ).toEqual({ id: "p1", url: null });
+    expect(
+      sentAs("tiktok", "POST", "/web/posts", {
+        id: "7000",
+        url: "https://www.tiktok.com/@x/video/7000",
+      }),
+    ).toEqual({
+      id: "7000",
+      url: "https://www.tiktok.com/@x/video/7000",
+    });
   });
 
   it("youtube video, comment and community post", () => {
