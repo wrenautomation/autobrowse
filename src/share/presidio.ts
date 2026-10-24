@@ -8,6 +8,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { strFromU8, zipSync } from "fflate";
+import { shareFetch } from "./fetch.js";
 import { type Pass, rewriteTrace } from "./scrub.js";
 import { SHARE_URL } from "./share.js";
 
@@ -210,7 +211,7 @@ export async function presidioFlow(body: string, analyze: Analyze): Promise<stri
 }
 
 /** The ingest's admin routes (bearer SHARE_ADMIN_TOKEN). */
-export function shareAdmin(token: string, base = SHARE_URL, f: typeof fetch = fetch) {
+export function shareAdmin(token: string, base = SHARE_URL, f: typeof fetch = shareFetch) {
   const call = async (method: string, path: string, body?: Uint8Array | string) => {
     const rsp = await f(`${base}/admin/${path}`, {
       method,

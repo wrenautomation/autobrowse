@@ -7,6 +7,7 @@
  * person's own browser (the runner makes no trace for the last two), and
  * sites on the exclude list.
  */
+
 import { randomUUID } from "node:crypto";
 import {
   existsSync,
@@ -21,6 +22,7 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { isPersonalProfile } from "../browser/network.js";
+import { shareFetch } from "./fetch.js";
 import { type Known, knownFromTrace, ScrubLeak, scrubText, scrubTrace } from "./scrub.js";
 
 export const SHARE_URL = "https://share.wrenautomation.com";
@@ -244,7 +246,7 @@ export async function sendShared(
   if (off) return { sent: 0, dropped: 0, left: files.length, stopped: off };
   const { installId } = readShare(root);
   const base = (env.AUTOBROWSE_SHARE_URL || SHARE_URL).replace(/\/$/, "");
-  const f = o.fetch ?? fetch;
+  const f = o.fetch ?? shareFetch;
   const until = Date.now() + (o.budgetMs ?? 30_000);
   let sent = 0;
   let dropped = 0;
