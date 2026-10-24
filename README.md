@@ -918,3 +918,7 @@ and need) and, when it has a login, a `SiteLogin`. `route()` infers the
 input type from the schema. Setup steps are the collectable part: a step is
 a recorded flow on the developer console or an OAuth consent, and `setup`
 runs it into whichever sink you pass (the `.env`, SSM, your vault).
+
+## License
+
+PolyForm Shield 1.0.0: use, change and share for any purpose except a product that competes with Wren Automation. See LICENSE.md and CONTRIBUTING.md. Releases published before this change keep their old license.
