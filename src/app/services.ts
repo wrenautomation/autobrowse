@@ -195,6 +195,7 @@ import { type FleetDeps, inboxFleetWorkflow } from "../workflows/inbox-fleet/ind
 import type { Probe } from "../workflows/inbox-fleet/steps.js";
 import type { Proof } from "../workflows/proof.js";
 import { redirectWorkflow } from "../workflows/redirect/index.js";
+import { COMPILED_DIR, linkOnce, shippedRoots } from "../workflows/roots.js";
 import { senderDomainWorkflow } from "../workflows/sender-domain/index.js";
 import {
   type Consents,
@@ -445,9 +446,7 @@ export const LOCAL_WORKFLOWS: readonly AnyWorkflow[] = [
   inboxFleetWorkflow,
 ];
 
-/** Where compiled workflows live and where the compiler writes; relative imports resolve to the library from there. */
-export const COMPILED_DIR = "src/workflows";
-export const COMPILED_LIB = "../../index.js";
+export { COMPILED_DIR, COMPILED_LIB } from "../workflows/roots.js";
 
 export interface App {
   services: Array<
@@ -1782,7 +1781,8 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       warned.add(`${dir}\n${message}`);
       log.warn({ dir, err: message }, "compiled workflow not loaded");
     },
-    () => modWorkflowRoots(modsDirFor(settings)),
+    () => [...shippedRoots(), ...modWorkflowRoots(modsDirFor(settings))],
+    linkOnce,
   );
   const taken = new Set(WORKFLOWS.map((w) => w.name));
   /** Compiled flows, minus any that clashes with a hand-written name (said once). */

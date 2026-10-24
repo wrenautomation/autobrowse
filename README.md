@@ -428,7 +428,7 @@ pnpm autobrowse creds pull [sites...]             # the other way, on a second l
 pnpm autobrowse signup instagram --email hello@wrenautomation.com --name "Wren Automation" --handle wrenautomation --headed
 pnpm autobrowse inbox-accounts will@new.com       # the free accounts in src/auth/free-accounts.ts for one inbox (email signups + Google logins); skips what it holds
 pnpm autobrowse record buy-domain --site cloudflare --url https://dash.cloudflare.com/ --terminal
-pnpm autobrowse compile buy-domain             # → src/workflows/buy-domain/ with its outline.json (on the Runs page at once; no restart)
+pnpm autobrowse compile buy-domain             # → src/workflows/buy-domain/ in a clone, ~/.config/autobrowse/workflows/buy-domain/ in an install (AUTOBROWSE_WORKFLOWS moves it); on the Runs page at once
 pnpm autobrowse try google-name                # run a compiled workflow here, no Restate: the proof it is deterministic
 pnpm autobrowse compile buy-domain --no-llm --from-outline
 pnpm autobrowse compile buy-domain --finish     # …then a model finishes it until tsc and its test pass

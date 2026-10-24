@@ -59,6 +59,7 @@ import type { Jobs } from "../ui/jobs.js";
 import { type CompiledCatalog, compiledCatalog } from "../workflows/compiled.js";
 import type { Proof } from "../workflows/proof.js";
 import { proofLine, proveWorkflow, writeProof } from "../workflows/proof.js";
+import { linkOnce, SHIPPED_DIR, shippedRoots } from "../workflows/roots.js";
 import type { Ingress } from "./client.js";
 import type { Settings } from "./config.js";
 import { fileDone } from "./needs.js";
@@ -185,6 +186,7 @@ export async function proveCompiled(
 export async function compileRecording(rec: Recording, llm: Llm | null): Promise<Compiled> {
   const out = await compile(rec, { llm, lib: COMPILED_LIB });
   const dir = join(COMPILED_DIR, out.outline.name);
+  await linkOnce();
   await writeRendered(dir, out);
   await saveOutline(dir, out.outline);
   return out;
@@ -195,7 +197,7 @@ const EXEMPLAR = "aws-port25-request";
 
 async function exemplarFor(name: string): Promise<{ module: string; test: string } | null> {
   if (name === EXEMPLAR) return null;
-  const dir = join(COMPILED_DIR, EXEMPLAR);
+  const dir = join(SHIPPED_DIR, EXEMPLAR);
   try {
     const [module, test] = await Promise.all([
       readFile(join(dir, "index.ts"), "utf8"),
@@ -366,8 +368,11 @@ export type BackendParts = Pick<
  * on these in-process.
  */
 export function localParts(settings: Settings, o: { headless?: boolean } = {}): BackendParts {
-  const catalog = compiledCatalog(COMPILED_DIR, undefined, () =>
-    modWorkflowRoots(modsDirFor(settings)),
+  const catalog = compiledCatalog(
+    COMPILED_DIR,
+    undefined,
+    () => [...shippedRoots(), ...modWorkflowRoots(modsDirFor(settings))],
+    linkOnce,
   );
   const gmail = gmailFor(settings);
   const screen = o.headless === undefined ? screenOf(settings) : { headless: o.headless };

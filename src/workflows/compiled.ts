@@ -1,6 +1,6 @@
 /**
- * Compiled workflows register themselves: every `src/workflows/<name>/
- * index.ts` that exports a `workflow` is served by one Restate object,
+ * Compiled workflows register themselves: every `<root>/<name>/index.ts`
+ * (roots in roots.ts) that exports a `workflow` is served by one Restate object,
  * `Compiled`, keyed `<workflow>/<key>`, which loads the flow from disk
  * when a run needs it. Compile from the UI or the CLI and run it from the
  * Runs page: no restart. A rewritten flow is reloaded by its mtime. Their
@@ -100,15 +100,18 @@ export interface CompiledCatalog {
 
 /**
  * Reads the directory on every call: a compile shows up at once, and a
- * directory listing is cheap. `more` adds roots read after `root` (trusted
- * mods' workflows); a name already taken keeps the first.
+ * directory listing is cheap. `more` adds roots read after `root` (shipped
+ * flows, trusted mods' workflows); a name already taken keeps the first.
+ * `before` runs ahead of each read (the user folder's library links).
  */
 export function compiledCatalog(
   root: string,
   onError: (dir: string, err: unknown) => void = () => undefined,
   more: () => string[] = () => [],
+  before: () => Promise<void> = async () => undefined,
 ): CompiledCatalog {
   const list = async () => {
+    await before();
     const all = (
       await Promise.all([root, ...more()].map((r) => loadCompiledWorkflows(r, onError)))
     ).flat();

@@ -260,7 +260,7 @@ ${gate}${secretLines.length ? `${secretLines.join("\n")}\n` : ""}${shell}${step.
 }
 
 export function render(o: Outline, opts: RenderOptions = {}): Rendered {
-  const lib = opts.lib ?? "autobrowse";
+  const lib = opts.lib ?? "@wrenautomation/autobrowse";
   const steps = o.steps.map((s) =>
     s.kind === "browser"
       ? renderBrowserStep(o, s)
