@@ -1,21 +1,59 @@
 # autobrowse
 
-Browser and account automation for the fleet: domains, Workspace, inboxes,
-logins, tokens. Recorded browser flows where no API exists, APIs where one
-does, a person in the loop where money, accounts or consent are involved.
-Separate from `wren` (the campaign system) on purpose: different
-credentials, different runtime (browser sessions, waits for a human),
-different release pace.
+Many sites have no API, or hide the part you need behind a login. A
+Playwright script breaks when the page moves a button. A browser agent
+gets past that, but it is slow, costs model tokens on every run, and does
+not do the same thing twice. Then come the sign-in walls: passwords, 2FA
+codes by email or text, captchas.
 
-On npm as `@wrenautomation/autobrowse`: `npx @wrenautomation/autobrowse --help`
-for the CLI, `import … from "@wrenautomation/autobrowse/sites"` (also `/auth`,
-`/do`, `/agent`, `/flows`, `/llm`, `/layout`) for the library. `/layout` is page
-text laid out as it looks (`layoutText(page, limit)` on a Playwright page; `layout(boxes)` is pure). A `v*` tag publishes
-(`.github/workflows/release.yml`, trusted publishing).
+autobrowse lets you explore a site once, by hand or with a model, and
+compiles what worked into a plain Playwright flow. The flow replays with
+no model. When a step breaks, the agent finishes it on the live page and
+rewrites the step. Sign-ins use your stored credentials (sealed), make
+TOTP codes itself and read one-time codes from your inbox or your phone.
+Anything that spends money or sends in your name waits for your yes.
 
-New here: `walkthrough/` is the guided path (setup → secrets → sites →
-Meta → Google → explore → agent → accounts → chores → the box) with demos
-that run now.
+## Tier 0 in five minutes
+
+Needs Node 24+. No keys, no account.
+
+```sh
+npm i @wrenautomation/autobrowse && npx playwright install chromium   # in your project folder
+npx autobrowse explore scratch --url https://example.com --background   # one browser, waiting for commands
+npx autobrowse cmd '{"cmd":"aria"}'                                     # the page as controls
+npx autobrowse cmd '{"cmd":"click","hints":{"role":"link","nth":0}}'
+npx autobrowse cmd '{"cmd":"read","hints":{"role":"paragraph","nth":0},"as":"text"}'
+npx autobrowse cmd '{"cmd":"save","name":"first-flow"}'                 # what worked becomes a recording
+npx autobrowse cmd '{"cmd":"close"}'
+npx autobrowse compile first-flow --no-llm                              # recording to code, no model
+npx autobrowse try first-flow                                           # run it
+```
+
+The flow is in `~/.config/autobrowse/workflows/first-flow/`: TypeScript
+you can read and change. `npx autobrowse abilities` lists every flow this
+install can run.
+
+## Tiers
+
+| Tier | Add | You get |
+|------|-----|---------|
+| 0 | nothing | explore, `compile --no-llm`, `try` on public pages |
+| 1 | a Claude Code subscription or one API key; `autobrowse setup` | the agent, `do`, your signed-in sites, 2FA and codes |
+| 2 | a local Restate (`brew install restatedev/tap/restate`) | `autobrowse worker`: durable runs that survive restarts, the UI on :9080 |
+
+`autobrowse setup` asks which tier, then only what that tier needs.
+Settings go to `.env` in the folder you run from; [`.env.example`](https://github.com/wrenautomation/autobrowse/blob/main/.env.example)
+lists every key by tier. Tiers 0 to 2 never need AWS. The rest of this README
+also covers the operator setup that runs Wren's fleet (owners, SSM, the
+desk); `deploy/operator.env.example` holds its keys.
+
+## Library
+
+`import … from "@wrenautomation/autobrowse/sites"` (also `/auth`, `/do`,
+`/agent`, `/flows`, `/llm`, `/layout`). `/layout` is page text laid out as
+it looks (`layoutText(page, limit)` on a Playwright page; `layout(boxes)`
+is pure). A `v*` tag publishes (`.github/workflows/release.yml`, trusted
+publishing). `walkthrough/` is the guided path with demos that run now.
 
 ## One verb
 
@@ -376,13 +414,13 @@ a row; it is work.
 ## Run
 
 ```sh
-cp .env.example .env            # fill it
+cp .env.example .env            # optional keys by tier; operator keys in deploy/operator.env.example
 pnpm ui:build                   # the SPA the worker serves
 pnpm worker                     # Restate endpoint on :9081, UI + API on :9080
 restate cloud env tunnel        # expose it to the shared Restate Cloud env, register it
 pnpm ui:dev                     # SPA with hot reload on :5173, proxied to :9080
 
-pnpm autobrowse setup                          # asks once for what is missing (hidden input, sealed store)
+pnpm autobrowse setup --all                    # the operator roster: every known site in turn (hidden input, sealed store)
 pnpm autobrowse login cloudflare               # signs in by itself: password or the Google button, TOTP/email/SMS code
 pnpm autobrowse workspace-logo logo.png   # the org logo across Gmail/Calendar/Drive (320×132 PNG < 30 KB)
 pnpm autobrowse profile-photo pfp.gif --as google@wren   # an account's round picture in Gmail; a GIF stays animated

@@ -13,15 +13,15 @@ AWS is never needed for tiers 0 to 2.
 ## Tier 0: five minutes, no keys
 
 ```sh
-npm i -g @wrenautomation/autobrowse && npx playwright install chromium
-autobrowse explore scratch --url https://example.com --background   # one browser, waiting for commands
-autobrowse cmd '{"cmd":"aria"}'                                     # the page as controls
-autobrowse cmd '{"cmd":"click","hints":{"role":"link","nth":0}}'
-autobrowse cmd '{"cmd":"read","hints":{"role":"paragraph","nth":0},"as":"text"}'
-autobrowse cmd '{"cmd":"save","name":"first-flow"}'                 # the journal becomes a recording
-autobrowse cmd '{"cmd":"close"}'
-autobrowse compile first-flow --no-llm                              # recording to code, no model
-autobrowse try first-flow                                           # run it
+npm i @wrenautomation/autobrowse && npx playwright install chromium   # in your project folder
+npx autobrowse explore scratch --url https://example.com --background   # one browser, waiting for commands
+npx autobrowse cmd '{"cmd":"aria"}'                                     # the page as controls
+npx autobrowse cmd '{"cmd":"click","hints":{"role":"link","nth":0}}'
+npx autobrowse cmd '{"cmd":"read","hints":{"role":"paragraph","nth":0},"as":"text"}'
+npx autobrowse cmd '{"cmd":"save","name":"first-flow"}'                 # the journal becomes a recording
+npx autobrowse cmd '{"cmd":"close"}'
+npx autobrowse compile first-flow --no-llm                              # recording to code, no model
+npx autobrowse try first-flow                                           # run it
 ```
 
 That opens example.com, follows its link, reads a paragraph, compiles the
@@ -32,7 +32,7 @@ runs the same steps.
 ## Tier 1 and 2
 
 ```sh
-npx @wrenautomation/autobrowse setup    # asks the tier, then only what that tier needs
+npx autobrowse setup                    # asks the tier, then only what that tier needs
 ```
 
 Tier 1 asks for the model (your Claude Code subscription when `claude` is on
@@ -42,12 +42,12 @@ codes arrive. Tier 2 adds Restate:
 ```sh
 brew install restatedev/tap/restate
 restate-server                          # one terminal
-npx @wrenautomation/autobrowse worker   # another: Restate endpoint :9081, UI + API :9080
+npx autobrowse worker                   # another: Restate endpoint :9081, UI + API :9080
 open http://localhost:9080              # runs, gates, explore, recordings, accounts, settings
 ```
 
 Settings go to `.env` in the folder you run from (0600, never committed).
-`.env.example` lists every optional key by tier.
+[`.env.example`](https://github.com/wrenautomation/autobrowse/blob/main/.env.example) lists every optional key by tier.
 
 ## From a clone
 
