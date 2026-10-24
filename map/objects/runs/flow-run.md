@@ -21,7 +21,7 @@ A failure record says why one run broke; failure rates need every run. No input 
 - Default place: `statsDir` — `src/deps/stats.ts`; `RunnerOptions.runs` — `src/browser/flow.ts:335`, default at `:471`; `runRow` — `:351`; the row at `:1080`
 - A browser that never opens still writes a row: goal `open the browser`, acts 0, outcome interrupted (transient) or failed — `src/browser/flow.ts:526`
 - Tokens per run: `tallied` — `src/llm/ledger.ts:85`, run at `src/browser/flow.ts:991`
-- CLI: `autobrowse success` reads `flowRunsDirFor` — `src/app/services.ts:635`
+- CLI: `autobrowse success` reads `flowRunsDirFor` — `src/app/services-state.ts:352`
 
 ## Connected to
 

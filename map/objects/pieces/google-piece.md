@@ -20,13 +20,13 @@ One copy of the auth and one copy of the Gmail wire, for both repos. Every call 
 - Auth: `SCOPES`, `delegatedScopes`, `loadServiceAccountKey(path, envName = "GOOGLE_SERVICE_ACCOUNT")`, `serviceAccountToken`, `postmasterToken`, `authedJson(http, …)` (the one function that takes an `HttpClient`) — `src/google/auth.ts:15,31,79,180,230,251`
 - Wire: `GmailClient` (`sendRaw`, `findByMessageId`, `listMessages`, `getMetadata`, `getMessage`, `watch`, `searchAll`, `sendAs`, `patchSendAs`, `getRaw`), `GmailApiError`, `gmailPushTopic` — `src/google/gmail.ts:26,62,70`
 - Helper: `gmailClient({ tokenFor, scopes, fetch? })` makes one `GmailClient` per scope; `GmailUserClient` (`setSignature`, `send`, `recent`, `search`, `whole`), `mimeMessage`, `rawHeader`, `messageText` — `src/google/gmail.ts:240,336,452,272,305`
-- Composer: `gmailFor` — `src/app/services.ts:1352`
+- Composer: `gmailFor` — `src/app/services-reach.ts:99`
 - Exports — `src/google/index.ts`; tests — `test/google-piece.test.ts`, `test/gmail.test.ts`
 
 ## Connected to
 
 - **owns:** the Gmail wire and the service-account token
-- **joins:** [[sign-in-context]] (Gmail is a code reader), [[mail-piece]], [[oauth-piece]] (the OAuth wire, sign-in side), [[settings]] (`googleTokens`, `src/app/services.ts:1299`)
+- **joins:** [[sign-in-context]] (Gmail is a code reader), [[mail-piece]], [[oauth-piece]] (the OAuth wire, sign-in side), [[settings]] (`googleTokens`, `src/app/services-reach.ts:39`)
 - **looks-like-but-is-not:** [[identity-provider]] (the browser sign-in to Google); a site's OAuth [[token]]
 
 ## If you change this

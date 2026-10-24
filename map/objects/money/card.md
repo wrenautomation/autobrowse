@@ -20,7 +20,7 @@ Cards never pass through a model or a log: `place{secret:"card.number"}` reads t
 - `Card { label, kind, holder, number, expMonth, expYear, cvc, postal?, owner?, email?, phone?, addedAt }` — `src/money/wallet.ts:29-50`; `luhn`, `cardBrand`, `admitCard`, `parseCardLine`, `cardFromFields` — `:53-198`
 - `Wallet`, `fileWallet` (`~/.config/autobrowse/wallet.sealed`, `src/app/config.ts:227`), `ssmWallet` (`/wallet/cards`), `backedUpWallet`, `pickCard` — `src/money/wallet.ts:200-458`; `cardSecret(name)` — `:415`
 - `Profile`, `Address`, `contactsOf`, `ProfileStore` (`/wallet/profiles`) — `src/money/profile.ts:36-239`
-- `profileSecret` (`profile.<field>`, `profile@<id>.<field>`), `profileField` — `src/money/profile.ts:130-149`; explore reads them through `profiles` (`profilesForPlace`, `src/app/services.ts:852`)
+- `profileSecret` (`profile.<field>`, `profile@<id>.<field>`), `profileField` — `src/money/profile.ts:130-149`; explore reads them through `profiles` (`profilesForPlace`, `src/app/services-money.ts:144`)
 - `bankCodeSecret` (`card.code`, `card@<label>.code`), `codeWindowOpen`, `bankCodeReader` (newest numeric text after the card; a handed-out text is spent) — `src/money/bank-code.ts`; `placeBankCode` and the `cardLanded` state in `src/explore/server.ts`; `cardCodeFor`, `grantedAheadFor` in `src/app/services.ts`
 - `Charge`, `Receipt`, `Invoice`, `reportCharge` (texted, emailed, written down) — `src/money/charges.ts:18-160`; `cardsOnFile` (which card each host holds) — `src/explore/server.ts:381-385`
 
@@ -32,7 +32,7 @@ Cards never pass through a model or a log: `place{secret:"card.number"}` reads t
 
 ## If you change this
 
-- **Hits:** `src/explore/server.ts:366-393`, `src/money/bank-code.ts`, `src/browser/frames.ts`, `src/money/profile.ts`, `src/money/charges.ts`, `src/app/services.ts:779-907` (`walletFor`, `profilesFor`, `profilesForPlace`, `cardsFor`, `chargesFor`), `src/app/cli-wallet.ts`, `src/auth/ingest.ts`.
+- **Hits:** `src/explore/server.ts:366-393`, `src/money/bank-code.ts`, `src/browser/frames.ts`, `src/money/profile.ts`, `src/money/charges.ts`, `src/app/services-state.ts:345`, `src/app/services-signin.ts:150` (`walletFor`, `profilesFor`, `profilesForPlace`, `cardsFor`, `chargesFor`), `src/app/cli-wallet.ts`, `src/auth/ingest.ts`.
 - **Does not hit:** the credential vault; site API tokens.
 
 ## Surfaces

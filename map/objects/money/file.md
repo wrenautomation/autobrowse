@@ -23,7 +23,7 @@ A file never passes through a log or a plaintext file: `upload{files:["file:<nam
 - `FileBucket`, `bucketFiles` (prefix `files/`, sets in `files.sets`, record in metadata less the text), `backedUpFiles` — `src/files/store.ts:321-446`; `s3FileBucket` — `src/shots/s3.ts:31`
 - `fileRef`, `filePayload`, `filesInSets` — `src/files/store.ts:449-488`
 - `migratePapers`, `retiredDirFor` (old `papers/` → copy, read back, then `papers-retired`) — `src/files/migrate.ts:44-114`
-- `filesFor`, `oldPapersDir`, `filesForExplore` — `src/app/services.ts:1008-1044`
+- `filesFor`, `oldPapersDir`, `filesForExplore` — `src/app/services-money.ts:97`
 - explore `files`, `fileSets`, `filesYes`, `uploadFiles`, the `files` and `read_file` commands — `src/explore/server.ts:511`, `:1151`, `:1168`, `:1687`; the act's `FilePayload` — `src/browser/flow.ts`
 - drops: `mintDrop`, `takeDrop` — `src/auth/link.ts:108-144`; CLI `src/app/cli-files.ts`; `explore --files` — `src/app/cli-record.ts:65`
 - library export `autobrowse/files` — `src/files/index.ts`

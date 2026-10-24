@@ -20,7 +20,7 @@ Sign-ins branch. Determinism is per known screen, not per fixed sequence: a walk
 - `Screen { name, looks, at?, shows?, hides?, says?, is?, act?, goal?, overlay?, repeats? }` — `src/browser/screens.ts:34-57`; `isOn` needs at least one check — `:284`
 - `Walk` (screens, `maxSteps` default 12, `fail`) — `:344`; `walk(ctx, w)` — `:433`
 - `Trail` on `ScreenHelp` — `:118-134`: a walk starts its path with the screens earlier tries of the call got past and reports each screen whose act ran (`:466`); stuck counts this try only. The runner fills it from the [[resume-record]]
-- `LearnedScreen { site, url, landmarks, walk?, screen?, click?, reason, found, used, from? }` and `LearnedScreens` store — `:66-97`; file `SCREENS_FILE` = `~/.config/autobrowse/screens.json` (`src/app/config.ts:114`); the runner and the login check read the owner's then installed [[mod]]s' (`screensFor`, `src/app/services.ts:579`), and a mod's screen that works is kept with `from`
+- `LearnedScreen { site, url, landmarks, walk?, screen?, click?, reason, found, used, from? }` and `LearnedScreens` store — `:66-97`; file `SCREENS_FILE` = `~/.config/autobrowse/screens.json` (`src/app/config.ts:114`); the runner and the login check read the owner's then installed [[mod]]s' (`screensFor`, `src/app/services-state.ts:341`), and a mod's screen that works is kept with `from`
 - `ScreenReader` (a model names an unknown page) — `:102`, `llmScreenReader` `src/browser/repair.ts:156`
 - Walks in force: Google (`src/auth/google.ts`), Cloudflare (`src/auth/sites.ts`); runner interrupts (a cookie banner) share the file
 
