@@ -63,9 +63,13 @@ function forms(value: string): string[] {
   return [...out];
 }
 
-interface Scrubber {
+/** What a pass does to each string: `url` for URL-shaped ones, `text` for the rest. */
+export interface Pass {
   text(s: string): string;
   url(s: string): string;
+}
+
+interface Scrubber extends Pass {
   check(text: string): void;
 }
 
@@ -113,7 +117,7 @@ function scrubber(known: Known[]): Scrubber {
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 
 /** Every string in a value, through `text`; keys that carry typed input become `<typed>`. */
-function deep(v: Json, s: Scrubber, key = ""): Json {
+function deep(v: Json, s: Pass, key = ""): Json {
   if (TYPED_PARAMS.has(key) && v !== null && typeof v !== "boolean" && typeof v !== "number")
     return "<typed>";
   if (typeof v === "string") return /url$/i.test(key) ? s.url(v) : s.text(v);
@@ -128,7 +132,7 @@ function deep(v: Json, s: Scrubber, key = ""): Json {
  * `[tag, attrs?, ...children]`. Input values become `<input>`; a
  * textarea's text the same.
  */
-function node(n: Json, s: Scrubber, parentTag = ""): Json {
+function node(n: Json, s: Pass, parentTag = ""): Json {
   if (typeof n === "string") return parentTag === "TEXTAREA" ? "<input>" : s.text(n);
   if (!Array.isArray(n) || n.length === 0 || typeof n[0] !== "string") return n;
   const tag = n[0];
@@ -160,7 +164,7 @@ const LAUNCH_KEYS = new Set([
   "storageState",
 ]);
 
-function event(o: { [k: string]: Json }, s: Scrubber): { [k: string]: Json } | null {
+function event(o: { [k: string]: Json }, s: Pass): { [k: string]: Json } | null {
   switch (o.type) {
     case "screencast-frame":
       return null;
@@ -197,7 +201,7 @@ function event(o: { [k: string]: Json }, s: Scrubber): { [k: string]: Json } | n
 }
 
 /** A network row: method, URL without query values, status, and the CSS body pointer only. */
-function resource(o: { [k: string]: Json }, s: Scrubber, css: Set<string>): { [k: string]: Json } {
+function resource(o: { [k: string]: Json }, s: Pass, css: Set<string>): { [k: string]: Json } {
   const snap = (o.snapshot ?? {}) as { [k: string]: Json };
   const req = (snap.request ?? {}) as { [k: string]: Json };
   const rsp = (snap.response ?? {}) as { [k: string]: Json };
@@ -262,23 +266,65 @@ function lines(
   return `${out.join("\n")}\n`;
 }
 
-/** The trace zip with personal data out. Throws `ScrubLeak` when a known value survives. */
-export function scrubTrace(zip: Uint8Array, known: Known[]): Uint8Array {
-  const s = scrubber(known);
+/**
+ * The trace with each kept string through `p`, and what holds pixels or
+ * bodies dropped. A scrubbed trace passes through unchanged but for `p`:
+ * the second pass at Wren (`share/presidio`) uses this on one.
+ */
+export function rewriteTrace(zip: Uint8Array, p: Pass): Record<string, Uint8Array> {
   const files = unzipSync(zip);
   const out: Record<string, Uint8Array> = {};
   const css = new Set<string>();
   for (const [name, bytes] of Object.entries(files)) {
     if (name.endsWith(".network"))
-      out[name] = strToU8(lines(strFromU8(bytes), (o) => resource(o, s, css)));
+      out[name] = strToU8(lines(strFromU8(bytes), (o) => resource(o, p, css)));
   }
   for (const [name, bytes] of Object.entries(files)) {
-    if (name.endsWith(".trace")) out[name] = strToU8(lines(strFromU8(bytes), (o) => event(o, s)));
+    if (name.endsWith(".trace")) out[name] = strToU8(lines(strFromU8(bytes), (o) => event(o, p)));
   }
   for (const sha of css) {
     const bytes = files[`resources/${sha}`];
-    if (bytes) out[`resources/${sha}`] = strToU8(s.text(strFromU8(bytes)));
+    if (bytes) out[`resources/${sha}`] = strToU8(p.text(strFromU8(bytes)));
   }
+  return out;
+}
+
+/** The trace zip with personal data out. Throws `ScrubLeak` when a known value survives. */
+export function scrubTrace(zip: Uint8Array, known: Known[]): Uint8Array {
+  const s = scrubber(known);
+  const out = rewriteTrace(zip, s);
   for (const bytes of Object.values(out)) s.check(strFromU8(bytes));
   return zipSync(out, { level: 6 });
+}
+
+/** Protocol methods whose params carry what the run typed, and the param. */
+const TYPED_BY: Record<string, string> = {
+  fill: "value",
+  type: "text",
+  keyboardType: "text",
+  keyboardInsertText: "text",
+  pressSequentially: "text",
+};
+
+/** Every value the run typed, read from the raw trace's own action params: sign-ins included. */
+export function knownFromTrace(zip: Uint8Array): Known[] {
+  const trace = unzipSync(zip, { filter: (f) => f.name.endsWith(".trace") });
+  const out = new Map<string, Known>();
+  for (const bytes of Object.values(trace))
+    for (const line of strFromU8(bytes).split("\n")) {
+      if (!line.includes('"before"')) continue;
+      try {
+        const o = JSON.parse(line) as {
+          type?: string;
+          method?: string;
+          params?: Record<string, unknown>;
+        };
+        const param = o.type === "before" && o.method ? TYPED_BY[o.method] : undefined;
+        const v = param ? o.params?.[param] : undefined;
+        if (typeof v === "string" && v.trim()) out.set(v, { value: v, kind: "typed" });
+      } catch {
+        // a cut-off last line
+      }
+    }
+  return [...out.values()];
 }

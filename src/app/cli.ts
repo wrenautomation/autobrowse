@@ -37,6 +37,7 @@ import { registerNeedsCommands } from "./cli-needs.js";
 import { registerReachCommands } from "./cli-reach.js";
 import { registerRecordCommands } from "./cli-record.js";
 import { registerRunsCommands } from "./cli-runs.js";
+import { registerShareCommands, sendAfterCommand } from "./cli-share.js";
 import { registerShotsCommands } from "./cli-shots.js";
 import { registerSiteCommands } from "./cli-site.js";
 import { registerTeachCommand } from "./cli-teach.js";
@@ -63,6 +64,7 @@ import {
   keysDepFor,
   LOCAL_WORKFLOWS,
   loadDataLogins,
+  shareKnownFor,
   sinkFor,
   WORKFLOWS,
   workspaceInboxDepsFor,
@@ -76,6 +78,7 @@ if (argvOwner === "") {
 }
 if (argvOwner) process.env.AUTOBROWSE_OWNER = argvOwner;
 const { settings } = boot();
+void shareKnownFor(settings);
 loadDataLogins(settings);
 const api = ingress({
   url: settings.restateIngressUrl,
@@ -640,6 +643,7 @@ registerReachCommands(
   keysDepFor(settings),
 );
 registerShotsCommands(program, settings);
+registerShareCommands(program);
 registerWatchedCommands(program, settings);
 registerModsCommands(program, settings);
 registerRunsCommands(program, settings, local);
@@ -805,16 +809,21 @@ registerAutotrackCommands(program, settings);
 registerAccessCommands(program, settings);
 
 tidyHelp(program);
-program.parseAsync().catch((err: unknown) => {
-  // Name the command that failed, so a bare "exit code 1" always says why.
-  const command = process.argv
-    .slice(2)
-    .filter((a) => !a.startsWith("-"))
-    .slice(0, 2)
-    .join(" ");
-  const why = err instanceof Error ? err.message : String(err);
-  console.error(`autobrowse ${command} failed: ${why}`);
-  if (process.env.AUTOBROWSE_DEBUG && err instanceof Error) console.error(err.stack);
-  else console.error("(rerun with AUTOBROWSE_DEBUG=1 for the stack)");
-  process.exitCode = 1;
-});
+program
+  .hook("postAction", async (_, cmd) => {
+    if (cmd.parent?.name() !== "share") await sendAfterCommand();
+  })
+  .parseAsync()
+  .catch((err: unknown) => {
+    // Name the command that failed, so a bare "exit code 1" always says why.
+    const command = process.argv
+      .slice(2)
+      .filter((a) => !a.startsWith("-"))
+      .slice(0, 2)
+      .join(" ");
+    const why = err instanceof Error ? err.message : String(err);
+    console.error(`autobrowse ${command} failed: ${why}`);
+    if (process.env.AUTOBROWSE_DEBUG && err instanceof Error) console.error(err.stack);
+    else console.error("(rerun with AUTOBROWSE_DEBUG=1 for the stack)");
+    process.exitCode = 1;
+  });

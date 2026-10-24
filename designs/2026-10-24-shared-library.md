@@ -24,11 +24,13 @@ Every autobrowse install sends its compiled flows and its run traces to Wren, wi
 
 ## Build order
 
-1. `scrubTrace` + its tests, local only. No upload. Built: `src/shots/scrub.ts`, `redactPii` in `src/recorder/redact.ts`.
+1. `scrubTrace` + its tests, local only. No upload. Built: `src/share/scrub.ts`, `redactPii` in `src/recorder/redact.ts`.
 2. Switch, notice, exclude list, queue, `share status`. The runner keeps the trace of every run, not only failures and watched runs as now (`flow.ts` stops tracing without a path on success). It collects `known` in the run (each `fill`/`type` value, each `place` value as resolved, the profile's fields) and scrubs right after `tracing.stop`, in the same process. `known` is never written to disk.
 3. Ingest (presign) + inbox bucket prefix + Presidio job.
 4. Send step on the desk timer and after each CLI run.
 5. Registry repo, gate and `workflows add`.
+
+Step 2 built: `src/share/share.ts` (switch, state, notice, exclude, queue, send), `autobrowse share`, the runner hook in `flow.ts` (a run that worked stops tracing to a temp zip, scrubs it, deletes the temp; a failure shares its kept trace), the desk send timer and the profile hook (`shareKnownFor`).
 
 ## Decision log
 
@@ -42,3 +44,6 @@ Every autobrowse install sends its compiled flows and its run traces to Wren, wi
 - 10-24: Known values under 5 characters, or digit-only under 7, are not replaced or checked. On a real failed Workday trace a typed year matched every date and frame id. Typed values are masked by place (action params, input values) whatever their length.
 - 10-24: Real check, one failed Workday apply trace (a resume, the hardest case): 8.1 MB, 576 files → 0.5 MB, 2 files, 1 s. Every typed value gone in all forms; no address, home folder or query value left. Images and response bodies go; Workday had no CSS kept, so its snapshots render unstyled.
 - 10-24: SVG geometry attributes (`d`, `points`, `viewBox`, `transform`) skip the text pass. They hold only numbers, and the phone pattern read them as phone numbers.
+- 10-24: Known values come from the raw trace's own action params (`fill` value, `type` text), not a collector in the run. The trace already holds every typed value, sign-ins included, so no run code changes and nothing is missed. Profile fields come from a hook set at boot.
+- 10-24: A flow pack is a JSON file in the same queue (`<stamp>.<name>.flow.json`). The ingest takes `/v1/traces/*` and `/v1/flows/*`; the gate reads flows from the inbox.
+- 10-24: Send: a 2xx or a 4xx (but 429) takes the file off the queue; a 429, 5xx or network error stops the round. Files over 8 MB are dropped. After each CLI command: 5 s. On the desk: every 15 min, 120 s.

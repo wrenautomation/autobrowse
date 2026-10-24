@@ -638,6 +638,45 @@ export function keepTracesOnTimer(settings: Settings, log: Logger): void {
   setTimeout(tick, 60_000).unref();
 }
 
+/** The shared library's queue goes to Wren's ingest on the trace timer's beat (`share/share`). */
+export function sendSharedOnTimer(log: Logger): void {
+  let busy = false;
+  const tick = (): void => {
+    if (busy) return;
+    busy = true;
+    void import("../share/share.js")
+      .then(({ sendShared }) => sendShared({ budgetMs: 120_000 }))
+      .then((r) => {
+        if (r.sent || r.dropped) log.info(r, "share");
+      })
+      .catch((err) => log.warn({ err: err instanceof Error ? err.message : String(err) }, "share"))
+      .finally(() => {
+        busy = false;
+      });
+  };
+  setInterval(tick, 15 * 60_000).unref();
+  setTimeout(tick, 90_000).unref();
+}
+
+/**
+ * The profile's values (name, email, phone, address) are known values for
+ * every shared trace: masked wherever they show. Read once, on the first share.
+ */
+export async function shareKnownFor(settings: Settings): Promise<void> {
+  if (process.platform !== "darwin" || !isDefaultOwner(settings.owner)) return;
+  const { setKnownSource } = await import("../share/share.js");
+  setKnownSource(async () => {
+    const out: { value: string; kind: string }[] = [];
+    const walk = (v: unknown, kind: string): void => {
+      if (typeof v === "string") out.push({ value: v, kind });
+      else if (v && typeof v === "object")
+        for (const [k, x] of Object.entries(v)) if (k !== "id") walk(x, k);
+    };
+    walk(await (await profilesFor(settings)).list(), "profile");
+    return out;
+  });
+}
+
 /** Where every secret use is written: next to the credential file, 0600, one JSON line each. */
 /** The ledgers live beside the credential file, one hash-chained JSONL each (`autobrowse ledger verify`). */
 export function ledgerPath(

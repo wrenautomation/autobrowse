@@ -12,7 +12,7 @@
  * raw and may hold typed secrets; it stays out of git. What goes in is the
  * typed flow with visible-label selectors, so a redesign fails loudly.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { FileChooser, Locator, Page } from "playwright";
 import { resumeDir, statsDirOf } from "../deps/stats.js";
@@ -20,6 +20,7 @@ import { expandHome } from "../google/auth.js";
 import { tallied } from "../llm/ledger.js";
 import { redactAria, redactText } from "../recorder/redact.js";
 import { type FlowOutcome, type FlowRunRow, type FlowRuns, fileFlowRuns } from "../runs/flows.js";
+import { shareOff, shareTrace } from "../share/share.js";
 import { currentCall, type DoneActs, markSubmitted } from "./attempt.js";
 import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js";
 import { type Fixes, flowKey } from "./fixes.js";
@@ -1085,6 +1086,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           };
           outcome = kind;
           failure = record.error;
+          if (artifacts.trace)
+            await shareTrace(artifacts.trace, { site: key, flow: flow.name, outcome: kind });
           if (call && resumes) keepResume(call, kind);
           artifacts.failure = join(artifactsDir, `${stamp}.failure.json`);
           writeFileSync(artifacts.failure, JSON.stringify(record, null, 2));
@@ -1116,10 +1119,22 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           runner.fixes?.flush();
           learned.flush();
           // A watched run keeps its trace whatever happened; a failure saved one already.
-          if (tracing)
-            await session.context.tracing
-              .stop(watch ? { path: join(watch.dir, "trace.zip") } : undefined)
-              .catch(() => undefined);
+          // A run that worked goes to the shared library too (`share/share`), scrubbed first.
+          if (tracing) {
+            const share = outcome === "ok" && !shareOff();
+            const path = watch
+              ? join(watch.dir, "trace.zip")
+              : share
+                ? join(artifactsDir, `${stamp}.share.zip`)
+                : null;
+            const saved = await session.context.tracing
+              .stop(path ? { path } : undefined)
+              .then(() => true)
+              .catch(() => false);
+            if (saved && path && share)
+              await shareTrace(path, { site: key, flow: flow.name, outcome: "ok" });
+            if (path && !watch) rmSync(path, { force: true });
+          }
           if (runner.park && !broken) {
             // Stubs from `answer` belong to this run.
             await session.context.unrouteAll({ behavior: "ignoreErrors" }).catch(() => undefined);

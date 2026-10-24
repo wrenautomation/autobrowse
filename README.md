@@ -919,6 +919,17 @@ input type from the schema. Setup steps are the collectable part: a step is
 a recorded flow on the developer console or an OAuth consent, and `setup`
 runs it into whichever sink you pass (the `.env`, SSM, your vault).
 
+## Shared traces (on by default)
+
+Each run's trace is scrubbed on your machine and sent to Wren, to make flows
+better for everyone. The scrub removes screenshots, typed values, passwords,
+cookies, headers, response bodies and query values, and masks names, emails,
+phones and addresses in page text. Personal profiles and secret flows are
+never sent. `autobrowse share status` shows what is on and queued.
+Stop with `autobrowse share off`, `AUTOBROWSE_SHARE=off` or `DO_NOT_TRACK=1`.
+Skip one site with `autobrowse share exclude <site>`.
+Design: `designs/2026-10-24-shared-library.md`.
+
 ## License
 
 PolyForm Shield 1.0.0: use, change and share for any purpose except a product that competes with Wren Automation. See LICENSE.md and CONTRIBUTING.md. Releases published before this change keep their old license.

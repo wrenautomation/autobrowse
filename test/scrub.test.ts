@@ -1,7 +1,7 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { redactPii } from "../src/recorder/redact.js";
-import { type Known, ScrubLeak, scrubTrace } from "../src/shots/scrub.js";
+import { type Known, ScrubLeak, scrubTrace } from "../src/share/scrub.js";
 
 const NAME = "Quentin Marlowe";
 const MAIL = "quentin.marlowe@example.org";
