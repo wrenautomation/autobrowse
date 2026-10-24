@@ -40,7 +40,7 @@ A profile per site name keeps sign-ins between runs. Three tiers say where the b
 
 ## If you change this
 
-- **Hits:** `src/browser/flow.ts:384` (`flowRunner`), `src/explore/server.ts:500`, `src/browser/park.ts`, `src/browser/reap.ts`, `src/browser/browsers.ts`, `src/browser/profile-wait.ts`, `src/sites/service.ts`, `src/browser/watchers.ts`, `src/browser/own.ts`, `src/app/services-kit.ts:3`, `src/app/services-browser.ts:101`.
+- **Hits:** `src/browser/flow.ts:384` (`flowRunner`), `src/explore/server.ts:261`, `src/browser/park.ts`, `src/browser/reap.ts`, `src/browser/browsers.ts`, `src/browser/profile-wait.ts`, `src/sites/service.ts`, `src/browser/watchers.ts`, `src/browser/own.ts`, `src/app/services-kit.ts:3`, `src/app/services-browser.ts:101`.
 - **Does not hit:** flows themselves (they see `FlowPage`), the agent's step loop.
 
 ## Surfaces

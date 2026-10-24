@@ -22,7 +22,7 @@ Cards never pass through a model or a log: `place{secret:"card.number"}` reads t
 - `Profile`, `Address`, `contactsOf`, `ProfileStore` (`/wallet/profiles`) — `src/money/profile.ts:36-239`
 - `profileSecret` (`profile.<field>`, `profile@<id>.<field>`), `profileField` — `src/money/profile.ts:130-149`; explore reads them through `profiles` (`profilesForPlace`, `src/app/services-money.ts:144`)
 - `bankCodeSecret` (`card.code`, `card@<label>.code`), `codeWindowOpen`, `bankCodeReader` (newest numeric text after the card; a handed-out text is spent) — `src/money/bank-code.ts`; `placeBankCode` and the `cardLanded` state in `src/explore/server.ts`; `cardCodeFor`, `grantedAheadFor` in `src/app/services.ts`
-- `Charge`, `Receipt`, `Invoice`, `reportCharge` (texted, emailed, written down) — `src/money/charges.ts:18-160`; `cardsOnFile` (which card each host holds) — `src/explore/server.ts:381-385`
+- `Charge`, `Receipt`, `Invoice`, `reportCharge` (texted, emailed, written down) — `src/money/charges.ts:18-160`; `cardsOnFile` (which card each host holds) — `src/explore/commands.ts:227-229`
 
 ## Connected to
 
@@ -32,7 +32,7 @@ Cards never pass through a model or a log: `place{secret:"card.number"}` reads t
 
 ## If you change this
 
-- **Hits:** `src/explore/server.ts:366-393`, `src/money/bank-code.ts`, `src/browser/frames.ts`, `src/money/profile.ts`, `src/money/charges.ts`, `src/app/services-state.ts:345`, `src/app/services-signin.ts:150` (`walletFor`, `profilesFor`, `profilesForPlace`, `cardsFor`, `chargesFor`), `src/app/cli-wallet.ts`, `src/auth/ingest.ts`.
+- **Hits:** `src/explore/commands.ts:214-237`, `src/money/bank-code.ts`, `src/browser/frames.ts`, `src/money/profile.ts`, `src/money/charges.ts`, `src/app/services-state.ts:345`, `src/app/services-signin.ts:150` (`walletFor`, `profilesFor`, `profilesForPlace`, `cardsFor`, `chargesFor`), `src/app/cli-wallet.ts`, `src/auth/ingest.ts`.
 - **Does not hit:** the credential vault; site API tokens.
 
 ## Surfaces
