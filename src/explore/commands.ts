@@ -226,7 +226,6 @@ export const LOOKED_AT = new Set<Command["cmd"]>([
 export const WAITS_FOR_CONTROL = new Set<Command["cmd"]>(["fill", "place"]);
 /** Answers a caller that reads the whole page each time would get instead: measured for the token report. */
 export const WHOLE_PAGE = new Set<Command["cmd"]>([...LOOKS, "aria", "snapshot", "text", "batch"]);
-/** How long after a command its own late DOM events are still the agent's, not a person's. */
 /** Which explore flag gives a `place` secret, for the error when it is missing. */
 export function placeHint(secret: string): string {
   const dot = secret.lastIndexOf(".");

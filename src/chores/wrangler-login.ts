@@ -86,5 +86,3 @@ async function urlOf(out: () => string, done: Promise<unknown>, ms: number): Pro
     await new Promise((r) => setTimeout(r, 100));
   }
 }
-
-/** The last lines of the CLI's output, the URL and long tokens masked. */
