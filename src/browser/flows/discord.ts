@@ -13,7 +13,8 @@
  */
 import type { SecretSink } from "../../deps/sink.js";
 import { DISCORD_APP_ID, DISCORD_BOT_TOKEN, inviteUrl } from "../../sites/discord.js";
-import { defineFlow, type FlowPage } from "../flow.js";
+import { defineFlow } from "../flow.js";
+import { passCaptcha } from "./kit.js";
 
 const PORTAL = "https://discord.com/developers/applications";
 const APP_URL = /developers\/applications\/(\d{5,25})/;
@@ -25,12 +26,6 @@ const SKIP = { role: "button", name: "Skip" } as const;
 const TERMS_BOX = {
   css: 'div[role=dialog] label[data-mana-component=checkbox] div[class*="checkboxIndicator"]',
 } as const;
-
-async function passCaptcha(fp: FlowPage, where: string): Promise<void> {
-  if (!(await fp.has(HCAPTCHA, 2_000))) return;
-  const got = await fp.captcha();
-  if (!got.solved) fp.human(`discord: the captcha at ${where} is a person's (${got.reason})`);
-}
 
 export interface DiscordBotInput {
   /** The application's (and the bot's) name. */
@@ -69,7 +64,7 @@ export const discordBotToken = defineFlow<DiscordBotInput, { appId: string; kept
         goal: "create the application",
       },
     );
-    await passCaptcha(fp, "create application");
+    await passCaptcha(fp, HCAPTCHA, "discord: the captcha at create application");
     if (!(await fp.waitForUrl(APP_URL, 30_000)))
       return fp.human("the new application did not open");
     const appId = fp.url().match(APP_URL)?.[1] ?? "";
@@ -146,7 +141,7 @@ export const discordInvite = defineFlow<DiscordInviteInput, { added: true }>({
         goal: "add the bot to the server",
       },
     );
-    await passCaptcha(fp, "authorize");
+    await passCaptcha(fp, HCAPTCHA, "discord: the captcha at authorize");
     const text = async () => (await fp.text()).toLowerCase();
     for (let i = 0; i < 15; i++) {
       if (/authori[sz]ed|added to|you may now close/.test(await text())) return { added: true };

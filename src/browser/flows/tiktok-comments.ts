@@ -19,7 +19,8 @@
  * (our new videos failed nine reads that way).
  */
 import type { Response } from "playwright";
-import { defineFlow, type FlowPage } from "../flow.js";
+import { defineFlow } from "../flow.js";
+import { scrollList } from "./kit.js";
 
 const WEB = "https://www.tiktok.com";
 const FIRST_MS = 15_000;
@@ -207,11 +208,6 @@ export function commentCountOf(label: string | null): number | null {
 const DATA_SCRIPT = `document.getElementById("__UNIVERSAL_DATA_FOR_REHYDRATION__")?.textContent ?? null`;
 
 /** Scroll the comment panel to its end; the page itself when no panel scrolls. */
-async function scrollComments(fp: FlowPage): Promise<void> {
-  const moved = await fp.page.evaluate<boolean>(SCROLL_SCRIPT).catch(() => false);
-  if (!moved) await fp.scroll(1_500);
-}
-
 export const tiktokPostComments = defineFlow<PostCommentsInput, PostComments>({
   site: "tiktok",
   name: "post-comments",
@@ -280,7 +276,7 @@ export const tiktokPostComments = defineFlow<PostCommentsInput, PostComments>({
       for (let i = 0; i < SCROLLS && still < STILL_SCROLLS && left() > 0; i++) {
         const before = rows().length;
         if (before >= cap) break;
-        await scrollComments(fp);
+        await scrollList(fp, SCROLL_SCRIPT);
         await settle();
         still = rows().length > before ? 0 : still + 1;
       }

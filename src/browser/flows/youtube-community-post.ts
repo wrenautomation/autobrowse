@@ -7,6 +7,7 @@
  * answer. Publishing is the irreversible act; the route says so.
  */
 import { defineFlow } from "../flow.js";
+import { linksOn } from "./kit.js";
 
 export interface CommunityPostInput {
   text: string;
@@ -78,12 +79,5 @@ export const youtubeCommunityPost = defineFlow<CommunityPostInput, { url: string
 });
 
 /** Links to posts on the page, newest first as YouTube lists them. */
-async function postLinks(fp: { html(): Promise<string> }): Promise<string[]> {
-  const html = await fp.html();
-  const out: string[] = [];
-  for (const m of html.matchAll(/href="(\/post\/[^"?]+)/g)) {
-    const u = `https://www.youtube.com${m[1]}`;
-    if (!out.includes(u)) out.push(u);
-  }
-  return out;
-}
+const postLinks = (fp: { html(): Promise<string> }) =>
+  linksOn(fp, /href="(\/post\/[^"?]+)/g, (p) => `https://www.youtube.com${p}`);

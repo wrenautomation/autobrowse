@@ -11,10 +11,9 @@
  */
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
+import { firstShown, RENDER_MS, SETTLE_MS } from "./kit.js";
 
 const WEB = "https://x.com";
-const RENDER_MS = 15_000;
-const SETTLE_MS = 1_000;
 
 const SIGNED_OUT = /\/(i\/flow\/login|login)\b/;
 const MISSING =
@@ -29,16 +28,6 @@ async function openX(fp: FlowPage, url: string): Promise<void> {
   await fp.open(url);
   if (SIGNED_OUT.test(fp.url()))
     fp.human("X is signed out on this profile: `autobrowse login x@<account>`");
-}
-
-/** Which of `hints` shows first within the render time; "missing" when the page says so. */
-async function first(fp: FlowPage, hints: Hints[]): Promise<number | "missing" | null> {
-  for (let i = 0; i < RENDER_MS / SETTLE_MS; i++) {
-    for (const [n, h] of hints.entries()) if (await fp.has(h)) return n;
-    if (MISSING.test(await fp.text())) return "missing";
-    await fp.wait(SETTLE_MS);
-  }
-  return null;
 }
 
 const label = (handle: string) => handle.replace(/"/g, "");
@@ -63,7 +52,7 @@ export const xFollow = defineFlow<FollowInput, unknown>({
     await openX(fp, `${WEB}/${username}`);
     const on = followingButton(username);
     const off = followButton(username);
-    const state = await first(fp, [on, off]);
+    const state = await firstShown(fp, [on, off], MISSING);
     if (state === "missing") return notFound(`no X user @${username}`);
     if (state === null) return fp.human(`no Follow button on @${username} (${fp.url()})`);
     const following = state === 0;
@@ -96,7 +85,7 @@ export const xLike = defineFlow<LikeInput, unknown>({
     await openX(fp, `${WEB}/i/status/${id}`);
     const on = unlikeButton(id);
     const off = likeButton(id);
-    const state = await first(fp, [on, off]);
+    const state = await firstShown(fp, [on, off], MISSING);
     if (state === "missing") return notFound(`no X post ${id}`);
     if (state === null) return fp.human(`no Like button on post ${id} (${fp.url()})`);
     const liked = state === 0;
@@ -134,7 +123,7 @@ export interface ReplyInput {
 /** The post open and its reply box shown: all a reply does before typing. The answer when it can't. */
 async function replyReady(fp: FlowPage, id: string): Promise<ReturnType<typeof notFound> | null> {
   await openX(fp, `${WEB}/i/status/${id}`);
-  const box = await first(fp, [replyBox]);
+  const box = await firstShown(fp, [replyBox], MISSING);
   if (box === "missing") return notFound(`no X post ${id}`);
   if (box === null)
     return fp.human(`no reply box under post ${id}: replies may be limited to people it names`);

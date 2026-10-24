@@ -9,6 +9,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import type { FlowRunner } from "../browser/flow.js";
 import { awsCliLogin } from "../browser/flows/aws-cli-login.js";
+import { cliTail } from "./cli-tail.js";
 
 export interface AwsLoginOptions {
   profile?: string;
@@ -57,10 +58,13 @@ export async function awsCliLoginChore(
     if (asked) child.stdin?.write(o.overwrite ? "y\n" : "n\n");
     child.stdin?.end();
     const exit = await done;
-    return { ok: exit === 0, detail: tail(out) };
+    return { ok: exit === 0, detail: cliTail(out, URL_RE) };
   } catch (e) {
     child.kill();
-    return { ok: false, detail: `${tail(out)}\n${e instanceof Error ? e.message : String(e)}` };
+    return {
+      ok: false,
+      detail: `${cliTail(out, URL_RE)}\n${e instanceof Error ? e.message : String(e)}`,
+    };
   }
 }
 
@@ -90,19 +94,10 @@ function waitForUrl(child: ChildProcess, out: () => string, ms: number): Promise
         resolve(m[0]);
       } else if (child.exitCode !== null || Date.now() - at > ms) {
         clearInterval(tick);
-        reject(new Error(`aws login printed no URL: ${tail(out())}`));
+        reject(new Error(`aws login printed no URL: ${cliTail(out(), URL_RE)}`));
       }
     }, 100);
   });
 }
 
 /** The last lines of the CLI's output, long tokens masked. */
-function tail(s: string): string {
-  return s
-    .replace(URL_RE, "<url>")
-    .replace(/[A-Za-z0-9_.-]{30,}/g, "<tok>")
-    .trim()
-    .split("\n")
-    .slice(-3)
-    .join("\n");
-}
