@@ -615,6 +615,30 @@ export function tracesFor(settings: Settings) {
   };
 }
 
+/** Copy then sweep traces every SHOTS_EVERY_MINUTES (at least 15), and a minute after start. One run at a time. */
+export function keepTracesOnTimer(settings: Settings, log: Logger): void {
+  const keep = tracesFor(settings);
+  if (!keep) return;
+  let busy = false;
+  const tick = (): void => {
+    if (busy) return;
+    busy = true;
+    void keep
+      .backup()
+      .then(async (r) => {
+        const swept = await keep.sweep();
+        if (r.shipped || r.refused || swept.removed)
+          log.info({ ...r, unreadable: r.unreadable.length, swept }, "traces");
+      })
+      .catch((err) => log.warn({ err: err instanceof Error ? err.message : String(err) }, "traces"))
+      .finally(() => {
+        busy = false;
+      });
+  };
+  setInterval(tick, Math.max(settings.shotsEveryMinutes, 15) * 60_000).unref();
+  setTimeout(tick, 60_000).unref();
+}
+
 /** Where every secret use is written: next to the credential file, 0600, one JSON line each. */
 /** The ledgers live beside the credential file, one hash-chained JSONL each (`autobrowse ledger verify`). */
 export function ledgerPath(

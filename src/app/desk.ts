@@ -36,6 +36,7 @@ import { registerDeployment } from "./register.js";
 import {
   buildApp,
   credentialsFor,
+  keepTracesOnTimer,
   keyAdminFor,
   sendJournalFor,
   siteCallsDirFor,
@@ -131,6 +132,7 @@ if (plan.mode === "tunnel") {
 if (wren) watchRecordings(wren, (msg) => log.info({ watch: msg }, "recordings"));
 if (recorder) watchCalls(recorder, (msg) => log.warn({ calls: msg }, "calls"));
 watchers?.start();
+keepTracesOnTimer(settings, log);
 // A stalled event loop starves every Restate stream on it: calls arrive past their 60 s token
 // and connections die (2026-10-16). Log any stall over 2 s, so the next one is proven.
 const loopDelay = monitorEventLoopDelay({ resolution: 50 });
