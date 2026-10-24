@@ -1,13 +1,13 @@
 # Walkthrough
 
-The path from a fresh clone to running autobrowse for real. Each guide is
+The path from a fresh install to running autobrowse for real. Each guide is
 short, in order, with the exact commands and what they print. `demos/` are
 scripts you can run now; they read, dry-run or list — nothing spends, posts
 or leaves a mailing list without you.
 
 | # | Guide | You end up with |
 |---|-------|-----------------|
-| 0 | [Setup](00-setup.md) | the CLI running on your Mac, the UI on :9080 |
+| 0 | [Setup](00-setup.md) | tier 0 in five minutes with no keys; `setup` for tiers 1 and 2 |
 | 1 | [Secrets and money](01-secrets-and-money.md) | credentials sealed, gates on, the ledger in your channel |
 | 2 | [Sites: APIs with a token, browser without](02-sites.md) | `site call` against YouTube/Gmail, setup steps for the rest |
 | 3 | [Meta app: ads, Pages, Instagram](03-meta-app.md) | one token that runs ads and posts, from wren |

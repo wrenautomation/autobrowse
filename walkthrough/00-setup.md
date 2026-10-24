@@ -1,45 +1,61 @@
 # 0 · Setup
 
-**Goal:** `pnpm autobrowse` works on this Mac; the worker + UI run locally.
+**Goal:** `autobrowse` runs on your machine at the tier you pick.
 
-## Install
+| Tier | Needs | Gives |
+|------|-------|-------|
+| 0 | Node 24+, Chromium | explore a public page, `compile --no-llm`, `try` |
+| 1 | + a Claude Code subscription or one API key, your accounts | the agent, `do`, signed-in sites, 2FA and codes |
+| 2 | + a local Restate | durable runs that survive restarts |
+
+AWS is never needed for tiers 0 to 2.
+
+## Tier 0: five minutes, no keys
 
 ```sh
-brew install node pnpm            # Node 24+, pnpm 10
-cd ~/Documents/wren_automation/autobrowse
-pnpm install
-pnpm exec playwright install chromium   # the browser the flows drive (BROWSER_CHANNEL=chrome uses your Chrome instead)
-cp .env.example .env               # every key explained inline; start with LLM_* and NOTIFY_*
-pnpm autobrowse --help
+npm i -g @wrenautomation/autobrowse && npx playwright install chromium
+autobrowse explore scratch --url https://example.com --background   # one browser, waiting for commands
+autobrowse cmd '{"cmd":"aria"}'                                     # the page as controls
+autobrowse cmd '{"cmd":"click","hints":{"role":"link","nth":0}}'
+autobrowse cmd '{"cmd":"read","hints":{"role":"paragraph","nth":0},"as":"text"}'
+autobrowse cmd '{"cmd":"save","name":"first-flow"}'                 # the journal becomes a recording
+autobrowse cmd '{"cmd":"close"}'
+autobrowse compile first-flow --no-llm                              # recording to code, no model
+autobrowse try first-flow                                           # run it
 ```
 
-`.env` is 0600 and gitignored. Values never go in commits; `autobrowse env`
-moves them between machines (guide 1).
+That opens example.com, follows its link, reads a paragraph, compiles the
+acts to a flow and runs it. No model, nothing signed in. The flow lands in
+`~/.config/autobrowse/workflows/`. In a clone, `walkthrough/demos/03-explore.sh`
+runs the same steps.
 
-## Sanity
+## Tier 1 and 2
 
 ```sh
-pnpm autobrowse site                # sites, token state, setup left
-pnpm autobrowse abilities           # everything `do` can route to, and what is not recorded
-pnpm gates                          # lint + typecheck + tests; the Restate test needs Docker
+npx @wrenautomation/autobrowse setup    # asks the tier, then only what that tier needs
 ```
 
-You should see the site table (guide 2) and a green gates run.
-
-## The worker and UI
+Tier 1 asks for the model (your Claude Code subscription when `claude` is on
+the PATH, else an Anthropic key), the sites that sign in as you, and where
+codes arrive. Tier 2 adds Restate:
 
 ```sh
-pnpm ui:build
-pnpm worker                         # Restate endpoint :9081, UI + API :9080
-open http://localhost:9080          # runs, gates, explore, recordings, accounts, settings
+brew install restatedev/tap/restate
+restate-server                          # one terminal
+npx @wrenautomation/autobrowse worker   # another: Restate endpoint :9081, UI + API :9080
+open http://localhost:9080              # runs, gates, explore, recordings, accounts, settings
 ```
 
-Without a Restate server the worker still serves the UI and every
-non-durable command (`explore`, `agent`, `try`, `site call`). For durable
-runs (`run`, `domain`) start one:
+Settings go to `.env` in the folder you run from (0600, never committed).
+`.env.example` lists every optional key by tier.
+
+## From a clone
 
 ```sh
-docker compose up -d --build        # Restate + worker in containers, .env supplies secrets
+git clone https://github.com/wrenautomation/autobrowse && cd autobrowse
+pnpm install && pnpm exec playwright install chromium
+pnpm autobrowse --help                  # same CLI; `pnpm worker` runs the worker from source
+pnpm gates                              # lint + typecheck + tests; the Restate test needs Docker
 ```
 
 ## Where things live
@@ -51,8 +67,7 @@ docker compose up -d --build        # Restate + worker in containers, .env suppl
 | `~/.config/autobrowse/spend.jsonl` | every payment-gate decision |
 | `~/.config/autobrowse/profiles/<site>[@account]` | one Chrome profile per identity |
 | `~/.config/autobrowse/artifacts/` | screenshots, traces, `*.failure.json`, `*.aria.txt` |
-| `recordings/` | journals from `record`, `explore`, `agent` (gitignored) |
-| `src/workflows/<name>/` | compiled workflows with `outline.json` |
+| `recordings/` | journals from `record`, `explore`, `agent` |
 
 ## The one live setting
 
@@ -62,6 +77,6 @@ single command overrides it once.
 
 ## What is still owed
 
-`pnpm autobrowse needs` lists every login, key, consent, phone step, card
-and decision autobrowse is waiting on, each with its command; rows clear
+`autobrowse needs` lists every login, key, consent, phone step, card and
+decision autobrowse is waiting on, each with its command; rows clear
 themselves once the thing is in hand. `needs do <id>` runs the ingestion.

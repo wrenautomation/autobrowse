@@ -1,6 +1,7 @@
 /** `autobrowse login <site>` and `autobrowse record <name>`: the recorder's command line. */
-import { rmSync } from "node:fs";
-import { join } from "node:path";
+import { spawn } from "node:child_process";
+import { existsSync, openSync, readFileSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { Command } from "commander";
 import { urlWithoutQuery } from "../auth/guard.js";
 import type { SecretValues } from "../auth/signup.js";
@@ -10,6 +11,28 @@ import { explorerOpener, type LocalBackend } from "./backend.js";
 import type { Settings } from "./config.js";
 import { headed } from "./screen.js";
 import { browserOptions, COMPILED_DIR, llmFor } from "./services.js";
+
+/** POST one command to an explore session; `wait=1` holds the request across a payment gate. */
+async function postCmd(
+  port: number,
+  tokenFile: string,
+  body: unknown,
+): Promise<{ ok: boolean; body: string }> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/?wait=1`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${readFileSync(tokenFile, "utf8").trim()}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15 * 60_000),
+    });
+    return { ok: res.ok, body: await res.text() };
+  } catch (err) {
+    return {
+      ok: false,
+      body: JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
+    };
+  }
+}
 
 /** Long enough to fill a signup form; `creds copy` puts it back after. */
 const HAND_CLIPBOARD_MS = 5 * 60_000;
@@ -65,6 +88,10 @@ export function registerRecordCommands(
       "--files <sets>",
       'named file sets (autobrowse files sets), comma separated: the session starts with them at the ready; upload{files:["file:<name>"]}, read_file{name}',
     )
+    .option(
+      "--background",
+      "return once the session takes commands; it keeps running (`autobrowse cmd` talks to it)",
+    )
     .action(
       async (
         site: string,
@@ -80,10 +107,12 @@ export function registerRecordCommands(
           login?: string;
           fresh?: boolean;
           files?: string;
+          background?: boolean;
         },
       ) => {
         const { tokenFileFor, journalFileFor } = await import("../explore/server.js");
         const tokenFile = tokenFileFor(Number(o.port));
+        if (o.background) return background(site, Number(o.port), tokenFile);
         const journalFile = journalFileFor(
           expandHome(settings.recordingsDir),
           site,
@@ -124,6 +153,54 @@ export function registerRecordCommands(
         console.log(`explore ${site} closed`);
       },
     );
+
+  /** The same command, detached; back once its token file says it takes commands. */
+  const background = async (site: string, port: number, tokenFile: string): Promise<void> => {
+    if (existsSync(tokenFile) && (await postCmd(port, tokenFile, { cmd: "url" })).ok)
+      return console.log(`port ${port} already open`);
+    rmSync(tokenFile, { force: true });
+    const log = join(dirname(tokenFile), `explore-${port}.log`);
+    const argv = process.argv.slice(2).filter((a) => a !== "--background");
+    const fd = openSync(log, "w");
+    const child = spawn(
+      process.execPath,
+      [...process.execArgv, process.argv[1] as string, ...argv],
+      {
+        detached: true,
+        stdio: ["ignore", fd, fd],
+      },
+    );
+    child.unref();
+    let exited = false;
+    child.on("exit", () => {
+      exited = true;
+    });
+    for (let i = 0; i < 240 && !exited; i++) {
+      if (existsSync(tokenFile))
+        return console.log(`exploring ${site} on port ${port}\nlog ${log}`);
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    const tail = readFileSync(log, "utf8").split("\n").slice(-20).join("\n");
+    throw new Error(
+      `explore ${site} did not start; log ${log}:\n${tail.replace(/[\w-]{30,}/g, "<tok>")}`,
+    );
+  };
+
+  program
+    .command("cmd <json>")
+    .description(
+      'One command to an explore session (`{"cmd":"aria"}`, click, read, save, close…); prints its JSON answer, masked',
+    )
+    .option("--port <port>", "the session's loopback port", "9090")
+    .action(async (json: string, o: { port: string }) => {
+      const { tokenFileFor } = await import("../explore/server.js");
+      const tokenFile = tokenFileFor(Number(o.port));
+      if (!existsSync(tokenFile))
+        throw new Error(`no explore session on ${o.port}: autobrowse explore <site> --background`);
+      const res = await postCmd(Number(o.port), tokenFile, JSON.parse(json));
+      console.log(res.body);
+      if (!res.ok) process.exitCode = 1;
+    });
 
   const listOf = (v: string) =>
     v
