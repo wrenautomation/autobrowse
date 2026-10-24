@@ -260,8 +260,8 @@ const schema = z.object({
   credentialsCipher: z
     .enum(["keychain", "none"])
     .default(process.platform === "darwin" ? "keychain" : "none"),
-  /** The shared credential store (SSM, the env store): the truth every read asks first and every write lands in; the file here is the offline copy. */
-  credentialsShared: z.enum(["ssm", "off"]).default("ssm"),
+  /** The shared credential store (SSM, the env store): the truth every read asks first and every write lands in; the file here is the offline copy. Off unless set: a fresh install has no AWS. */
+  credentialsShared: z.enum(["ssm", "off"]).default("off"),
   /** Inbox that receives email one-time codes when a credential does not name one. */
   codesInbox: z.string().email().optional(),
   /** The person's accounts and what each is for (`autobrowse accounts`); addresses only. */
