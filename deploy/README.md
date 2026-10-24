@@ -21,6 +21,7 @@ date has the box's terraform, compose file and scripts.
 `deploy/terraform`: the screenshots bucket (`shots.tf`), the owners role
 (`owners.tf`) and the env store path (`env-store.tf`). `aws login`, then
 `cd deploy/terraform && tofu apply`.
+The AWS provider is 766 MB. `~/.tofurc` sets `plugin_cache_dir = "~/Library/Caches/wren_automation/tofu-plugins"`, so autobrowse, wren and every worktree share one copy.
 
 ## Env store
 
