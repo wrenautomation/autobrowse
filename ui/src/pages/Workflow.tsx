@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import type { Outline } from "../../../src/compiler/outline.js";
 import { api, type Compiled } from "../api.js";
-import { ProveButton } from "../components/Prove.js";
 import { href, useLoad } from "../hooks.js";
+import { ProveButton } from "../Prove.js";
 
 export function WorkflowPage({ name }: { name: string }) {
   const { data, error } = useLoad(() => api.outline(name), [name]);
