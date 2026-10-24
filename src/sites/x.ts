@@ -10,11 +10,12 @@
  */
 import { basename, extname } from "node:path";
 import { z } from "zod";
-import { HttpError } from "../clients/http.js";
+import { HttpError, type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { VerifyRead, VerifyRow } from "./verdict.js";
 import { arr, isoOf, rec, str, text, unclear, withoutLinks } from "./verify-kit.js";
+import { bodyWords } from "./why.js";
 import { bytesOf } from "./youtube.js";
 
 export const X_ORIGIN = "https://api.x.com";
@@ -131,16 +132,8 @@ const MIME: Record<string, string> = {
   ".mov": "video/quicktime",
 };
 
-async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok)
-    throw new HttpError(
-      "CALL",
-      `${X_ORIGIN}${what}`,
-      res.status,
-      JSON.stringify(res.body ?? "").slice(0, 300),
-    );
-  return res.body as T;
-}
+const must = <T>(res: JsonResponse<T>, what: string): T =>
+  mustOk(res, `${X_ORIGIN}${what}`, bodyWords);
 const withQuery = (path: string, q: Record<string, string | number | undefined>) => {
   const u = new URL(`${X_ORIGIN}${path}`);
   for (const [k, val] of Object.entries(q))

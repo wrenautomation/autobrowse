@@ -7,13 +7,13 @@
  * Threads" (Threads use case), the account @wrenautomation is its tester.
  */
 import { z } from "zod";
-import { HttpError } from "../clients/http.js";
+import { type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
-import { graphWhy } from "./meta.js";
 import { WEB_REDIRECT } from "./oauth.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { Seen } from "./verdict.js";
 import { rec, str, text, unclear } from "./verify-kit.js";
+import { graphWhy } from "./why.js";
 
 export const THREADS_ORIGIN = "https://graph.threads.net";
 export const THREADS_VERSION = "v1.0";
@@ -75,11 +75,8 @@ const replies = z.object({
   reverse: z.boolean().default(true),
 });
 
-async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok)
-    throw new HttpError("CALL", `${THREADS_ORIGIN}/${what}`, res.status, graphWhy(res.body));
-  return res.body as T;
-}
+const must = <T>(res: JsonResponse<T>, what: string): T =>
+  mustOk(res, `${THREADS_ORIGIN}/${what}`, graphWhy);
 const v = (path: string) => `${THREADS_ORIGIN}/${THREADS_VERSION}/${path}`;
 const withQuery = (url: string, q: Record<string, string | number | boolean | undefined>) => {
   const u = new URL(url);

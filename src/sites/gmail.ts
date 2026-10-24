@@ -7,31 +7,20 @@
  * (domain-wide delegation) stays the path for our own Workspace users.
  */
 import { z } from "zod";
-import { HttpError } from "../clients/http.js";
+import { type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { Seen, VerifyRead, VerifyRow } from "./verdict.js";
 import { arr, isoOf, mimeText, rec, str, text, unclear } from "./verify-kit.js";
+import { googleReason } from "./why.js";
 
 export const GMAIL_ORIGIN = "https://gmail.googleapis.com";
 const ME = `${GMAIL_ORIGIN}/gmail/v1/users/me`;
 
 const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 
-async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok) {
-    // Google's reason (rateLimitExceeded, insufficientPermissions, …) says what to do.
-    const err = (res.body as { error?: { errors?: { reason?: string }[]; status?: string } } | null)
-      ?.error;
-    throw new HttpError(
-      "CALL",
-      `${ME}/${what}`,
-      res.status,
-      err?.errors?.[0]?.reason ?? err?.status ?? "",
-    );
-  }
-  return res.body as T;
-}
+const must = <T>(res: JsonResponse<T>, what: string): T =>
+  mustOk(res, `${ME}/${what}`, googleReason);
 
 /** The Subject and the addresses on To of an RFC 2822 message (base64url), decoded. */
 export function headersOfRaw(raw: string): { subject: string; to: string[] } {

@@ -10,13 +10,14 @@
  * account with a payment method and a Page exist.
  */
 import { z } from "zod";
-import { HttpError } from "../clients/http.js";
+import { HttpError, type JsonResponse, mustOk } from "../clients/http.js";
 import type { Amount } from "../gates/spend.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { WEB_REDIRECT } from "./oauth.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi, SiteError } from "./types.js";
 import type { Seen, VerifyGet, VerifyRead, VerifyRow } from "./verdict.js";
 import { arr, hasNext, isoOf, rec, str, text, unclear } from "./verify-kit.js";
+import { type GraphFailure, graphNote, graphWhy } from "./why.js";
 
 export const META_ORIGIN = "https://graph.facebook.com";
 /** Graph API versions live about two years. */
@@ -344,28 +345,8 @@ const pageMessage = z.object({
   tag: z.string().optional(),
 });
 
-/** A Graph error body: the code and subcode say what failed (never the token). */
-type GraphFailure = {
-  error?: { code?: number; error_subcode?: number; message?: string; error_user_msg?: string };
-};
-const graphNote = (body: unknown) => {
-  const e = (body as GraphFailure | null)?.error;
-  return e?.code === undefined
-    ? ""
-    : `graph code ${e.code}${e.error_subcode ? `/${e.error_subcode}` : ""}`;
-};
-
-/** The code and Graph's own words: they name the bad field, never the token. */
-export const graphWhy = (body: unknown) => {
-  const msg = (body as GraphFailure | null)?.error?.message;
-  return [graphNote(body), msg?.slice(0, 200)].filter(Boolean).join(": ");
-};
-
-async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok)
-    throw new HttpError("CALL", `${META_ORIGIN}/${what}`, res.status, graphWhy(res.body));
-  return res.body as T;
-}
+const must = <T>(res: JsonResponse<T>, what: string): T =>
+  mustOk(res, `${META_ORIGIN}/${what}`, graphWhy);
 const v = (path: string) => `${META_ORIGIN}/${META_VERSION}/${path}`;
 const withQuery = (url: string, q: Record<string, string | number | boolean | undefined>) => {
   const u = new URL(url);

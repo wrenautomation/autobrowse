@@ -7,7 +7,7 @@
  */
 import { z } from "zod";
 import { MAX_COMMENTS } from "../browser/flows/tiktok-comments.js";
-import { HttpError } from "../clients/http.js";
+import { HttpError, type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { pollWaits } from "./poll.js";
 import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
@@ -182,15 +182,16 @@ const profileName = z.object({
   name: z.string().trim().min(1).max(30),
 });
 
-async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok) {
-    // TikTok names the refusal in `error.code` (scope_not_authorized, spam_risk_too_many_posts…).
-    const e = (res.body as { error?: { code?: unknown; message?: unknown } } | null)?.error;
-    const note = [e?.code, e?.message].filter((x) => typeof x === "string" && x).join(": ");
-    throw new HttpError("CALL", `${TIKTOK_ORIGIN}/${what}`, res.status, note.slice(0, 300));
-  }
-  return res.body as T;
-}
+/** TikTok names the refusal in `error.code` (scope_not_authorized, spam_risk_too_many_posts…). */
+const tiktokWhy = (body: unknown): string => {
+  const e = (body as { error?: { code?: unknown; message?: unknown } } | null)?.error;
+  return [e?.code, e?.message]
+    .filter((x) => typeof x === "string" && x)
+    .join(": ")
+    .slice(0, 300);
+};
+const must = <T>(res: JsonResponse<T>, what: string): T =>
+  mustOk(res, `${TIKTOK_ORIGIN}/${what}`, tiktokWhy);
 const withFields = (path: string, fields: string) =>
   `${TIKTOK_ORIGIN}${path}?fields=${encodeURIComponent(fields)}`;
 
