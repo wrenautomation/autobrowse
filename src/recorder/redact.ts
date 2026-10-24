@@ -60,6 +60,26 @@ export function redactText(text: string): string {
   return out.replace(CARD_RUN, (run) => (luhnValid(run.replace(/\D/g, "")) ? REDACTED : run));
 }
 
+/** Personal data in page text: an address, a phone number, a home folder, an IP, a long numeric id. */
+const PII: [RegExp, string][] = [
+  [/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "<email>"],
+  // As people write them: `+1 (416) 555-0199`, `416.555.0199`, `+44 20 7946 0958`. Not SVG path data.
+  [
+    /(?<![\w.-])(?:\+\d{1,3}[ .-]?)?(?:\(\d{2,4}\)|\d{2,4})(?:[ .-]\d{2,4}){2,3}(?![\w.-])/g,
+    "<phone>",
+  ],
+  [/([/\\](?:Users|home)[/\\])[^/\\\s"'():]+/g, "$1<user>"],
+  [/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, "<ip>"],
+  [/\b\d{7,}\b/g, "<id>"],
+];
+
+/** `redactText`, then addresses, phone numbers, IPs and long numeric ids. */
+export function redactPii(text: string): string {
+  let out = redactText(text);
+  for (const [re, mark] of PII) out = out.replace(re, mark);
+  return out;
+}
+
 /**
  * A snapshot row of a dropdown named as a secret field shows its choice
  * (`button role=combobox id=pidlInput_expiryMonth text=01`): masked.

@@ -120,6 +120,7 @@
     "commander": "15.0.0",
     "credvault": "0.13.0",
     "entities": "8.1.0",
+    "fflate": "0.8.3",
     "hono": "4.13.8",
     "imapflow": "2.2.4",
     "impit": "0.14.5",
