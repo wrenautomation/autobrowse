@@ -36,6 +36,7 @@ import { registerDeployment } from "./register.js";
 import {
   buildApp,
   credentialsFor,
+  keepSharedOnTimer,
   keepTracesOnTimer,
   keyAdminFor,
   sendJournalFor,
@@ -136,6 +137,7 @@ if (recorder) watchCalls(recorder, (msg) => log.warn({ calls: msg }, "calls"));
 watchers?.start();
 keepTracesOnTimer(settings, log);
 sendSharedOnTimer(log);
+keepSharedOnTimer(log);
 await shareKnownFor(settings);
 // A stalled event loop starves every Restate stream on it: calls arrive past their 60 s token
 // and connections die (2026-10-16). Log any stall over 2 s, so the next one is proven.

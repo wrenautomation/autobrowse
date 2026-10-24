@@ -76,6 +76,21 @@ export function registerShareCommands(program: Command): void {
         `sent ${r.sent}, dropped ${r.dropped}, left ${r.left}${r.stopped ? ` (stopped: ${r.stopped})` : ""}`,
       );
     });
+  registerShareKeep(share);
+}
+
+export function registerShareKeep(share: Command): void {
+  share
+    .command("keep")
+    .description(
+      "Wren only: run Presidio over the ingest's inbox and move it to kept/ (SHARE_ADMIN_TOKEN)",
+    )
+    .action(async () => {
+      const token = process.env.SHARE_ADMIN_TOKEN;
+      if (!token) throw new Error("SHARE_ADMIN_TOKEN not set");
+      const { keepShared } = await import("../share/presidio.js");
+      console.log(await keepShared(token));
+    });
 }
 
 /** After a CLI command: a short send, so a CLI-only install empties its queue too. */

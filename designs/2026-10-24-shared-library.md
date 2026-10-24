@@ -26,7 +26,7 @@ Every autobrowse install sends its compiled flows and its run traces to Wren, wi
 
 1. `scrubTrace` + its tests, local only. No upload. Built: `src/share/scrub.ts`, `redactPii` in `src/recorder/redact.ts`.
 2. Switch, notice, exclude list, queue, `share status`. The runner keeps the trace of every run, not only failures and watched runs as now (`flow.ts` stops tracing without a path on success). It collects `known` in the run (each `fill`/`type` value, each `place` value as resolved, the profile's fields) and scrubs right after `tracing.stop`, in the same process. `known` is never written to disk.
-3. Ingest (presign) + inbox bucket prefix + Presidio job.
+3. Ingest + inbox bucket prefix + Presidio job. Built: wren `apps/share`, `src/share/presidio.ts`, `autobrowse share keep`.
 4. Send step on the desk timer and after each CLI run.
 5. Registry repo, gate and `workflows add`.
 
@@ -47,3 +47,5 @@ Step 2 built: `src/share/share.ts` (switch, state, notice, exclude, queue, send)
 - 10-24: Known values come from the raw trace's own action params (`fill` value, `type` text), not a collector in the run. The trace already holds every typed value, sign-ins included, so no run code changes and nothing is missed. Profile fields come from a hook set at boot.
 - 10-24: A flow pack is a JSON file in the same queue (`<stamp>.<name>.flow.json`). The ingest takes `/v1/traces/*` and `/v1/flows/*`; the gate reads flows from the inbox.
 - 10-24: Send: a 2xx or a 4xx (but 429) takes the file off the queue; a 429, 5xx or network error stops the round. Files over 8 MB are dropped. After each CLI command: 5 s. On the desk: every 15 min, 120 s.
+- 10-24: Ingest is a Worker in wren (`apps/share`, share.wrenautomation.com) on R2 bucket `autobrowse-share`, not a presigned PUT. A Worker checks the install id, the name, zip magic and size before a byte lands; a presigned URL would need a second call and checks nothing. Rate caps: 20/min per install, 60/min per IP (a fresh id buys nothing). Admin routes behind a bearer write only `kept/`, `flows/`, `gate/`.
+- 10-24: Presidio pass = desk chore `keepSharedOnTimer` (hourly, 30 files a round), image pinned `presidio-analyzer:2.2.362`, container up only for the round (`--memory 2g`). Strings are batched per call (40k chars); a longer string is cut at white space (spaCy refuses over 1M). A file it cannot parse is deleted, never kept raw. Real Workday trace: 99 s, 2.9k PERSON and 570 LOCATION spans masked. Over-masking is the safe side.

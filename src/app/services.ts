@@ -659,6 +659,33 @@ export function sendSharedOnTimer(log: Logger): void {
 }
 
 /**
+ * Wren's second scrub (`share/presidio`): hourly, when the ingest's inbox holds files and
+ * SHARE_ADMIN_TOKEN is set. Presidio's container runs only for the pass (it holds ~1.5 GB).
+ */
+export function keepSharedOnTimer(log: Logger): void {
+  const token = process.env.SHARE_ADMIN_TOKEN;
+  if (!token) return;
+  let busy = false;
+  const tick = (): void => {
+    if (busy) return;
+    busy = true;
+    void (async () => {
+      const { keepShared } = await import("../share/presidio.js");
+      const r = await keepShared(token);
+      if (r.kept || r.bad) log.info(r, "share kept");
+    })()
+      .catch((err) =>
+        log.warn({ err: err instanceof Error ? err.message : String(err) }, "share kept"),
+      )
+      .finally(() => {
+        busy = false;
+      });
+  };
+  setInterval(tick, 60 * 60_000).unref();
+  setTimeout(tick, 5 * 60_000).unref();
+}
+
+/**
  * The profile's values (name, email, phone, address) are known values for
  * every shared trace: masked wherever they show. Read once, on the first share.
  */
