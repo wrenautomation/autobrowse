@@ -2,8 +2,8 @@
 import { useState } from "react";
 import { describeOp } from "../../../src/desktop/describe.js";
 import { api, type Compiled, type Recording } from "../api.js";
-import { ProveButton } from "../components/Prove.js";
 import { href, useLoad } from "../hooks.js";
+import { ProveButton } from "../Prove.js";
 
 export function RecordingsPage() {
   const { data, error } = useLoad(() => api.recordings(), []);

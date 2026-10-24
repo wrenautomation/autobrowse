@@ -1,6 +1,6 @@
 /** The proof is the compiled flow working on its own once: run it here, straight after compiling or editing. */
 import { useState } from "react";
-import { api, type Proof } from "../api.js";
+import { api, type Proof } from "./api.js";
 
 export /** The proof is the compiled flow working on its own once: run it here, straight after compiling. */
 function ProveButton({ workflow }: { workflow: string }) {
