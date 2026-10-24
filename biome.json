@@ -1,6 +1,10 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
-  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "files": {
     "includes": [
       "**",
@@ -11,7 +15,51 @@
       "!.claude/worktrees"
     ]
   },
-  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
-  "linter": { "enabled": true },
-  "javascript": { "formatter": { "quoteStyle": "double", "semicolons": "always" } }
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always"
+    }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "src/**",
+        "!src/app/client.ts",
+        "!src/app/sentry.ts",
+        "!src/browser/session.ts",
+        "!src/share/fetch.ts",
+        "!src/calls/obs.ts",
+        "!src/mail/imap.ts",
+        "!src/mail/session.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@restatedev/restate-sdk-clients": "One door per vendor: the Restate ingress client lives in src/app/client.ts; import that, so a vendor change is one file.",
+                  "@sentry/node": "One door per vendor: error reporting lives in src/app/sentry.ts; import that, so a vendor change is one file.",
+                  "patchright": "One door per vendor: the patched browser lives in src/browser/session.ts; import that, so a vendor change is one file.",
+                  "undici": "One door per vendor: the pinned fetch lives in src/share/fetch.ts; import that, so a vendor change is one file.",
+                  "obs-websocket-js": "One door per vendor: OBS lives in src/calls/obs.ts; import that, so a vendor change is one file.",
+                  "imapflow": "One door per vendor: IMAP lives in src/mail/imap.ts and src/mail/session.ts; import that, so a vendor change is one file."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
