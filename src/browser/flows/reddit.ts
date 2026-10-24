@@ -22,6 +22,7 @@
 import { already } from "../attempt.js";
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
+import { passCaptcha } from "./kit.js";
 import {
   type CommentStat,
   listingFromAtom,
@@ -491,11 +492,7 @@ async function formErrors(fp: FlowPage, scope: string): Promise<Array<[string, s
 }
 
 /** A new account's forms carry a reCAPTCHA: solved last, just before the irreversible click. */
-async function passCaptcha(fp: FlowPage) {
-  if (!(await fp.has({ css: 'iframe[src*="recaptcha"]' }, 2_000))) return;
-  const got = await fp.captcha();
-  if (!got.solved) fp.human(`reddit: the form's captcha is a person's (${got.reason})`);
-}
+const RECAPTCHA = { css: 'iframe[src*="recaptcha"]' } as const;
 
 export interface SubmitInput {
   sr: string;
@@ -682,7 +679,7 @@ export const redditSubmit = defineFlow<
         { role: "checkbox", name: "send replies to my inbox" },
         { goal: "no replies to the inbox" },
       );
-    await passCaptcha(fp);
+    await passCaptcha(fp, RECAPTCHA, "reddit: the form's captcha");
     // A suggestion taken by mistake posts somewhere else: the field must still say what was asked.
     if (!PROFILE_SR.test(i.sr)) {
       const typed = await fp.page.locator("input[name=sr]").inputValue();
@@ -753,7 +750,7 @@ export const redditComment = defineFlow<CommentInput, JsonAnswer<{ things: unkno
       { css: `${scope} textarea[name=text]` },
       { goal: "type the comment" },
     );
-    await passCaptcha(fp);
+    await passCaptcha(fp, RECAPTCHA, "reddit: the form's captcha");
     await fp.act(
       { kind: "click" },
       { css: `${scope} button[type=submit]` },
@@ -843,7 +840,7 @@ export const redditMessage = defineFlow<MessageInput, JsonAnswer<{ delivered: tr
         goal: "type the message",
       },
     );
-    await passCaptcha(fp);
+    await passCaptcha(fp, RECAPTCHA, "reddit: the form's captcha");
     await fp.act(
       { kind: "click" },
       { css: `${form} button#send, ${form} button[type=submit]` },

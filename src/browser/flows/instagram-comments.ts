@@ -13,8 +13,9 @@
  * Read only: it opens the page and scrolls. It never clicks, likes, replies or types.
  */
 import type { Response } from "playwright";
-import { defineFlow, type FlowPage } from "../flow.js";
+import { defineFlow } from "../flow.js";
 import { igPostOf, type PostInput, postUrl } from "./instagram-act.js";
+import { scrollList } from "./kit.js";
 
 const RENDER_MS = 15_000;
 const POLL_MS = 500;
@@ -170,11 +171,6 @@ const SCROLL_SCRIPT = `(() => {
   return boxes.length > 0;
 })()`;
 
-async function scrollComments(fp: FlowPage): Promise<void> {
-  const moved = await fp.page.evaluate<boolean>(SCROLL_SCRIPT).catch(() => false);
-  if (!moved) await fp.scroll(1_500);
-}
-
 export const instagramPostComments = defineFlow<
   IgCommentsInput,
   IgPostComments | { found: false; reason: string }
@@ -237,7 +233,7 @@ export const instagramPostComments = defineFlow<
       for (let i = 0; i < SCROLLS && more && still < STILL_SCROLLS; i++) {
         const before = merged().length;
         if (before >= cap) break;
-        await scrollComments(fp);
+        await scrollList(fp, SCROLL_SCRIPT);
         await settle();
         still = merged().length > before ? 0 : still + 1;
       }

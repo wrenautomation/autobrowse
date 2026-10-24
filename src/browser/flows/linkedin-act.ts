@@ -9,24 +9,14 @@
  * Connect keeps Follow under "More". A company page shows "Follow <Company>". Once followed, the
  * label reads "Following <Name>" (or "Unfollow …").
  */
-import { defineFlow, type FlowPage } from "../flow.js";
+import { defineFlow } from "../flow.js";
 import type { Hints } from "../locate.js";
+import { firstShown, RENDER_MS, SETTLE_MS } from "./kit.js";
 import { go } from "./linkedin-reach.js";
 
 const WEB = "https://www.linkedin.com";
-const RENDER_MS = 15_000;
-const SETTLE_MS = 1_000;
 
 const MISSING = /this page doesn.t exist|page not found|this post (?:cannot|can.t) be displayed/i;
-
-async function first(fp: FlowPage, hints: Hints[]): Promise<number | "missing" | null> {
-  for (let i = 0; i < RENDER_MS / SETTLE_MS; i++) {
-    for (const [n, h] of hints.entries()) if (await fp.has(h)) return n;
-    if (MISSING.test(await fp.text())) return "missing";
-    await fp.wait(SETTLE_MS);
-  }
-  return null;
-}
 
 const unreacted: Hints = { role: "button", name: "/^reaction button state: no reaction$/i" };
 const reacted: Hints = {
@@ -48,7 +38,7 @@ export const linkedinLike = defineFlow<
   name: "like",
   async run(fp, { urn, undo }) {
     await go(fp, `${WEB}/feed/update/${urn}/`);
-    const state = await first(fp, [reacted, unreacted]);
+    const state = await firstShown(fp, [reacted, unreacted], MISSING);
     if (state === "missing") return { found: false, reason: `no LinkedIn post ${urn}` };
     if (state === null) return fp.human(`no Like on post ${urn} (${fp.url()})`);
     const liked = state === 0;
@@ -96,7 +86,7 @@ export const linkedinFollow = defineFlow<
         : null;
     if (!who) throw new Error("linkedin/follow: a vanity or a company");
     await go(fp, `${WEB}${who}`);
-    let state = await first(fp, [on, off, more]);
+    let state = await firstShown(fp, [on, off, more], MISSING);
     if (state === "missing") return { found: false, reason: `nothing at ${who}` };
     if (state === null) return fp.human(`no Follow on ${who} (${fp.url()})`);
     if (state === 2) {

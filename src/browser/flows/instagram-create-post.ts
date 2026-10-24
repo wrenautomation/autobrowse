@@ -11,6 +11,7 @@
  */
 import { defineFlow } from "../flow.js";
 import type { Hints } from "../locate.js";
+import { linksOn } from "./kit.js";
 
 export interface CreatePostInput {
   /** A local image or video file. */
@@ -103,12 +104,5 @@ async function signedInAs(fp: { html(): Promise<string> }): Promise<string | nul
 }
 
 /** Links to this account's posts on the page, newest first as Instagram lists them. */
-async function postLinks(fp: { html(): Promise<string> }, _who: string): Promise<string[]> {
-  const html = await fp.html();
-  const out: string[] = [];
-  for (const m of html.matchAll(/href="(\/(?:p|reel)\/[^"?/]+)\/?"/g)) {
-    const u = `https://www.instagram.com${m[1]}/`;
-    if (!out.includes(u)) out.push(u);
-  }
-  return out;
-}
+const postLinks = (fp: { html(): Promise<string> }, _who: string) =>
+  linksOn(fp, /href="(\/(?:p|reel)\/[^"?/]+)\/?"/g, (p) => `https://www.instagram.com${p}/`);

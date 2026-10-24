@@ -17,10 +17,9 @@
  */
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
+import { firstShown, RENDER_MS, SETTLE_MS } from "./kit.js";
 
 const WEB = "https://www.instagram.com";
-const RENDER_MS = 15_000;
-const SETTLE_MS = 1_000;
 
 const SIGNED_OUT = /\/accounts\/login\b/;
 const MISSING = /sorry, this page isn.t available|the link you followed may be broken/i;
@@ -30,16 +29,6 @@ async function openIg(fp: FlowPage, url: string): Promise<void> {
   await fp.open(url);
   if (SIGNED_OUT.test(fp.url()))
     fp.human("Instagram is signed out on this profile: `autobrowse login instagram`");
-}
-
-/** Which of `hints` shows first within the render time; "missing" when the page says so. */
-async function first(fp: FlowPage, hints: Hints[]): Promise<number | "missing" | null> {
-  for (let i = 0; i < RENDER_MS / SETTLE_MS; i++) {
-    for (const [n, h] of hints.entries()) if (await fp.has(h)) return n;
-    if (MISSING.test(await fp.text())) return "missing";
-    await fp.wait(SETTLE_MS);
-  }
-  return null;
 }
 
 /** Instagram refused the act ("Try Again Later"): a person looks before the account is flagged. */
@@ -66,7 +55,7 @@ export const instagramFollow = defineFlow<
   name: "follow",
   async run(fp, { username, undo }) {
     await openIg(fp, `${WEB}/${encodeURIComponent(username)}/`);
-    const state = await first(fp, [followingButton, followButton]);
+    const state = await firstShown(fp, [followingButton, followButton], MISSING);
     if (state === "missing") return { found: false, reason: `no Instagram account @${username}` };
     if (state === null) return fp.human(`no Follow button on @${username} (${fp.url()})`);
     const following = state === 0;
@@ -104,7 +93,7 @@ export const instagramLike = defineFlow<
   name: "like",
   async run(fp, { shortcode, undo }) {
     await openIg(fp, postUrl(shortcode));
-    const state = await first(fp, [hearted, heart]);
+    const state = await firstShown(fp, [hearted, heart], MISSING);
     if (state === "missing") return { found: false, reason: `no Instagram post ${shortcode}` };
     if (state === null) return fp.human(`no Like on post ${shortcode} (${fp.url()})`);
     const liked = state === 0;
@@ -135,7 +124,7 @@ export const instagramComment = defineFlow<
   name: "comment",
   async run(fp, { shortcode, text }) {
     await openIg(fp, postUrl(shortcode));
-    const state = await first(fp, [commentBox]);
+    const state = await firstShown(fp, [commentBox], MISSING);
     if (state === "missing") return { found: false, reason: `no Instagram post ${shortcode}` };
     if (state === null)
       return fp.human(`no comment box on post ${shortcode}: comments may be off (${fp.url()})`);

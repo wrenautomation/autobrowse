@@ -9,6 +9,7 @@
 import { spawn } from "node:child_process";
 import type { FlowRunner } from "../browser/flow.js";
 import { googleOauthConsent } from "../browser/flows/oauth-consent.js";
+import { cliTail } from "./cli-tail.js";
 
 export interface GcloudLoginOptions {
   /** The Google account gcloud signs in as (picked in the chooser). */
@@ -55,10 +56,13 @@ export async function gcloudLoginChore(
       new Promise<"late">((r) => setTimeout(() => r("late"), 60_000)),
     ]);
     if (exit === "late") throw new Error("gcloud never took the code");
-    return { ok: exit === 0, detail: tail(out) };
+    return { ok: exit === 0, detail: cliTail(out, URL_RE) };
   } catch (e) {
     child.kill();
-    return { ok: false, detail: `${tail(out)}\n${e instanceof Error ? e.message : String(e)}` };
+    return {
+      ok: false,
+      detail: `${cliTail(out, URL_RE)}\n${e instanceof Error ? e.message : String(e)}`,
+    };
   }
 }
 
@@ -73,19 +77,9 @@ async function urlOf(out: () => string, done: Promise<unknown>, ms: number): Pro
     const m = URL_RE.exec(out());
     if (m) return m[0];
     if (exited || Date.now() - at > ms)
-      throw new Error(`gcloud printed no login URL: ${tail(out())}`);
+      throw new Error(`gcloud printed no login URL: ${cliTail(out(), URL_RE)}`);
     await new Promise((r) => setTimeout(r, 100));
   }
 }
 
 /** The last lines of the CLI's output, the URL, long tokens and addresses masked. */
-function tail(s: string): string {
-  return s
-    .replace(URL_RE, "<url>")
-    .replace(/[A-Za-z0-9_.-]{30,}/g, "<tok>")
-    .replace(/[A-Za-z0-9._%+-]+@/g, "***@")
-    .trim()
-    .split("\n")
-    .slice(-3)
-    .join("\n");
-}
