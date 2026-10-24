@@ -1,14 +1,14 @@
 {
-  "at": "2026-09-20T04:53:45.283Z",
+  "at": "2026-10-24T07:50:33.126Z",
   "status": "done",
   "steps": [
     {
       "name": "read-main-heading",
       "status": "done",
-      "detail": "{\"title\":\"Example Domain\"}"
+      "detail": "{\"text\":\"This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring purposes.\"}"
     }
   ],
   "output": {
-    "title": "Example Domain"
+    "text": "This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring purposes."
   }
 }

@@ -29,7 +29,8 @@ const readMainHeadingFlow = defineFlow<ReadMainHeadingInput, Record<string, stri
   async run(fp) {
     await fp.open("https://example.com/");
     const out: Record<string, string> = {};
-    out.title = await fp.read({ role: "heading", name: "Example Domain" }); // page.getByRole("heading", { name: "Example Domain", exact: true })
+    // 2026-10: example.com dropped its <h1>; the page is one paragraph now.
+    out.text = await fp.read({ role: "paragraph" });
     return out;
   },
 });
