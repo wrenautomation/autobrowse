@@ -16,6 +16,7 @@ const fake =
     for (const [word, entity_type, score] of [
       ["Ada Byron", "PERSON", 0.85],
       ["Paris", "LOCATION", locScore],
+      ["ada@x.test", "EMAIL_ADDRESS", 0.9],
     ] as const)
       for (let i = text.indexOf(word); i >= 0; i = text.indexOf(word, i + 1))
         out.push({ entity_type, start: i, end: i + word.length, score });
@@ -53,10 +54,19 @@ describe("presidioTrace", () => {
 });
 
 describe("keepInbox", () => {
-  it("moves inbox files to kept/ through the pass and deletes what it cannot read", async () => {
+  it("moves inbox files to kept/; flow source kept intact, a flow with an email in it refused", async () => {
     const store = new Map<string, Uint8Array>();
     const enc = (s: string) => strToU8(s);
-    store.set("inbox/2026-10-24/id1/flows/a.flow.json", enc(JSON.stringify({ name: "Ada Byron" })));
+    const src = 'const parisSubmit = "Paris";';
+    const pack = (code: string) =>
+      enc(
+        JSON.stringify({
+          files: { "index.ts": code },
+          proof: { steps: [{ detail: "Ada Byron" }] },
+        }),
+      );
+    store.set("inbox/2026-10-24/id1/flows/a.flow.json", pack(src));
+    store.set("inbox/2026-10-24/id1/flows/c.flow.json", pack('const to = "ada@x.test";'));
     store.set("inbox/2026-10-24/id1/traces/b.zip", enc("not a zip"));
     const f = (async (url: string, init: RequestInit) => {
       const u = new URL(url);
@@ -75,10 +85,15 @@ describe("keepInbox", () => {
       return new Response(null, { status: 200 });
     }) as typeof fetch;
     const r = await keepInbox(shareAdmin("t", "https://s.test", f), fake());
-    expect(r).toEqual({ kept: 1, bad: 1, left: 0 });
-    expect([...store.keys()]).toEqual(["kept/flows/2026-10-24/id1/a.flow.json"]);
-    expect(strFromU8(store.get("kept/flows/2026-10-24/id1/a.flow.json") as Uint8Array)).toBe(
-      '{"name":"<person>"}',
+    expect(r).toEqual({ kept: 1, bad: 1, held: 1, left: 0 });
+    expect([...store.keys()].sort()).toEqual([
+      "gate/held/2026-10-24/id1/traces/b.zip",
+      "kept/flows/2026-10-24/id1/a.flow.json",
+    ]);
+    const kept = JSON.parse(
+      strFromU8(store.get("kept/flows/2026-10-24/id1/a.flow.json") as Uint8Array),
     );
+    expect(kept.files["index.ts"]).toBe(src);
+    expect(kept.proof.steps[0].detail).toBe("<person>");
   });
 });

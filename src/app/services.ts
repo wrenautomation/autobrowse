@@ -662,6 +662,27 @@ export function sendSharedOnTimer(log: Logger): void {
  * Wren's second scrub (`share/presidio`): hourly, when the ingest's inbox holds files and
  * SHARE_ADMIN_TOKEN is set. Presidio's container runs only for the pass (it holds ~1.5 GB).
  */
+/** Nightly: re-prove registry flows that have a local plan; a broken one opens a registry issue. */
+export function reproofOnTimer(
+  log: Logger,
+  root: string,
+  prove: (name: string, plan: Record<string, unknown>) => Promise<{ status: string }>,
+): void {
+  const tick = (): void => {
+    void import("../share/gate.js")
+      .then(({ reproofRegistry }) => reproofRegistry(root, prove))
+      .then((r) => {
+        if (r.broken.length) log.warn(r, "registry re-proof: broken flows");
+        else if (r.proven) log.info(r, "registry re-proof");
+      })
+      .catch((err) =>
+        log.warn({ err: err instanceof Error ? err.message : String(err) }, "registry re-proof"),
+      );
+  };
+  setInterval(tick, 24 * 60 * 60_000).unref();
+  setTimeout(tick, 30 * 60_000).unref();
+}
+
 export function keepSharedOnTimer(log: Logger): void {
   const token = process.env.SHARE_ADMIN_TOKEN;
   if (!token) return;
@@ -672,7 +693,12 @@ export function keepSharedOnTimer(log: Logger): void {
     void (async () => {
       const { keepShared } = await import("../share/presidio.js");
       const r = await keepShared(token);
-      if (r.kept || r.bad) log.info(r, "share kept");
+      if (r.held) log.warn(r, "share kept: traces held, the pass could not read them");
+      else if (r.kept || r.bad) log.info(r, "share kept");
+      const { gateShared } = await import("../share/gate.js");
+      const { shareAdmin } = await import("../share/presidio.js");
+      const g = await gateShared(shareAdmin(token));
+      if (g.review) log.warn(g, "share gate: flows wait for a yes (autobrowse share review)");
     })()
       .catch((err) =>
         log.warn({ err: err instanceof Error ? err.message : String(err) }, "share kept"),

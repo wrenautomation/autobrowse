@@ -29,6 +29,8 @@ import { isDefaultOwner, named } from "../owner.js";
 import { fileSiteCalls } from "../runs/calls.js";
 import { DESK_SERVICE, sitesService } from "../sites/index.js";
 import { studioService, watchRecordings, wrenCheckout, wrenIn } from "../studio/service.js";
+import { COMPILED_DIR } from "../workflows/roots.js";
+import { proveCompiled } from "./backend.js";
 import { registerOnBox } from "./box-register.js";
 import { cloudAdminUrl, planEndpoint } from "./endpoint.js";
 import { awsFor, boot } from "./owner.js";
@@ -39,6 +41,7 @@ import {
   keepSharedOnTimer,
   keepTracesOnTimer,
   keyAdminFor,
+  reproofOnTimer,
   sendJournalFor,
   sendSharedOnTimer,
   shareKnownFor,
@@ -138,6 +141,9 @@ watchers?.start();
 keepTracesOnTimer(settings, log);
 sendSharedOnTimer(log);
 keepSharedOnTimer(log);
+reproofOnTimer(log, COMPILED_DIR, (name, plan) =>
+  proveCompiled(app.catalog, app.browser, name, plan),
+);
 await shareKnownFor(settings);
 // A stalled event loop starves every Restate stream on it: calls arrive past their 60 s token
 // and connections die (2026-10-16). Log any stall over 2 s, so the next one is proven.

@@ -93,6 +93,7 @@ export async function presidioDown(): Promise<void> {
 export async function maskAll(
   strings: Iterable<string>,
   analyze: Analyze,
+  only?: ReadonlySet<string>,
 ): Promise<Map<string, string>> {
   const all = [...new Set(strings)].filter((s) => /[A-Za-z0-9]{2}/.test(s));
   const todo = all.filter((s) => s.length <= CHUNK);
@@ -113,7 +114,7 @@ export async function maskAll(
       pieces.push(long.slice(at, end));
       at = end;
     }
-    const m = await maskAll(pieces, analyze);
+    const m = await maskAll(pieces, analyze, only);
     const masked = pieces.map((x) => m.get(x) ?? x).join("");
     if (masked !== long) out.set(long, masked);
   }
@@ -124,6 +125,7 @@ export async function maskAll(
     const text = batch.join(SEP);
     const spans = (await analyze(text))
       .filter((h) => h.score >= (ENTITIES[h.entity_type] ?? 1))
+      .filter((h) => !only || only.has(h.entity_type))
       .sort((a, b) => a.start - b.start);
     let at = 0;
     for (const s of batch) {
@@ -171,24 +173,40 @@ export async function presidioTrace(zip: Uint8Array, analyze: Analyze): Promise<
   return zipSync(rewriteTrace(zip, { text: apply, url: apply }), { level: 6 });
 }
 
-/** A flow pack (JSON) with every string value through Presidio. */
-export async function presidioJson(body: string, analyze: Analyze): Promise<string> {
-  const seen: string[] = [];
-  const walk = (v: unknown, f: (s: string) => string): unknown =>
-    typeof v === "string"
-      ? f(v)
-      : Array.isArray(v)
-        ? v.map((x) => walk(x, f))
-        : v && typeof v === "object"
-          ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, f)]))
-          : v;
-  const doc = JSON.parse(body) as unknown;
-  walk(doc, (s) => {
-    seen.push(s);
-    return s;
-  });
-  const masked = await maskAll(seen, analyze);
-  return JSON.stringify(walk(doc, (s) => masked.get(s) ?? s));
+/**
+ * Pattern entities only: on source code PERSON and LOCATION are NER guesses
+ * on identifiers (`parisSubmit`), and masking them breaks the code.
+ */
+const IN_CODE = new Set([
+  "EMAIL_ADDRESS",
+  "PHONE_NUMBER",
+  "CREDIT_CARD",
+  "IBAN_CODE",
+  "US_SSN",
+  "US_PASSPORT",
+  "US_BANK_NUMBER",
+]);
+
+export class FlowRefused extends Error {}
+
+/**
+ * A flow pack through Presidio. Proof lines are masked. Source files are only
+ * checked: a hit refuses the pack (a flow carries no literal values), since a
+ * rewrite would break the code the gate must compile.
+ */
+export async function presidioFlow(body: string, analyze: Analyze): Promise<string> {
+  const pack = JSON.parse(body) as {
+    files?: Record<string, string>;
+    proof?: { steps?: { detail?: string }[] };
+  };
+  if (!pack.files || typeof pack.files !== "object") throw new FlowRefused("no files");
+  const hits = await maskAll(Object.values(pack.files), analyze, IN_CODE);
+  if (hits.size) throw new FlowRefused("personal data in source");
+  const steps = pack.proof?.steps ?? [];
+  const lines = steps.map((x) => String(x.detail ?? ""));
+  const masked = await maskAll(lines, analyze);
+  for (const [i, x] of steps.entries()) x.detail = masked.get(lines[i] ?? "") ?? lines[i] ?? "";
+  return JSON.stringify(pack);
 }
 
 /** The ingest's admin routes (bearer SHARE_ADMIN_TOKEN). */
@@ -228,16 +246,18 @@ export type ShareAdmin = ReturnType<typeof shareAdmin>;
 
 /**
  * Move the inbox to `kept/` through Presidio: `inbox/<day>/<install>/<kind>/<name>` becomes
- * `kept/<kind>/<day>/<install>/<name>`. A file Presidio cannot read is deleted, never kept raw.
+ * `kept/<kind>/<day>/<install>/<name>`. Nothing unread lands in `kept/`: a trace the pass cannot
+ * parse is held under `gate/held/`, a refused flow is deleted.
  */
 export async function keepInbox(
   admin: ShareAdmin,
   analyze: Analyze,
   limit = 200,
-): Promise<{ kept: number; bad: number; left: number }> {
+): Promise<{ kept: number; bad: number; held: number; left: number }> {
   const all = await admin.list("inbox/");
   let kept = 0;
   let bad = 0;
+  let held = 0;
   for (const { key } of all.slice(0, limit)) {
     const [, day, install, kind, name] = key.split("/");
     if (!day || !install || !name || (kind !== "traces" && kind !== "flows")) {
@@ -251,18 +271,23 @@ export async function keepInbox(
       clean =
         kind === "traces"
           ? await presidioTrace(raw, analyze)
-          : await presidioJson(strFromU8(raw), analyze);
+          : await presidioFlow(strFromU8(raw), analyze);
     } catch (err) {
       if ((err as Error).message.startsWith("presidio")) throw err;
+      // A trace this pass cannot read may be a new trace format, not junk: hold it
+      // (admin only, read by nothing) for a fixed pass. A refused flow just goes.
+      if (kind === "traces" && !(err instanceof FlowRefused)) {
+        await admin.put(`gate/held/${key.slice("inbox/".length)}`, raw);
+        held++;
+      } else bad++;
       await admin.delete(key);
-      bad++;
       continue;
     }
     await admin.put(`kept/${kind}/${day}/${install}/${name}`, clean);
     await admin.delete(key);
     kept++;
   }
-  return { kept, bad, left: Math.max(0, all.length - limit) };
+  return { kept, bad, held, left: Math.max(0, all.length - limit) };
 }
 
 /**
@@ -271,7 +296,7 @@ export async function keepInbox(
  */
 export async function keepShared(token: string, limit = 30, base = SHARE_URL) {
   const admin = shareAdmin(token, base);
-  if (!(await admin.list("inbox/")).length) return { kept: 0, bad: 0, left: 0 };
+  if (!(await admin.list("inbox/")).length) return { kept: 0, bad: 0, held: 0, left: 0 };
   const analyze = await presidioUp();
   try {
     return await keepInbox(admin, analyze, limit);

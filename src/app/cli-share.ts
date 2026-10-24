@@ -91,6 +91,54 @@ export function registerShareKeep(share: Command): void {
       const { keepShared } = await import("../share/presidio.js");
       console.log(await keepShared(token));
     });
+  const admin = async () => {
+    const token = process.env.SHARE_ADMIN_TOKEN;
+    if (!token) throw new Error("SHARE_ADMIN_TOKEN not set");
+    return (await import("../share/presidio.js")).shareAdmin(token);
+  };
+  share
+    .command("gate")
+    .description("Wren only: static check over kept flow packs; a pass waits for review")
+    .action(async () => {
+      const { gateShared } = await import("../share/gate.js");
+      console.log(await gateShared(await admin()));
+    });
+  share
+    .command("review [id]")
+    .description("Wren only: flow packs waiting for a yes; with an id, its steps and source")
+    .option("--refused", "the refused ones and why")
+    .action(async (id: string | undefined, o: { refused?: boolean }) => {
+      const { heldPacks } = await import("../share/gate.js");
+      const held = await heldPacks(await admin(), o.refused ? "refused" : "review");
+      if (!id) {
+        for (const h of held)
+          console.log(
+            `${h.id}  ${h.pack.site}  ${h.pack.proof.steps.length} steps  ${h.at.slice(0, 10)}${h.reasons.length ? `  ${h.reasons.join("; ")}` : ""}`,
+          );
+        if (!held.length) console.log("none");
+        return;
+      }
+      const h = held.find((x) => x.id === id);
+      if (!h) throw new Error(`no pack ${id}; see \`autobrowse share review\``);
+      console.log(`${h.id}  site ${h.pack.site}  proof ${h.pack.proof.status} ${h.pack.proof.at}`);
+      for (const st of h.pack.proof.steps) console.log(`  ${st.name}  ${st.status}  ${st.detail}`);
+      for (const [f, body] of Object.entries(h.pack.files)) console.log(`\n--- ${f}\n${body}`);
+    });
+  share
+    .command("approve <id>")
+    .description("Wren only: yes to a pack: PR to the public registry, merged")
+    .action(async (id: string) => {
+      const { approvePack } = await import("../share/gate.js");
+      console.log(await approvePack(await admin(), id));
+    });
+  share
+    .command("refuse <id> <why>")
+    .description("Wren only: no to a pack, with the reason")
+    .action(async (id: string, why: string) => {
+      const { refusePack } = await import("../share/gate.js");
+      await refusePack(await admin(), id, why);
+      console.log(`refused ${id}`);
+    });
 }
 
 /** After a CLI command: a short send, so a CLI-only install empties its queue too. */

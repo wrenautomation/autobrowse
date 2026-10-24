@@ -124,45 +124,66 @@ const program = new Command("autobrowse")
   });
 
 program
-  .command("workflows [name]")
+  .command("workflows [name] [flow]")
   .description(
-    "What this worker can run; with a name, its steps and the inputs its plan takes (`!` = irreversible)",
+    "What this worker can run; with a name, its steps and the inputs its plan takes (`!` = irreversible); `workflows add <flow>` installs one from the shared registry",
   )
+  .option("--force", "add: replace a flow already here")
   .option(
     "--template",
     "print a plan to fill in and pass back as `run <name> <key> --plan file.json`",
   )
-  .action(async (name: string | undefined, o: { template?: boolean }) => {
-    const { backend } = local();
-    const [workflows, proofs] = await Promise.all([workflowsOf(backend), proofsOf(backend)]);
-    if (name) {
-      const { inputLines, inputsOf, templateOf } = await import("../engine/inputs.js");
-      const w = workflows.find((x) => x.name === name);
-      if (!w) throw new Error(`no workflow ${name}; see \`autobrowse workflows\``);
-      if (o.template) return console.log(JSON.stringify(templateOf(w.plan), null, 2));
-      console.log(`${bold(w.name)}  ${w.description}`);
-      console.log(
-        `${bold("steps")}   ${w.steps.map((s) => (s.irreversible ? warn(`${s.name}!`) : s.name)).join(dim(" → "))}`,
-      );
-      console.log(bold("inputs"));
-      for (const line of inputLines(inputsOf(w.plan))) console.log(line);
-      return;
-    }
-    // One line each: name, how far it is proven, what it does. Steps and inputs: `workflows <name>`.
-    const state = (name: string) => {
-      const proof = proofs[name];
-      if (proof)
-        return proof.status === "done"
-          ? good(`proven ${proof.at.slice(0, 10)}`)
-          : bad(`proof ${proof.status}`);
-      return name in proofs ? warn("draft") : "hand-written";
-    };
-    for (const line of columns(
-      workflows.map((w) => [accent(w.name), state(w.name), w.description]),
-    ))
-      console.log(line);
-    console.log(dim("\nautobrowse workflows <name>: its steps and inputs"));
-  });
+  .action(
+    async (
+      name: string | undefined,
+      flow: string | undefined,
+      o: { template?: boolean; force?: boolean },
+    ) => {
+      if (name === "add") {
+        const { addFlow, REGISTRY } = await import("../share/gate.js");
+        const { COMPILED_DIR, COMPILED_LIB, linkOnce } = await import("../workflows/roots.js");
+        if (!flow) throw new Error(`workflows add <flow>: a name from github.com/${REGISTRY}`);
+        const files = await addFlow(flow, {
+          root: COMPILED_DIR,
+          lib: COMPILED_LIB,
+          force: !!o.force,
+        });
+        await linkOnce();
+        return console.log(
+          `added ${flow} (${files.join(", ")}); see \`autobrowse workflows ${flow}\``,
+        );
+      }
+      const { backend } = local();
+      const [workflows, proofs] = await Promise.all([workflowsOf(backend), proofsOf(backend)]);
+      if (name) {
+        const { inputLines, inputsOf, templateOf } = await import("../engine/inputs.js");
+        const w = workflows.find((x) => x.name === name);
+        if (!w) throw new Error(`no workflow ${name}; see \`autobrowse workflows\``);
+        if (o.template) return console.log(JSON.stringify(templateOf(w.plan), null, 2));
+        console.log(`${bold(w.name)}  ${w.description}`);
+        console.log(
+          `${bold("steps")}   ${w.steps.map((s) => (s.irreversible ? warn(`${s.name}!`) : s.name)).join(dim(" → "))}`,
+        );
+        console.log(bold("inputs"));
+        for (const line of inputLines(inputsOf(w.plan))) console.log(line);
+        return;
+      }
+      // One line each: name, how far it is proven, what it does. Steps and inputs: `workflows <name>`.
+      const state = (name: string) => {
+        const proof = proofs[name];
+        if (proof)
+          return proof.status === "done"
+            ? good(`proven ${proof.at.slice(0, 10)}`)
+            : bad(`proof ${proof.status}`);
+        return name in proofs ? warn("draft") : "hand-written";
+      };
+      for (const line of columns(
+        workflows.map((w) => [accent(w.name), state(w.name), w.description]),
+      ))
+        console.log(line);
+      console.log(dim("\nautobrowse workflows <name>: its steps and inputs"));
+    },
+  );
 
 program
   .command("flows")

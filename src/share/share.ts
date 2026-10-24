@@ -151,8 +151,11 @@ export function queued(root = shareRoot()): { name: string; bytes: number }[] {
     .map((name) => ({ name, bytes: statSync(join(dir, name)).size }));
 }
 
-/** Flow source files a pack carries; the proof goes in as its own field, tests stay home. */
-const PACK_FILE = /^(?!.*\.test\.)[\w.-]+\.(ts|json)$/;
+/**
+ * Flow source files a pack carries: no dots in the stem, so tests (`index.test.ts`) and
+ * local files (`.plan.json`, `.registry`) stay home. The proof goes in as its own field.
+ */
+const PACK_FILE = /^[A-Za-z0-9_-]+\.(ts|json)$/;
 
 /** The proof fields a pack reads (structurally `Proof` from workflows/proof). */
 export interface PackProof {

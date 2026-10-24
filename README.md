@@ -928,6 +928,18 @@ phones and addresses in page text. Personal profiles and secret flows are
 never sent. `autobrowse share status` shows what is on and queued.
 Stop with `autobrowse share off`, `AUTOBROWSE_SHARE=off` or `DO_NOT_TRACK=1`.
 Skip one site with `autobrowse share exclude <site>`.
+
+A compiled workflow whose proof passes is shared the same way: its source
+and step lines, scrubbed, without what it read. Wren checks each one and
+puts the good ones in the public registry,
+[wrenautomation/autobrowse-flows](https://github.com/wrenautomation/autobrowse-flows).
+Install one with `autobrowse workflows add <name>`.
+
+Wren side (needs `SHARE_ADMIN_TOKEN`): the desk runs Presidio over the
+inbox every hour, then the static check. `autobrowse share review` lists
+flows that wait for a yes; `share approve <id>` merges one into the
+registry; `share refuse <id> <why>`. A registry flow with a `.plan.json`
+beside it is re-proven each night; a failure opens a registry issue.
 Design: `designs/2026-10-24-shared-library.md`.
 
 ## License
