@@ -207,7 +207,6 @@ export function commentCountOf(label: string | null): number | null {
 /** The page's own item data, as text. */
 const DATA_SCRIPT = `document.getElementById("__UNIVERSAL_DATA_FOR_REHYDRATION__")?.textContent ?? null`;
 
-/** Scroll the comment panel to its end; the page itself when no panel scrolls. */
 export const tiktokPostComments = defineFlow<PostCommentsInput, PostComments>({
   site: "tiktok",
   name: "post-comments",

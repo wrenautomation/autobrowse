@@ -99,5 +99,3 @@ function waitForUrl(child: ChildProcess, out: () => string, ms: number): Promise
     }, 100);
   });
 }
-
-/** The last lines of the CLI's output, long tokens masked. */
