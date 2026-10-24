@@ -170,7 +170,12 @@ const profileName = z.object({
 });
 
 async function must<T>(res: { ok: boolean; status: number; body: T | null }, what: string) {
-  if (!res.ok) throw new HttpError("CALL", `${TIKTOK_ORIGIN}/${what}`, res.status);
+  if (!res.ok) {
+    // TikTok names the refusal in `error.code` (scope_not_authorized, spam_risk_too_many_posts…).
+    const e = (res.body as { error?: { code?: unknown; message?: unknown } } | null)?.error;
+    const note = [e?.code, e?.message].filter((x) => typeof x === "string" && x).join(": ");
+    throw new HttpError("CALL", `${TIKTOK_ORIGIN}/${what}`, res.status, note.slice(0, 300));
+  }
   return res.body as T;
 }
 const withFields = (path: string, fields: string) =>
