@@ -32,7 +32,7 @@ Data run by one interpreter, not rendered TypeScript: a walk is rebuilt from new
 - Again: a cut's `again: [n]` (part or `login`) makes act n start a new visit of the same page (a wrong code), its own screen after the first, known also by landmarks only it shows — `src/walks/cut.ts`, `src/walks/build.ts`
 - See: `see` stops the walk unless the page shows `hints` or a file field's base name within `ms` — `src/walks/flow.ts`
 - Pick: `pick` chooses checkboxes or radios in a `region` by their row's text (shadow roots too), clicks only what differs, reads back — `src/browser/pick.ts`, `src/walks/flow.ts`
-- Run: `walkFlow` (input, then default, then v1 example, then `deps.ask`; profile values through `deps.profile`) — `src/walks/flow.ts:256`; `walkFor` resolves secrets through stored logins (`walkSecrets`) and profile values on the Mac — `src/app/services.ts:641`, `:605`; the Restate `flow` handler falls back to it — `src/engine/browser-service.ts:160`
+- Run: `walkFlow` (input, then default, then v1 example, then `deps.ask`; profile values through `deps.profile`) — `src/walks/flow.ts:256`; `walkFor` resolves secrets through stored logins (`walkSecrets`) and profile values on the Mac — `src/app/services-signin.ts:71`, `:605`; the Restate `flow` handler falls back to it — `src/engine/browser-service.ts:160`
 
 ## Connected to
 

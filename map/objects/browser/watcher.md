@@ -25,7 +25,7 @@ LinkedIn, X and Instagram push nothing we can use without a review or credits (w
 - Tab: images, media, fonts aborted (never in the person's own browser); reloaded every 3 h; a closed tab reopens after 1 min, doubling to 30
 - Profile busy (an explore session holds it): `paused` in the state, never closed; looks again every minute, no doubling, and opens once the profile frees (`paused`, `src/browser/watchers.ts:289`); logs `watch paused` / `watch resumed`
 - The browser stays open: `SessionPark.pin` (`src/browser/park.ts:67`), counted; `unpin` lets it idle out
-- Built on the desk only: `watchersFor` (`src/app/services.ts:615`), sink = POST to `RESTATE_INGRESS_URL`; handlers `desk/watch|unwatch|watches` (`src/sites/service.ts:142`)
+- Built on the desk only: `watchersFor` (`src/app/services-signin.ts:43`), sink = POST to `RESTATE_INGRESS_URL`; handlers `desk/watch|unwatch|watches` (`src/sites/service.ts:142`)
 
 ## Connected to
 

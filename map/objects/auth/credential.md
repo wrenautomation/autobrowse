@@ -18,7 +18,7 @@ The vault is its own repo and npm package (public). Changing a name in `src/auth
 ## Shape
 
 - Names: Keychain service `autobrowse` (seal key; an owner's `autobrowse-owner-<owner>`), env prefix `AUTOBROWSE_CRED_`, secret prefix `AUTOBROWSE_` — `src/auth/keep.ts:9-20`; SSM path `/autobrowse/config` (an owner's `/autobrowse/owners/<owner>/config`) — `src/owner.ts:20-29`
-- Store: env layer first, then the sealed file `~/.config/autobrowse/credentials.json` (`src/app/config.ts:225`); armed with a canary whose read is refused and reported — `src/app/services.ts:440-492`
+- Store: env layer first, then the sealed file `~/.config/autobrowse/credentials.json` (`src/app/config.ts:225`); armed with a canary whose read is refused and reported — `src/app/services-browser.ts:240`, `src/app/services-state.ts:58`
 - A credential is keyed `<site>` or `<site>@<label>`; `via` names an identity provider instead of a password (`methodsOf`, `src/auth/login.ts`); `via: "email"` is a passwordless emailed-code login (`emailCodeLogin`)
 - Named by `<site>` (main or only), `<site>@<role>` or `<site>@<username>`: `resolveAccount` `src/auth/roles.ts:66`; `namedStore` `src/auth/roles.ts:120` wraps the store and names the browser profile (`profileName`, `src/browser/session.ts:135`); `giveRole`/`dropRole` `src/auth/roles.ts:160-201` behind `creds role` (`src/app/cli-auth.ts:542`)
 - Minted on signup: `accountKey`, `mintCredential`, `mintPassword` — `src/auth/signup.ts:225-313`
@@ -28,7 +28,7 @@ The vault is its own repo and npm package (public). Changing a name in `src/auth
 - `creds key add|ls|spend|revoke|rotate|purpose|audit|project|migrate` — `src/app/cli-keys.ts`, registered under `creds` in `src/app/cli-auth.ts`; `migrate` is a dry run unless `--apply`, with a `projectionDiff` check before and after
 - Rotation: `rotateKey` (same address; purposes, via and cap carry over; the old id goes first in `previous`; the old value leaves the env names on the next projection), `rotationOf` (the vendor's mint flow in `ROTATORS`, run key `rotate-<account>-<yyyymmdd>`, 501 when none), `KeyError` (400, 404, 501) — `src/auth/keys.ts`. `creds key rotate <address>` starts that run through `api.run`; `--clipboard` takes a hand value. Neither revokes at the vendor: the output names the old key to revoke by hand. The Console flow `anthropic-console-api-key` keeps its key through `KeyKeeper` (`src/deps/keys.ts`, `keyKeeperFor` in `src/app/services.ts`) and projects the env names after.
 - The `sites` service (and the desk) answers for the Accounts page with `keys`, `keySpend`, `keyRevoke`, `keyRotate`: shapes and `keyAdmin` in `src/sites/keys.ts`, handlers in `src/sites/service.ts`. No answer carries a value
-- Every typed secret is audited (`SecretAudit`, `auditFor` `src/app/services.ts:620`; window read by `ledgerSince` `src/auth/ledger.ts:18`)
+- Every typed secret is audited (`SecretAudit`, `auditFor` `src/app/services-state.ts:370`; window read by `ledgerSince` `src/auth/ledger.ts:18`)
 
 ## Connected to
 
@@ -38,7 +38,7 @@ The vault is its own repo and npm package (public). Changing a name in `src/auth
 
 ## If you change this
 
-- **Hits:** `src/app/services.ts:440`, `src/auth/keys.ts`, `src/sites/keys.ts`, wren `packages/core` Accounts rows (copied shapes), `src/auth/link.ts` and wren `apps/phone` (the link's sealed shape), `src/auth/roles.ts`, `src/auth/login.ts`, `src/auth/accounts.ts`, `src/auth/signup.ts`, `src/app/needs.ts`, `src/app/cli-auth.ts` (`creds`), the wren repo (reads the same SSM path through credvault).
+- **Hits:** `src/app/services-browser.ts:240`, `src/auth/keys.ts`, `src/sites/keys.ts`, wren `packages/core` Accounts rows (copied shapes), `src/auth/link.ts` and wren `apps/phone` (the link's sealed shape), `src/auth/roles.ts`, `src/auth/login.ts`, `src/auth/accounts.ts`, `src/auth/signup.ts`, `src/app/needs.ts`, `src/app/cli-auth.ts` (`creds`), the wren repo (reads the same SSM path through credvault).
 - **Does not hit:** the wallet; site API tokens.
 
 ## Surfaces

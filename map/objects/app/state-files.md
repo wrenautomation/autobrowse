@@ -30,12 +30,12 @@ Plain files a person can open, one concern each; secrets sealed; shared truth in
 | `~/.config/autobrowse/key-uses.json` | calls this month per capped API key, by key id (never the value); beside the caps file (`fileKeyUses` `src/reach/key-ring.ts`, `keysDepFor` `src/app/services.ts`) | [[credential]] (`creds key`), [[site-api]] (`web`'s Exa routes) |
 | `~/.config/autobrowse/caps.json` | today's use of each account's daily caps, keyed site, account, bucket, and `next`: each site|account's next paced slot, kept across the day turning (`:116`; `/data/caps.json` on the box) | [[site-facade]] |
 | `~/.config/autobrowse/steps.jsonl` | agent step ledger (`src/agent/ledger.ts`) | [[agent-session]] |
-| `~/.config/autobrowse/runs/` | explore run history, one chained file a run, plus `index.jsonl` (`runsDirFor`, `src/app/services.ts:559`) | [[explore-run]] |
+| `~/.config/autobrowse/runs/` | explore run history, one chained file a run, plus `index.jsonl` (`runsDirFor`, `src/app/services-state.ts:320`) | [[explore-run]] |
 | `~/.config/autobrowse/walks/<site>/<name>.json` | walks built from runs (`walksDirFor`, `:524`) | [[walk-spec]] |
 | `~/.config/autobrowse/llm/llm-YYYY-MM.jsonl` | every model call: purpose, tokens, ms (`llmCallsDirFor`, `:527`) | [[llm-call]] |
 | `~/.config/autobrowse/needs-done.json` | decisions marked done (`src/app/config.ts:40`) | [[need]] |
 | `~/.config/autobrowse/profiles/<site>` | browser profiles (`src/app/config.ts:86`) | [[session]] |
-| `~/.config/autobrowse/artifacts/` | shots, aria, traces, `*.failure.json`, `*.network.jsonl`, `*.html`, watched steps (`src/app/services.ts:516`) | [[failure-record]], [[watch-step]] |
+| `~/.config/autobrowse/artifacts/` | shots, aria, traces, `*.failure.json`, `*.network.jsonl`, `*.html`, watched steps (`src/app/services-state.ts:82`) | [[failure-record]], [[watch-step]] |
 | `~/.config/autobrowse/owners/<o>/` | a non-default owner's `.env` and the files above, fixed names (`OWNER_PATHS`, `src/app/config.ts:434`) | [[owner]] |
 | `recordings/` (repo, gitignored) | recordings, explore journals | [[recording]], [[explore-session]] |
 | `src/workflows/<name>/` (repo, committed) | compiled modules, outline, proof | [[compiled-workflow]] |

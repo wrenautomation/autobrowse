@@ -24,7 +24,7 @@ Batches: the model plans 1 to `maxBatch` (6) acts for the screen it read; the co
 - Model reply: `planSchema` (`{thought, actions}`, done/human alone) — `src/agent/explorer.ts:62`; one kept step `stepSchema` — `:54`; batch rules in the prompt `BATCH` — `:133`
 - Batch rules in code: `endsBatch` — `src/agent/explorer.ts:384`; page checks `stateOf`, `moved` — `:421,430`; precondition `usable` (explore `count` + `eval` on the ref's hints) — `:442`
 - What the model sees: `digest(aria)` with refs, `pageForModel` — `src/agent/digest.ts:213,421`
-- Ledger: `StepLedger` rows (with `missed`) in `~/.config/autobrowse/steps.jsonl` — `src/agent/ledger.ts:10-48`; `stepLedgerFor` `src/app/services.ts:616`; OTLP trace sink `traceSinkFor` `:289`
+- Ledger: `StepLedger` rows (with `missed`) in `~/.config/autobrowse/steps.jsonl` — `src/agent/ledger.ts:10-48`; `stepLedgerFor` `src/app/services-state.ts:366`; OTLP trace sink `traceSinkFor` `:289`
 - Made by `agentFor` — `src/app/backend.ts:291`
 
 ## Connected to
