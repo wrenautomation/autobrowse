@@ -10,11 +10,11 @@ No source file over ~1200 lines with several reasons to change. A split is a pur
 - `services.ts` stays the public face: `App`, `buildApp` and an explicit re-export of every name that was exported before; nothing new exported. The 26 importers and the tests did not change. Four helpers siblings share became exports of their own file (`ssmFor`, `noticeFor`, `required`, `lazy`).
 - Done by an ~120-line AST script (TypeScript's parser) that assigned statements, computed each file's imports from the original list, and added sibling imports; thrown away after, as the handoff says. Map citations repointed by the symbol named next to them (28), else by line.
 
-## `src/explore/server.ts` (2088 lines): planned, not split
+## `src/explore/server.ts` (2088 lines): step 1 done, step 2 planned
 
-- The file is two things: the command grammar and small pure helpers (lines 137–470, 576–680, 710–790: `commandSchema`, the `LOOKS`/`UNBATCHABLE`/`LOOKED_AT` sets, `placeHint`, `shortUrl`, `pageChange`, `leanUrls`, the journal and token file helpers, `runDesktop`, `serve`) and one 1340-line function, `startExplore`, whose `act` switch (500 lines) closes over some forty locals.
-- Step 1 (pure move, safe): `explore/commands.ts` (schema, `Command`, the sets), `explore/journal.ts` (`journalFileFor`, `readJournal`, `tokenFileFor`, `Journaled`), `explore/serve.ts` (`serve`, `runDesktop`). `server.ts` re-exports them; ~600 lines leave.
-- Step 2 (not a pure move): `startExplore` needs a context object (`page`, `journal`, `gate`, `out`, the run log) before `act`'s cases can move out by command family (look, act, place, files, desktop). That changes how the closure's state is shared and needs the explore and teach tests run live; not done in this sweep.
+- The file was two things: the command grammar and small pure helpers (`commandSchema`, the command sets, `placeHint`, `shortUrl`, `pageChange`, `leanUrls`, the journal and token file helpers) and one 1340-line function, `serve`, whose `act` switch (500 lines) closes over some forty locals.
+- Step 1 (pure move, done): `explore/commands.ts` (the schema, `Command`, the `LOOKS`/`UNBATCHABLE`/`LOOKED_AT`/`WAITS_FOR_CONTROL`/`WHOLE_PAGE` sets, `toLocatorHints`, `placeHint`) and `explore/journal.ts` (`Journaled`, `journalFileFor`, `readJournal`, `tokenFileFor`). `server.ts` re-exports what it exported before; `ui/api.ts` can import the grammar without the server. `server.ts` is 1811 lines: `serve` is 1340 of them.
+- Step 2 (not a pure move): `serve` needs a context object (`page`, `journal`, `gate`, `out`, the run log) before `act`'s cases can move out by command family (look, act, place, files, desktop). That changes how the closure's state is shared and needs the explore and teach tests run live; not done in this sweep.
 - A file-size gate (`git ls-files | xargs wc -l`, none over 1200) goes into `pnpm lint` once step 2 is in; until then `server.ts` would fail it.
 
 ## Decision log
