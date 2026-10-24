@@ -334,7 +334,8 @@ describe("walkFromRuns", () => {
     expect(signup).toMatchObject({
       url: "site.test/signup",
       looks: "heading join the list on site.test/signup",
-      landmarks: ["heading join the list", "field email", "field name", "button continue"],
+      // Fields and buttons before headings: a heading may name the item, not the screen.
+      landmarks: ["field email", "field name", "button continue", "heading join the list"],
       seen: 2,
     });
     expect(signup?.after).toBeUndefined();
@@ -505,6 +506,14 @@ describe("walkFromRuns", () => {
       url: "site.test/signup",
       after: ["your-details"],
     });
+  });
+
+  it("waits for the last screen when it acted on the goal's URL with a bare look", () => {
+    const bare: PageLook = { url: DONE.url, landmarks: [] };
+    const rows = [act(A.click("Continue"), SIGNUP), act(A.click("Home"), bare), end(DONE)];
+    const s = walkFromRuns([input(R1, "2026-09-30T12:05:00.000Z", rows)], opts).spec;
+    expect(s.screens[0]).toMatchObject({ goal: true, url: DONE.url });
+    expect(s.screens[0]?.after).toEqual([s.screens.at(-1)?.name]);
   });
 
   it("with no end look, the goal is whatever page the last screen leads to", () => {

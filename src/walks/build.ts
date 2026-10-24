@@ -257,6 +257,7 @@ export function visitsOf(
 }
 
 const KIND_ORDER = (l: string) => (l.startsWith("heading ") ? 0 : l.startsWith("field ") ? 1 : 2);
+const CHROME_ORDER = (l: string) => (l.startsWith("field ") ? 0 : l.startsWith("heading ") ? 2 : 1);
 
 /** Landmarks all of `looks` show, headings then fields then buttons. */
 const common = (looks: readonly PageLook[]): string[] => {
@@ -328,9 +329,11 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
         i !== c && o[0]?.look.url === url ? common(o.map((m) => m.look)) : [],
       ),
     );
-    const distinct = mine.filter((l) => !others.has(l));
+    // Fields and buttons first: a heading often names the item (an assignment title), not the screen.
+    const chrome = [...mine].sort((a, b) => CHROME_ORDER(a) - CHROME_ORDER(b));
+    const distinct = chrome.filter((l) => !others.has(l));
     const pick = distinct.slice(0, PICK);
-    for (const l of mine) if (pick.length < MIN_PICK && !pick.includes(l)) pick.push(l);
+    for (const l of chrome) if (pick.length < MIN_PICK && !pick.includes(l)) pick.push(l);
     return pick;
   };
 
@@ -599,8 +602,11 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
           `goal: run ${input.summary.run} ended on ${cut.end.url}, the newest on ${endLook.url}; kept the newest's`,
         );
     const mine = common(alike);
+    // A visit on the goal's own URL counts too: its look may be bare (an eval page read before it loaded).
     const onTheWay = cuts.some(({ cut }) =>
-      cut.visits.some((v) => shows(endLook.url, mine.slice(0, PICK), v.look)),
+      cut.visits.some(
+        (v) => v.look.url === endLook.url || shows(endLook.url, mine.slice(0, PICK), v.look),
+      ),
     );
     screens.unshift({
       name: goalName,

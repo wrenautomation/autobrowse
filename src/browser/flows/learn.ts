@@ -13,13 +13,11 @@
  * `/content/enforced/<ou>-<code>/`; their files download the same way, with
  * an in-page fetch, as base64.
  *
+ * Courses, dropbox folders and the dropbox submit are walks now, cut from an
+ * explore run (`walks cut learn`, designs/2026-10-23-cut-runs.md):
+ * learn/walk-courses, walk-dropbox-folders, walk-dropbox-submit.
+ *
  * Writes use the pages, as a person does.
- * - Dropbox: `folder_submit_files.d2l?db=&ou=` → "Add a File" opens a dialog
- *   (frame `iframe[title^='Add a File']`); its "My Computer" link takes only a
- *   DOM click; "Upload" opens the file chooser; "Add" closes the dialog;
- *   "Submit" (the second on the page) asks a Confirmation, "Yes" lands on
- *   `folder_submit_files_results.d2l` ("File submission successful", the
- *   Submission ID). Written from one hand run, 2026-10-23; never run as a flow.
  * - Quiz: `quiz_summary.d2l?qi=&ou=` → "Start Quiz!" (or "Continue Quiz..."
  *   for an attempt left open). The questions sit two frames deep
  *   (`QUIZ_FRAME`), one fieldset per question after its "Question N" heading.
@@ -51,16 +49,13 @@ declare const document: El & {
   createElement(tag: "template"): { innerHTML: string; content: El };
 };
 
-const LP = "/d2l/api/lp/1.43";
 const LE = "/d2l/api/le/1.67";
 /** The quiz's question page: a frame inside the attempt's frame. */
 export const QUIZ_FRAME = "iframe#ctl_2 >> internal:control=enter-frame >> iframe#FRM_page";
 const ATTEMPT_FRAME = "iframe#ctl_2";
-const ADD_FRAME = "iframe[title^='Add a File']";
 const PAGE_MS = 15_000;
 
 const squash = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** One Valence GET from the signed-in page; a refusal goes to a person. */
 async function valence<T>(fp: FlowPage, path: string): Promise<T> {
@@ -73,35 +68,6 @@ async function valence<T>(fp: FlowPage, path: string): Promise<T> {
     return fp.human(`LEARN's API answered ${res.status} for ${path}: ${res.body}`);
   return JSON.parse(res.body) as T;
 }
-
-export interface Course {
-  ou: number;
-  name: string;
-  code: string;
-}
-
-/** Every course offering the account is enrolled in. */
-export const learnCourses = defineFlow<Record<string, never>, Course[]>({
-  site: "learn",
-  name: "courses",
-  async run(fp) {
-    interface Page {
-      PagingInfo: { Bookmark: string; HasMoreItems: boolean };
-      Items: { OrgUnit: { Id: number; Name: string; Code: string } }[];
-    }
-    const out: Course[] = [];
-    let bookmark = "";
-    do {
-      const page = await valence<Page>(
-        fp,
-        `${LP}/enrollments/myenrollments/?orgUnitTypeId=3${bookmark ? `&bookmark=${encodeURIComponent(bookmark)}` : ""}`,
-      );
-      for (const { OrgUnit: o } of page.Items) out.push({ ou: o.Id, name: o.Name, code: o.Code });
-      bookmark = page.PagingInfo.HasMoreItems ? page.PagingInfo.Bookmark : "";
-    } while (bookmark);
-    return out;
-  },
-});
 
 /** One row of a course's list page: its name and what each column says. */
 async function listRows(fp: FlowPage, url: string): Promise<{ name: string; cells: string[] }[]> {
@@ -123,38 +89,6 @@ async function listRows(fp: FlowPage, url: string): Promise<{ name: string; cell
     )
     .then((rows) => rows.map((r) => ({ name: squash(r.name), cells: r.cells.map(squash) })));
 }
-
-export interface Folder {
-  db: number;
-  name: string;
-  due: string | null;
-  /** "Not Submitted", or "1 Submission, 1 File"; null when the list page does not show the folder. */
-  status: string | null;
-  submitted: boolean;
-}
-
-/** A course's dropbox folders and whether each has a submission. */
-export const learnDropbox = defineFlow<{ ou: number }, Folder[]>({
-  site: "learn",
-  name: "dropbox",
-  async run(fp, { ou }) {
-    const folders = await valence<{ Id: number; Name: string; DueDate: string | null }[]>(
-      fp,
-      `${LE}/${ou}/dropbox/folders/`,
-    );
-    const rows = await listRows(fp, `${LEARN}/d2l/lms/dropbox/user/folders_list.d2l?ou=${ou}`);
-    return folders.map((f) => {
-      const status = rows.find((r) => r.name === squash(f.Name))?.cells[0] ?? null;
-      return {
-        db: f.Id,
-        name: f.Name,
-        due: f.DueDate,
-        status,
-        submitted: !!status && /\d+ submissions?/i.test(status),
-      };
-    });
-  },
-});
 
 export interface Quiz {
   qi: number;
@@ -220,62 +154,6 @@ export const learnQuizReview = defineFlow<{ ou: number; qi: number }, Attempt[]>
       });
     }
     return out;
-  },
-});
-
-export interface SubmitInput {
-  ou: number;
-  db: number;
-  /** A local file path. */
-  file: string;
-  /** Click Submit; false attaches the file and stops for a look. */
-  submit: boolean;
-}
-
-/** Attach one file to a dropbox folder; with `submit`, hand it in and read the Submission ID. */
-export const learnDropboxSubmit = defineFlow<SubmitInput, { submissionId: string | null }>({
-  site: "learn",
-  name: "dropbox-submit",
-  async run(fp, input) {
-    await fp.open(
-      `${LEARN}/d2l/lms/dropbox/user/folder_submit_files.d2l?db=${input.db}&grpid=0&isprv=&bp=0&ou=${input.ou}`,
-    );
-    const add: Hints = { role: "button", name: "Add a File" };
-    if (!(await fp.has(add, PAGE_MS))) return fp.human(`no "Add a File" on ${fp.url()}: closed?`);
-    await fp.act({ kind: "click" }, add, { goal: "open the Add a File dialog" });
-    // The dialog's "My Computer" link ignores a pointer click; a DOM click opens it.
-    const mine = fp.page.frameLocator(ADD_FRAME).getByText("My Computer", { exact: true });
-    await mine.waitFor({ timeout: PAGE_MS });
-    await mine.evaluate((a) => (a as unknown as El).click());
-    await fp.act(
-      { kind: "upload", files: [input.file] },
-      { role: "button", name: "Upload", frame: ADD_FRAME },
-      { goal: "choose the file" },
-    );
-    await fp.act(
-      { kind: "click" },
-      { role: "button", name: "Add", nth: 0 },
-      { goal: "attach the file" },
-    );
-    const name = input.file.split("/").at(-1) as string;
-    const attached: Hints = { text: `/${escapeRe(name)}/` };
-    if (!(await fp.has(attached, PAGE_MS))) return fp.human(`${name} did not attach`);
-    if (!input.submit) return { submissionId: null };
-    await fp.act(
-      { kind: "click" },
-      { role: "button", name: "Submit", nth: 1 },
-      { goal: "submit the folder", irreversible: true },
-    );
-    await fp.act(
-      { kind: "click" },
-      { role: "button", name: "Yes" },
-      { goal: "confirm the submission", irreversible: true },
-    );
-    if (!(await fp.waitForUrl(/folder_submit_files_results\.d2l/, 30_000)))
-      return fp.human(`no results page after Submit (${fp.url()})`);
-    const text = await fp.text();
-    if (!/submission successful/i.test(text)) return fp.human(`LEARN said: ${text.slice(0, 300)}`);
-    return { submissionId: text.match(/Submission ID:?\s*(\d+)/i)?.[1] ?? null };
   },
 });
 

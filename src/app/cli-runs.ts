@@ -362,8 +362,21 @@ export function registerRunsCommands(
         });
         if (!flow) throw new Error(`no walk ${ref}`);
         const out = await parts.browser.run(flow, input);
-        console.log(`reached ${out.goal} via ${out.screens.join(" → ") || "(already there)"}`);
-        if (Object.keys(out.read).length) console.log(`read: ${Object.keys(out.read).join(", ")}`);
+        if (out.held) console.log(`held before "${out.held}" (submit=false)`);
+        else console.log(`reached ${out.goal} via ${out.screens.join(" → ") || "(already there)"}`);
+        // Counts only: what a walk read can be private (grades, names).
+        const sizes = Object.entries(out.read).map(([k, v]) => {
+          const n = (() => {
+            try {
+              const j: unknown = JSON.parse(v);
+              return Array.isArray(j) ? j.length : null;
+            } catch {
+              return null;
+            }
+          })();
+          return n === null ? k : `${k} (${n})`;
+        });
+        if (sizes.length) console.log(`read: ${sizes.join(", ")}`);
         for (const [as, rows] of Object.entries(out.records))
           console.log(
             `${as}: ${rows.length} rows → ${keepRows(settings, s.site, s.name, as, rows)}`,

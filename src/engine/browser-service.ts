@@ -37,14 +37,7 @@ import {
 import { instagramPostComments } from "../browser/flows/instagram-comments.js";
 import { instagramCreatePost } from "../browser/flows/instagram-create-post.js";
 import { instagramOauthConsent } from "../browser/flows/instagram-oauth-consent.js";
-import {
-  learnCourses,
-  learnDropbox,
-  learnDropboxSubmit,
-  learnQuizAttempt,
-  learnQuizReview,
-  learnQuizzes,
-} from "../browser/flows/learn.js";
+import { learnQuizAttempt, learnQuizReview, learnQuizzes } from "../browser/flows/learn.js";
 import { linkedinFollow, linkedinLike } from "../browser/flows/linkedin-act.js";
 import { linkedinActivity } from "../browser/flows/linkedin-activity.js";
 import { linkedinAudience } from "../browser/flows/linkedin-audience.js";
@@ -221,11 +214,8 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     loomUpload,
     loomRename,
     loomDelete,
-    learnCourses,
-    learnDropbox,
     learnQuizzes,
     learnQuizReview,
-    learnDropboxSubmit,
     learnQuizAttempt,
     outlookOauthConsent,
     youtubeCommunityPost,

@@ -52,16 +52,10 @@ export {
   type Answer as LearnAnswer,
   type Attempt as LearnAttempt,
   type AttemptInput as LearnAttemptInput,
-  type Course as LearnCourse,
-  type Folder as LearnFolder,
-  learnCourses,
-  learnDropbox,
-  learnDropboxSubmit,
   learnQuizAttempt,
   learnQuizReview,
   learnQuizzes,
   type Quiz as LearnQuiz,
-  type SubmitInput as LearnSubmitInput,
 } from "./learn.js";
 export { linkedinFollow, linkedinLike } from "./linkedin-act.js";
 export { type Audience as LinkedInAudience, linkedinAudience } from "./linkedin-audience.js";
