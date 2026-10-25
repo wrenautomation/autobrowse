@@ -30,6 +30,7 @@ import { registerDesktopCommands } from "./cli-desktop.js";
 import { registerDoCommands } from "./cli-do.js";
 import { registerEnvCommands } from "./cli-env.js";
 import { registerFilesCommands } from "./cli-files.js";
+import { registerFilmCommand } from "./cli-film.js";
 import { readJson } from "./cli-json.js";
 import { registerLangfuseCommands } from "./cli-langfuse.js";
 import { registerModsCommands } from "./cli-mods.js";
@@ -691,6 +692,7 @@ registerWatchedCommands(program, settings);
 registerModsCommands(program, settings);
 registerRunsCommands(program, settings, local);
 registerTeachCommand(program, settings);
+registerFilmCommand(program);
 registerRepairsCommands(program, settings);
 registerScreensCommands(program, settings);
 program

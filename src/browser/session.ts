@@ -13,6 +13,7 @@ import { type HttpClient, safeUrls } from "../clients/http.js";
 import { expandHome } from "../google/auth.js";
 import { assertProfileFree } from "./browsers.js";
 import type { Egress, Exit } from "./egress.js";
+import { type FilmOptions, filmContext, filmGeometry } from "./film.js";
 import { type Fingerprint, geometry, learnFingerprint, wearFingerprint } from "./fingerprint.js";
 import { keepSessionCookies, keptDomains } from "./keep-session.js";
 import type { Hints } from "./locate.js";
@@ -126,6 +127,8 @@ export interface BrowserOptions {
    * the exit's (`EGRESS_<NAME>_TZ`); the rest this; the machine's own when unset.
    */
   timezone?: string;
+  /** Film every page into a take (`AUTOBROWSE_FILM`, `browser/film`); never the person's own browser. */
+  film?: FilmOptions | null;
 }
 
 export interface Session {
@@ -138,6 +141,8 @@ export interface Session {
   shared?: boolean;
   /** The virtual authenticator: export after an enrollment. */
   passkeys: Passkeys;
+  /** Each page films itself as a pane (`browser/film.ts`): a trace takes no screenshots of its own. */
+  filmed?: boolean;
   /** A new IP from the profile's exit, when it rotates (`browser/egress`); false otherwise. */
   newIp?: () => Promise<boolean>;
   close(): Promise<void>;
@@ -177,14 +182,18 @@ export async function openSession(site: string, opts: BrowserOptions): Promise<S
     // `webdriver` property on navigator, reading undefined, is itself a tell.
   }
   const page = context.pages()[0] ?? (await context.newPage());
+  const film = opts.film ? await filmContext(context, opts.film) : null;
   const passkeys = virtualAuthenticator(context, await opts.passkeys?.(site).catch(() => []));
   const local = opts.tier !== "browserbase" && opts.tier !== "cdp";
   return {
     context,
     page,
     passkeys,
+    ...(film ? { filmed: true } : {}),
     ...(local && opts.egress ? { newIp: () => (opts.egress as Egress).newIp(profile) } : {}),
     async close() {
+      // Before the pages go: each pane's last frame holds until now.
+      await film?.stop();
       // An attached app keeps its windows; only what we launched or rented closes.
       if (opts.tier === "cdp") {
         await browser?.close().catch(() => undefined);
@@ -279,7 +288,7 @@ async function launchLocal(
 ): Promise<BrowserContext> {
   const proxy = exit?.proxy ?? null;
   const headless = opts.headless ?? true;
-  const { args: sizeArgs, ...size } = geometry(headless);
+  const { args: sizeArgs, ...size } = opts.film ? filmGeometry(opts.film.size) : geometry(headless);
   // Headless says the headed fingerprint (fingerprint.ts). Not through Playwright's
   // `userAgent`: that rebuilds the client hints from the UA string and sends
   // `Sec-CH-UA-Arch: "x86"` and platform version "10_15_7" from an arm Mac on 26.x.

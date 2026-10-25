@@ -28,6 +28,9 @@
  * the human part falls back to the plain act, never to a failure.
  *
  * `handsFor(null)` is instant hands: demos, tests, a console answering at once.
+ * `handsFor(pace, random, log)` also says each act to `log` as it happens (a
+ * pointer step, a press, a key, a wheel step), on the epoch-ms clock: a film
+ * draws its cursor and plays its sounds from that (`browser/film.ts`).
  * `showPointer` draws the pointer on the page (a dot), to watch a headed run;
  * it puts an element in the page, so it is for watching, never for real runs.
  *
@@ -100,6 +103,50 @@ export const HUMAN_PACE: Pace = {
     most: 6_000,
   },
 };
+
+/**
+ * For a film: the pace of a demo. No slips, no stalls, no wander while
+ * reading; keys at a steady clip, a calm reach a viewer can follow.
+ */
+export const FILM_PACE: Pace = {
+  think: [450, 900],
+  drift: 0,
+  typing: {
+    ...HUMAN_PACE.typing,
+    hold: [40, 70],
+    gap: [50, 85],
+    tempo: [0.9, 1.1],
+    wordBeat: 0.08,
+    beat: [120, 260],
+    stall: 0,
+    pasteOver: 600,
+    typo: 0,
+  },
+  mouse: {
+    ...HUMAN_PACE.mouse,
+    reach: [260, 360],
+    perBit: [110, 150],
+    overshoot: 0,
+    hover: [180, 280],
+    hold: [70, 110],
+    tremor: 0.3,
+    hesitate: 0,
+    jitter: 0.2,
+  },
+  scroll: { ...HUMAN_PACE.scroll, look: [500, 900] },
+};
+
+/** What a hand did, when (epoch ms): page px, as the page's own events say them. */
+export type HandEvent =
+  | { kind: "move" | "down" | "up"; t: number; x: number; y: number }
+  | { kind: "key"; t: number; key: string }
+  | { kind: "scroll"; t: number; dy: number }
+  /** The control a click or a type acts on. */
+  | { kind: "focus"; t: number; box: { x: number; y: number; w: number; h: number } };
+
+export type HandsLog = (page: Page, e: HandEvent) => void;
+
+const unlogged: HandsLog = () => {};
 
 export interface ActTimeout {
   timeout: number;
@@ -198,24 +245,56 @@ async function showOn(page: Page) {
   await page.evaluate(POINTER_DOT).catch(() => undefined);
 }
 
-async function play(page: Page, steps: { x: number; y: number; after: number }[], pace: Pace) {
+async function play(
+  page: Page,
+  steps: { x: number; y: number; after: number }[],
+  pace: Pace,
+  log: HandsLog,
+) {
   if (pace.showPointer) await showOn(page);
   for (const step of steps) {
     await page.mouse.move(step.x, step.y);
     pointers.set(page, { x: step.x, y: step.y });
+    log(page, { kind: "move", t: Date.now(), x: step.x, y: step.y });
     if (step.after) await page.waitForTimeout(step.after);
   }
 }
 
 /** Rest the hand on the mouse where it is, for a draw from `range`. */
-async function rest(page: Page, range: [number, number], pace: Pace, random: Random) {
+async function rest(
+  page: Page,
+  range: [number, number],
+  pace: Pace,
+  random: Random,
+  log: HandsLog,
+) {
   const at = await pointerOf(page, random);
-  await play(page, restAt(at, drawMs(range, random), pace.mouse, random), pace);
+  await play(page, restAt(at, drawMs(range, random), pace.mouse, random), pace, log);
 }
 
-async function glide(page: Page, to: Point, size: number, pace: Pace, random: Random) {
-  await play(page, mousePath(await pointerOf(page, random), to, size, pace.mouse, random), pace);
+async function glide(
+  page: Page,
+  to: Point,
+  size: number,
+  pace: Pace,
+  random: Random,
+  log: HandsLog,
+) {
+  const path = mousePath(await pointerOf(page, random), to, size, pace.mouse, random);
+  await play(page, path, pace, log);
   pointers.set(page, to);
+}
+
+/** The wheel, flick by flick, from where the pointer rests. */
+async function wheel(page: Page, dy: number, pace: Pace, random: Random, log: HandsLog) {
+  if (pace.showPointer) await showOn(page);
+  const at = await pointerOf(page, random);
+  await page.mouse.move(at.x, at.y);
+  for (const step of wheelPlan(dy, pace.scroll, random)) {
+    await page.mouse.wheel(0, step.dy);
+    log(page, { kind: "scroll", t: Date.now(), dy: step.dy });
+    await page.waitForTimeout(step.after);
+  }
 }
 
 /**
@@ -224,7 +303,7 @@ async function glide(page: Page, to: Point, size: number, pace: Pace, random: Ra
  * middle band. Too far, or a box that will not settle: the caller's plain
  * scroll finishes it.
  */
-async function wheelTo(target: Locator, o: ActTimeout, pace: Pace, random: Random) {
+async function wheelTo(target: Locator, o: ActTimeout, pace: Pace, random: Random, log: HandsLog) {
   const page = target.page();
   const view = await viewOf(page);
   const box = await target.boundingBox(o).catch(() => null);
@@ -234,37 +313,41 @@ async function wheelTo(target: Locator, o: ActTimeout, pace: Pace, random: Rando
   // Aim it somewhere between a third and a half of the way down.
   const dy = box.y - view.height * (0.33 + random() * 0.17);
   if (Math.abs(dy) > pace.scroll.most) return;
-  if (pace.showPointer) await showOn(page);
-  const at = await pointerOf(page, random);
-  await page.mouse.move(at.x, at.y);
-  for (const step of wheelPlan(dy, pace.scroll, random)) {
-    await page.mouse.wheel(0, step.dy);
-    await page.waitForTimeout(step.after);
-  }
+  await wheel(page, dy, pace, random, log);
 }
 
-export function handsFor(pace: Pace | null, random: Random = Math.random): Hands {
+export function handsFor(
+  pace: Pace | null,
+  random: Random = Math.random,
+  log: HandsLog = unlogged,
+): Hands {
   if (!pace) return instantHands;
+  const key = (page: Page, k: string) => log(page, { kind: "key", t: Date.now(), key: k });
 
   const click = async (asked: Locator, { at, ...o }: ActTimeout & { at?: Point }) => {
     const target = at ? asked : await pressable(asked, o);
     const page = target.page();
-    await wheelTo(target, o, pace, random).catch(() => undefined);
+    await wheelTo(target, o, pace, random, log).catch(() => undefined);
     const box = await target
       .scrollIntoViewIfNeeded(o)
       .then(() => target.boundingBox(o))
       .catch(() => null);
     if (!box) return target.click({ ...o, ...(at ? { position: at } : {}) });
     const aim = at ? { x: box.x + at.x, y: box.y + at.y } : aimPoint(box, random);
-    await glide(page, aim, Math.min(box.width, box.height), pace, random).catch(() => undefined);
-    await rest(page, pace.mouse.hover, pace, random).catch(() => undefined);
+    await glide(page, aim, Math.min(box.width, box.height), pace, random, log).catch(
+      () => undefined,
+    );
+    await rest(page, pace.mouse.hover, pace, random, log).catch(() => undefined);
+    const { x, y, width: w, height: h } = box;
+    log(page, { kind: "focus", t: Date.now(), box: { x, y, w, h } });
     // Playwright's click at that spot: it checks the control is still there and uncovered,
     // finds the pointer already on it, and holds the button for `delay`.
-    await target.click({
-      ...o,
-      position: { x: aim.x - box.x, y: aim.y - box.y },
-      delay: drawMs(pace.mouse.hold, random),
-    });
+    const delay = drawMs(pace.mouse.hold, random);
+    await target.click({ ...o, position: { x: aim.x - box.x, y: aim.y - box.y }, delay });
+    // The button came up as the click returned, `delay` after it went down.
+    const up = Date.now();
+    log(page, { kind: "down", t: up - delay, ...aim });
+    log(page, { kind: "up", t: up, ...aim });
   };
 
   return {
@@ -281,7 +364,7 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
             return spent <= ms;
           },
         );
-        await play(page, path, pace).catch(() => undefined);
+        await play(page, path, pace, log).catch(() => undefined);
         const left = ms - (Date.now() - start);
         if (left > 0) await page.waitForTimeout(left);
         return;
@@ -295,23 +378,17 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
       const size = Math.min(box.width, box.height);
       const start = { x: box.x + from.x, y: box.y + from.y };
       const end = { x: box.x + to.x, y: box.y + to.y };
-      await glide(page, start, size, pace, random);
-      await rest(page, pace.mouse.hover, pace, random);
+      await glide(page, start, size, pace, random, log);
+      await rest(page, pace.mouse.hover, pace, random, log);
       await page.mouse.down();
-      await rest(page, pace.mouse.hold, pace, random);
-      await glide(page, end, size, pace, random);
-      await rest(page, pace.mouse.hover, pace, random);
+      log(page, { kind: "down", t: Date.now(), ...start });
+      await rest(page, pace.mouse.hold, pace, random, log);
+      await glide(page, end, size, pace, random, log);
+      await rest(page, pace.mouse.hover, pace, random, log);
       await page.mouse.up();
+      log(page, { kind: "up", t: Date.now(), ...end });
     },
-    async scroll(page, dy) {
-      if (pace.showPointer) await showOn(page);
-      const at = await pointerOf(page, random);
-      await page.mouse.move(at.x, at.y);
-      for (const step of wheelPlan(dy, pace.scroll, random)) {
-        await page.mouse.wheel(0, step.dy);
-        await page.waitForTimeout(step.after);
-      }
-    },
+    scroll: (page, dy) => wheel(page, dy, pace, random, log),
     async type(target, text, o) {
       const page = isPage(target) ? target : target.page();
       if (!isPage(target)) {
@@ -328,6 +405,7 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
       // The click focused the control: keys go to the page's keyboard from here, not
       // through the locator, which re-checks and re-focuses the control on every key.
       for (const k of typingPlan(text, pace.typing, random)) {
+        key(page, k.ch);
         // `delay` is how long the key is held: down, wait, up.
         if (k.ch === BACKSPACE) await page.keyboard.press(BACKSPACE, { delay: k.hold });
         else await page.keyboard.type(k.ch, { delay: k.hold });
@@ -339,22 +417,25 @@ export function handsFor(pace: Pace | null, random: Random = Math.random): Hands
     async paste(target, text, o) {
       if (await chosen(target, text, o, (l) => click(l, o))) return;
       await click(target, o);
-      await rest(target.page(), pace.mouse.hover, pace, random).catch(() => undefined);
+      await rest(target.page(), pace.mouse.hover, pace, random, log).catch(() => undefined);
       // A code split one box per character (Microsoft's six digit boxes): a fill lands
       // it all in the first box. Keys, as a person types them, move the widget along.
       if ([...text].length > 1 && (await boxWidth(target)) === 1) {
         await target.fill("", o);
-        for (const ch of text)
+        for (const ch of text) {
+          key(target.page(), ch);
           await target.page().keyboard.type(ch, { delay: drawMs(pace.typing.hold, random) });
+        }
         return;
       }
       await target.fill(text, o);
     },
-    press: (target, key, o) => {
+    press: (target, k, o) => {
       const delay = drawMs(pace.typing.hold, random);
+      key(isPage(target) ? target : target.page(), k);
       return isPage(target)
-        ? target.keyboard.press(key, { delay })
-        : target.press(key, { ...o, delay });
+        ? target.keyboard.press(k, { delay })
+        : target.press(k, { ...o, delay });
     },
   };
 }

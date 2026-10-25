@@ -7,6 +7,8 @@ import { drawMs } from "../src/browser/human/draw.js";
 import {
   aimPoint,
   BACKSPACE,
+  FILM_PACE,
+  type HandEvent,
   HUMAN_PACE,
   handsFor,
   instantHands,
@@ -378,6 +380,31 @@ describe("hands", () => {
     const { log, page } = fakes(null);
     await handsFor(neat, seeded()).type(page, "ok", { timeout: 1000 });
     expect(log.map((l) => l.replace(/ \d+$/, ""))).toEqual(["key o", "key k"]);
+  });
+
+  it("say each act to the log, on the clock, in the order it happened", async () => {
+    const { page, target } = fakes({ x: 400, y: 300, width: 120, height: 30 });
+    const said: HandEvent[] = [];
+    const hands = handsFor(FILM_PACE, seeded(), (p, e) => {
+      expect(p).toBe(page);
+      said.push(e);
+    });
+    await hands.type(target, "hi", { timeout: 1000 });
+    await hands.press(page, "Enter", { timeout: 1000 });
+    await hands.scroll(page, 300);
+    const kinds = said.map((e) => e.kind).filter((k, i, all) => k !== all[i - 1]);
+    expect(kinds).toEqual(["move", "focus", "down", "up", "key", "scroll"]);
+    expect(said.filter((e) => e.kind === "key").map((e) => e.key)).toEqual(["h", "i", "Enter"]);
+    const down = said.find((e) => e.kind === "down");
+    const up = said.find((e) => e.kind === "up");
+    expect(down && up && up.t - down.t).toBeGreaterThanOrEqual(FILM_PACE.mouse.hold[0]);
+    expect(said.find((e) => e.kind === "focus")).toMatchObject({
+      box: { x: 400, y: 300, w: 120, h: 30 },
+    });
+  });
+
+  it("film at a pace with no slips and no wander", () => {
+    expect([FILM_PACE.typing.typo, FILM_PACE.typing.stall, FILM_PACE.drift]).toEqual([0, 0, 0]);
   });
 
   it("are instant with no pace", () => {

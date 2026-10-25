@@ -19,6 +19,7 @@ Robustness lives in one place: a pause to read, a curved reach, typing in runs w
 
 - `Pace` — `src/browser/human/index.ts:50`; `Hands { think, click, type, press, scroll … }` — `:113`; `handsFor` — `:245`
 - Mouse, scroll, typing styles in the sibling files
+- An optional `HandsLog` sink hears each act (move, down, up, key, scroll, focus): [[film]]
 - Chosen from settings: `paceFor` — `src/app/services-signin.ts:293`
 
 ## Connected to

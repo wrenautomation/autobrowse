@@ -23,6 +23,7 @@ import { type FlowOutcome, type FlowRunRow, type FlowRuns, fileFlowRuns } from "
 import { shareOff, shareTrace } from "../share/share.js";
 import { currentCall, type DoneActs, markSubmitted } from "./attempt.js";
 import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js";
+import { filmLog } from "./film.js";
 import { type Fixes, flowKey } from "./fixes.js";
 import {
   type Hands,
@@ -488,7 +489,12 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
   const artifactsDir = expandHome(opts.artifactsDir);
   const locks = runner.locks ?? new KeyedMutex();
   const repairer = runner.repairer ?? noRepairer;
-  const hands = handsFor(runner.pace === undefined ? HUMAN_PACE : runner.pace);
+  // A filmed page hears every act (`browser/film`); the rest drop it.
+  const hands = handsFor(
+    runner.pace === undefined ? HUMAN_PACE : runner.pace,
+    Math.random,
+    filmLog,
+  );
   const park = runner.park;
   const runsDir = runner.runs === undefined ? statsDirOf("flows") : null;
   const runs = runner.runs ?? (runsDir ? fileFlowRuns(runsDir) : null);
@@ -606,12 +612,13 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         let actsBefore = 0;
         mkdirSync(artifactsDir, { recursive: true });
         // Tracing is best effort: a CDP-attached context may refuse it. Never
-        // in the person's own browser: it would film their other tabs.
+        // in the person's own browser: it would film their other tabs. A filmed
+        // session's frames are the film's: a page has one screencast, and its first client sets the size.
         const tracing =
           !flow.secret &&
           !session.shared &&
           (await session.context.tracing
-            .start({ screenshots: true, snapshots: true })
+            .start({ screenshots: !session.filmed, snapshots: true })
             .then(() => true)
             .catch(() => false));
         let signingIn = false;

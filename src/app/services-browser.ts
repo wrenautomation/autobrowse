@@ -5,6 +5,7 @@ import { credentialFor, SITE_LOGINS } from "../auth/index.js";
 import type { Eyes } from "../browser/captcha/index.js";
 import { eyesOf } from "../browser/captcha/llm-eyes.js";
 import { egressOf } from "../browser/egress.js";
+import { filmSizeOf } from "../browser/film.js";
 import { flowRunner } from "../browser/flow.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
 import { ownBrowserOf } from "../browser/own.js";
@@ -131,6 +132,9 @@ export function browserOptions(
     channel: settings.browserChannel,
     artifactsDir: settings.artifactsDir,
     ...(settings.watchFlows ? { watchFlows: settings.watchFlows } : {}),
+    ...(settings.film
+      ? { film: { dir: expandHome(settings.film), size: filmSizeOf(settings.filmSize) } }
+      : {}),
     browserbase:
       settings.browserbaseApiKey && settings.browserbaseProjectId
         ? {

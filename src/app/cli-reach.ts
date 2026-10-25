@@ -14,6 +14,7 @@ import type { Command } from "commander";
 import type { EnvStore } from "credvault";
 import { SITE_LOGINS } from "../auth/sites.js";
 import { egressOf } from "../browser/egress.js";
+import { FILM_NEEDS, missingNeeds } from "../browser/film.js";
 import type { Person, Profile } from "../browser/flows/linkedin-reach.js";
 import { envSource, ringCount, type SpentKeys } from "../reach/key-ring.js";
 import { type KeysDep, keyCall, reachEnv } from "../reach/key-source.js";
@@ -51,7 +52,7 @@ export function registerReachCommands(
   program
     .command("doctor")
     .description(
-      "What answers now: search keys, the Maps scraper, browser exits, one live call per site, and this machine's browsers",
+      "What answers now: search keys, the Maps scraper, browser exits, one live call per site, this machine's browsers, and what filming needs",
     )
     .action(async () => {
       const has = async (n: string) => ((await env(n)) ? good("ready") : dim(`no ${n}`));
@@ -82,6 +83,15 @@ export function registerReachCommands(
         `${v.browsers.length} open, ${v.totalMb} MB · ${v.explorers.length} explore (${v.explorers.filter((e) => e.held).length} held)`,
       ]);
       for (const w of warnings(v)) rows.push([bold("browsers"), warn(w)]);
+      // What `film` and AUTOBROWSE_FILM run: each tool, or how to get it.
+      const missing = missingNeeds(FILM_NEEDS.map((n) => n.bin));
+      rows.push([
+        bold("film"),
+        FILM_NEEDS.map(
+          (n) =>
+            `${n.bin} ${missing.some((m) => m.startsWith(`${n.bin} `)) ? warn(n.install) : good("ready")}`,
+        ).join(" · "),
+      ]);
       for (const line of columns(rows)) console.log(line);
     });
   program

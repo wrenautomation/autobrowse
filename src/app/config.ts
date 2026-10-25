@@ -114,6 +114,13 @@ const schema = z.object({
   browserKeepMax: z.coerce.number().int().min(1).default(2),
   /** How the browser acts: `human` (paced like a person; sites watch for the other kind) or `fast` (demos, tests). */
   pace: z.enum(["human", "fast"]).default("human"),
+  /** Film every browser into this take folder (designs/2026-10-24-film.md); `autobrowse film` sets it for its shell. */
+  film: z.string().min(1).optional(),
+  /** The filmed page's size, CSS px. */
+  filmSize: z
+    .string()
+    .regex(/^\d{3,4}x\d{3,4}$/, "WIDTHxHEIGHT")
+    .default("1920x1080"),
   /** Draw the pointer on the page as a dot, to watch a headed run; it adds an element sites can see. */
   showPointer: z
     .string()
@@ -396,6 +403,8 @@ export const ENV_KEYS = {
   browserKeepMax: "BROWSER_KEEP_MAX",
   pace: "PACE",
   showPointer: "SHOW_POINTER",
+  film: "AUTOBROWSE_FILM",
+  filmSize: "AUTOBROWSE_FILM_SIZE",
   artifactsDir: "ARTIFACTS_DIR",
   fixesFile: "FIXES_FILE",
   screensFile: "SCREENS_FILE",

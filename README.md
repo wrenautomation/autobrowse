@@ -487,6 +487,7 @@ pnpm autobrowse runs --limit 20                # the registry, newest first (--b
 pnpm autobrowse explored google                # explore runs kept for good: driver, goal, outcome, answer tokens (show <run>: its shape, no values)
 pnpm autobrowse walks build google admin-sso --goal-like "sso"   # runs that reached a goal → a walk, run as google/walk-admin-sso
 pnpm autobrowse teach scratch join-list --url http://127.0.0.1:8765/   # do it by hand, type done; review the guesses (--yes takes them), --mod <dir> packs it
+pnpm autobrowse film demo.tape.json --out takes/demo   # type a tape in a filmed terminal; each browser it opens films too (needs ffmpeg, ttyd)
 pnpm autobrowse walks run google/admin-sso --plan domain=x.com   # no model in the loop; --yes when it has a final act, --profile <id> for whose details
 pnpm autobrowse mods pack scratch --out ./mod   # your walks, screens, fixes, --login for a site, scrubbed; you npm publish it
 pnpm autobrowse mods search [words]             # npm mods: sites, domains, gates, code or data
@@ -558,7 +559,8 @@ Why and the full split: `designs/2026-09-30-owner-keys.md`.
 
 ```
 src/engine/     workflow/step types, effects seam, guards, run (advance/answer), the Restate run object, Runs registry, events
-src/browser/    session (profiles, Browserbase), lock, flow runner (trace, hand-off, fp.act), locate, repair, flows/
+src/browser/    session (profiles, Browserbase), lock, flow runner (trace, hand-off, fp.act), locate, repair, film, flows/
+src/film/       film tapes and their director (ttyd in our Chrome): a run as a take for a product video
 src/clients/    http.ts (timeouts, retries, safe errors) + one client per API
 src/auth/       site logins, code sources (totp, email), enrollment, the page guard; the vault itself is credvault (keep.ts = our names in it)
 src/llm/        Llm seam: anthropic, openai, cohere, claude-code, fake; completeJson; OTLP trace sink

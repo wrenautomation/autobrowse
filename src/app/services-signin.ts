@@ -13,7 +13,7 @@ import {
 } from "../auth/index.js";
 import { loginSecrets, type SecretValues } from "../auth/signup.js";
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
-import { HUMAN_PACE, type Pace } from "../browser/human/index.js";
+import { FILM_PACE, HUMAN_PACE, type Pace } from "../browser/human/index.js";
 import { Watchers } from "../browser/watchers.js";
 import { channels } from "../channels/index.js";
 import { HttpError, httpClient } from "../clients/http.js";
@@ -292,6 +292,8 @@ export function linqFor(
 
 /** The runner's pace from settings; `fast` means no delays at all. */
 export function paceFor(settings: Settings): Pace | null {
+  // A film is watched: a demo's pace, whatever PACE says.
+  if (settings.film) return FILM_PACE;
   if (settings.pace === "fast") return null;
   return settings.showPointer ? { ...HUMAN_PACE, showPointer: true } : HUMAN_PACE;
 }

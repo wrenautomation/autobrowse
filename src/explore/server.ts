@@ -32,6 +32,7 @@ import { writeRecords } from "../agent/records.js";
 import { SecretLeak, urlWithoutQuery } from "../auth/guard.js";
 import type { SecretValues } from "../auth/signup.js";
 import { fetchFile } from "../browser/download.js";
+import { filmLog } from "../browser/film.js";
 import {
   chooseOption,
   defineFlow,
@@ -820,7 +821,7 @@ async function serve(
     flowYes.grant(flow, FLOW_MS);
   };
   /** Instant for a console; a person's hands when an agent drives (`pace`). */
-  const hands = handsFor(opts.pace ?? null);
+  const hands = handsFor(opts.pace ?? null, Math.random, filmLog);
   const gate = async (act: "fill" | "select" | "click", t: Target, wait: boolean) => {
     // A click is judged by what the button says too: `#checkout` or `.btn` alone names nothing.
     const said =
