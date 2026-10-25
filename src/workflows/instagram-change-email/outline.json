@@ -6,7 +6,7 @@
     {
       "key": "newEmail",
       "label": "Enter email",
-      "example": "william@wrenautomation.com"
+      "example": null
     }
   ],
   "secrets": [
@@ -51,7 +51,7 @@
       "ops": [
         {
           "kind": "click",
-          "goal": "click Contact info jinwilliam.jin+wren@gmail.com",
+          "goal": "click Contact info",
           "hints": {
             "tag": "",
             "role": "button",
@@ -164,11 +164,11 @@
         },
         {
           "kind": "click",
-          "goal": "click wrenautomation Instagram",
+          "goal": "click {account} Instagram",
           "hints": {
             "tag": "",
             "role": "checkbox",
-            "name": "wrenautomation Instagram",
+            "name": "{account} Instagram",
             "text": null,
             "placeholder": null,
             "id": null,

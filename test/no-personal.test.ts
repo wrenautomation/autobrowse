@@ -7,9 +7,13 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { loadEnvFile } from "../src/app/config.js";
 import { formatHits, type Known, lintFiles } from "../src/compiler/lint.js";
 
 const ROOTS = ["src/workflows", "src/browser/flows"];
+
+/** The npm scope is the product's, not the operator's: every operator installs it. */
+const PRODUCT_NAMES = new Set(["src/workflows/roots.ts"]);
 
 /**
  * Ids a platform owns, not a person: Instagram's web app id, Google Admin's
@@ -27,15 +31,17 @@ function sources(): Record<string, string> {
     for (const name of readdirSync(dir)) {
       const p = join(dir, name);
       if (statSync(p).isDirectory()) walk(p);
-      else if (p.endsWith(".ts") && !p.endsWith(".test.ts")) out[p] = readFileSync(p, "utf8");
+      else if ((p.endsWith(".ts") && !p.endsWith(".test.ts")) || p.endsWith("outline.json"))
+        out[p] = readFileSync(p, "utf8");
     }
   };
   for (const r of ROOTS) walk(r);
   return out;
 }
 
-/** The operator's own values on this machine, when its env is set; empty on CI. */
+/** The operator's own values from the repo's `.env` (names only leave this test); empty on CI. */
 function operatorValues(): Known[] {
+  loadEnvFile();
   const out: Known[] = [];
   const add = (name: string, kind: string) => {
     const v = process.env[name];
@@ -52,7 +58,9 @@ function operatorValues(): Known[] {
 describe("no personal data in shipped flows", () => {
   it("every workflow and browser flow names no one", () => {
     const hits = lintFiles(sources(), operatorValues()).filter(
-      (h) => !(h.kind === "id" && PLATFORM_IDS.has(h.file)),
+      (h) =>
+        !(h.kind === "id" && PLATFORM_IDS.has(h.file)) &&
+        !(h.kind === "known:operator" && PRODUCT_NAMES.has(h.file)),
     );
     expect(formatHits(hits)).toBe("");
   });

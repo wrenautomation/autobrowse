@@ -11,7 +11,7 @@
     {
       "key": "elasticIpAddress",
       "label": "Elastic IP address - optional",
-      "example": "34.233.233.146"
+      "example": null
     },
     {
       "key": "reverseDnsRecord",

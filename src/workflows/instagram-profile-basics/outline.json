@@ -6,7 +6,7 @@
     {
       "key": "profilePhotoFile",
       "label": "Change photo",
-      "example": "/Users/williamjin/Documents/wren_automation/autobrowse/assets/brand/wren-pfp.png"
+      "example": null
     }
   ],
   "secrets": [],

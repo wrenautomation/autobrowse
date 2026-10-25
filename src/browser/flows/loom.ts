@@ -1,7 +1,7 @@
 /**
  * Loom through the signed-in web app: Loom has no public API for a video's
  * owner (its SDK records in a page; oEmbed only reads). Mapped 2026-09-29 in
- * explore as loom (william@, workspace wrenautomation):
+ * explore as loom (the owner's Workspace account):
  *
  * - `/home` has "Upload a video", which opens an Uppy dialog with an
  *   `input[type=file]` (.mp4 .mov .webm .wmv .avi .m4v, under 4 GB), then

@@ -2,7 +2,7 @@
  * A public TikTok post from a video file, on TikTok Studio's upload page.
  * The Content Posting API can't do it for an unaudited app (its posts are
  * SELF_ONLY), so the browser posts as the signed-in account. Mapped
- * 2026-10-14 in headless explore as tiktok (wrenautomation, Google sign-in):
+ * 2026-10-14 in headless explore as tiktok (Google sign-in):
  *
  * - `/tiktokstudio/upload` holds a hidden `input[type=file]`; a file there
  *   opens the form at once, the upload runs beside it ("Uploaded (58.9MB)").
@@ -119,7 +119,7 @@ export function videoIdsOf(links: string[]): string[] {
   return out;
 }
 
-/** The handle in a profile URL (`/@wrenautomation?lang=en`), or null. */
+/** The handle in a profile URL (`/@handle?lang=en`), or null. */
 export function handleOf(url: string): string | null {
   return /tiktok\.com\/@([A-Za-z0-9._]+)/.exec(url)?.[1] ?? null;
 }

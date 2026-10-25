@@ -16,7 +16,7 @@
     {
       "key": "appName",
       "label": "App name on the consent screen",
-      "example": "Wren Automation"
+      "example": null
     },
     {
       "key": "email",

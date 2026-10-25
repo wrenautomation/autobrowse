@@ -1,7 +1,7 @@
 /**
  * Sending-domain ideas: spellings of the brand across a few extensions, so
  * cold mail never risks the main domain. The fleet's own pattern
- * (wren-automation.com, wrenautomation.net, wrenautomations.com): joined,
+ * (acme-corp.com, acmecorp.net, acmecorps.com): joined,
  * hyphenated, plural, and a short suffix. No try/meet/get prefixes: they
  * read as funnels. `digits` adds one letter swapped for a look-alike digit
  * (wrenautomati0n): cheap, but a filter may read it as a spoof.
