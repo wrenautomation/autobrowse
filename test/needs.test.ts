@@ -17,6 +17,7 @@ import {
   siteNeeds,
 } from "../src/app/needs.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";
+import { operator } from "../src/owner.js";
 import { gmail, meta, npm, perplexity, youtube } from "../src/sites/index.js";
 
 const ctx = (env: Record<string, string>, extra: Partial<NeedsContext> = {}): NeedsContext => ({
@@ -29,6 +30,8 @@ const ctx = (env: Record<string, string>, extra: Partial<NeedsContext> = {}): Ne
   credentials: memoryCredentials({ google: { username: "jin@gmail.com", password: "p" } }),
   env: (n) => env[n],
   workspaceDomain: null,
+  operatorName: "Test Co",
+  operatorHandle: "testco",
   phone: async () => ({ read: true, send: false }),
   desktop: null,
   ...extra,
@@ -242,7 +245,7 @@ describe("signup needs", () => {
     expect(x?.what).toMatch(/app-only/);
     expect(x?.how).toEqual([
       expect.stringMatching(/^in the x phone app: .*Continue with Google/),
-      "autobrowse creds made x@wren",
+      `autobrowse creds made x@${operator()}`,
     ]);
   });
 });

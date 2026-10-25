@@ -9,7 +9,7 @@ import { basename } from "node:path";
 import type { Command } from "commander";
 import { linkTtl, mintDrop, takeDrop } from "../auth/link.js";
 import { expandHome } from "../google/auth.js";
-import type { Settings } from "./config.js";
+import { credLinkUrl, type Settings } from "./config.js";
 import { auditFor, filesFor, oldPapersDir } from "./services.js";
 
 type Meta = { id?: string; side?: string; owner?: string; expires?: string; note?: string };
@@ -47,7 +47,7 @@ export function registerFilesCommands(program: Command, settings: Settings): voi
   const files = program
     .command("files")
     .description(
-      "Files for forms (papers: ID documents; docs: resume, transcript): sealed on this Mac, backed up to a bucket only William's AWS user reaches",
+      "Files for forms (papers: ID documents; docs: resume, transcript): sealed on this Mac, backed up to a bucket only the owner's AWS user reaches",
     );
   metaOptions(
     files
@@ -85,7 +85,7 @@ export function registerFilesCommands(program: Command, settings: Settings): voi
     const meta = await metaOf(name, o);
     const ttl = o.ttl ? linkTtl(o.ttl) : 1800;
     const label = meta.kind === "paper" ? paperLabel(meta.id, meta.side) : (meta.note ?? name);
-    const drop = await mintDrop(settings.credLinkUrl, settings.credLinkSecret, label, {
+    const drop = await mintDrop(credLinkUrl(settings), settings.credLinkSecret, label, {
       open: o.open,
       ttl,
     });
@@ -95,7 +95,7 @@ export function registerFilesCommands(program: Command, settings: Settings): voi
     );
     const until = Date.now() + ttl * 1000;
     for (;;) {
-      const data = await takeDrop(settings.credLinkUrl, settings.credLinkSecret, drop);
+      const data = await takeDrop(credLinkUrl(settings), settings.credLinkSecret, drop);
       if (data) {
         const f = await fileOf(data, meta);
         const store = await filesFor(settings);
@@ -105,7 +105,7 @@ export function registerFilesCommands(program: Command, settings: Settings): voi
           credential: `file:${name}`,
           site: "files",
           field: "secret",
-          url: `${settings.credLinkUrl}/drops`,
+          url: `${credLinkUrl(settings)}/drops`,
           by: o.open ? "files ask --open" : "files ask",
           allowed: true,
         });

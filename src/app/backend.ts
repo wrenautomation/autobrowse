@@ -9,6 +9,7 @@
 
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import type { CredentialStore } from "credvault";
 import type { Scope } from "../access/keys.js";
 import { type HealOutcome, healFailure } from "../agent/heal.js";
 import { type AgentSessions, agentSessions } from "../agent/sessions.js";
@@ -19,7 +20,7 @@ import { fileFixes } from "../browser/fixes.js";
 import { type FlowRunner, flowRunner } from "../browser/flow.js";
 import { fileScreens } from "../browser/screens.js";
 import type { FailureRecord } from "../browser/session.js";
-import type { Compiled, FinishOutcome, Outline } from "../compiler/index.js";
+import type { Compiled, FinishOutcome, Known, Outline } from "../compiler/index.js";
 import {
   checkCompiled,
   compile,
@@ -58,6 +59,7 @@ import { type SiteFacade, sitesFor } from "../sites/index.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import type { Jobs } from "../ui/jobs.js";
 import { type CompiledCatalog, compiledCatalog } from "../workflows/compiled.js";
+import { filePlans, type PlanStore, withDefaults } from "../workflows/plans.js";
 import type { Proof } from "../workflows/proof.js";
 import { proofLine, proveWorkflow, writeProof } from "../workflows/proof.js";
 import { linkOnce, SHIPPED_DIR, shippedRoots } from "../workflows/roots.js";
@@ -108,8 +110,10 @@ export interface Backend {
   workflows: readonly AnyWorkflow[] | (() => Promise<readonly AnyWorkflow[]>);
   /** Compiled workflows' proof runs by name; a name absent here is hand-written. */
   proofs?: Record<string, Proof | null> | (() => Promise<Record<string, Proof | null>>);
-  /** Run a compiled workflow once as its proof and keep it; absent when there is no browser here. */
+  /** Run a compiled workflow once as its proof and keep it (the saved default plan under `plan`); absent when there is no browser here. */
   prove?(workflow: string, plan?: Record<string, unknown>): Promise<Proof>;
+  /** Each workflow's saved default plan, the operator's own values; every start merges it under what it is given. */
+  plans?: PlanStore;
   /** Heal a failed compiled step from its failure record: agent finishes it, step rewritten, proven. */
   heal?(record: FailureRecord): Promise<HealOutcome>;
   /** A compiled workflow's editable outline: read it, or save an edit and re-render the module. */
@@ -184,14 +188,33 @@ export async function proveCompiled(
   return proof;
 }
 
-/** Recording → outline + module, written where the catalog loads from (on the Runs page at once). */
-export async function compileRecording(rec: Recording, llm: Llm | null): Promise<Compiled> {
-  const out = await compile(rec, { llm, lib: COMPILED_LIB });
+/**
+ * Recording → outline + module, written where the catalog loads from (on the
+ * Runs page at once), and the typed values → the operator's plan file, so the
+ * module names no one and still runs for us (designs/2026-10-24-operator-defaults.md).
+ */
+export async function compileRecording(
+  rec: Recording,
+  llm: Llm | null,
+  o: { plans?: PlanStore; known?: readonly Known[] } = {},
+): Promise<Compiled> {
+  const out = await compile(rec, { llm, lib: COMPILED_LIB, known: o.known ?? [] });
   const dir = join(COMPILED_DIR, out.outline.name);
   await linkOnce();
   await writeRendered(dir, out);
   await saveOutline(dir, out.outline);
+  if (o.plans && Object.keys(out.defaults).length)
+    out.defaultsFile = await o.plans.put(out.outline.name, out.defaults, { keep: true });
   return out;
+}
+
+/** The recording's account username, the one value every page of it may repeat. */
+export async function knownFor(
+  credentials: Pick<CredentialStore, "get">,
+  site: string,
+): Promise<Known[]> {
+  const cred = await credentials.get(site).catch(() => null);
+  return cred?.username ? [{ value: cred.username, kind: "account" }] : [];
 }
 
 /** The hand-finished workflow every model finish imitates; null when it is not checked out here. */
@@ -432,8 +455,11 @@ export interface BackendOptions {
  * the same code with the same catalog, browser, sink and approver behind it.
  */
 export function backendFor(settings: Settings, app: BackendParts, o: BackendOptions): Backend {
-  const prove = (name: string, plan?: Record<string, unknown>) =>
-    proveCompiled(app.catalog, app.browser, name, plan);
+  const plans = filePlans(settings.plansDir);
+  const prove = async (name: string, plan?: Record<string, unknown>) =>
+    proveCompiled(app.catalog, app.browser, name, await withDefaults(plans, name, plan ?? {}));
+  const compileRec = async (rec: Recording) =>
+    compileRecording(rec, o.llm, { plans, known: await knownFor(app.credentials, rec.site) });
   const agent = o.llm
     ? agentFor(settings, o.llm, {
         sink: app.sink,
@@ -460,8 +486,7 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
     ...(agent ? { agent } : {}),
     memory: filePicks(join(recordingsDir, ".do-picks.json")),
     compile: async (name) => ({
-      workflow: (await compileRecording(await loadRecording(recordingsDir, name), o.llm)).outline
-        .name,
+      workflow: (await compileRec(await loadRecording(recordingsDir, name))).outline.name,
     }),
   };
   const verb = doerFor(verbParts);
@@ -469,6 +494,7 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
     workflows: app.workflows,
     proofs: app.proofs,
     prove,
+    plans,
     sites: app.sites,
     do: verb,
     abilities: verb.abilities,
@@ -482,7 +508,7 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
         }
       : {}),
     outline: outlineEditor(),
-    compile: (rec) => compileRecording(rec, o.llm),
+    compile: compileRec,
     ...(o.llm ? { finish: (name, opts) => finishCompiled(name, o.llm as Llm, opts) } : {}),
     ingress: o.ingress,
     bus: app.bus,

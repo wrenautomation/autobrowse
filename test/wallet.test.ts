@@ -44,7 +44,7 @@ const VISA = "4242424242424242";
 const MC = "5555555555554444";
 const NOW = new Date("2026-09-25T12:00:00Z");
 const card = (label: string, kind: Card["kind"], number = VISA): Card =>
-  parseCardLine(`${number} 09/28 123`, { label, kind, now: NOW });
+  parseCardLine(`${number} 09/28 123`, { label, kind, now: NOW, holder: "Jane Roe" });
 
 describe("wallet cards", () => {
   it("parses a clipboard line, spaced number, postal and name", () => {
@@ -61,7 +61,10 @@ describe("wallet cards", () => {
       postal: "M5V2T6",
       holder: "Jane Q Doe",
     });
-    expect(card("c", "credit").holder).toBe("William Jin");
+    expect(card("c", "credit").holder).toBe("Jane Roe");
+    expect(() =>
+      parseCardLine(`${VISA} 09/28 123`, { label: "c", kind: "credit", now: NOW }),
+    ).toThrow(/name on the card/);
     expect(
       parseCardLine(`${VISA} 09/28 123 Jane Doe`, { label: "c", kind: "credit", now: NOW }),
     ).toMatchObject({ holder: "Jane Doe" });
@@ -70,7 +73,8 @@ describe("wallet cards", () => {
     ).toBeUndefined();
   });
   it("errors name the part, never the value", () => {
-    const bad = (t: string) => () => parseCardLine(t, { label: "c", kind: "credit", now: NOW });
+    const bad = (t: string) => () =>
+      parseCardLine(t, { label: "c", kind: "credit", now: NOW, holder: "Jane Roe" });
     expect(bad("4242424242424241 09/28 123")).toThrow(/check digit/);
     expect(bad("4242424242424242 08/26 123")).toThrow(/expired/);
     expect(bad("4242424242424242")).toThrow(/^expected/);
@@ -87,7 +91,7 @@ describe("wallet cards", () => {
     const c = card("main", "credit");
     expect(
       ["number", "exp", "expMonth", "expYear", "expYY", "cvc", "name"].map((f) => cardField(c, f)),
-    ).toEqual([VISA, "09/28", "09", "2028", "28", "123", "William Jin"]);
+    ).toEqual([VISA, "09/28", "09", "2028", "28", "123", "Jane Roe"]);
     expect(cardField(c, "pin")).toBeNull();
     expect(cardSecret("card.cvc")).toEqual({ label: null, field: "cvc" });
     expect(cardSecret("card@debit.number")).toEqual({ label: "debit", field: "number" });
@@ -204,7 +208,7 @@ describe("wallet stores", () => {
   });
   it("builds a card from one field per prompt, each checked on its own", () => {
     const now = new Date("2026-09-25T12:00:00Z");
-    const o = { label: "main", kind: "credit" as const, now };
+    const o = { label: "main", kind: "credit" as const, now, holder: "Jane Roe" };
     const card = cardFromFields(
       { number: "4242 4242 4242 4242", exp: "04/29", cvc: "123", postal: "m5v 2t6" },
       o,
@@ -214,7 +218,7 @@ describe("wallet stores", () => {
       expMonth: 4,
       expYear: 2029,
       postal: "M5V2T6",
-      holder: "William Jin",
+      holder: "Jane Roe",
     });
     const bad = (f: Partial<Parameters<typeof cardFromFields>[0]>) => () =>
       cardFromFields({ number: "4242424242424242", exp: "04/29", cvc: "123", ...f }, o);

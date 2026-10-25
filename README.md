@@ -468,6 +468,7 @@ pnpm autobrowse inbox-accounts will@new.com       # the free accounts in src/aut
 pnpm autobrowse record buy-domain --site cloudflare --url https://dash.cloudflare.com/ --terminal
 pnpm autobrowse compile buy-domain             # → src/workflows/buy-domain/ in a clone, ~/.config/autobrowse/workflows/buy-domain/ in an install (AUTOBROWSE_WORKFLOWS moves it); on the Runs page at once
 pnpm autobrowse try google-name                # run a compiled workflow here, no Restate: the proof it is deterministic
+# Every value the recording typed lands in ~/.config/autobrowse/plans/<workflow>.json (PLANS_DIR), not in the module: the module names no one and still runs for you. Every run, try and prove merges that file under --plan; `workflows <name>` shows the saved values.
 pnpm autobrowse compile buy-domain --no-llm --from-outline
 pnpm autobrowse compile buy-domain --finish     # …then a model finishes it until tsc and its test pass
 pnpm autobrowse finish buy-domain --brief "the Buy button charges the card"

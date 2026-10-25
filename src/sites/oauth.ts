@@ -72,7 +72,23 @@ function clientFields(
  * The https redirect a site that refuses http or localhost registers (Meta,
  * Instagram, TikTok). The browser answers it, so nothing on the site serves it.
  */
-export const WEB_REDIRECT = "https://wrenautomation.com/oauth/callback";
+export const WEB_REDIRECT = { env: "OAUTH_REDIRECT_URL" } as const;
+
+/** The redirect a consent sends the browser to: the spec's, read from env when it says so, else the loopback. */
+export function redirectOf(
+  spec: Pick<OAuthSpec, "redirect">,
+  env: (name: string) => string | undefined,
+  port?: number,
+): string {
+  if (!spec.redirect) return `http://127.0.0.1:${port ?? 9400}/oauth/callback`;
+  if (typeof spec.redirect === "string") return spec.redirect;
+  const v = env(spec.redirect.env);
+  if (!v)
+    throw new Error(
+      `consent needs ${spec.redirect.env}: the https redirect URI registered on the app`,
+    );
+  return v;
+}
 
 /** PKCE: a verifier and its S256 challenge. */
 export function pkcePair(): { verifier: string; challenge: string } {
@@ -384,7 +400,7 @@ export async function runConsent(
   const secret = o.env(spec.clientSecret);
   if (!id || !secret)
     throw new Error(`consent needs ${spec.clientId} and ${spec.clientSecret} first`);
-  const redirect = spec.redirect ?? `http://127.0.0.1:${o.port ?? 9400}/oauth/callback`;
+  const redirect = redirectOf(spec, o.env, o.port);
   const state = randomBytes(16).toString("hex");
   const listener = redirect.startsWith("http://")
     ? listen(redirect, state, o.timeoutMs ?? 300_000)

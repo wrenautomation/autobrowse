@@ -12,8 +12,6 @@ import { go } from "./linkedin-reach.js";
 
 const WEB = "https://www.linkedin.com";
 const RENDER_MS = 15_000;
-/** Wren's Page, by its numeric id (the same one `linkedin-page-branding` edits). */
-export const WREN_PAGE = "143656154";
 
 export interface Count {
   n: number;
@@ -61,7 +59,7 @@ export const linkedinAudience = defineFlow<AudienceInput, Audience>({
       ...(connections ? { connections } : {}),
       raw: { profile },
     };
-    const id = input.page ?? WREN_PAGE;
+    const id = input.page;
     if (!id) return out;
     await go(fp, `${WEB}/company/${encodeURIComponent(id)}/`);
     if (!(await fp.has({ css: "main section" }, RENDER_MS)))

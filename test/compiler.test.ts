@@ -3,6 +3,7 @@ import { join } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { compile, writeRendered } from "../src/compiler/index.js";
+import { lintFiles, lintText } from "../src/compiler/lint.js";
 import { outlineSchema } from "../src/compiler/outline.js";
 import { polish } from "../src/compiler/polish.js";
 import { render, renderOp } from "../src/compiler/render.js";
@@ -215,6 +216,86 @@ describe("url fields", () => {
     expect(src).toContain("project: plan.project");
     expect(src).toContain("  project: string;");
     expect(() => outlineSchema.parse({ ...o, fields: [] })).toThrow(/\{project\}/);
+  });
+});
+
+describe("operator defaults", () => {
+  /** A signup that types a handle, then clicks the page's "<handle> Instagram" heading as the account. */
+  const rec: Recording = {
+    ...recording,
+    name: "signup-x",
+    commands: [],
+    terminal: null,
+    actions: [
+      { t: 0, kind: "navigate", url: "https://x.test/signup" },
+      {
+        t: 1,
+        kind: "input",
+        url: "https://x.test/signup",
+        target: h({ name: "Handle" }),
+        value: "acmeco",
+        redacted: false,
+      },
+      {
+        t: 2,
+        kind: "input",
+        url: "https://x.test/signup",
+        target: h({ name: "Email" }),
+        value: "me@example.com",
+        redacted: false,
+      },
+      { t: 3, kind: "navigate", url: "https://x.test/acmeco/home" },
+      {
+        t: 4,
+        kind: "click",
+        url: "https://x.test/acmeco/home",
+        target: h({ tag: "a", role: "link", name: "acmeco Instagram" }),
+      },
+      {
+        t: 5,
+        kind: "click",
+        url: "https://x.test/acmeco/home",
+        target: h({ tag: "button", role: "button", name: "me@example.com menu" }),
+      },
+    ],
+  };
+  const known = [{ value: "me@example.com", kind: "account" }];
+
+  it("a typed value or the account in a URL or hint becomes {field}; the plan file keeps the values", async () => {
+    const out = await compile(rec, { known });
+    const src = out.files["index.ts"] ?? "";
+    const step = out.outline.steps[1];
+    if (step?.kind !== "browser") throw new Error("browser step expected");
+    const handle = out.outline.fields.find((f) => /handle/i.test(f.label))?.key as string;
+    const email = out.outline.fields.find((f) => /email/i.test(f.label))?.key as string;
+    expect(step.url).toBe(`https://x.test/{${handle}}/home`);
+    expect(step.ops.map((op) => ("hints" in op ? op.hints.name : null))).toEqual([
+      `{${handle}} Instagram`,
+      `{${email}} menu`,
+    ]);
+    // Every typed value lands in the defaults and leaves the outline: the module names no one.
+    expect(out.defaults).toEqual({ [handle]: "acmeco", [email]: "me@example.com" });
+    expect(out.outline.fields.map((f) => f.example)).toEqual([null, null]);
+    expect(src).not.toContain("acmeco");
+    expect(src).not.toContain("me@example.com");
+    expect(out.lint).toEqual([]);
+    expect(src).toContain(`name: \`\${input.${handle}} Instagram\``);
+  });
+
+  it("the lint names the place and the kind of personal data left, never the value", () => {
+    const hits = lintFiles(
+      {
+        "index.ts": 'const a = "me@acme.io";\nconst b = "acmeco";',
+        "index.test.ts": '"x@acme.io"',
+      },
+      [{ value: "acmeco", kind: "account" }],
+      { knownOnly: ["index.test.ts"] },
+    );
+    expect(hits).toEqual([
+      { file: "index.ts", line: 1, kind: "email" },
+      { file: "index.ts", line: 2, kind: "known:account" },
+    ]);
+    expect(lintText("see 203.0.113.7, you@example.com, Chrome/129.0.0.0")).toEqual([]);
   });
 });
 

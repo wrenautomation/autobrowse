@@ -116,7 +116,7 @@ export const drive: SiteApi = {
         input: {
           project: { env: "GOOGLE_CLOUD_PROJECT" },
           api: "drive.googleapis.com",
-          appName: "Wren Automation",
+          appName: { env: "OPERATOR_NAME" },
           email: { account: true },
           clientName: "autobrowse",
           redirectUri: "http://127.0.0.1:9400/oauth/callback",

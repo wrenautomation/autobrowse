@@ -7,7 +7,6 @@
  * legs answer in the same shape.
  */
 import { z } from "zod";
-import { WREN_PAGE } from "../browser/flows/linkedin-audience.js";
 import { POST_URN } from "../browser/flows/linkedin-post-analytics.js";
 import { type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
@@ -39,9 +38,21 @@ export const LINKEDIN_VERSION = "202609";
  * author URN; the browser leg reads the Page's name live and picks it off the
  * composer's author list, so a rename needs no change here.
  */
-export const LINKEDIN_PAGES: ReadonlySet<string> = new Set([WREN_PAGE]);
-/** Their handles (`/company/<handle>/`), so a comment the page shows by link names the Page's URN. */
-const PAGE_HANDLES: Record<string, string> = { wrenautomation: WREN_PAGE };
+type Env = (name: string) => string | undefined;
+/**
+ * The Pages this operator admins, handle (`/company/<handle>/`) to numeric id, from
+ * `LINKEDIN_PAGES` (`handle=id,handle=id`; a bare id stands under itself). A comment the page
+ * shows by link then names the Page's URN; the first Page is the default one.
+ */
+export function pageHandles(env: Env): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const part of (env("LINKEDIN_PAGES") ?? "").split(",")) {
+    const [handle, id] = part.trim().split("=");
+    if (handle) out[handle.toLowerCase()] = id ?? handle;
+  }
+  return out;
+}
+export const defaultPage = (env: Env): string | undefined => Object.values(pageHandles(env))[0];
 
 const PAGE_URN = /^urn:li:organization:(\d+)$/;
 
@@ -55,11 +66,14 @@ const asPage = (who: string, scope: string): string[] => (PAGE_URN.test(who) ? [
  * The Page id an author URN posts as, or none for the member.
  * Wren's token holds `w_member_social` only, so a Page's post goes by the browser.
  */
-export function composerPage(author: string): string | undefined {
+export function composerPage(author: string, env: Env): string | undefined {
   const id = PAGE_URN.exec(author)?.[1];
   if (!id) return undefined;
-  if (!LINKEDIN_PAGES.has(id))
-    throw new SiteError(400, `${author} is not a Page Wren admins: add it to LINKEDIN_PAGES`);
+  if (!Object.values(pageHandles(env)).includes(id))
+    throw new SiteError(
+      400,
+      `${author} is not a Page this operator admins: add it to LINKEDIN_PAGES (handle=id)`,
+    );
   return id;
 }
 
@@ -479,10 +493,10 @@ export const linkedin: SiteApi = {
       },
       browser: {
         flow: "linkedin/create-post",
-        input: (b) => ({
+        input: (b, env) => ({
           text: b.commentary,
           visibility: b.visibility,
-          page: composerPage(b.author),
+          page: composerPage(b.author, env),
         }),
       },
     }),
@@ -566,7 +580,10 @@ export const linkedin: SiteApi = {
           ),
           "rest/socialActions/{urn}/comments",
         ),
-      browser: { flow: "linkedin/post-comments", input: (q) => ({ ...q, pages: PAGE_HANDLES }) },
+      browser: {
+        flow: "linkedin/post-comments",
+        input: (q, env) => ({ ...q, pages: pageHandles(env) }),
+      },
     }),
     route({
       method: "POST",
@@ -623,11 +640,11 @@ export const linkedin: SiteApi = {
         ),
       browser: {
         flow: "linkedin/comment",
-        input: (b) => ({
+        input: (b, env) => ({
           urn: b.urn,
           text: b.message.text,
           actor: b.actor,
-          page: composerPage(b.actor),
+          page: composerPage(b.actor, env),
         }),
       },
     }),
@@ -866,7 +883,11 @@ export const linkedin: SiteApi = {
         "The account's own followers and connections, and a Page's followers (`page`: handle or id, default Wren's; empty skips it), with the text each came from. Reads only",
       request: z.object({ page: z.union([handle, z.literal("")]).optional() }),
       meter: () => ({ audience: 1 }),
-      browser: { flow: "linkedin/audience" },
+      // No page asked: the operator's default Page; "" reads the profile alone.
+      browser: {
+        flow: "linkedin/audience",
+        input: (q, env) => ({ ...q, page: q.page === undefined ? defaultPage(env) : q.page }),
+      },
     }),
     route({
       method: "GET",

@@ -8,7 +8,15 @@
  */
 import { planLocator, renderLocator } from "../browser/locate.js";
 import { INTERACTIVE_COMMANDS } from "../deps/shell.js";
-import type { DesktopOutlineOp, OpValue, Outline, OutlineOp, OutlineStep } from "./outline.js";
+import {
+  type DesktopOutlineOp,
+  HINT_TEXTS,
+  type OpValue,
+  type Outline,
+  type OutlineOp,
+  type OutlineStep,
+  PLACEHOLDER,
+} from "./outline.js";
 import { camel } from "./structure.js";
 
 export interface RenderOptions {
@@ -51,7 +59,9 @@ export function renderOp(op: OutlineOp): string {
   const plan = planLocator(op.hints);
   const hints = `{ ${Object.entries(op.hints)
     .filter(([, v]) => v)
-    .map(([k, v]) => `${k}: ${typeof v === "number" ? v : q(String(v))}`)
+    .map(
+      ([k, v]) => `${k}: ${typeof v === "number" ? v : template(String(v), (f) => `input.${f}`)}`,
+    )
     .join(", ")} }`;
   const locatorNote = plan ? ` // ${renderLocator(plan)}` : " // TODO: no usable hints";
   if (op.kind === "read" && op.match) {
@@ -76,29 +86,38 @@ export function renderOp(op: OutlineOp): string {
   return `    await fp.act(${opSrc}, ${hints}, ${opts});${locatorNote}`;
 }
 
-/** `{project}` in a step URL is the plan field `project`. */
-export const URL_FIELD = /\{([a-z][a-zA-Z0-9]*)\}/g;
+/** `{project}` in a step URL or a hint is the plan field `project`. */
+export const URL_FIELD = PLACEHOLDER;
 
-/** A step URL as source: a plain string, or a template when it names plan fields. */
-function renderUrl(url: string): string {
-  if (!URL_FIELD.test(url)) return q(url);
-  URL_FIELD.lastIndex = 0;
-  const body = url
+/** Text as source: a plain string, or a template when it names plan fields (`expr` renders one). */
+function template(text: string, expr: (field: string) => string): string {
+  PLACEHOLDER.lastIndex = 0;
+  if (!PLACEHOLDER.test(text)) return q(text);
+  PLACEHOLDER.lastIndex = 0;
+  const body = text
     .replace(/[`\\]/g, "\\$&")
     .replace(/\$\{/g, "\\${")
-    .replace(URL_FIELD, (_m, f: string) => `\${encodeURIComponent(input.${f})}`);
+    .replace(PLACEHOLDER, (_m, f: string) => `\${${expr(f)}}`);
   return `\`${body}\``;
 }
+
+/** A step URL as source; a plan field in it is URL-encoded. */
+const renderUrl = (url: string): string => template(url, (f) => `encodeURIComponent(input.${f})`);
 
 /** Plan fields and secrets one flow needs, in order of first use. */
 export function flowInputs(step: Extract<OutlineStep, { kind: "browser" }>) {
   const fields: string[] = [];
   const secrets: string[] = [];
-  for (const m of (step.url ?? "").matchAll(URL_FIELD)) {
-    const f = m[1] as string;
-    if (!fields.includes(f)) fields.push(f);
-  }
+  const named = (text: string) => {
+    for (const m of text.matchAll(PLACEHOLDER)) {
+      const f = m[1] as string;
+      if (!fields.includes(f)) fields.push(f);
+    }
+  };
+  named(step.url ?? "");
   for (const op of step.ops) {
+    if ("hints" in op)
+      for (const k of HINT_TEXTS) if (typeof op.hints[k] === "string") named(op.hints[k]);
     const value = op.kind === "fill" ? op.value : op.kind === "upload" ? op.file : null;
     if (!value) continue;
     if (value.from === "plan" && !fields.includes(value.field)) fields.push(value.field);

@@ -40,7 +40,7 @@ import { type ImageRule, imageProblem } from "../image.js";
 
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
-  companyId: z.string().regex(/^\d+$/).describe("The Page's numeric id"), // e.g. "1234567"
+  companyId: z.string().regex(/^\d+$/).describe("The Page's numeric id"), // e.g. "123456"
   logoFile: z.string().min(1).optional().describe("Logo, square"), // e.g. "assets/logo.png"
   bannerFile: z.string().min(1).optional().describe("Banner, 1584x396"), // e.g. "assets/banner.png"
   website: z.string().url().optional().describe("Website URL"), // e.g. "https://example.com"

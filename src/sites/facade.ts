@@ -49,6 +49,7 @@ import {
   type Method,
   needsOf,
   type OAuthSpec,
+  originOf,
   prefersBrowser,
   type SetupStep,
   type SiteApi,
@@ -592,7 +593,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     const as = s.signedOut ? null : ((await deps.accountFor?.(s)) ?? null);
     return {
       site: s.site,
-      origin: s.origin,
+      origin: originOf(s, deps.env),
       authed: hasToken(s, as),
       routes: await Promise.all(s.routes.map((r) => routeRow(s, r, as))),
       setup: await Promise.all(s.setup.map(setupRow)),
@@ -783,7 +784,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
             );
           const ok = await deps.approve({
             what,
-            url: `${s.origin}${path}`,
+            url: `${originOf(s, deps.env)}${path}`,
             site: name,
             ...(amount ? { amount } : {}),
           });

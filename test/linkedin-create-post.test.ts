@@ -11,7 +11,7 @@ import { prefersBrowser } from "../src/sites/types.js";
 import { fakePage } from "./auth-fakes.js";
 import { fakeFetch } from "./fakes.js";
 
-const PAGE = "urn:li:organization:143656154";
+const PAGE = "urn:li:organization:42";
 const MEMBER = "urn:li:person:abc123";
 
 const line = (a: { op: { kind: string }; hints: Hints }) =>
@@ -25,9 +25,9 @@ describe("linkedin/create-post", () => {
     const input = (author: string) =>
       route?.browser?.input?.(
         { author, commentary: "hi", visibility: "PUBLIC" } as never,
-        () => undefined,
+        (n) => ({ LINKEDIN_PAGES: "testco=42" })[n],
       );
-    expect(input(PAGE)).toEqual({ text: "hi", visibility: "PUBLIC", page: "143656154" });
+    expect(input(PAGE)).toEqual({ text: "hi", visibility: "PUBLIC", page: "42" });
     expect(input(MEMBER)).toEqual({ text: "hi", visibility: "PUBLIC", page: undefined });
     expect(BROWSER_FLOWS["linkedin/create-post"]).toBe(linkedinCreatePost);
   });
@@ -43,7 +43,10 @@ describe("linkedin/create-post", () => {
         return { url: "https://www.linkedin.com/feed/update/urn:li:activity:2/" } as never;
       },
     };
-    const env: Record<string, string> = { LINKEDIN_ACCESS_TOKEN__HELLO_WREN_TEST: "tok" };
+    const env: Record<string, string> = {
+      LINKEDIN_ACCESS_TOKEN__HELLO_WREN_TEST: "tok",
+      LINKEDIN_PAGES: "testco=42",
+    };
     const sites = siteFacade([linkedin], {
       http: httpClient({ fetch: api.fetch }),
       env: (n) => env[n],
@@ -66,7 +69,7 @@ describe("linkedin/create-post", () => {
     });
     expect(api.calls).toHaveLength(1);
     expect(seen).toEqual([
-      'linkedin@wren create-post {"text":"hi","visibility":"PUBLIC","page":"143656154"}',
+      'linkedin@wren create-post {"text":"hi","visibility":"PUBLIC","page":"42"}',
     ]);
 
     await expect(post("urn:li:organization:999")).rejects.toMatchObject({ status: 400 });
@@ -80,7 +83,10 @@ describe("linkedin/create-post", () => {
   });
 
   it("a grant still in review is a 501 naming it when the route has no browser leg", async () => {
-    const env: Record<string, string> = { LINKEDIN_ACCESS_TOKEN__HELLO_WREN_TEST: "tok" };
+    const env: Record<string, string> = {
+      LINKEDIN_ACCESS_TOKEN__HELLO_WREN_TEST: "tok",
+      LINKEDIN_PAGES: "testco=42",
+    };
     const api = fakeFetch(() => ({ status: 200, body: {} }));
     const sites = siteFacade([linkedin], {
       http: httpClient({ fetch: api.fetch }),
@@ -116,7 +122,7 @@ describe("linkedin/create-post", () => {
       posted ? '<div data-urn="urn:li:activity:7300000000000000000"></div>' : "";
     const out = await linkedinCreatePost.run(fp, {
       text: "hello",
-      page: "143656154",
+      page: "42",
       visibility: "PUBLIC",
     });
     expect(acts.map(line)).toEqual([
@@ -169,7 +175,10 @@ describe("linkedin upload", () => {
     const file = vi.fn(async () => new Response(new Uint8Array([37, 80, 68, 70])));
     vi.stubGlobal("fetch", file);
     try {
-      const env: Record<string, string> = { LINKEDIN_ACCESS_TOKEN__HELLO_WREN_TEST: "tok" };
+      const env: Record<string, string> = {
+        LINKEDIN_ACCESS_TOKEN__HELLO_WREN_TEST: "tok",
+        LINKEDIN_PAGES: "testco=42",
+      };
       const sites = siteFacade([linkedin], {
         http: httpClient({ fetch: api.fetch }),
         env: (n) => env[n],
@@ -228,7 +237,10 @@ describe("linkedin upload", () => {
     const file = vi.fn(async () => new Response(new Uint8Array([1, 2, 3, 4, 5])));
     vi.stubGlobal("fetch", file);
     try {
-      const env: Record<string, string> = { LINKEDIN_ACCESS_TOKEN__HELLO_WREN_TEST: "tok" };
+      const env: Record<string, string> = {
+        LINKEDIN_ACCESS_TOKEN__HELLO_WREN_TEST: "tok",
+        LINKEDIN_PAGES: "testco=42",
+      };
       const sites = siteFacade([linkedin], {
         http: httpClient({ fetch: api.fetch }),
         env: (n) => env[n],
@@ -288,7 +300,10 @@ describe("linkedin upload", () => {
     );
     vi.useFakeTimers();
     try {
-      const env: Record<string, string> = { LINKEDIN_ACCESS_TOKEN__HELLO_WREN_TEST: "tok" };
+      const env: Record<string, string> = {
+        LINKEDIN_ACCESS_TOKEN__HELLO_WREN_TEST: "tok",
+        LINKEDIN_PAGES: "testco=42",
+      };
       const sites = siteFacade([linkedin], {
         http: httpClient({ fetch: api.fetch }),
         env: (n) => env[n],

@@ -104,7 +104,7 @@ const decode = (s: string) => {
   }
 };
 
-/** "1,234" → 1234, "2K" → 2000, "1.5M" → 1500000, "12 comments" → 12; 0 when no number. */
+/** "1,234" → 1234, "2K" → 2000, "1.5M" → 1_500_000, "12 comments" → 12; 0 when no number. */
 export function countOf(text: string | undefined): number {
   const m = /(\d[\d,]*(?:\.\d+)?)\s*([KM])?/i.exec(text ?? "");
   if (!m?.[1]) return 0;
@@ -123,7 +123,7 @@ export function authorUrlOf(url: string | undefined): string | null {
 const TOOLS_KINDS: Record<number, string> = { 1: "activity", 2: "ugcPost" };
 
 /**
- * `CgsIgsCzsLPL1cXQAQ-replaceableCommentTools<hash>` → `urn:li:activity:N`: the
+ * `Cgs…-replaceableCommentTools<hash>` → `urn:li:activity:N`: the
  * base64 before the dash is one length-delimited field (1 = activity, 2 =
  * ugcPost) holding the id as a zigzag varint in its field 1. Null for any other shape.
  */

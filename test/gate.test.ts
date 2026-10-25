@@ -75,7 +75,7 @@ describe("checkPack", () => {
     expect(await bad(`await fetch("https://x.test");`)).toMatch(/uses fetch/);
     expect(await bad(`const m = await import("fs");`)).toMatch(/dynamic import/);
     expect(await bad(`eval("1");`)).toMatch(/uses eval/);
-    expect(await bad(`const to = "ada@example.org";`)).toMatch(/personal data/);
+    expect(await bad(`const to = "ada@acme-corp.io";`)).toMatch(/personal data/);
     expect(await bad("const x = ;")).toMatch(/does not parse/);
     expect(await bad(`import { y } from "./nope.js";`)).toMatch(/imports \.\/nope\.js/);
     expect(await checkPack({ ...pack(), name: "../x" })).toEqual(["name"]);

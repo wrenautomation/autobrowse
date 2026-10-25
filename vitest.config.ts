@@ -26,7 +26,12 @@ function pruneLeakedRuns(): void {
 pruneLeakedRuns();
 export default defineConfig({
   test: {
-    env: { AUTOBROWSE_STATS: "off", AUTOBROWSE_RESUME: "off", AUTOBROWSE_SHARE: "off" },
+    env: {
+      AUTOBROWSE_STATS: "off",
+      AUTOBROWSE_RESUME: "off",
+      AUTOBROWSE_SHARE: "off",
+      PLANS_DIR: join(tmpdir(), "autobrowse-test-plans"),
+    },
     testTimeout: 120_000,
     hookTimeout: 180_000,
   },

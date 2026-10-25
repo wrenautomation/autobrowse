@@ -14,11 +14,15 @@ import { httpClient } from "../src/clients/http.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
 import { SITES } from "../src/sites/index.js";
 import { instagram, instagramOAuth } from "../src/sites/instagram.js";
-import { accessTokens, runConsent, WEB_REDIRECT } from "../src/sites/oauth.js";
-import { TIKTOK_REDIRECT, tiktok, tiktokOAuth } from "../src/sites/tiktok.js";
+import { accessTokens, runConsent } from "../src/sites/oauth.js";
+import { tiktok, tiktokOAuth } from "../src/sites/tiktok.js";
 import type { ApiLeg } from "../src/sites/types.js";
 import { fakePage } from "./auth-fakes.js";
 import { fakeFetch } from "./fakes.js";
+
+/** The https redirect an operator registered (OAUTH_REDIRECT_URL in these tests). */
+const WEB_REDIRECT = "https://example.com/oauth/callback";
+const TIKTOK_REDIRECT = "https://example.com/oauth/social/tiktok";
 
 const base = { username: "wren", password: "p", recoveryCodes: [], passkeys: [] };
 const ctx = (fp: SignInContext["fp"], kinds: CodeKind[]): SignInContext => ({
@@ -294,6 +298,8 @@ describe("instagram and tiktok consents and OAuth shapes", () => {
       TIKTOK_CLIENT_SECRET: "s",
       INSTAGRAM_CLIENT_ID: "i",
       INSTAGRAM_CLIENT_SECRET: "is",
+      OAUTH_REDIRECT_URL: WEB_REDIRECT,
+      TIKTOK_REDIRECT_URL: TIKTOK_REDIRECT,
     };
     const consent = (spec: typeof tiktokOAuth, port: number) =>
       runConsent(spec, {

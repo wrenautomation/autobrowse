@@ -42,7 +42,10 @@ describe("the bank's code in a 3-D Secure iframe", () => {
   const grantAsks: string[] = [];
   /** Shifts the session's clock, to age the card. */
   let skew = 0;
-  const visa = parseCardLine("4242424242424242 09/30 321", { label: "main", kind: "credit" });
+  const visa = parseCardLine("4242424242424242 09/30 321 Jane Roe", {
+    label: "main",
+    kind: "credit",
+  });
 
   const send = async (cmd: Record<string, unknown>, wait = false) => {
     const r = await fetch(`http://127.0.0.1:${port}/${wait ? "?wait=1" : ""}`, {

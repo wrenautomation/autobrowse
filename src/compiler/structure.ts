@@ -11,7 +11,16 @@ import type { Hints } from "../browser/locate.js";
 import { INTERACTIVE_COMMANDS } from "../deps/shell.js";
 import { paymentGate } from "../gates/payment.js";
 import type { Action, LocatorHints, Recording } from "../recorder/types.js";
-import type { DesktopOutlineOp, Outline, OutlineField, OutlineOp, OutlineStep } from "./outline.js";
+import type { Known } from "../share/scrub.js";
+import {
+  type DesktopOutlineOp,
+  HINT_TEXTS,
+  type Outline,
+  type OutlineField,
+  type OutlineOp,
+  type OutlineStep,
+  PLACEHOLDER,
+} from "./outline.js";
 
 export const IRREVERSIBLE_CLICK =
   /\b(buy|purchase|pay|checkout|complete (order|purchase)|place order|confirm|create|generate|register|delete|remove|revoke|deploy|send|publish|submit)\b/i;
@@ -132,7 +141,16 @@ export function dropLookAround(steps: OutlineStep[]): OutlineStep[] {
   return churn ? steps.slice(0, last + 1) : steps;
 }
 
-export function structure(rec: Recording): Outline {
+export interface StructureOptions {
+  /**
+   * Values the recording is known to carry that are the person's, not the site's: the account's
+   * username (`kind: "account"`). A hint or URL that shows one reads `{field}` instead
+   * (designs/2026-10-24-operator-defaults.md).
+   */
+  known?: readonly Known[];
+}
+
+export function structure(rec: Recording, o: StructureOptions = {}): Outline {
   const fields: OutlineField[] = [];
   const secrets: Outline["secrets"] = [];
   const fieldKey = uniquer("");
@@ -430,14 +448,19 @@ export function structure(rec: Recording): Outline {
   }
 
   const kept = dropLookAround(steps);
+  placeholders(kept, fields, rec.site, o.known ?? []);
   // Only what an op still reads (a browser fill or a desktop type), after replaced fills dropped theirs;
-  // a step URL's `{field}` counts too.
+  // a step URL's or a hint's `{field}` counts too.
   const used = new Set<string>();
+  const named = (text: string) => {
+    for (const m of text.matchAll(PLACEHOLDER)) used.add(m[1] as string);
+  };
   for (const s of kept) {
     if (s.kind === "terminal") continue;
-    if (s.kind === "browser" && s.url)
-      for (const m of s.url.matchAll(/\{([a-z][a-zA-Z0-9]*)\}/g)) used.add(m[1] as string);
+    if (s.kind === "browser" && s.url) named(s.url);
     for (const op of s.ops) {
+      if (s.kind === "browser" && "hints" in op)
+        for (const k of HINT_TEXTS) if (typeof op.hints[k] === "string") named(op.hints[k]);
       if ("file" in op && op.file.from === "plan") used.add(op.file.field);
       if (!("value" in op) || typeof op.value !== "object") continue;
       if (op.value.from === "secret") used.add(op.value.key);
@@ -452,4 +475,68 @@ export function structure(rec: Recording): Outline {
     secrets: secrets.filter((f) => used.has(f.key)),
     steps: kept,
   };
+}
+
+/** A value shorter than this is too common a string to stand in for. */
+const PLACEHOLDER_MIN = 3;
+
+/**
+ * The person's values in what the page showed: a typed value (a handle, a
+ * name) that the next page repeats in a control's label or in the URL, or the
+ * account's own username. Each becomes `{field}` so the compiled flow reads it
+ * from the plan; the username's field is `account`, added when a hint needs it.
+ * A hint already loosened to a regex is left alone (its personal part is gone).
+ */
+function placeholders(
+  steps: OutlineStep[],
+  fields: OutlineField[],
+  site: string,
+  known: readonly Known[],
+): void {
+  const stand: { value: string; key: string }[] = fields
+    .filter((f) => f.example !== null && f.example.length >= PLACEHOLDER_MIN)
+    .map((f) => ({ value: f.example as string, key: f.key }));
+  const account = known.find((k) => k.kind === "account" && k.value.length >= PLACEHOLDER_MIN);
+  let accountKey: string | null = fields.find((f) => f.example === account?.value)?.key ?? null;
+  const accountField = (): string => {
+    if (accountKey) return accountKey;
+    accountKey = fields.some((f) => f.key === "account") ? "account" : "account";
+    if (!fields.some((f) => f.key === accountKey))
+      fields.push({
+        key: accountKey,
+        label: `The ${site} account the flow runs as`,
+        example: account?.value ?? null,
+      });
+    return accountKey;
+  };
+  const swap = (text: string): string => {
+    if (/^\/.*\/i?$/.test(text)) return text;
+    let out = text;
+    for (const s of [...stand].sort((a, b) => b.value.length - a.value.length))
+      if (out.includes(s.value)) out = out.split(s.value).join(`{${s.key}}`);
+    if (account && out.includes(account.value))
+      out = out.split(account.value).join(`{${accountField()}}`);
+    return out;
+  };
+  // A step named after a URL path that holds the value: the field's key stands in (`acmeco-home` → `handle-home`).
+  const nameSwap = (name: string): string => {
+    let out = name;
+    for (const s of stand)
+      if (out.includes(kebab(s.value))) out = out.split(kebab(s.value)).join(s.key.toLowerCase());
+    return out;
+  };
+  for (const step of steps) {
+    if (step.kind !== "browser") continue;
+    if (step.url) step.url = swap(step.url);
+    step.name = nameSwap(step.name);
+    step.description = swap(step.description);
+    for (const op of step.ops) {
+      if ("goal" in op) op.goal = swap(op.goal);
+      if (!("hints" in op)) continue;
+      for (const k of HINT_TEXTS) {
+        const v = op.hints[k];
+        if (typeof v === "string") op.hints[k] = swap(v);
+      }
+    }
+  }
 }

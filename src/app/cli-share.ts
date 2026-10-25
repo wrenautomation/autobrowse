@@ -53,7 +53,7 @@ export function registerShareCommands(program: Command): void {
     });
   share
     .command("exclude <site>")
-    .description("never share this site (`linkedin`) or profile (`linkedin@wren`)")
+    .description("never share this site or profile (a personal account, say)")
     .action((site: string) => {
       const s = readShare();
       writeShare({ ...s, exclude: [...new Set([...s.exclude, site])].sort() });

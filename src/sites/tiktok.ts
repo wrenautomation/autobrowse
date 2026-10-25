@@ -200,7 +200,7 @@ const withFields = (path: string, fields: string) =>
  * portal's TikTok connect (2026-10-15, the stale wrenautomation.com/oauth/callback was removed for
  * review). The consent walker answers it in the browser, so the portal never sees the code.
  */
-export const TIKTOK_REDIRECT = "https://app.wrenautomation.com/oauth/social/tiktok";
+export const TIKTOK_REDIRECT = { env: "TIKTOK_REDIRECT_URL" } as const;
 
 export const tiktokOAuth: OAuthSpec = {
   authorizeUrl: OAUTH_PROVIDERS.tiktok.authorize,

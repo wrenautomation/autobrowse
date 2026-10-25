@@ -40,7 +40,7 @@ export type Role = keyof typeof ROLES;
 
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
-  companyId: z.string().regex(/^\d+$/).describe("The Page's numeric id"), // e.g. "1234567"
+  companyId: z.string().regex(/^\d+$/).describe("The Page's numeric id"), // e.g. "123456"
   vanity: z
     .string()
     .regex(/^[A-Za-z0-9_%-]{2,100}$/)

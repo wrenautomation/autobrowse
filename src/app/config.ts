@@ -39,6 +39,8 @@ const schema = z.object({
   ownerRoleArn: z.string().min(1).optional(),
   /** Needs marked done by hand (`autobrowse needs done`). */
   needsDoneFile: z.string().min(1).default("~/.config/autobrowse/needs-done.json"),
+  /** Saved default plans, one `<workflow>.json` each: the operator's values for workflows that name no one (designs/2026-10-24-operator-defaults.md). */
+  plansDir: z.string().min(1).default("~/.config/autobrowse/plans"),
   /** Restate ingress: Restate Cloud in prod (wren's loops share the env), a local restate-server otherwise. */
   restateIngressUrl: z.string().url().default("http://localhost:8080"),
   restateAuthToken: z.string().min(1).optional(),
@@ -50,6 +52,20 @@ const schema = z.object({
   /** The Workspace domain that service account is delegated for; its inboxes read without a consent. */
   googleWorkspaceDomain: z.string().min(1).optional(),
   googleAdminUser: z.string().email().optional(),
+  /**
+   * The operator: the business name a consent screen and a signup show, and its handle on the
+   * platforms. No default: the package names no one (designs/2026-10-24-operator-defaults.md).
+   */
+  operatorName: z.string().trim().min(1).optional(),
+  operatorHandle: z.string().trim().min(1).optional(),
+  /** The https redirect URI registered on the Meta app (Facebook, Instagram, Threads consents). */
+  oauthRedirectUrl: z.string().url().optional(),
+  /** The https redirect URI registered on the TikTok app. */
+  tiktokRedirectUrl: z.string().url().optional(),
+  /** The operator's own web app, where its connector apps (HubSpot, QuickBooks, Jobber) call back. */
+  appOrigin: z.string().url().optional(),
+  /** The LinkedIn Pages the operator admins: `handle=id,handle=id` (or a bare id); the first is the default. */
+  linkedinPages: z.string().trim().min(1).optional(),
   /** Where wren reads its roster. */
   rosterSsmParam: z.string().min(1).default("/wren/prod/senders_config"),
   /** Where wren reads the SMTP and IMAP logins of mailboxes it sends through. */
@@ -144,7 +160,7 @@ const schema = z.object({
   /** Bearer the UI and inbound hooks need for anything that changes a run. Unset = local only, no auth. */
   uiToken: z.string().min(1).optional(),
   /** wren's phone Worker, where `creds link` mints a one-time link to a login. */
-  credLinkUrl: z.string().url().default("https://phone.wrenautomation.com"),
+  credLinkUrl: z.string().url().optional(),
   /** The secret that Worker checks a mint's signature with (same value as wren's). Unset = `creds link` off. */
   credLinkSecret: z.string().min(1).optional(),
   /** Agent keys (hashes and scopes, never a key): who may see and call what (`access/keys`). */
@@ -343,6 +359,7 @@ export const ENV_KEYS = {
   ownersDir: "OWNERS_DIR",
   ownerRoleArn: "AUTOBROWSE_OWNER_ROLE_ARN",
   needsDoneFile: "NEEDS_DONE_FILE",
+  plansDir: "PLANS_DIR",
   restateIngressUrl: "RESTATE_INGRESS_URL",
   restateAuthToken: "RESTATE_AUTH_TOKEN",
   cloudflareApiToken: "CLOUDFLARE_API_TOKEN",
@@ -350,6 +367,12 @@ export const ENV_KEYS = {
   googleServiceAccount: "GOOGLE_SERVICE_ACCOUNT",
   googleWorkspaceDomain: "GOOGLE_WORKSPACE_DOMAIN",
   googleAdminUser: "GOOGLE_ADMIN_USER",
+  operatorName: "OPERATOR_NAME",
+  operatorHandle: "OPERATOR_HANDLE",
+  oauthRedirectUrl: "OAUTH_REDIRECT_URL",
+  tiktokRedirectUrl: "TIKTOK_REDIRECT_URL",
+  appOrigin: "APP_ORIGIN",
+  linkedinPages: "LINKEDIN_PAGES",
   rosterSsmParam: "ROSTER_SSM_PARAM",
   mailboxesSsmParam: "MAILBOXES_SSM_PARAM",
   awsRegion: "AWS_REGION",
@@ -460,6 +483,13 @@ export const ENV_KEYS = {
   restateBoxIdentityKey: "RESTATE_BOX_IDENTITY_KEY",
 } as const satisfies Record<keyof Settings, string>;
 
+/** The credential-link Worker's URL, or a clear word on the setting it needs. */
+export function credLinkUrl(settings: Pick<Settings, "credLinkUrl">): string {
+  if (!settings.credLinkUrl)
+    throw new Error("set CRED_LINK_URL: the phone Worker that hands secrets over by link");
+  return settings.credLinkUrl;
+}
+
 export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {
   const raw: Record<string, string> = {};
   for (const [field, key] of Object.entries(ENV_KEYS)) {
@@ -483,6 +513,7 @@ export const OWNER_PATHS = {
   capsFile: "caps.json",
   accessFile: "access.json",
   needsDoneFile: "needs-done.json",
+  plansDir: "plans",
   walletFile: "wallet.sealed",
   filesDir: "files",
   profilesDir: "profiles",

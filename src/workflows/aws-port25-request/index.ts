@@ -26,7 +26,7 @@ export const planSchema = z.object({
   /** The address AWS answers to; the form does not prefill it. */
   contactEmail: z.string().email().describe("Email address"),
   useCaseDescription: z.string().min(1).describe("Use case description"),
-  elasticIpAddress: z.string().min(1).describe("Elastic IP address"), // e.g. "34.233.233.146"
+  elasticIpAddress: z.string().min(1).describe("Elastic IP address"), // e.g. "203.0.113.7"
   reverseDnsRecord: z.string().min(1).describe("Reverse DNS record"), // e.g. "mail.example.com"
 });
 export type Plan = z.infer<typeof planSchema>;

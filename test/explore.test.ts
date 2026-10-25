@@ -62,7 +62,10 @@ describe("explore mode", () => {
   let allowHost = (_host: string) => true;
   const audit = memoryAudit();
   // Stripe's public test Visa, never a real card.
-  const visa = parseCardLine("4242424242424242 09/30 321", { label: "main", kind: "credit" });
+  const visa = parseCardLine("4242424242424242 09/30 321 Jane Roe", {
+    label: "main",
+    kind: "credit",
+  });
   const charges: Array<[Charge, Receipt, Contacts?]> = [];
   const send = async (cmd: Record<string, unknown>, wait = false) => {
     const r = await fetch(`http://127.0.0.1:${port}/${wait ? "?wait=1" : ""}`, {

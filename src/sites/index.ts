@@ -1,5 +1,5 @@
 export { CALCOM_ORIGIN, calcom } from "./calcom.js";
-export { CONNECTOR_PROFILES, connectors } from "./connectors.js";
+export { connectorProfile, connectors } from "./connectors.js";
 export { DISCORD_API, discord, inviteUrl } from "./discord.js";
 export { DRIVE_ORIGIN, drive, driveOAuth } from "./drive.js";
 export {

@@ -12,8 +12,11 @@ import type { Approval } from "../src/gates/payment.js";
 import { memoryCaps } from "../src/sites/caps.js";
 import { siteFacade } from "../src/sites/facade.js";
 import { meta, metaOAuth } from "../src/sites/meta.js";
-import { runConsent, WEB_REDIRECT } from "../src/sites/oauth.js";
+import { runConsent } from "../src/sites/oauth.js";
 import { fakePage } from "./auth-fakes.js";
+
+/** The https redirect an operator registered (OAUTH_REDIRECT_URL in these tests). */
+const WEB_REDIRECT = "https://example.com/oauth/callback";
 
 const base = { username: "w@x.dev", password: "p", recoveryCodes: [], passkeys: [] };
 const ctx = (fp: SignInContext["fp"], kinds: CodeKind[]): SignInContext => ({
@@ -381,7 +384,11 @@ describe("meta site", () => {
         });
       },
     });
-    const env: Record<string, string> = { META_CLIENT_ID: "app", META_CLIENT_SECRET: "s" };
+    const env: Record<string, string> = {
+      META_CLIENT_ID: "app",
+      META_CLIENT_SECRET: "s",
+      OAUTH_REDIRECT_URL: WEB_REDIRECT,
+    };
     await expect(
       runConsent(metaOAuth, {
         http,

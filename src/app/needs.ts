@@ -16,7 +16,7 @@ import { type Identity, identityFor } from "../auth/identities.js";
 import type { SiteLogin } from "../auth/login.js";
 import { signupInbox } from "../auth/signup.js";
 import { expandHome } from "../google/auth.js";
-import { isDefaultOwner } from "../owner.js";
+import { isDefaultOwner, operator } from "../owner.js";
 import { ringNames } from "../reach/key-ring.js";
 import { gmailOAuth } from "../sites/gmail.js";
 import { accountEnv } from "../sites/oauth.js";
@@ -54,6 +54,11 @@ export interface NeedsContext {
   /** What the sink holds, with each value's expiry; absent = expiry unknown. */
   kept?: () => Promise<EnvListing[]>;
   workspaceDomain: string | null;
+  /** The operator's own Google account (its channel, its Pages); absent = rows about it stay out. */
+  adminUser?: string | null;
+  /** The operator's business name and platform handle; absent = no signup rows. */
+  operatorName?: string | null;
+  operatorHandle?: string | null;
   /** The paired phone's legs, when a number is configured. */
   phone?: (() => Promise<{ read: boolean; send: boolean }>) | null;
   /** The desktop leg's permissions on this Mac. */
@@ -90,9 +95,6 @@ async function lapsing(ctx: NeedsContext, name: string): Promise<string | null> 
 const isOwners = (ctx: NeedsContext): ctx is NeedsContext & { owner: string } =>
   Boolean(ctx.owner) && !isDefaultOwner(ctx.owner as string);
 const dotenvOf = (ctx: NeedsContext) => (isOwners(ctx) && ctx.envFile ? ctx.envFile : ".env");
-
-/** Wren's own Google account: its channel, its Pages, its signups. */
-const WREN_ADDRESS = "william@wrenautomation.com";
 
 /** Needs derived from the sites: a login credential, the developer app's keys, the consent. */
 export function siteNeeds(ctx: NeedsContext): Need[] {
@@ -212,9 +214,9 @@ export function accountNeeds(ctx: NeedsContext): Need[] {
       unlocks: `signups and logins whose codes land at ${id.address}`,
       how: [
         `autobrowse site setup gmail consent --account ${id.address}   (headed, from the UI's headed button: a passkey prompt is yours to pass)`,
-        ...(id.address.endsWith("@wrenautomation.com")
+        ...(ctx.workspaceDomain && id.address.endsWith(`@${ctx.workspaceDomain}`)
           ? [
-              "or admin.google.com → Security → API controls → Domain-wide delegation → add https://www.googleapis.com/auth/gmail.readonly, then GOOGLE_WORKSPACE_DOMAIN=wrenautomation.com",
+              `or admin.google.com → Security → API controls → Domain-wide delegation → add https://www.googleapis.com/auth/gmail.readonly, then GOOGLE_WORKSPACE_DOMAIN=${ctx.workspaceDomain}`,
             ]
           : []),
       ],
@@ -338,11 +340,11 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
     {
       id: "npm-account",
       kind: "credential",
-      what: "The npm account itself: npmjs.com/signup on william@wrenautomation.com, then `creds username npm <the username you picked>`",
+      what: "The npm account itself: npmjs.com/signup on the operator's address, then `creds username npm <the username you picked>`",
       unlocks:
         "publishing mailifier, and every later package: once the account exists the token, 2FA and publish are all automatic",
       how: [
-        "autobrowse signup npm --by-hand --handle wrenautomation  (opens npmjs.com/signup in your browser, password on the clipboard; clears itself when npm's first mail lands)",
+        `autobrowse signup npm --by-hand --handle ${ctx.operatorHandle ?? "<handle>"}  (opens npmjs.com/signup in your browser, password on the clipboard; clears itself when npm's first mail lands)`,
         "why by hand: the page is behind a bot check, and legacy registry signup answers 403 `Account creation via legacy auth is unavailable`",
       ],
       check: async () => Boolean((await ctx.credentials.get("npm"))?.madeAt),
@@ -357,29 +359,33 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
     {
       id: "facebook-page-owner",
       kind: "decision",
-      what: "Which profile the Wren Automation Facebook Page hangs off (yours, or a new one for Wren)",
+      what: "Which profile the operator's Facebook Page hangs off (yours, or a new one for the business)",
       unlocks: "Page posts and the Instagram professional account behind it",
       how: ["autobrowse needs done facebook-page-owner --note <yours|new>"],
     },
-    {
-      id: "youtube-consent-wren",
-      kind: "consent",
-      what: "A YouTube token for Wren's own channel (the channel exists on william@wrenautomation.com; the stored token is still a personal channel's, and every write is refused until they match)",
-      unlocks: "uploads and comments as Wren, not as you",
-      how: [
-        "autobrowse site setup youtube consent --account william@wrenautomation.com",
-        "if Google blocks it: add that address as a test user on the Cloud project's OAuth consent screen first",
-      ],
-      check: () => holds(ctx, accountEnv(youtubeOAuth.refreshToken, WREN_ADDRESS)),
-    },
+    ...(ctx.adminUser
+      ? [
+          {
+            id: "youtube-consent-operator",
+            kind: "consent" as const,
+            what: `A YouTube token for the operator's own channel (the channel exists on ${ctx.adminUser}; a stored token for another account is a personal channel's, and every write is refused until they match)`,
+            unlocks: "uploads and comments as the business, not as you",
+            how: [
+              `autobrowse site setup youtube consent --account ${ctx.adminUser}`,
+              "if Google blocks it: add that address as a test user on the Cloud project's OAuth consent screen first",
+            ],
+            check: () => holds(ctx, accountEnv(youtubeOAuth.refreshToken, ctx.adminUser as string)),
+          },
+        ]
+      : []),
     {
       id: "google-app-published",
       kind: "consent",
-      what: "The Google OAuth app published (Cloud project wren-509223, on your personal account): in Testing, every YouTube and Gmail token dies after 7 days",
+      what: "The Google OAuth app published (Cloud project YOUTUBE_CLOUD_PROJECT, on your personal account): in Testing, every YouTube and Gmail token dies after 7 days",
       unlocks: "YouTube uploads that keep working past a week",
       how: [
-        "console.cloud.google.com → project wren-509223 → Google Auth Platform → Audience → Publish app → Confirm",
-        "then: autobrowse site setup youtube consent --account william@wrenautomation.com; autobrowse needs done google-app-published",
+        "console.cloud.google.com → the project YOUTUBE_CLOUD_PROJECT names → Google Auth Platform → Audience → Publish app → Confirm",
+        `then: autobrowse site setup youtube consent --account ${ctx.adminUser ?? "<the channel's account>"}; autobrowse needs done google-app-published`,
       ],
     },
     {
@@ -426,22 +432,22 @@ export function fixedNeeds(ctx: NeedsContext): Need[] {
 }
 
 /** The accounts Wren makes itself, and what stopped the agent when it tried. */
-export const WREN_SIGNUPS: readonly {
+export const OPERATOR_SIGNUPS: readonly {
   site: string;
-  /** The credential's name, when not the site's (`x` is William's own). */
-  key?: string;
+  /** The credential is `<site>@<operator>`, not the site's: `x` is the person's own account. */
+  own?: boolean;
   /** Why the agent's own run handed off, when it did. */
   handoff: string | null;
   /** The web signup is walled (2026-09-23): only the phone app, with Google as the signup address, gets through. */
   appOnly?: boolean;
 }[] = [
   { site: "instagram", handoff: null },
-  // Wren's own profile (William's real name: Meta disables profiles named after a
-  // business); the Wren Automation Page, the Meta app and the ad account hang off it.
+  // The operator's own profile (a person's real name: Meta disables profiles named after a
+  // business); the Page, the Meta app and the ad account hang off it.
   { site: "facebook", handoff: null },
   {
     site: "x",
-    key: "x@wren",
+    own: true,
     handoff: "the web signup hits X's app-only risk wall, headed or not",
     appOnly: true,
   },
@@ -450,23 +456,29 @@ export const WREN_SIGNUPS: readonly {
   { site: "tiktok", handoff: null },
 ];
 
-/** Needs for Wren's own accounts: one per signup not yet stored, plus the profile steps after. */
+/**
+ * Needs for the operator's own accounts: one per signup not yet stored, plus the profile steps
+ * after. Only for an operator with a name and a handle set, and never for another owner.
+ */
 export function signupNeeds(ctx: NeedsContext): Need[] {
   const out: Need[] = [];
-  for (const w of WREN_SIGNUPS) {
-    const key = w.key ?? w.site;
+  const name = ctx.operatorName;
+  const handle = ctx.operatorHandle;
+  if (!name || !handle || isOwners(ctx)) return out;
+  for (const w of OPERATOR_SIGNUPS) {
+    const key = w.own ? `${w.site}@${operator()}` : w.site;
     out.push({
       id: `signup-${w.site}`,
       kind: "credential",
-      what: `Wren's ${w.site} account${w.handoff ? ` (${w.handoff})` : ""}`,
-      unlocks: `posting as Wren on ${w.site}`,
+      what: `${name}'s ${w.site} account${w.handoff ? ` (${w.handoff})` : ""}`,
+      unlocks: `posting as ${name} on ${w.site}`,
       how: w.appOnly
         ? [
-            `in the ${w.site} phone app: sign up → Continue with Google → the signup address, name "Wren Automation", handle wrenautomation`,
+            `in the ${w.site} phone app: sign up → Continue with Google → the signup address, name "${name}", handle ${handle}`,
             `autobrowse creds made ${key}`,
           ]
         : [
-            `autobrowse signup ${key} --name "Wren Automation" --handle wrenautomation --headed`,
+            `autobrowse signup ${key} --name "${name}" --handle ${handle} --headed`,
             `autobrowse creds push ${key}`,
           ],
       check: async () => Boolean((await ctx.credentials.get(key))?.madeAt),
@@ -475,7 +487,7 @@ export function signupNeeds(ctx: NeedsContext): Need[] {
   out.push({
     id: "instagram-page-link",
     kind: "decision",
-    what: "Link Wren's Instagram to the Wren Automation Page: Instagram asks a text captcha on the way",
+    what: `Link ${name}'s Instagram to its Facebook Page: Instagram asks a text captcha on the way`,
     unlocks: "Instagram publishing and comments through the Meta app",
     how: [
       'autobrowse explore facebook --headed --login instagram --url "https://business.facebook.com/latest/"',

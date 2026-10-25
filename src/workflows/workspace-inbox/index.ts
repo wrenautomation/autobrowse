@@ -27,7 +27,7 @@ import {
 } from "../inbox-activity/index.js";
 
 export const workspaceInboxPlanSchema = z.object({
-  address: z.string().trim().toLowerCase().email().describe("The inbox, e.g. will@getwren.co"),
+  address: z.string().trim().toLowerCase().email().describe("The inbox, e.g. hello@example.com"),
   givenName: inboxSchema.shape.givenName,
   familyName: inboxSchema.shape.familyName,
   signatureHtml: domainPlanSchema.shape.signatureHtml,
@@ -75,7 +75,7 @@ type Step<S extends string = string> = StepDef<
   S
 >;
 
-/** `will@getwren.co` → the domain workflow's plan for that one inbox, buying nothing. */
+/** `hello@example.com` → the domain workflow's plan for that one inbox, buying nothing. */
 export function asDomainPlan(plan: WorkspaceInboxPlan): DomainPlan {
   const [local = "", domain = ""] = plan.address.split("@");
   return domainPlanSchema.parse({

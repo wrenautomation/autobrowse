@@ -12,7 +12,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { redactPii } from "../recorder/redact.js";
+import { lintFiles } from "../compiler/lint.js";
 import { PACKAGE } from "../workflows/roots.js";
 import type { ShareAdmin } from "./presidio.js";
 
@@ -165,7 +165,7 @@ export async function checkPack(raw: unknown): Promise<string[]> {
     }
   if (p.proof?.status !== "done") out.push("proof did not pass");
   for (const [f, s] of Object.entries(files)) {
-    if (redactPii(s) !== s) out.push(`${f}: personal data`);
+    if (lintFiles({ [f]: s }).length) out.push(`${f}: personal data`);
     if (f.endsWith(".ts")) out.push(...(await codeReasons(f, s, files)));
   }
   if (!out.length && (await leaks(files))) out.push("gitleaks");

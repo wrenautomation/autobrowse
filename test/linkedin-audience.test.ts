@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FlowRunner } from "../src/browser/flow.js";
-import { countOf, linkedinAudience, WREN_PAGE } from "../src/browser/flows/linkedin-audience.js";
+import { countOf, linkedinAudience } from "../src/browser/flows/linkedin-audience.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
@@ -8,6 +8,10 @@ import { siteFacade } from "../src/sites/facade.js";
 import { linkedin } from "../src/sites/linkedin.js";
 import { fakePage } from "./auth-fakes.js";
 import { fakeFetch } from "./fakes.js";
+
+/** The operator's Page in these tests: `LINKEDIN_PAGES=testco=42`. */
+const PAGE_ID = "42";
+const env = (n: string) => ({ LINKEDIN_PAGES: `testco=${PAGE_ID}` })[n];
 
 // Synthetic page text in the shape LinkedIn shows it; no real people.
 const PROFILE =
@@ -36,21 +40,21 @@ describe("linkedin audience: the flow and the route", () => {
     return { fp, acts, opened };
   };
 
-  it("reads its own profile, then Wren's Page; never acts", async () => {
+  it("reads its own profile, then the Page it is given; never acts", async () => {
     const { fp, acts, opened } = pages({
       "https://www.linkedin.com/in/me/": PROFILE,
-      [`https://www.linkedin.com/company/${WREN_PAGE}/`]: PAGE,
+      [`https://www.linkedin.com/company/${PAGE_ID}/`]: PAGE,
     });
-    const out = await linkedinAudience.run(fp, {});
+    const out = await linkedinAudience.run(fp, { page: PAGE_ID });
     expect(out).toEqual({
       followers: 57,
       connections: { n: 48, label: "48" },
-      page: { id: WREN_PAGE, followers: 1204, label: "1,204" },
+      page: { id: PAGE_ID, followers: 1204, label: "1,204" },
       raw: { profile: PROFILE, page: PAGE },
     });
     expect(opened).toEqual([
       "https://www.linkedin.com/in/me/",
-      `https://www.linkedin.com/company/${WREN_PAGE}/`,
+      `https://www.linkedin.com/company/${PAGE_ID}/`,
     ]);
     expect(acts).toEqual([]);
   });
@@ -63,7 +67,7 @@ describe("linkedin audience: the flow and the route", () => {
     await expect(linkedinAudience.run(bare.fp, {})).rejects.toThrow(/no follower count/);
   });
 
-  it("GET /audience runs as linkedin@wren, metered 4 a day; William's and the alt read none", async () => {
+  it("GET /audience runs as linkedin@wren with the default Page, metered 4 a day; the person's and the alt read none", async () => {
     const seen: string[] = [];
     const runner: FlowRunner = {
       async run(flow, input) {
@@ -73,7 +77,7 @@ describe("linkedin audience: the flow and the route", () => {
     };
     const sites = siteFacade([linkedin], {
       http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
-      env: () => undefined,
+      env,
       sink: memorySink(),
       runner,
       flow: (n) => BROWSER_FLOWS[n] ?? null,
@@ -82,7 +86,7 @@ describe("linkedin audience: the flow and the route", () => {
       profileFor: async (site) => `${site}@wren`,
     });
     expect(await sites.call("linkedin", "GET", "/audience", {})).toEqual({ followers: 1 });
-    expect(seen).toEqual(["linkedin@wren audience {}"]);
+    expect(seen).toEqual([`linkedin@wren audience {"page":"${PAGE_ID}"}`]);
     await expect(sites.call("linkedin", "GET", "/audience", { page: "a/b" })).rejects.toThrow();
     expect(linkedin.caps).toMatchObject({ audience: 4 });
     expect(linkedin.accountCaps?.linkedin).toMatchObject({ audience: 0 });

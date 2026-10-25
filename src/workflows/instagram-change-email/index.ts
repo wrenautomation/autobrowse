@@ -19,7 +19,7 @@ import {
 
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
-  newEmail: z.string().min(1).describe("Enter email"), // e.g. "me@example.com"
+  newEmail: z.string().min(1).describe("Enter email"), // e.g. "you@example.com"
   /** The Accounts Center lists each account as "<handle> Instagram": the one that gets the email. */
   account: z.string().min(1).describe("The Instagram handle"), // e.g. "example"
 });

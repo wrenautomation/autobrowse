@@ -5,15 +5,24 @@
  * (`connectors keys <app>`), and `connectors prod` hands them to wren.
  */
 import { CONNECTOR_KEYS } from "../browser/flows/connector-keys.js";
+import { operator } from "../owner.js";
 import type { SetupStep, SiteApi } from "./types.js";
 
-/** The console account each app lives under: `creds` names, the profiles explore made them in. */
-export const CONNECTOR_PROFILES = {
-  hubspot: "hubspot",
-  quickbooks: "intuit@wren",
-  "quickbooks-dev": "intuit@wren",
-  jobber: "jobber@wren",
+/**
+ * The console account each app lives under: the `creds` name, the profile explore made it in.
+ * An operator's own console is `<site>@<operator>` by convention; HubSpot's is the plain site.
+ */
+const CONSOLES = {
+  hubspot: { site: "hubspot", own: false },
+  quickbooks: { site: "intuit", own: true },
+  "quickbooks-dev": { site: "intuit", own: true },
+  jobber: { site: "jobber", own: true },
 } as const;
+export type ConnectorApp = keyof typeof CONSOLES;
+export function connectorProfile(app: ConnectorApp): string {
+  const c = CONSOLES[app];
+  return c.own ? `${c.site}@${operator()}` : c.site;
+}
 
 /** wren's apps, made 2026-10-09; ids only, never a secret. */
 const INTUIT_KEYS =
@@ -38,7 +47,7 @@ const step = (app: keyof typeof CONNECTOR_KEYS, flow: string, summary: string): 
 
 export const connectors: SiteApi = {
   site: "connectors",
-  origin: "https://app.wrenautomation.com",
+  origin: { env: "APP_ORIGIN" },
   auth: { open: true },
   routes: [],
   setup: [

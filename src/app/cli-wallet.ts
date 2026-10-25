@@ -6,6 +6,7 @@
  */
 import type { Command } from "commander";
 import { readClipboard } from "../auth/ingest.js";
+import { profileOf } from "../money/profile.js";
 import {
   type Card,
   type CardFields,
@@ -93,7 +94,7 @@ export function registerWalletCommands(program: Command, settings: Settings): vo
 
   const wallet = program
     .command("wallet")
-    .description("William's cards: credit pays, debit only where WALLET_DEBIT_HOSTS allows");
+    .description("Your cards: credit pays, debit only where WALLET_DEBIT_HOSTS allows");
   wallet
     .command("add [label]")
     .description(
@@ -107,14 +108,18 @@ export function registerWalletCommands(program: Command, settings: Settings): vo
     .action(async (given: string | undefined, o: { kind: string; clipboard?: boolean }) => {
       if (o.kind !== "credit" && o.kind !== "debit")
         throw new Error(`--kind is credit or debit, not ${o.kind}`);
+      // The name on the card, when the line or the prompt leaves it out: the billing profile's.
+      const holder = profileOf(await (await profilesFor(settings)).list(), undefined)?.name;
+      const kind: Card["kind"] = o.kind;
+      const opts = { label: given ?? "pending", kind, ...(holder ? { holder } : {}) };
       let card: Card;
       if (o.clipboard) {
         const clip = readClipboard();
-        card = parseCardLine(clip.text, { label: given ?? "pending", kind: o.kind });
+        card = parseCardLine(clip.text, opts);
         clip.clear();
       } else {
-        const f = await askCard();
-        card = cardFromFields(f, { label: given ?? "pending", kind: o.kind });
+        const f = await askCard(holder);
+        card = cardFromFields(f, opts);
       }
       if (!given) card = { ...card, label: defaultLabel(card.number) };
       const { replaces } = await (await walletFor(settings)).put(card);
@@ -201,7 +206,7 @@ export function registerWalletCommands(program: Command, settings: Settings): vo
 }
 
 /** Each field hidden, checked as it is entered; a wrong one is asked again (Ctrl-C quits). */
-async function askCard(): Promise<CardFields> {
+async function askCard(holder: string | undefined): Promise<CardFields> {
   const ask = async (q: string, check: (v: string) => unknown) => {
     for (;;) {
       const v = await askSecret(q);
@@ -224,6 +229,9 @@ async function askCard(): Promise<CardFields> {
     "postal code (hidden, Enter to skip): ",
     (v) => void cardChecks.postal(v),
   );
-  const name = await ask("name on card (hidden, Enter for William Jin): ", () => null);
+  const name = await ask(
+    `name on card (hidden${holder ? ", Enter for the billing profile's" : ""}): `,
+    (v) => (v || holder ? null : "the name on the card, or a billing profile to take it from"),
+  );
   return { number, exp, cvc, ...(postal ? { postal } : {}), ...(name ? { name } : {}) };
 }

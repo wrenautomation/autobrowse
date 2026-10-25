@@ -81,6 +81,22 @@ export function redactPii(text: string): string {
   return out;
 }
 
+const PII_KINDS = ["email", "phone", "home folder", "ip", "id"] as const;
+
+/** What `redactPii` would mask in `text`, by kind and never by value: what a lint reports. */
+export function personalKinds(text: string): string[] {
+  const out: string[] = [];
+  if (SECRET_VALUES.some((re) => re.test(text))) out.push("secret");
+  if ([...text.matchAll(CARD_RUN)].some((m) => luhnValid(m[0].replace(/\D/g, ""))))
+    out.push("card");
+  PII.forEach(([re], i) => {
+    re.lastIndex = 0;
+    if (re.test(text)) out.push(PII_KINDS[i] as string);
+    re.lastIndex = 0;
+  });
+  return out;
+}
+
 /**
  * A snapshot row of a dropdown named as a secret field shows its choice
  * (`button role=combobox id=pidlInput_expiryMonth text=01`): masked.

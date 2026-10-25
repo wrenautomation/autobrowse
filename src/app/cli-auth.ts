@@ -38,7 +38,7 @@ const CLIPBOARD_MS = 60_000;
 
 import { macClipboard } from "./cli-env.js";
 import { type KeysCliDeps, registerKeyCommands } from "./cli-keys.js";
-import type { Settings } from "./config.js";
+import { credLinkUrl, type Settings } from "./config.js";
 import { headed } from "./display.js";
 import { askSecretTwice } from "./prompt.js";
 import {
@@ -477,7 +477,7 @@ export function registerAuthCommands(
           uses.push({ credential: `env:${name}`, site: "env", field: "secret" });
         }
         const link = await mintCredentialLink(
-          settings.credLinkUrl,
+          credLinkUrl(settings),
           settings.credLinkSecret,
           { label: linkLabel(o.label ? [o.label] : [...given, ...keys]), fields },
           { open: o.open, ttl: o.ttl ? linkTtl(o.ttl) : o.open ? 86_400 : undefined },
@@ -487,7 +487,7 @@ export function registerAuthCommands(
           await auditFor(settings).record({
             at,
             ...u,
-            url: `${settings.credLinkUrl}/links`,
+            url: `${credLinkUrl(settings)}/links`,
             by: o.open ? "creds link --open" : "creds link",
             allowed: true,
           });
@@ -740,7 +740,10 @@ export function registerAuthCommands(
     .description(
       "Store a tripwire credential under a name a thief would reach for (stripe, bank); any read of it is an alarm in the ledger",
     )
-    .option("--username <u>", "what it looks like", "billing@wrenautomation.com")
+    .requiredOption(
+      "--username <u>",
+      "what it looks like: an address a thief expects (billing@<your domain>)",
+    )
     .action(async (name: string, o: { username: string }) => {
       const { canaryCredential } = await import("credvault");
       await credentialsFor(settings, { armed: false }).put(name, canaryCredential(o.username));

@@ -31,7 +31,7 @@ function recorderFor(settings: Settings): Recorder {
 export function registerCallsCommands(program: Command, settings: Settings): void {
   const calls = program
     .command("calls")
-    .description("William's calls recorded by OBS on this Mac: notes and transcript land in wren");
+    .description("Your calls recorded by OBS on this Mac: notes and transcript land in wren");
 
   calls
     .command("setup")

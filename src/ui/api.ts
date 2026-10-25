@@ -41,9 +41,20 @@ import { cursorOf, LIST_LIMIT, type ListQuery, ROW_STATUSES } from "../engine/ro
 import { commandSchema } from "../explore/server.js";
 import { listRecordingSummaries, loadRecording, recordingDir } from "../recorder/store.js";
 import { type Method, SiteError } from "../sites/index.js";
+import { withDefaults } from "../workflows/plans.js";
 import { needAffordances, runAffordances, setupAffordances } from "./affordances.js";
 import { accessAuth, bearerAuth, originGuard, rateLimit } from "./auth.js";
-import { csvOf, errorBody, fail, limitParam, page, readJson, readPath, readQuery } from "./http.js";
+import {
+  csvOf,
+  errorBody,
+  fail,
+  invalid,
+  limitParam,
+  page,
+  readJson,
+  readPath,
+  readQuery,
+} from "./http.js";
 import { Jobs, type JobView } from "./jobs.js";
 
 /** The HTTP face: the shared `Backend` port plus what only this transport needs. */
@@ -645,9 +656,13 @@ export function api(deps: ApiDeps): Hono<Env> {
     const { workflow, key } = path.data;
     const w = await find(workflow);
     if (!w) return fail(c, 404, `no workflow ${workflow}`);
-    const body = await readJson(c, z.object({ plan: w.plan }));
+    // The saved default plan under what the page sent, then the workflow's own check.
+    const body = await readJson(c, z.object({ plan: z.record(z.string(), z.unknown()) }));
     if (!body.ok) return body.res;
-    await runOf(workflow, key).run(body.data.plan);
+    const merged = await withDefaults(deps.plans, workflow, body.data.plan);
+    const plan = z.object({ plan: w.plan }).safeParse({ plan: merged });
+    if (!plan.success) return invalid(c, plan.error);
+    await runOf(workflow, key).run(plan.data.plan as never);
     c.header("Location", `/api/runs/${workflow}/${encodeURIComponent(key)}`);
     return c.json({ ok: true }, 202);
   });

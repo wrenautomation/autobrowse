@@ -3,11 +3,14 @@ import { threadsOauthConsent } from "../src/browser/flows/threads-oauth-consent.
 import type { Hints } from "../src/browser/locate.js";
 import { httpClient } from "../src/clients/http.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
-import { runConsent, WEB_REDIRECT } from "../src/sites/oauth.js";
+import { runConsent } from "../src/sites/oauth.js";
 import { THREADS_MAX, threads, threadsOAuth } from "../src/sites/threads.js";
 import type { ApiLeg } from "../src/sites/types.js";
 import { fakePage } from "./auth-fakes.js";
 import { fakeFetch } from "./fakes.js";
+
+/** The https redirect an operator registered (OAUTH_REDIRECT_URL in these tests). */
+const WEB_REDIRECT = "https://example.com/oauth/callback";
 
 const line = (a: { op: { kind: string }; hints: Hints }) =>
   `${a.op.kind} ${a.hints.name ?? a.hints.text}`;
@@ -67,7 +70,11 @@ describe("threads site", () => {
         });
       },
     });
-    const env: Record<string, string> = { THREADS_CLIENT_ID: "i", THREADS_CLIENT_SECRET: "s" };
+    const env: Record<string, string> = {
+      THREADS_CLIENT_ID: "i",
+      THREADS_CLIENT_SECRET: "s",
+      OAUTH_REDIRECT_URL: WEB_REDIRECT,
+    };
     const out = await runConsent(threadsOAuth, {
       http,
       env: (n) => env[n],

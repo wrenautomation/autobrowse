@@ -782,6 +782,12 @@ export function registerRecordCommands(
         out = await backend.compile(await loadRecording(backend.recordingsDir, name));
       }
       for (const f of Object.keys(out.files)) console.log(join(COMPILED_DIR, out.outline.name, f));
+      if (out.defaultsFile)
+        console.log(`${out.defaultsFile}  (your values; the module names none)`);
+      if (out.lint.length) {
+        const { formatHits } = await import("../compiler/index.js");
+        console.log(`personal data left (make it a plan field):\n${formatHits(out.lint)}`);
+      }
       if (out.usage)
         console.log(`model: ${out.usage.inputTokens} in / ${out.usage.outputTokens} out`);
       console.log(

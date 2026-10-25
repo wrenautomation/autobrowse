@@ -8,6 +8,11 @@
  */
 import { z } from "zod";
 
+/** `{project}` in a step URL or a hint is the plan field `project`. */
+export const PLACEHOLDER = /\{([a-z][a-zA-Z0-9]*)\}/g;
+/** The hints that read as text on the page, so a plan field can stand in them. */
+export const HINT_TEXTS = ["name", "text", "placeholder"] as const;
+
 export const hintsSchema = z.object({
   tag: z.string().nullable().optional(),
   role: z.string().nullable().optional(),
@@ -164,18 +169,28 @@ export const outlineSchema = z
     steps: z.array(stepSchema),
   })
   .superRefine((o, ctx) => {
-    // `{project}` in a step URL is a plan field, so it has to be one the plan declares.
+    // `{project}` in a step URL or a locator hint is a plan field, so it has to be one the plan declares.
     const declared = new Set(o.fields.map((f) => f.key));
-    o.steps.forEach((step, i) => {
-      if (step.kind !== "browser" || !step.url) return;
-      for (const m of step.url.matchAll(/\{([a-z][a-zA-Z0-9]*)\}/g)) {
+    const check = (text: string, path: (string | number)[], what: string) => {
+      for (const m of text.matchAll(PLACEHOLDER)) {
         if (!declared.has(m[1] as string))
           ctx.addIssue({
             code: "custom",
-            path: ["steps", i, "url"],
-            message: `url names plan field {${m[1]}} which fields does not declare`,
+            path,
+            message: `${what} names plan field {${m[1]}} which fields does not declare`,
           });
       }
+    };
+    o.steps.forEach((step, i) => {
+      if (step.kind !== "browser") return;
+      if (step.url) check(step.url, ["steps", i, "url"], "url");
+      step.ops.forEach((op, j) => {
+        if (!("hints" in op)) return;
+        for (const k of HINT_TEXTS) {
+          const v = op.hints[k];
+          if (typeof v === "string") check(v, ["steps", i, "ops", j, "hints", k], `hint ${k}`);
+        }
+      });
     });
   });
 

@@ -216,8 +216,9 @@ export interface OAuthSpec {
    * The redirect URI the client registered, when it cannot be the http loopback
    * (Meta takes neither http nor localhost). Nothing serves
    * it: the browser answers it and the code comes back in the landed URL.
+   * `{ env }` reads it from the operator's env at consent time.
    */
-  redirect?: string;
+  redirect?: string | { env: string };
   /** The leg that opens the authorize URL (`{url}`) in the site's logged-in profile and clicks through. */
   consent: Leg;
   /**
@@ -229,8 +230,8 @@ export interface OAuthSpec {
 
 export interface SiteApi {
   site: string;
-  /** The official API's origin, for the api legs: `https://api.linkedin.com`. */
-  origin: string;
+  /** The official API's origin, for the api legs: `https://api.linkedin.com`; `{ env }` for an operator's own. */
+  origin: string | { env: string };
   /**
    * Env name of the bearer, or an OAuth spec to mint one from a refresh
    * token, or `open`: no bearer, every api leg runs (a site whose backends
@@ -292,3 +293,9 @@ export class SiteError extends Error {
 export function route<I, O>(r: SiteRoute<I, O>): SiteRoute<never, unknown> {
   return r as unknown as SiteRoute<never, unknown>;
 }
+
+/** A site's origin as a string: the operator's env fills an `{ env }` one, or its name stands in. */
+export const originOf = (
+  s: Pick<SiteApi, "origin">,
+  env: (name: string) => string | undefined,
+): string => (typeof s.origin === "string" ? s.origin : (env(s.origin.env) ?? `<${s.origin.env}>`));

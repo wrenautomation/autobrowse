@@ -4,16 +4,32 @@
  * committing; here it is what the model's rounds are judged by.
  */
 import { execFile } from "node:child_process";
-import { relative } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join, relative } from "node:path";
+import { formatHits, type Known, lintFiles } from "./lint.js";
 
 export interface CheckOptions {
   cwd?: string;
   timeoutMs?: number;
+  /** The person's values this workflow must not carry (the account's username). */
+  known?: readonly Known[];
 }
+
+/** The module and the outline carry no personal data at all; the test, none of the known values. */
+const LINTED = ["index.ts", "outline.json", "index.test.ts"];
+const LINT_KNOWN_ONLY = ["index.test.ts"];
 
 export async function checkCompiled(dir: string, o: CheckOptions = {}): Promise<string | null> {
   const cwd = o.cwd ?? process.cwd();
   const rel = relative(cwd, dir);
+  const files: Record<string, string> = {};
+  for (const f of LINTED) {
+    const src = await readFile(join(dir, f), "utf8").catch(() => null);
+    if (src !== null) files[f] = src;
+  }
+  const hits = lintFiles(files, o.known ?? [], { knownOnly: LINT_KNOWN_ONLY });
+  if (hits.length)
+    return `personal data (make it a plan field; a hint may read {field}):\n${formatHits(hits)}`;
   // Incremental: a finish round after the first re-checks only what changed (15s → 7s here).
   const tsc = await run(
     cwd,

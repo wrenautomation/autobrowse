@@ -119,7 +119,7 @@ export function cardEnding(c: Pick<Card, "label" | "kind" | "number">): string {
  */
 export function parseCardLine(
   text: string,
-  o: { label: string; kind: Card["kind"]; now?: Date },
+  o: { label: string; kind: Card["kind"]; now?: Date; holder?: string },
 ): Card {
   // Number groups (spaces or dashes) up to the month; a postal code is Canadian or US shaped.
   const m =
@@ -189,14 +189,16 @@ export const cardChecks = {
 
 export function cardFromFields(
   f: CardFields,
-  o: { label: string; kind: Card["kind"]; now?: Date },
+  o: { label: string; kind: Card["kind"]; now?: Date; holder?: string },
 ): Card {
   const now = o.now ?? new Date();
   const postal = cardChecks.postal(f.postal ?? "");
+  const holder = f.name?.trim() || o.holder?.trim();
+  if (!holder) throw new Error("the name on the card: give it, or set a billing profile");
   return cardSchema.parse({
     label: o.label,
     kind: o.kind,
-    holder: f.name?.trim() || "William Jin",
+    holder,
     number: cardChecks.number(f.number),
     ...cardChecks.exp(f.exp, now),
     cvc: cardChecks.cvc(f.cvc),

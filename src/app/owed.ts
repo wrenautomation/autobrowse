@@ -61,6 +61,9 @@ export function needsContextFor(
         .catch(() => (settings.secretSink === "ssm" ? [] : envFileStore(settings.envFile).list())),
     ),
     workspaceDomain: settings.googleWorkspaceDomain?.toLowerCase() ?? null,
+    adminUser: settings.googleAdminUser ?? null,
+    operatorName: settings.operatorName ?? null,
+    operatorHandle: settings.operatorHandle ?? null,
     // Each probe spawns a tool; several rows ask, one context answers once.
     phone: (() => {
       const phone = phoneFor(settings);
@@ -103,6 +106,9 @@ export function policyOf(
     env: (n: string) => env[n],
     envNames: () => Object.keys(env),
     workspaceDomain: settings.googleWorkspaceDomain?.toLowerCase() ?? null,
+    adminUser: settings.googleAdminUser ?? null,
+    operatorName: settings.operatorName ?? null,
+    operatorHandle: settings.operatorHandle ?? null,
     push: async () => {},
   };
   return {

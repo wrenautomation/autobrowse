@@ -291,7 +291,7 @@ export interface PostCommentsInput {
   urn: string;
   count: number;
   start: number;
-  /** Page handles to their ids (`wrenautomation` → `143656154`), so a Page's comments name its URN. */
+  /** Page handles to their ids (`acme` → `123456`), so a Page's comments name its URN. */
   pages?: Record<string, string>;
 }
 

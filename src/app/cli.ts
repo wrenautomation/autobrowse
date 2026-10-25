@@ -17,6 +17,7 @@ import { ownerKeys } from "../owner.js";
 import { accent, bad, bold, columns, dim, good, warn } from "../style.js";
 import { DEFAULT_TLDS, domainIdeas } from "../workflows/domain/ideas.js";
 import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
+import { filePlans, withDefaults } from "../workflows/plans.js";
 import { localBackend, proofsOf, spentKeysFor, workflowsOf } from "./backend.js";
 import { registerAccessCommands } from "./cli-access.js";
 import { registerAccountsCommands } from "./cli-accounts.js";
@@ -86,6 +87,8 @@ const api = ingress({
 });
 
 const local = localBackend(settings, api);
+/** Saved default plans: every start here merges one under what --plan gives. */
+const plans = filePlans(settings.plansDir);
 
 /**
  * A Restate call with a stopped worker behind it waits, silently, until the
@@ -164,7 +167,12 @@ program
           `${bold("steps")}   ${w.steps.map((s) => (s.irreversible ? warn(`${s.name}!`) : s.name)).join(dim(" → "))}`,
         );
         console.log(bold("inputs"));
-        for (const line of inputLines(inputsOf(w.plan))) console.log(line);
+        const saved = await plans.get(name);
+        const fields = inputsOf(w.plan).map((f) =>
+          f.name in saved ? { ...f, required: false, default: saved[f.name] } : f,
+        );
+        for (const line of inputLines(fields)) console.log(line);
+        if (Object.keys(saved).length) console.log(dim(`  saved defaults: ${plans.path(name)}`));
         return;
       }
       // One line each: name, how far it is proven, what it does. Steps and inputs: `workflows <name>`.
@@ -270,7 +278,9 @@ program
   .option("--plan <json|file>", "inline JSON, a file path, or - for stdin")
   .option("--dry-run", "plan only; stop before the first irreversible step")
   .action(async (workflow: string, key: string, o: { plan?: string; dryRun?: boolean }) => {
-    let plan = o.plan ? ((await readJson(o.plan)) as Record<string, unknown>) : null;
+    let plan = o.plan
+      ? await withDefaults(plans, workflow, (await readJson(o.plan)) as Record<string, unknown>)
+      : null;
     // The run may happen on the box: files the plan names on this machine go with it.
     if (plan && settings.shotsBucket) {
       const { shipPlanFiles, s3InputStore } = await import("../browser/run-files.js");
@@ -323,7 +333,11 @@ program
       const handWritten = WORKFLOWS.includes(workflow);
       if (handWritten && !LOCAL_WORKFLOWS.includes(workflow))
         throw new Error(`${name} needs the worker's deps (APIs); run it with: autobrowse run`);
-      const raw = o.plan ? ((await readJson(o.plan)) as Record<string, unknown>) : {};
+      const raw = await withDefaults(
+        plans,
+        name,
+        o.plan ? ((await readJson(o.plan)) as Record<string, unknown>) : {},
+      );
       const plan = workflow.plan.parse({ ...raw, dryRun: o.dryRun ?? false });
       if (o.prove) {
         // A proof is its own kind of run: gates declined, nothing bought, the outcome kept beside the flow.

@@ -39,6 +39,7 @@ Each word below has one meaning. A thing that used to share a word has its own w
 | run | one engine run ([[run-object]], `autobrowse runs`) | |
 | exploration | the history of one explore session ([[explore-run]], `autobrowse explored`) | |
 | recording | one saved journal | `recordings/` |
+| plan | a workflow's input; the saved default plan (`<plansDir>/<workflow>.json`) is the operator's values, merged under every start | `PlanStore` (`src/workflows/plans.ts`) |
 | step | one unit of a sequence, in the layer that holds it | `StepDef` (engine), outline step (compiler), `Step` (`browser/watch`), `StepRecord` (agent) |
 | screen | a page a walk knows | `src/browser/screens.ts` |
 | display | headed or headless, for every browser opened from now | `Display` (`src/app/display.ts`) |

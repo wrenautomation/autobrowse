@@ -923,7 +923,7 @@ export const youtube: SiteApi = {
       makes: ["YOUTUBE_CLOUD_PROJECT"],
       how: {
         workflow: "google-cloud-project",
-        input: { name: "wren", keepAs: "YOUTUBE_CLOUD_PROJECT" },
+        input: { name: { env: "OPERATOR_HANDLE" }, keepAs: "YOUTUBE_CLOUD_PROJECT" },
       },
       summary:
         "In Google Cloud Console, as the channel's own Workspace account: a project to hold the OAuth client; its id is kept",
@@ -937,7 +937,7 @@ export const youtube: SiteApi = {
         input: {
           project: { env: "YOUTUBE_CLOUD_PROJECT" },
           api: "youtube.googleapis.com",
-          appName: "Wren Automation",
+          appName: { env: "OPERATOR_NAME" },
           email: { account: true },
           clientName: "autobrowse youtube",
           redirectUri: "http://127.0.0.1:9400/oauth/callback",

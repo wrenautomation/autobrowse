@@ -19,7 +19,7 @@ import {
   quickbooksConnectorKeys,
 } from "../browser/flows/connector-keys.js";
 import { awsConfigFromEnv } from "../owner.js";
-import { CONNECTOR_PROFILES, CONNECTOR_URLS } from "../sites/connectors.js";
+import { CONNECTOR_URLS, connectorProfile } from "../sites/connectors.js";
 
 const CONNECTOR_FLOWS: Record<ConnectorApp, BrowserFlow<never, unknown>> = {
   hubspot: hubspotConnectorKeys as BrowserFlow<never, unknown>,
@@ -97,7 +97,7 @@ export function registerConnectorsCommands(
         const flow = CONNECTOR_FLOWS[app];
         const seen = new Map<string, string>();
         await runner.run(
-          { ...flow, site: CONNECTOR_PROFILES[app] },
+          { ...flow, site: connectorProfile(app) },
           {
             url: CONNECTOR_URLS[app],
             ...(app === "quickbooks-dev" ? { dev: true } : {}),
@@ -111,12 +111,7 @@ export function registerConnectorsCommands(
       }
       const sites = deps.sites();
       if (!sites) throw new Error("no site apis here");
-      const { made } = await sites.setup(
-        "connectors",
-        `${app}-keys`,
-        null,
-        CONNECTOR_PROFILES[app],
-      );
+      const { made } = await sites.setup("connectors", `${app}-keys`, null, connectorProfile(app));
       // The site sink keeps them in the shared store too.
       console.log(`kept ${made.join(", ")}`);
     });

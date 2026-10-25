@@ -19,7 +19,7 @@ import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
 import { linkedin } from "../src/sites/linkedin.js";
 import { fakePage } from "./auth-fakes.js";
 
-const PAGE = "urn:li:organization:143656154";
+const PAGE = "urn:li:organization:42";
 const POST = "urn:li:activity:7513655466959208449";
 const onPage = (id: string) =>
   `id="replaceableComment_urn:li:comment:(activity:7513655466959208449,${id})"`;
@@ -39,12 +39,11 @@ describe("linkedin comments by the page", () => {
     expect(BROWSER_FLOWS["linkedin/comment"]).toBe(linkedinComment);
     expect(BROWSER_FLOWS["linkedin/post-comments"]).toBe(linkedinPostComments);
     // The Page comments as itself: the leg opens the post acting as the Page.
-    const input = post?.browser?.input?.({
-      urn: POST,
-      actor: PAGE,
-      message: { text: "hi" },
-    } as never);
-    expect(input).toEqual({ urn: POST, text: "hi", actor: PAGE, page: "143656154" });
+    const input = post?.browser?.input?.(
+      { urn: POST, actor: PAGE, message: { text: "hi" } } as never,
+      (n) => ({ LINKEDIN_PAGES: "testco=42" })[n],
+    );
+    expect(input).toEqual({ urn: POST, text: "hi", actor: PAGE, page: "42" });
   });
 
   it("reads a comment URN, its post and its time", () => {
@@ -65,7 +64,7 @@ describe("linkedin comments by the page", () => {
     let sent = false;
     const { fp, acts } = fakePage({
       text: [""],
-      url: `https://www.linkedin.com/feed/update/${POST}/?actorCompanyId=143656154`,
+      url: `https://www.linkedin.com/feed/update/${POST}/?actorCompanyId=42`,
       present: (h: Hints) => h.css === "[contenteditable=true]" || /Comment as /.test(h.css ?? ""),
       onAct: (n) => {
         if (n === 2) sent = true;
@@ -74,7 +73,7 @@ describe("linkedin comments by the page", () => {
     fp.html = async () =>
       `<div ${onPage("5")}></div>${sent ? `<div ${onPage("7513656774860636160")}></div>` : ""}`;
     expect(
-      await linkedinComment.run(fp, { urn: POST, text: "hi", actor: PAGE, page: "143656154" }),
+      await linkedinComment.run(fp, { urn: POST, text: "hi", actor: PAGE, page: "42" }),
     ).toEqual({
       id: "7513656774860636160",
       commentUrn: `urn:li:comment:(${POST},7513656774860636160)`,
@@ -94,7 +93,7 @@ describe("linkedin comments by the page", () => {
       present: (h: Hints) => h.css === "[contenteditable=true]",
     });
     await expect(
-      linkedinComment.run(fp, { urn: POST, text: "hi", actor: PAGE, page: "143656154" }),
+      linkedinComment.run(fp, { urn: POST, text: "hi", actor: PAGE, page: "42" }),
     ).rejects.toThrow(/does not act as Page/);
     expect(acts).toEqual([]);
   });
@@ -112,7 +111,7 @@ describe("linkedin comments by the page", () => {
       urn,
       text: "thanks",
       actor: PAGE,
-      page: "143656154",
+      page: "42",
     });
     expect(out).toMatchObject({ commentUrn: null, object: POST, parentComment: urn });
     expect(acts.map((a) => [a.op.kind, a.hints.nth ?? 0])).toEqual([
@@ -136,7 +135,7 @@ describe("linkedin comments by the page", () => {
         {
           ref: "activity:1,7513516083404922880",
           left: 369,
-          href: "https://www.linkedin.com/company/wrenautomation/",
+          href: "https://www.linkedin.com/company/testco/",
           name: "Wren",
           text: "Thanks",
         },
@@ -148,7 +147,7 @@ describe("linkedin comments by the page", () => {
           text: "Agreed",
         },
       ],
-      { wrenautomation: "143656154" },
+      { testco: "42" },
     );
     expect(rows.map((r) => [r.actor, r.parentComment ?? null, r.message.text])).toEqual([
       ["https://www.linkedin.com/in/sam-test/", null, "Great post"],
