@@ -19,7 +19,7 @@ import type { Response } from "playwright";
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
 import { scrollCollect } from "../scroll-collect.js";
-import { firstShown, RENDER_MS, SETTLE_MS } from "./kit.js";
+import { firstShown, RENDER_MS, SETTLE_MS, scrollList } from "./kit.js";
 
 const WEB = "https://www.instagram.com";
 
@@ -346,6 +346,16 @@ export const instagramFollowing = defineFlow<
 /** The home feed's timeline data: in the page's preloaded scripts, then in its GraphQL answers. */
 const FEED_CALL = /\/graphql\b|\/api\/v1\/feed\//;
 const FEED_DATA = /feed__timeline|"feed_items"/;
+/** The home's "Turn on Notifications" prompt: it holds the page still under it. */
+const NOT_NOW: Hints = { role: "button", name: "/^not now$/i" };
+/** The last post into view: the feed asks for its next page when the end comes near. */
+const FEED_END = `(() => {
+  const last = [...document.querySelectorAll("article")].pop();
+  if (!last) return false;
+  last.scrollIntoView({ block: "end" });
+  window.scrollBy(0, innerHeight);
+  return true;
+})()`;
 
 /** JSON text as the page sends it: one object, or one per line (a streamed answer). */
 function jsonsOf(text: string): unknown[] {
@@ -469,6 +479,8 @@ export const instagramFeed = defineFlow<
         if (bodies.length || (await preloaded()).length) break;
         await fp.wait(SETTLE_MS);
       }
+      if (await fp.has(NOT_NOW, 1_000))
+        await fp.act({ kind: "click" }, NOT_NOW, { goal: "close the notifications prompt" });
       const { rows } = await scrollCollect(fp, {
         read: async () => {
           await Promise.all(pending);
@@ -478,6 +490,7 @@ export const instagramFeed = defineFlow<
         // The next page is a network call, not rows already in the DOM: give it time.
         idle: 5,
         settleMs: 2_000,
+        scroll: () => scrollList(fp, FEED_END),
         key: (p) => p.shortcode,
         max: cap,
       });
