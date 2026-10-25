@@ -14,6 +14,7 @@
  * trace. The scrub is idempotent: a scrubbed trace comes back unchanged.
  */
 import { readFile, rename, stat, utimes, writeFile } from "node:fs/promises";
+import { constants, inflateRawSync } from "node:zlib";
 import { strFromU8, strToU8, unzipSync, type Zippable, zipSync } from "fflate";
 import { escapeRe, forms, type Json } from "../share/scrub.js";
 import { heldSecrets, MATCH_MIN } from "./secrets.js";
@@ -27,7 +28,65 @@ export interface SecretScrub {
   masked: number;
   /** Secret forms still in the written text: should be 0. */
   leaks: number;
+  /** A cut-off zip (a run stopped while it saved) read entry by entry and written whole. */
+  repaired: boolean;
   changed: boolean;
+}
+
+/** A repaired trace's last entry, read as far as it goes: `<name>.cut-off`. */
+export const CUT_OFF = ".cut-off";
+
+/**
+ * A zip with no end record, read by its local headers: each whole entry, then the cut one
+ * as far as it inflates (scrubbed like the rest), then any bytes left, raw. Deflate's own
+ * end shows where an entry stops, so a data descriptor (sizes after the data, as Playwright
+ * streams) needs no sizes. `null` when no entry is whole.
+ */
+export function salvageZip(zip: Uint8Array): Record<string, Uint8Array> | null {
+  const buf = Buffer.from(zip.buffer, zip.byteOffset, zip.byteLength);
+  const files: Record<string, Uint8Array> = {};
+  let at = 0;
+  let whole = 0;
+  while (at + 30 <= buf.length && buf.readUInt32LE(at) === 0x04034b50) {
+    const flags = buf.readUInt16LE(at + 6);
+    const method = buf.readUInt16LE(at + 8);
+    const size = buf.readUInt32LE(at + 18);
+    const start = at + 30 + buf.readUInt16LE(at + 26) + buf.readUInt16LE(at + 28);
+    const name = buf.toString("utf8", at + 30, at + 30 + buf.readUInt16LE(at + 26));
+    let end: number;
+    try {
+      if (method === 8) {
+        const { buffer, engine } = inflateRawSync(buf.subarray(start), {
+          info: true,
+        }) as unknown as {
+          buffer: Buffer;
+          engine: { bytesWritten: number };
+        };
+        files[name] = buffer;
+        end = start + engine.bytesWritten;
+      } else if (method === 0 && !(flags & 8) && start + size <= buf.length) {
+        files[name] = buf.subarray(start, start + size);
+        end = start + size;
+      } else break;
+    } catch {
+      // Cut off inside this entry: what inflates is kept, under the entry's own folder.
+      if (method !== 8) break;
+      try {
+        files[`${name}${CUT_OFF}`] = inflateRawSync(buf.subarray(start), {
+          finishFlush: constants.Z_SYNC_FLUSH,
+        });
+        at = buf.length;
+      } catch {}
+      break;
+    }
+    // The data descriptor: crc and sizes, after an optional signature.
+    if (flags & 8) end += end + 4 <= buf.length && buf.readUInt32LE(end) === 0x08074b50 ? 16 : 12;
+    at = end;
+    whole++;
+  }
+  if (!whole) return null;
+  if (at < buf.length) files[`cut-off${CUT_OFF}`] = buf.subarray(at);
+  return files;
 }
 
 /** `autocomplete` tokens of fields that hold a secret. */
@@ -86,12 +145,25 @@ function parseLines(body: string): Obj[] {
   return out;
 }
 
-const textOf = (bytes: Uint8Array): string | null => {
+/** `cut`: the bytes end anywhere, a character's first bytes too: those go. */
+const textOf = (bytes: Uint8Array, cut = false): string | null => {
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes, { stream: cut });
   } catch {
     return null;
   }
+};
+
+/** A cut entry can end inside a secret: the start of one that ends it is masked too. */
+const cutTail = (body: string, parts: string[]): string => {
+  let cut = 0;
+  for (const p of parts)
+    for (let k = Math.min(p.length - 1, body.length); k > cut && k >= 3; k--)
+      if (body.endsWith(p.slice(0, k))) {
+        cut = k;
+        break;
+      }
+  return cut ? `${body.slice(0, -cut)}${SECRET_MARK}` : body;
 };
 
 /** The text a keyboard run left in its field: keys in order, Backspace taking one back. */
@@ -126,13 +198,22 @@ export function scrubSecrets(
   zip: Uint8Array,
   held: Iterable<string> = heldSecrets(),
 ): { zip: Uint8Array | null; report: SecretScrub } {
-  const files = unzipSync(zip);
+  let files: Record<string, Uint8Array>;
+  let repaired = false;
+  try {
+    files = unzipSync(zip);
+  } catch (err) {
+    const salvaged = salvageZip(zip);
+    if (!salvaged) throw err;
+    files = salvaged;
+    repaired = true;
+  }
   const parsed = new Map<string, Obj[]>();
   for (const [name, bytes] of Object.entries(files))
     if (name.endsWith(".trace") || name.endsWith(".network"))
       parsed.set(name, parseLines(strFromU8(bytes)));
 
-  const report: SecretScrub = { found: 0, masked: 0, leaks: 0, changed: false };
+  const report: SecretScrub = { found: 0, masked: 0, leaks: 0, repaired, changed: false };
   // 1. Secret fields: their values are secrets; each value goes, whatever it holds.
   const found = new Set<string>();
   for (const events of parsed.values())
@@ -228,8 +309,10 @@ export function scrubSecrets(
       continue;
     }
     // Screen frames and images are pixels: a field shows dots, never its value.
-    const body = name.startsWith("resources/") && re ? textOf(bytes) : null;
-    if (body !== null && body.search(re as RegExp) >= 0) {
+    const cut = name.endsWith(CUT_OFF);
+    const read = (name.startsWith("resources/") || cut) && re ? textOf(bytes, cut) : null;
+    const body = read !== null && cut ? cutTail(read, parts) : read;
+    if (body !== null && (body !== read || body.search(re as RegExp) >= 0)) {
       report.masked++;
       const clean = body.replace(re as RegExp, SECRET_MARK);
       checks.push(clean);
@@ -237,7 +320,7 @@ export function scrubSecrets(
     } else out[name] = [bytes, { level: 0 }];
   }
   if (re) for (const body of checks) report.leaks += body.match(re)?.length ?? 0;
-  report.changed = report.masked > 0;
+  report.changed = report.masked > 0 || repaired;
   return { zip: report.changed ? zipSync(out) : null, report };
 }
 

@@ -1,10 +1,15 @@
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, Zip, ZipDeflate, zipSync } from "fflate";
 import { afterEach, describe, expect, it } from "vitest";
 import { holdsSecret, secret } from "../src/browser/secrets.js";
-import { SECRET_MARK, scrubSecrets, scrubSecretsFile } from "../src/browser/trace-secrets.js";
+import {
+  CUT_OFF,
+  SECRET_MARK,
+  scrubSecrets,
+  scrubSecretsFile,
+} from "../src/browser/trace-secrets.js";
 import { scrubKeptTraces } from "../src/shots/trace-scrub.js";
 import { dirTraceStore } from "../src/shots/traces.js";
 
@@ -125,6 +130,47 @@ describe("scrubSecrets", () => {
   it("is idempotent: a scrubbed trace comes back unchanged", () => {
     const once = scrubSecrets(fixture(), []).zip as Uint8Array;
     expect(scrubSecrets(once, []).zip).toBeNull();
+  });
+
+  it("repairs a zip cut off while it saved, and scrubs the cut entry as far as it reads", () => {
+    // Streamed as Playwright writes it: sizes after each entry's data, no end record yet.
+    const whole = unzipSync(fixture());
+    const parts: Uint8Array[] = [];
+    const zip = new Zip((err, chunk) => {
+      if (err) throw err;
+      parts.push(chunk);
+    });
+    for (const name of ["trace.trace", "trace.network", "resources/aa.txt"]) {
+      const entry = new ZipDeflate(name, { level: 6 });
+      zip.add(entry);
+      entry.push(whole[name] as Uint8Array, true);
+    }
+    zip.end();
+    const streamed = Buffer.concat(parts);
+    const end = streamed.lastIndexOf(Buffer.from("PK\x01\x02", "latin1"));
+    const cut = streamed.subarray(
+      0,
+      streamed.lastIndexOf(Buffer.from("PK\x07\x08", "latin1"), end) - 2,
+    );
+    expect(() => unzipSync(cut)).toThrow();
+    const { zip: fixed, report } = scrubSecrets(cut, []);
+    expect(report.repaired).toBe(true);
+    const files = unzipSync(fixed as Uint8Array);
+    expect(Object.keys(files)).toEqual([
+      "trace.trace",
+      "trace.network",
+      `resources/aa.txt${CUT_OFF}`,
+    ]);
+    const all = Object.values(files)
+      .map((b) => strFromU8(b))
+      .join("\n");
+    expect(all).not.toContain(PASSWORD);
+    // Cut inside the password: the part that is there goes too.
+    expect(strFromU8(files[`resources/aa.txt${CUT_OFF}`] as Uint8Array)).toBe(
+      `email=${encodeURIComponent(USER)}&password=${SECRET_MARK}`,
+    );
+    // Whole now: a second scrub leaves it.
+    expect(scrubSecrets(fixed as Uint8Array, []).zip).toBeNull();
   });
 
   it("masks a held secret typed into a field that is no password field", () => {
