@@ -377,7 +377,7 @@ const countOrNull = (n: unknown) => (typeof n === "number" ? n : null);
  * Every post in a timeline answer, found by shape (a `code`, a `taken_at` and a `user`), so the
  * GraphQL and v1 shapes both read. Ads and posts by accounts ours does not follow are left.
  */
-export function feedPostsOf(body: unknown): IgPost[] {
+export function feedPostsOf(body: unknown, left?: Set<string>): IgPost[] {
   const out: IgPost[] = [];
   const walk = (v: unknown): void => {
     if (!v || typeof v !== "object") return;
@@ -387,7 +387,10 @@ export function feedPostsOf(body: unknown): IgPost[] {
     }
     const o = v as Record<string, unknown>;
     // An ad: the node holds an `ad` beside its `media`, or the media carries `ad_id` (v1).
-    if (o.ad_id || o.ad_action || o.is_ad || (o.ad && typeof o.ad === "object")) return;
+    if (o.ad_id || o.ad_action || o.is_ad || (o.ad && typeof o.ad === "object")) {
+      left?.add("ad");
+      return;
+    }
     const m = o as Media;
     const username = m.user?.username;
     if (
@@ -395,7 +398,10 @@ export function feedPostsOf(body: unknown): IgPost[] {
       typeof m.taken_at === "number" &&
       typeof username === "string"
     ) {
-      if (m.user?.friendship_status?.following === false) return;
+      if (m.user?.friendship_status?.following === false) {
+        left?.add(m.code);
+        return;
+      }
       out.push({
         shortcode: m.code,
         url: postUrl(m.code),
@@ -420,7 +426,7 @@ export function feedPostsOf(body: unknown): IgPost[] {
  */
 export const instagramFeed = defineFlow<
   { max?: number },
-  { data: IgPost[]; meta: { result_count: number } }
+  { data: IgPost[]; meta: { result_count: number; left: number; pages: number } }
 >({
   site: "instagram",
   name: "feed",
@@ -459,7 +465,7 @@ export const instagramFeed = defineFlow<
         read: async () => {
           await Promise.all(pending);
           const scripts = (await preloaded()).flatMap(jsonsOf);
-          return [...scripts, ...bodies].flatMap(feedPostsOf);
+          return [...scripts, ...bodies].flatMap((b) => feedPostsOf(b));
         },
         // The next page is a network call, not rows already in the DOM: give it time.
         idle: 5,
@@ -469,7 +475,14 @@ export const instagramFeed = defineFlow<
       });
       if (!rows.length && !bodies.length && !(await preloaded()).length)
         return fp.human(`the Instagram home feed showed no timeline data (${fp.url()})`);
-      return { data: rows, meta: { result_count: rows.length } };
+      // What was left (posts by accounts not followed, ads) and the pages read: a thin feed
+      // says which it was.
+      const left = new Set<string>();
+      for (const b of [...(await preloaded()).flatMap(jsonsOf), ...bodies]) feedPostsOf(b, left);
+      return {
+        data: rows,
+        meta: { result_count: rows.length, left: left.size, pages: bodies.length },
+      };
     } finally {
       fp.page.off("response", onResponse);
     }
