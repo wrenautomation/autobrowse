@@ -78,7 +78,8 @@ export async function scrubKeptTraces(
       failed(t.key, err);
     }
   }
-  if (report.local.changed && o.store) report.pushed = await o.push();
+  // Always: a push an earlier run lost (a dropped connection) still holds changed traces.
+  if (o.store) report.pushed = await o.push();
   if (!o.backup || !o.store) return report;
 
   const here = new Set(local.map((t) => t.key));
