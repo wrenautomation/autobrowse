@@ -48,6 +48,8 @@ export class LlmOutputInvalid extends Error {
   constructor(
     readonly issues: string,
     readonly text: string,
+    /** What the refused replies cost: the spend is real even when the reply is not. */
+    readonly usage: LlmUsage = { inputTokens: 0, outputTokens: 0 },
   ) {
     super(`model output did not match the schema: ${issues}`);
     this.name = "LlmOutputInvalid";
@@ -93,5 +95,6 @@ export async function completeJson<T>(
     last = new LlmOutputInvalid(issues, reply.text);
     prompt = `${req.prompt}\n\nYour previous reply failed validation: ${issues}. Fix those fields and reply with the JSON object only.`;
   }
-  throw last ?? new Error("unreachable");
+  if (!last) throw new Error("unreachable");
+  throw new LlmOutputInvalid(last.issues, last.text, usage);
 }

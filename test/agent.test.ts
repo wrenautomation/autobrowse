@@ -29,6 +29,8 @@ function fakeExplorer(trees: string[]) {
           return { url: `https://site.test/p${i}` };
         case "read":
           return { as: c.as, text: `text of ${c.hints.name}` };
+        case "records":
+          return { as: c.as, rows: 2, min: 1, first: '[{"title":"A"},{"title":"B"}]' };
         case "pause":
           paused = true;
           return { paused };
@@ -107,6 +109,27 @@ describe("exploreWithAgent", () => {
     const r = await exploreWithAgent({ explorer: ex, llm, goal: "g" });
     expect(r.steps[0]?.error).toMatch(/ref 9 is not on the page; refs go 1..1/);
     expect(calls.some((c) => c.cmd === "click")).toBe(false);
+  });
+  it("reads a list as one records act and sees its rows next turn", async () => {
+    const { ex, calls } = fakeExplorer(['- link "A"\n- link "B"']);
+    const fields = [{ key: "title", says: "the story's title" }];
+    const llm = fakeLlm([
+      {
+        thought: "a list",
+        action: { cmd: "records", as: "stories", goal: "the stories", fields, max: 5 },
+      },
+      { thought: "fine", action: { cmd: "done", summary: "A, B", achieved: true } },
+    ]);
+    const r = await exploreWithAgent({ explorer: ex, llm, goal: "list the stories" });
+    expect(calls.find((c) => c.cmd === "records")).toEqual({
+      cmd: "records",
+      as: "stories",
+      goal: "the stories",
+      fields,
+      max: 5,
+    });
+    expect(llm.requests[1]?.prompt).toContain("ok, 2 rows; the first:");
+    expect(r.achieved).toBe(true);
   });
   it("treats an unparsable reply as a failed step and goes on", async () => {
     const { ex } = fakeExplorer(['- button "A"']);
@@ -376,20 +399,23 @@ describe("exploreWithAgent batches", () => {
     expect(llm.requests[1]?.prompt).toContain("(a person paused the run)");
   });
 
-  it("keeps done and human alone in their reply", async () => {
+  it("runs the acts before a trailing done and drops it; keeps human alone", async () => {
     const { ex, acts } = formExplorer();
     const llm = fakeLlm([
       {
         thought: "fill and finish",
         actions: [fill(1, "Jane"), { cmd: "done", summary: "s", achieved: true }],
       },
+      // Refused, and refused again on the one retry.
+      { thought: "ask", actions: [{ cmd: "human", reason: "money" }, fill(1, "Jane")] },
       { thought: "ask", actions: [{ cmd: "human", reason: "money" }, fill(1, "Jane")] },
       done,
     ]);
     const r = await exploreWithAgent({ explorer: ex, llm, goal: "apply" });
-    expect(acts()).toEqual([]);
-    expect(r.steps[0]?.step).toBeNull();
-    expect(r.steps[0]?.error).toMatch(/done and human must be the only action/);
+    // The model sees the filled page before it says done.
+    expect(acts()).toEqual(["fill First name"]);
+    expect(r.steps[1]?.step).toBeNull();
+    expect(r.steps[1]?.error).toMatch(/done and human must be the only action/);
     expect(r.achieved).toBe(true);
   });
 

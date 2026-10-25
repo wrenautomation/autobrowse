@@ -24,9 +24,10 @@ describe("completeJson", () => {
     expect(llm.requests.every((r) => r.json)).toBe(true);
 
     const bad = fakeLlm(["not json", "still not"]);
-    await expect(completeJson(bad, schema, { system: "s", prompt: "p" })).rejects.toBeInstanceOf(
-      LlmOutputInvalid,
-    );
+    const err = await completeJson(bad, schema, { system: "s", prompt: "p" }).catch((e) => e);
+    expect(err).toBeInstanceOf(LlmOutputInvalid);
+    // The refused replies still cost tokens: they are counted.
+    expect(err.usage.inputTokens).toBe(20);
   });
 });
 

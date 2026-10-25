@@ -51,11 +51,27 @@ function renderValue(v: OpValue): string {
   }
 }
 
+/** Code as a template when it can be one, so the flow shows it as code (raw if it holds a backslash); else a string. */
+function renderCode(code: string): string {
+  if (/`|\$\{|\\$/.test(code)) return q(code);
+  return `${code.includes("\\") ? "String.raw" : ""}\`${code.replace(/^\n|\n$/g, "")}\``;
+}
+
+/** A records op as an object literal: the checked extractor, kept in the flow's source. */
+function renderRecordsOp(op: Extract<OutlineOp, { kind: "records" }>): string {
+  const { code, sample: _, ...rest } = op;
+  const head = Object.entries(rest)
+    .map(([k, v]) => `      ${k}: ${JSON.stringify(v)},`)
+    .join("\n");
+  return `{\n${head}\n      sample: [],\n      code: ${renderCode(code)},\n    }`;
+}
+
 /** One op as one statement, indented for a flow's body. */
 export function renderOp(op: OutlineOp): string {
   if (op.kind === "human") return `    fp.human(${q(op.reason)});`;
-  if (op.kind === "records" || op.kind === "ai")
-    throw new Error(`a ${op.kind} op runs in a walk; compile does not render it (${op.goal})`);
+  if (op.kind === "ai")
+    throw new Error(`an ai op runs in a walk; compile does not render it (${op.goal})`);
+  if (op.kind === "records") return `    out.${op.as} = await records(fp, ${renderRecordsOp(op)});`;
   const plan = planLocator(op.hints);
   const hints = `{ ${Object.entries(op.hints)
     .filter(([, v]) => v)
@@ -138,10 +154,13 @@ function renderBrowserStep(o: Outline, step: Extract<OutlineStep, { kind: "brows
   const inputType = inputLines.length
     ? `export interface ${Input} {\n${inputLines.join("\n")}\n}`
     : `export type ${Input} = Record<string, never>;`;
-  const reads = step.ops.filter((op) => op.kind === "read");
+  const reads = step.ops.filter((op) => op.kind === "read" || op.kind === "records");
+  const out = step.ops.some((op) => op.kind === "records")
+    ? "Record<string, unknown>"
+    : "Record<string, string>";
   const flowLines = [
     ...(step.url ? [`    await fp.open(${renderUrl(step.url)});`] : []),
-    ...(reads.length ? ["    const out: Record<string, string> = {};"] : []),
+    ...(reads.length ? [`    const out: ${out} = {};`] : []),
     ...step.ops.map(renderOp),
     ...(reads.length ? ["    return out;"] : []),
   ];
@@ -162,7 +181,7 @@ function renderBrowserStep(o: Outline, step: Extract<OutlineStep, { kind: "brows
     : "    // TODO: prove the result through an API read where one exists.";
   return `${inputType}
 
-const ${id}Flow = defineFlow<${Input}, ${reads.length ? "Record<string, string>" : "void"}>({
+const ${id}Flow = defineFlow<${Input}, ${reads.length ? out : "void"}>({
   site: ${q(o.site)},
   name: ${q(step.name)},
   async run(fp${inputArgs ? ", input" : ""}) {
@@ -297,7 +316,11 @@ export function render(o: Outline, opts: RenderOptions = {}): Rendered {
     (s) => s.kind === "browser" && s.ops.some((op) => op.kind === "keep"),
   );
   const anySecret = o.secrets.length > 0;
+  const anyRecords = o.steps.some(
+    (s) => s.kind === "browser" && s.ops.some((op) => op.kind === "records"),
+  );
   const imports = [
+    ...(anyRecords ? ["records"] : []),
     "defineFlow",
     "defineWorkflow",
     "done",

@@ -40,6 +40,7 @@ export type {
 export { defineFlow, flowRunner, SITES } from "./browser/flow.js";
 export { type Hints, type LocatorPlan, locate, planLocator } from "./browser/locate.js";
 export { KeyedMutex } from "./browser/lock.js";
+export { type RecordsOp, type Row, records } from "./browser/records.js";
 export {
   llmRepairer,
   noRepairer,

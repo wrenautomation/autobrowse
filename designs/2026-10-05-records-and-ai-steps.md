@@ -9,7 +9,7 @@ Living doc. Started 2026-10-05. William: "letting ai write check and validate co
 - **The check.** The code runs on the live page and must return rows, every row must have the declared fields, and required fields must be filled on most rows. It must also find the rows a model read off the page text by eye (2 to 3 samples). A failed check goes back to the model with the reason, up to 3 rounds.
 - **Heal on a drop.** At run time, fewer rows than the kept floor (half of what the page gave when written) or required fields left empty means the page changed. With a model at hand, the walk re-writes the extractor on that page, checks it, saves it, and goes on. Without one the run fails, like any broken step.
 - **`ai` op.** An explicit model call in a walk: a prompt over earlier reads, the answer kept under a name. It names its model tier: `cheap` (Cohere when keyed, else Claude Code on the subscription, $0) or `smart` (the configured model). Each walk run caps it at 20 calls. Every call goes through the counted, daily-capped `llmFor`.
-- **Where it runs.** Walks are the deterministic workflow, so both ops live in `walkOpSchema` through `opSchema`. The TS compiler refuses them for now, since teach mode made walks the browser path.
+- **Where it runs.** Walks are the deterministic workflow, so both ops live in `walkOpSchema` through `opSchema`. The TS compiler renders `records` (since 2026-10-24) and refuses `ai`.
 
 ## The records op
 
@@ -65,7 +65,7 @@ Living doc. Started 2026-10-05. William: "letting ai write check and validate co
 3. ✅ Ad Library as a site route: `fb-public GET /ads?q=&country=` runs the walk, so wren calls it on the desk. Wren's `adLibrary` pool stage turns advertisers into firms.
 4. ✅ Facebook public groups: `fb-public GET /groups?q=` (Google), `/groups/{group}` (About), `/groups/{group}/posts/{post}` (a post and its top comments). Then directories.
 5. ✅ An explorer `records` command, so an explore run that ends on a list page builds a walk with the op.
-6. Compiler render, if a compiled workflow ever needs a list.
+6. ✅ Compiler render: `out.<as> = await records(fp, {...op})`, the checked code in the flow's source. The agent has a `records` act too.
 7. ✅ `each`: a walk loops over many inputs itself.
 
 ## Decision log
@@ -86,3 +86,5 @@ Living doc. Started 2026-10-05. William: "letting ai write check and validate co
 - 2026-10-05: The sandbox runs a whole `function (root) {...}` or an arrow when a model sends one in place of a body. A model did, and every round failed on the syntax.
 - 2026-10-05: Explore's `records` takes the driver's own `code` first. The driver is usually a model already looking at the page, and today's group walks showed a hand-written extractor beats the builder's one-shot model on odd pages. Without `code`, the session's model writes it as `autobrowse records` does.
 - 2026-10-06: `each` is an op, so the caller no longer loops. William: "fix the gap". A list page and its detail pages are now one walk, which the desk runs as one route. Rows run in order on one page, with no parallel tabs, to keep one IP's pace.
+- 2026-10-24: The agent gets a `records` act, and the compiler renders it. A list read as one `read` per row found each row by the text it showed, so a replay with another query found nothing. Seen on hn.algolia.com: 10 reads named "443 points" and the like. Now one act; the compiled flow runs the kept extractor with no model, and a drop below `min` throws (no heal in compiled code; `compile --finish` or a walk heals). Checked live with three other queries.
+- 2026-10-24: Each compiled step opens the URL its note was on, not the last `navigate`. Each flow runs in its own tab, so a step after a search had opened the bare home page. A plan value in that URL becomes `{field}` in its encoded forms too (`a%20b`, `a+b`).

@@ -250,7 +250,7 @@ describe("module", () => {
 /** A page and a control that record what the hands did. */
 function fakes(
   box: { x: number; y: number; width: number; height: number } | null,
-  field: { clickFocuses?: boolean; keysLand?: boolean } = {},
+  field: { clickFocuses?: boolean; keysLand?: boolean; coveredFrom?: number } = {},
 ) {
   const log: string[] = [];
   const { clickFocuses = true, keysLand = true } = field;
@@ -287,7 +287,9 @@ function fakes(
       log.push("focus");
       state.focused = true;
     },
-    evaluate: async () => state.focused,
+    // With a point: does a press there hit the control (a badge covers it from `coveredFrom` px)?
+    evaluate: async (_fn: unknown, arg?: { p?: { x: number } }) =>
+      arg?.p ? arg.p.x < (field.coveredFrom ?? Number.POSITIVE_INFINITY) : state.focused,
     inputValue: async () => state.value,
     fill: async (v: string) => {
       log.push(`fill ${v.length}`);
@@ -315,6 +317,19 @@ describe("hands", () => {
     expect(Number(x)).toBeLessThan(120);
     expect(Number(y)).toBeLessThan(30);
     expect(Number(held)).toBeGreaterThanOrEqual(HUMAN_PACE.mouse.hold[0]);
+  });
+
+  it("aim past a badge that covers part of the control", async () => {
+    // A 300 px search box; a logo covers its right third, from x 600.
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const { log, target } = fakes(
+        { x: 400, y: 300, width: 300, height: 30 },
+        { coveredFrom: 600 },
+      );
+      await handsFor(HUMAN_PACE, seeded(seed)).click(target, { timeout: 1000 });
+      const [, x] = log.at(-1)?.match(/^click at (\d+),/) ?? [];
+      expect(Number(x)).toBeLessThan(200);
+    }
   });
 
   it("wheel a control below the fold into view before reaching for it", async () => {

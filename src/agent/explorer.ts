@@ -40,6 +40,16 @@ const actionSchema = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("captcha") }),
   /** Read a control's or heading's text and keep it under a name; the compiled flow reads it too. */
   z.object({ cmd: z.literal("read"), ref, as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/) }),
+  /** A list on the page as rows: the session writes an extractor once; the compiled flow reruns it. */
+  z.object({
+    cmd: z.literal("records"),
+    as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
+    goal: z.string().min(1),
+    fields: z
+      .array(z.object({ key: z.string().regex(/^[a-z][a-zA-Z0-9]*$/), says: z.string() }))
+      .min(1),
+    max: z.number().int().positive().optional(),
+  }),
   /** A secret the site minted goes to the sink under an env name; the model never sees it. */
   z.object({ cmd: z.literal("keep"), ref, env: z.string().regex(/^[A-Z][A-Z0-9_]*$/) }),
   /** The goal is met (or cannot be): say what happened. */
@@ -58,12 +68,23 @@ export const stepSchema = z.object({
 });
 export type Step = z.infer<typeof stepSchema>;
 
-/** What the model replies: a thought and the acts for one screen. A lone `action` is a plan of one. */
+/**
+ * What the model replies: a thought and the acts for one screen. A lone `action` is a plan of one.
+ * A `done` after other acts is dropped: the acts run, and the model judges the page they leave.
+ */
 export const planSchema = z.preprocess(
-  (v) =>
-    v && typeof v === "object" && !("actions" in v) && "action" in v
-      ? { ...v, actions: [(v as { action: unknown }).action] }
-      : v,
+  (v) => {
+    const plan =
+      v && typeof v === "object" && !("actions" in v) && "action" in v
+        ? { ...v, actions: [(v as { action: unknown }).action] }
+        : v;
+    if (!plan || typeof plan !== "object" || !("actions" in plan)) return plan;
+    const acts = (plan as { actions: unknown }).actions;
+    const last = Array.isArray(acts) ? (acts.at(-1) as { cmd?: unknown } | undefined) : undefined;
+    return Array.isArray(acts) && acts.length > 1 && last?.cmd === "done"
+      ? { ...plan, actions: acts.slice(0, -1) }
+      : plan;
+  },
   z
     .object({ thought: z.string(), actions: z.array(actionSchema).min(1) })
     .refine(
@@ -131,7 +152,7 @@ export interface AgentResult {
 
 /** How a plan of several acts may look: the code holds to the same rules. */
 const BATCH = `Plan several actions only for the screen you see now.
-These may come before other actions: fill, place, select, upload, read, and a click on a C, R, O, S, TAB or X ref.
+These may come before other actions: fill, place, select, upload, read, records, and a click on a C, R, O, S, TAB or X ref.
 Any other action runs last, and the code skips the actions after it: a click on a button or link, press, open, key, captcha, keep, os.
 Put done or human alone in their reply.
 The code stops a plan early when a target is gone, the URL changes, a dialog opens, or an error shows. Then you see the page again and the actions that did not run.`;
@@ -157,6 +178,7 @@ Actions, with "cmd" set to exactly one of these words:
   {"cmd":"key","key":"Escape"}
   {"cmd":"captcha"}   (solve the captcha on the page, any kind; says solved or why not)
   {"cmd":"read","ref":n,"as":"camelName"}   (keep an element's text under a name; a workflow built from this run will read it the same way)
+  {"cmd":"records","as":"camelName","goal":"what the rows are","fields":[{"key":"title","says":"what it holds"}],"max":10}   (a list on the page as rows; a workflow built from this run reads the list again, whatever it holds then)
   {"cmd":"keep","ref":n,"env":"SOME_API_KEY"}   (a key, token or password the site just minted: it goes straight to the secret store under that env name; never read or quote it)
   {"cmd":"os","act":{"op":"tree"},"goal":"why"}   (the desktop, outside the browser: the front app's controls as role "name" lines)
   {"cmd":"os","act":{"op":"open","app":"System Settings"},"goal":"why"}
@@ -168,7 +190,7 @@ Actions, with "cmd" set to exactly one of these words:
   {"cmd":"human","reason":"why a person must do this"}
 ref is the [n] of a control in the outline; only those numbers exist.
 Use os acts only when the goal is outside the browser (an app, a system setting, a file, a command); look with tree before clicking.
-Control names carry content too: a link named "Name Jane Doe" tells you the name is Jane Doe. When the goal asks you to report or collect something, read it with read{ref,as} first, then quote it in the done summary.
+Control names carry content too: a link named "Name Jane Doe" tells you the name is Jane Doe. When the goal asks you to report or collect something, read it with read{ref,as} first, then quote it in the done summary. For a list (results, rows, items), use one records act, never one read per item: a read finds its element by the text it shows, so it finds only that same text again. Name a records or read "as" for what it holds ("stories", "price"), never after the values you typed: a workflow built from this run fills in other values.
 An "iframe:" section is a frame inside the page (a captcha, an embedded sign-in); its refs work like any other.
 Rules: never invent values; use only the inputs given. Never buy, delete, or submit money-related forms: return human{reason} instead.
 Any captcha ("I'm not a robot", pick the squares, type the letters, drag a slider): use captcha. Only when it says it is not solved twice, return human{reason}.
@@ -255,6 +277,9 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
       plan = reply.value;
     } catch (err) {
       if (!(err instanceof LlmOutputInvalid)) throw err;
+      usage.inputTokens += err.usage.inputTokens;
+      usage.outputTokens += err.usage.outputTokens;
+      stepUsage = err.usage;
       // A malformed reply is a failed step the model sees next turn, not the end of the run.
       land({
         n,
@@ -458,6 +483,14 @@ function toCommand(a: Act, page: Digest): ExploreCommand {
   if (a.cmd === "key") return { cmd: "key", key: a.key };
   if (a.cmd === "captcha") return { cmd: "captcha" };
   if (a.cmd === "os") return { cmd: "os", act: a.act };
+  if (a.cmd === "records")
+    return {
+      cmd: "records",
+      as: a.as,
+      goal: a.goal,
+      fields: a.fields,
+      ...(a.max ? { max: a.max } : {}),
+    };
   const ref = page.refs.find((r) => r.n === a.ref);
   if (!ref) throw new Error(`ref ${a.ref} is not on the page; refs go 1..${page.refs.length}`);
   const hints = hintsFor(ref);
@@ -494,6 +527,8 @@ export function clip(value: unknown, max = 6_000): unknown {
 function outcome(s: StepRecord): string {
   const r = s.result as {
     text?: string;
+    rows?: number;
+    first?: string;
     tree?: string;
     apps?: string[];
     code?: number;
@@ -502,6 +537,8 @@ function outcome(s: StepRecord): string {
   } | null;
   if (s.step?.action.cmd === "read" && r?.text !== undefined)
     return `ok: ${JSON.stringify(r.text.slice(0, 300))}`;
+  if (s.step?.action.cmd === "records" && r?.rows !== undefined)
+    return `ok, ${r.rows} rows; the first: ${r.first?.slice(0, 1_500) ?? ""}`;
   if (s.step?.action.cmd === "os" && r) {
     if (r.tree !== undefined) return `ok, the front app shows:\n${r.tree.slice(0, 6_000)}`;
     if (r.apps) return `ok: ${r.apps.join(", ")}`;
@@ -526,7 +563,7 @@ function describeAct(a: Step["action"]): string {
           ? ` "${a.value}"`
           : a.cmd === "place"
             ? ` secret ${a.secret}`
-            : a.cmd === "read"
+            : a.cmd === "read" || a.cmd === "records"
               ? ` as ${a.as}`
               : a.cmd === "keep"
                 ? ` as ${a.env}`

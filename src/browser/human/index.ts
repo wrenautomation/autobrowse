@@ -38,7 +38,15 @@
  */
 import type { Locator, Page } from "playwright";
 import { chance, drawMs, type Random } from "./draw.js";
-import { aimPoint, type MouseStyle, mousePath, type Point, restAt, wanderPath } from "./mouse.js";
+import {
+  aimPoint,
+  type Box,
+  type MouseStyle,
+  mousePath,
+  type Point,
+  restAt,
+  wanderPath,
+} from "./mouse.js";
 import { type ScrollStyle, wheelPlan } from "./scroll.js";
 import { BACKSPACE, type TypingStyle, typingPlan } from "./typing.js";
 
@@ -324,6 +332,18 @@ export function handsFor(
   if (!pace) return instantHands;
   const key = (page: Page, k: string) => log(page, { kind: "key", t: Date.now(), key: k });
 
+  /**
+   * A point a person could press: one the control itself shows, not a badge over it (the
+   * "Search by Algolia" logo inside a search box). A few draws, then the middle, then the first.
+   */
+  const openAim = async (target: Locator, box: Box): Promise<Point> => {
+    const first = aimPoint(box, random);
+    const middle = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const tries = [first, ...Array.from({ length: 7 }, () => aimPoint(box, random)), middle];
+    for (const p of tries) if (await hits(target, box, p)) return p;
+    return first;
+  };
+
   const click = async (asked: Locator, { at, ...o }: ActTimeout & { at?: Point }) => {
     const target = at ? asked : await pressable(asked, o);
     const page = target.page();
@@ -333,7 +353,7 @@ export function handsFor(
       .then(() => target.boundingBox(o))
       .catch(() => null);
     if (!box) return target.click({ ...o, ...(at ? { position: at } : {}) });
-    const aim = at ? { x: box.x + at.x, y: box.y + at.y } : aimPoint(box, random);
+    const aim = at ? { x: box.x + at.x, y: box.y + at.y } : await openAim(target, box);
     await glide(page, aim, Math.min(box.width, box.height), pace, random, log).catch(
       () => undefined,
     );
@@ -439,6 +459,22 @@ export function handsFor(
     },
   };
 }
+
+/**
+ * Whether a press at `p` (page px, as `box` is) lands on the control or inside it. In the
+ * control's own frame: the box and its client rect differ by the frame's offset.
+ */
+const hits = (target: Locator, box: Box, p: Point): Promise<boolean> =>
+  target
+    .evaluate(
+      (el, { box, p }) => {
+        const r = el.getBoundingClientRect();
+        const hit = el.ownerDocument.elementFromPoint(p.x - box.x + r.x, p.y - box.y + r.y);
+        return !!hit && (hit === el || el.contains(hit));
+      },
+      { box: { x: box.x, y: box.y }, p },
+    )
+    .catch(() => true);
 
 /** Whether the control (or something inside it) has focus; unknown counts as yes. */
 const hasFocus = (target: Locator): Promise<boolean> =>

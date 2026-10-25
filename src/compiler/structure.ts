@@ -318,6 +318,8 @@ export function structure(rec: Recording, o: StructureOptions = {}): Outline {
       case "note":
         close();
         closeDesktop();
+        // Each flow opens a new tab: the next step starts on the page the note was on, not the last navigate.
+        if (a.url) pendingUrl = a.url;
         // A short note is a name ("Checkout"); a sentence (an agent's thought) describes the step, and the page names it.
         pendingName = isSentence(a.text)
           ? pendingUrl
@@ -518,6 +520,17 @@ function placeholders(
       out = out.split(account.value).join(`{${accountField()}}`);
     return out;
   };
+  // A URL holds the value encoded (`a%20b`, or `a+b` from a form); the rendered flow encodes it back.
+  const urlSwap = (url: string): string => {
+    let out = swap(url);
+    for (const s of [...stand].sort((a, b) => b.value.length - a.value.length))
+      for (const v of new Set([
+        encodeURIComponent(s.value),
+        encodeURIComponent(s.value).replace(/%20/g, "+"),
+      ]))
+        if (out.includes(v)) out = out.split(v).join(`{${s.key}}`);
+    return out;
+  };
   // A step named after a URL path that holds the value: the field's key stands in (`acmeco-home` → `handle-home`).
   const nameSwap = (name: string): string => {
     let out = name;
@@ -527,7 +540,7 @@ function placeholders(
   };
   for (const step of steps) {
     if (step.kind !== "browser") continue;
-    if (step.url) step.url = swap(step.url);
+    if (step.url) step.url = urlSwap(step.url);
     step.name = nameSwap(step.name);
     step.description = swap(step.description);
     for (const op of step.ops) {

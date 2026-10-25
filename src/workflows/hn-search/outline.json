@@ -1,0 +1,86 @@
+{
+  "name": "hn-search",
+  "site": "hn",
+  "description": "Recorded 2026-10-25 on hn",
+  "fields": [
+    {
+      "key": "searchQuery",
+      "label": "Search stories by title, url or author",
+      "example": null
+    }
+  ],
+  "secrets": [],
+  "steps": [
+    {
+      "kind": "browser",
+      "name": "open-search-page",
+      "description": "Open the Hacker News Algolia search page",
+      "irreversible": false,
+      "proof": null,
+      "url": "https://hn.algolia.com/",
+      "ops": [
+        {
+          "kind": "fill",
+          "goal": "fill Search stories by title, url or author",
+          "hints": {
+            "tag": "",
+            "role": "searchbox",
+            "name": "Search stories by title, url or author",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "searchQuery"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "browser",
+      "name": "search-query",
+      "description": "Enter the search query and submit",
+      "irreversible": false,
+      "proof": null,
+      "url": "https://hn.algolia.com/?dateRange=all&page=0&prefix=true&query={searchQuery}&sort=byPopularity&type=story",
+      "ops": [
+        {
+          "kind": "records",
+          "goal": "Read the title and points of the first 5 stories",
+          "as": "stories",
+          "fields": [
+            {
+              "key": "title",
+              "says": "The title of the story"
+            },
+            {
+              "key": "points",
+              "says": "The points of the story"
+            }
+          ],
+          "key": "title",
+          "code": "\nfunction (root) {\n  const stories = root.querySelectorAll('article.Story');\n  const result = [];\n  stories.forEach(story => {\n    const titleElement = story.querySelector('.Story_title a:first-child');\n    const pointsElement = story.querySelector('.Story_meta a:first-child');\n    const title = titleElement ? titleElement.textContent.trim() : null;\n    const points = pointsElement ? pointsElement.textContent.trim().split(' ')[0] : null;\n    result.push({ title, points });\n  });\n  return result.slice(0, 5);\n}\n",
+          "min": 2,
+          "max": 5,
+          "sample": [
+            {
+              "title": "Show HN: Vibium – Browser automation for AI and humans, by Selenium's creator",
+              "points": "443"
+            },
+            {
+              "title": "Show HN: Skyvern – Browser automation using LLMs and computer vision",
+              "points": "422"
+            },
+            {
+              "title": "Launch HN: Skyvern (YC S23) – open-source AI agent for browser automations",
+              "points": "327"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

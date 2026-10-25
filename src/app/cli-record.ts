@@ -852,17 +852,18 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<{ achieved: bo
   const { exploreWithAgent } = await import("../agent/explorer.js");
   const llm = llmFor(settings);
   if (!llm) throw new Error("the agent needs a model: set LLM_PROVIDER and its key");
+  const { tokenFileFor } = await import("../explore/server.js");
+  // The token goes to its file, never the terminal: `autobrowse cmd` reads it from there.
   const ex = await explorerOpener(settings, undefined, r.headed ? headed : undefined)(
     r.site,
     r.port,
     {
+      tokenFile: tokenFileFor(r.port),
       ...(r.secrets ? { secrets: r.secrets.values, secretHosts: r.secrets.hosts } : {}),
       ...(r.signIn === false ? { signIn: false } : {}),
     },
   );
-  console.log(
-    `agent on ${r.site}; pause/resume: curl -s -X POST -H "Authorization: Bearer ${ex.token}" http://127.0.0.1:${ex.port}/ -d '{"cmd":"pause"}'`,
-  );
+  console.log(`agent on ${r.site}; pause: autobrowse cmd '{"cmd":"pause"}' --port ${ex.port}`);
   try {
     if (r.url) await ex.exec({ cmd: "open", url: r.url });
     const { stepLedgerFor } = await import("./services.js");

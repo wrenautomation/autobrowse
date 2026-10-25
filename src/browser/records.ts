@@ -99,6 +99,17 @@ export function dedupe(rows: Row[], op: Pick<RecordsOp, "key">): Row[] {
   return [...seen.values()];
 }
 
+/**
+ * The rows a compiled flow reads: the kept code on this page, checked. A drop below the op's
+ * floor throws, like any broken step; heal it with `autobrowse compile --finish` or a walk.
+ */
+export async function records(fp: FlowPage, op: RecordsOp): Promise<Row[]> {
+  const { rows } = await readRecords(fp, op);
+  const problem = checkRows(rows, op);
+  if (problem) throw new Error(`${op.goal}: ${problem}`);
+  return rows;
+}
+
 /** The op's rows on this page: one read, or a feed scrolled up to `max`. The last markup comes back too. */
 export async function readRecords(
   fp: FlowPage,

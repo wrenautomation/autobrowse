@@ -147,6 +147,71 @@ describe("render", () => {
   });
 });
 
+describe("records", () => {
+  /** A search typed on the home page, then a list read on the results page the search led to. */
+  const rec: Recording = {
+    ...recording,
+    name: "search-list",
+    commands: [],
+    terminal: null,
+    actions: [
+      { t: 0, kind: "navigate", url: "https://s.test/" },
+      {
+        t: 1,
+        kind: "input",
+        url: "https://s.test/",
+        target: h({ role: "searchbox", name: "Search" }),
+        value: "web scraping",
+        redacted: false,
+      },
+      {
+        t: 2,
+        kind: "note",
+        url: "https://s.test/?q=web%20scraping&sort=top",
+        text: "Read the stories.",
+      },
+      {
+        t: 3,
+        kind: "records",
+        url: "https://s.test/?q=web%20scraping&sort=top",
+        op: {
+          kind: "records",
+          goal: "the stories",
+          as: "stories",
+          fields: [{ key: "title", says: "its title" }],
+          key: "title",
+          code: "return [...root.querySelectorAll('h2')].map((h) => ({ title: h.textContent }));",
+          min: 2,
+          sample: [{ title: "A" }],
+        },
+      },
+    ],
+  };
+
+  it("renders a list read as its checked code, on the page the step started, the query encoded", async () => {
+    const out = await compile(rec);
+    const src = out.files["index.ts"] ?? "";
+    const step = out.outline.steps[1];
+    if (step?.kind !== "browser") throw new Error("browser step expected");
+    const field = out.outline.fields[0]?.key as string;
+    expect(step.url).toBe(`https://s.test/?q={${field}}&sort=top`);
+    expect(src).toContain(`?q=\${encodeURIComponent(input.${field})}&sort=top`);
+    expect(src).toContain("out.stories = await records(fp, {");
+    expect(src).toContain("code: `return [...root.querySelectorAll('h2')]");
+    expect(src).toContain("const out: Record<string, unknown> = {};");
+    expect(src).not.toContain("web scraping");
+  });
+
+  it("keeps code a template cannot hold as a string", () => {
+    const line = renderOp({
+      ...(rec.actions[3] as { op: Extract<Parameters<typeof renderOp>[0], { kind: "records" }> })
+        .op,
+      code: "return [`a`].map((title) => ({ title }));",
+    });
+    expect(line).toContain('code: "return [`a`].map((title) => ({ title }));"');
+  });
+});
+
 describe("keep", () => {
   it("renders a minted secret through the input sink, never the journaled result", () => {
     const rec: Recording = {

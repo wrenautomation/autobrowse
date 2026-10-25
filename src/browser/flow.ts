@@ -978,6 +978,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             if (wall.kind === "captcha" && runner.captcha && !triedCaptcha) {
               triedCaptcha = true;
               const got = await fp.captcha();
+              // The detector saw none: the word is the page's content (a story about captchas), not a wall.
+              if (!got.solved && got.kind === null) return;
               if (got.solved) {
                 // A checkbox wall lets the page through on its own (Cloudflare reloads it).
                 await session.page
