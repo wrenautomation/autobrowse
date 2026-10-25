@@ -173,7 +173,10 @@ a row; it is work.
   popup, `save`, `close`). It closes itself after 30 idle minutes;
   `--hold` turns that off for long human-in-the-loop work. `aria` dumps
   the page's accessibility tree: every control by role and name, so a
-  whole form is mapped in one look instead of one miss per run. Every act
+  whole form is mapped in one look instead of one miss per run. `marks`
+  is the fallback when no name finds a control: a screenshot with a
+  number on each control in view; `click {"hints":{"mark":n}}` acts on it
+  and journals that control's own hints. A miss answers with marks too. Every act
   that works is journaled as a recording; `save` writes it, `compile`
   takes it from there. Failing flows leave the same aria tree next to the
   screenshot (`<stamp>.aria.txt`). Each session is also a run, kept for

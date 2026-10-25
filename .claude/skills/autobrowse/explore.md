@@ -43,13 +43,14 @@ every act. `stop.sh` ends it for good. Flags for secrets: signup.md.
 ## Commands
 
 Targets are `hints`: `{role, name, text, placeholder, id, testId, href, inputType, css, nth}`.
-Any subset; `name` is the accessible name from `aria`.
+Any subset; `name` is the accessible name from `aria`. Or `{"mark":n}`: a number from the last `marks` picture.
 
 Look:
 - `{"cmd":"snapshot"}` — interactive elements, one line each. Start here.
 - `{"cmd":"aria"}` — accessibility tree, masked. `hints` scopes it, `limit` caps characters (default 12000).
 - `{"cmd":"text"}` — the page's words as laid out: side-by-side reads as a row (`Price | $40`), tables across, a sidebar as `[col 1/2]`. Costs what plain text does. `"coords":true` adds `@x,y` per line (+25%); `"layout":false` = DOM order.
 - `{"cmd":"url"}`, `{"cmd":"screenshot"}` (path back), `{"cmd":"count","hints":…}`.
+- `{"cmd":"marks"}` — a screenshot with a numbered box on each control in view, and the list `{n, tag, role, name}`. For a control the snapshot and `aria` do not name (an icon, a canvas widget). Act with `"hints":{"mark":n}`: the journal keeps the control's own hints, never the point. A load or re-render makes the marks stale: take them again.
 - `network` and `html` (page calls, saved pages) are off by default: they cost tokens. Only when William asks, start explore with `AUTOBROWSE_NETWORK=1`; see `designs/2026-10-06-network-capture.md`.
 - `{"cmd":"pages"}` / `{"cmd":"page","index":1}` or `"main"` — OAuth popups; the session returns to main when the popup closes.
 
@@ -99,7 +100,7 @@ Every look costs tokens. Look once, then let the acts tell you what changed.
 2. `snapshot`. `aria` with `hints` or a `limit` only when the snapshot is not enough.
 3. Every act answers `changed`: `added` (new controls, up to 40), `gone` (a count), `more` (past 40). Read that; don't look again after each act.
 4. Acts you are sure of (fill a form, submit) go in one `batch`. It stops at the first failure: `failed: {at, cmd, error}`, `done` holds what ran. A paying click goes alone.
-5. Prefer `role`+`name`; fall back to `css`+`nth`. A failed act is not journaled. Change the hints; don't repeat.
+5. Prefer `role`+`name`; fall back to `css`+`nth`. A failed act is not journaled. Change the hints; don't repeat. A miss answers with `marks` (the picture and its list): read it and act on a mark.
 6. Never `raw:true` on a page showing a key.
 7. Done: `done` with the outcome and a one-line summary, `save` with a kebab name if it should compile, `stop.sh`. Or `stop.sh <port> achieved|failed "summary"` in one go. Never stop without a verdict: `autobrowse success` counts a run with none as unknown.
 

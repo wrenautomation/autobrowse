@@ -17,6 +17,8 @@ const hintsSchema = z.object({
   nth: z.number().int().nonnegative().nullable().optional(),
   /** Inside an iframe: its selector chain from the page, as `aria` names it. */
   frame: z.string().nullable().optional(),
+  /** A number from the last `marks` picture, in place of the rest: the act journals its hints. */
+  mark: z.number().int().positive().optional(),
 });
 
 /** What an act points at: the same hints a flow uses (`css` and `nth` included). */
@@ -90,6 +92,8 @@ export const commandSchema = z.discriminatedUnion("cmd", [
     index: z.union([z.number().int().min(0), z.literal("main")]),
   }),
   z.object({ cmd: z.literal("screenshot") }),
+  /** A screenshot with a numbered box on each control in view, and the list; act with `hints:{mark:n}`. */
+  z.object({ cmd: z.literal("marks") }),
   /**
    * The page calls (XHR, fetch, page loads), redacted: the newest `last` (40) as lines,
    * `filter` on the URL; `id` = one call with its body; `diff` = call shapes and response

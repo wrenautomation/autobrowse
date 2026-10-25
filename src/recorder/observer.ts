@@ -12,10 +12,12 @@
  */
 export const BINDING = "__autobrowse";
 
-export const OBSERVER_SCRIPT = `
-(() => {
-  if (window.__autobrowseObserving) return;
-  window.__autobrowseObserving = true;
+/**
+ * The locator hints of one element, as plain JS in a string: the observer
+ * and explore's `marks` both run it, so a mark replays as a recorded act does.
+ * Defines `hints(el)` and the helpers it needs.
+ */
+export const HINTS_JS = `
   const IMPLICIT = { a: 'link', button: 'button', select: 'combobox', textarea: 'textbox', option: 'option', img: 'img', h1: 'heading', h2: 'heading', h3: 'heading', nav: 'navigation', form: 'form' };
   const INPUT_ROLES = { checkbox: 'checkbox', radio: 'radio', submit: 'button', button: 'button', reset: 'button', range: 'slider', number: 'spinbutton', search: 'searchbox' };
   const trim = (s) => (s ? s.replace(/\\s+/g, ' ').trim().slice(0, 80) : null) || null;
@@ -43,6 +45,13 @@ export const OBSERVER_SCRIPT = `
       inputType,
     };
   };
+`;
+
+export const OBSERVER_SCRIPT = `
+(() => {
+  if (window.__autobrowseObserving) return;
+  window.__autobrowseObserving = true;
+  ${HINTS_JS}
   const at = (e) => (e.composedPath && e.composedPath()[0]) || e.target;
   const interactive = (el) => el.closest('button, a, input, select, textarea, [role], [onclick], label, summary') || el;
   const send = (a) => { try { window.${BINDING}(a); } catch (e) {} };

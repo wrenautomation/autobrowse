@@ -142,6 +142,7 @@ import {
 } from "./commands.js";
 import { type Journaled, readJournal } from "./journal.js";
 import { DEFAULT_IDLE_MINUTES } from "./lease.js";
+import { marksFor, missed } from "./marks.js";
 
 export { type Command, commandSchema, placeHint } from "./commands.js";
 export { journalFileFor, readJournal, tokenFileFor } from "./journal.js";
@@ -782,6 +783,15 @@ async function serve(
 
   type Target = z.infer<typeof targetSchema>;
   const find = (t: Target) => locate(page, t.hints as Hints);
+  const marks = marksFor();
+  /** The marks picture, names masked as `aria` masks them. */
+  const takeMarks = async () => {
+    const taken = await marks.take(page, shoot);
+    return {
+      ...taken,
+      marks: taken.marks.map((m) => ({ ...m, name: m.name && redactText(m.name) })),
+    };
+  };
   /**
    * Billing fields and spending buttons wait for the person; refused when
    * nobody can be asked. Over the socket the question is asked once and the
@@ -1254,8 +1264,13 @@ async function serve(
     left = { url: page.url(), rows: now_ };
     return out;
   };
-  const act = async (cmd: Command, wait: boolean): Promise<unknown> => {
+  const act = async (given: Command, wait: boolean): Promise<unknown> => {
     page = fp.page;
+    // A mark from the last picture acts, and journals, as the control's own hints.
+    const cmd =
+      "hints" in given && given.hints?.mark
+        ? ({ ...given, hints: await marks.hints(page, given.hints.mark) } as Command)
+        : given;
     // A target on no frame that the page lacks is looked for in its iframes (card fields, a
     // bank's challenge). A fill or place gives frames still loading a moment.
     const c =
@@ -1403,7 +1418,10 @@ async function serve(
           : ariaWithFrames(page)
         ).catch((e: Error) => `error: ${e.message}`);
         // Even raw: a password typed into a field is never something a caller may read back.
-        return { aria: out(redactAria(tree.slice(0, c.limit ?? 12_000)), c.raw) };
+        const aria = out(redactAria(tree.slice(0, c.limit ?? 12_000)), c.raw);
+        return c.hints && tree.startsWith("error:")
+          ? { aria, hint: 'see the page: {"cmd":"marks"}' }
+          : { aria };
       }
       case "snapshot":
         return {
@@ -1474,6 +1492,8 @@ async function serve(
       }
       case "screenshot":
         return { file: await shoot() };
+      case "marks":
+        return takeMarks();
       case "network":
         return network(c);
       case "html":
@@ -1674,7 +1694,11 @@ async function serve(
             // A payment gate answers the whole call, as it does a single act.
             if (err instanceof PaymentGate) throw err;
             const error = err instanceof Error ? err.message.split("\n")[0] : String(err);
-            return answer({ failed: { at: i, cmd: one.cmd, error } });
+            const shot = "hints" in one && missed(err) ? await takeMarks().catch(() => null) : null;
+            return answer({
+              failed: { at: i, cmd: one.cmd, error },
+              ...(shot ? { marks: shot } : {}),
+            });
           }
         }
         return answer({});
@@ -1726,10 +1750,16 @@ async function serve(
         res.statusCode = err instanceof PaymentGate ? (err.reason === "asked" ? 202 : 403) : 500;
         const detail = err instanceof Error ? err.message : String(err);
         const error = detail.split("\n")[0];
+        // A target the page lacks as named: the picture of what it has, numbered to act on.
+        const shot =
+          "hints" in parsed && parsed.hints && missed(err)
+            ? await run({ cmd: "marks" }).catch(() => null)
+            : null;
         const body = JSON.stringify({
           error,
           url: shortUrl(page.url()),
           ...(err instanceof PaymentGate ? { gate: err.gate, reason: err.reason } : {}),
+          ...(shot ? { marks: shot, hint: 'act on a mark: "hints":{"mark":n}' } : {}),
         });
         counted(parsed, t, error ?? "", body.length, detail);
         res.end(body);

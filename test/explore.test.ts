@@ -476,6 +476,53 @@ describe("explore mode", () => {
     expect(bad.body.error).toMatch(/batch\[1\]: close cannot be batched/);
   }, 60_000);
 
+  it("marks: numbers the controls in view, acts on one by its hints, and redraws when stale", async () => {
+    const rows = `data:text/html,${encodeURIComponent(
+      `<div>Row A <button onclick="document.title='a'">Save</button></div><div>Row B <button onclick="document.title='b'"><span>Save</span></button></div><div onclick="document.title='card'" style="cursor:pointer">Open card</div><button style="display:none">Hidden</button>`,
+    )}`;
+    await send({ cmd: "open", url: rows });
+    const taken = (await send({ cmd: "marks" })).body as {
+      file: string;
+      marks: Array<{ n: number; role: string | null; name: string | null }>;
+    };
+    expect(statSync(taken.file).size).toBeGreaterThan(0);
+    // Top to bottom; the span inside a button is the button's press; a hidden control has no mark.
+    expect(taken.marks.map((m) => [m.role, m.name])).toEqual([
+      ["button", "Save"],
+      ["button", "Save"],
+      [null, null],
+    ]);
+    // The boxes are gone once the picture is taken.
+    const html = (await send({ cmd: "eval", js: "document.body.innerHTML" })).body;
+    expect(JSON.stringify(html)).not.toMatch(/-layer/);
+
+    const second = taken.marks[1] as { n: number };
+    await send({ cmd: "click", hints: { mark: second.n } });
+    expect((await send({ cmd: "eval", js: "document.title" })).body.result).toBe("b");
+    const card = taken.marks[2] as { n: number };
+    await send({ cmd: "click", hints: { mark: card.n } });
+    expect((await send({ cmd: "eval", js: "document.title" })).body.result).toBe("card");
+    const { actions } = (await send({ cmd: "journal", last: 2 })).body as {
+      actions: Array<{ kind: string; target: Record<string, unknown> }>;
+    };
+    // Replayable: the control's own hints and its place among their matches, never a point.
+    expect(actions[0]?.target).toMatchObject({ role: "button", name: "Save", nth: 1 });
+    expect(actions[1]?.target).toMatchObject({ tag: "div", text: "Open card" });
+    for (const a of actions) expect(a.target).not.toHaveProperty("mark");
+
+    // A new page: the old marks are stale, and the answer is a fresh picture.
+    await send({ cmd: "open", url: rows });
+    const stale = await send({ cmd: "click", hints: { mark: second.n } });
+    expect(stale.status).toBe(500);
+    expect(stale.body.error).toMatch(/stale/);
+    expect((stale.body.marks as { marks: unknown[] }).marks).toHaveLength(3);
+    // A name the page lacks: the miss answers with the picture too.
+    const miss = await send({ cmd: "click", hints: { role: "button", name: "Nowhere" } });
+    expect(miss.status).toBe(500);
+    expect(miss.body.hint).toMatch(/mark/);
+    expect((miss.body.marks as { marks: unknown[] }).marks).toHaveLength(3);
+  }, 60_000);
+
   it("reads a list as rows with the driver's code and journals the op a walk replays", async () => {
     const list = `data:text/html,${encodeURIComponent(
       "<ul><li><b>Acme</b> <a href='https://acme.test/'>site</a></li><li><b>Globex</b></li></ul>",
