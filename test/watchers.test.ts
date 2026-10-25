@@ -75,7 +75,7 @@ function fakeTab(titles: { now: string; url: string }) {
   return page;
 }
 
-function harness(o: { shared?: boolean; busy?: { left: number } } = {}) {
+function harness(o: { shared?: boolean; busy?: { left: number }; slow?: Promise<void> } = {}) {
   const titles = { now: "Feed | LinkedIn", url: "https://www.linkedin.com/my-items/saved-posts/" };
   const tabs: ReturnType<typeof fakeTab>[] = [];
   const released: string[] = [];
@@ -84,6 +84,7 @@ function harness(o: { shared?: boolean; busy?: { left: number } } = {}) {
       throw new Error("no runs here");
     },
     tab: async (site: string): Promise<HeldTab> => {
+      await o.slow;
       if (o.busy && o.busy.left-- > 0)
         throw new ProfileBusy("linkedin@wren", 4242, "explore:9195", "/profiles/linkedin@wren");
       const page = fakeTab(titles);
@@ -231,6 +232,37 @@ describe("Watchers", () => {
     await h.tick(10 * 60_000);
     expect(w.states()).toEqual([]);
     expect(h.tabs[1]?.gone).toBe(true);
+    await w.stop();
+  });
+
+  it("opens one tab when two leases meet while the tab opens", async () => {
+    vi.useFakeTimers();
+    let go = () => {};
+    const h = harness({ slow: new Promise<void>((r) => (go = r)) });
+    const w = h.make();
+    w.start();
+    const both = Promise.all([w.lease(lease()), w.lease(lease())]);
+    go();
+    await both;
+    expect(h.tabs).toHaveLength(1);
+    await w.stop();
+    expect(h.released).toHaveLength(1);
+  });
+
+  it("releases a tab that opens after its watch ended, so the browser can idle out", async () => {
+    vi.useFakeTimers();
+    let go = () => {};
+    const h = harness({ slow: new Promise<void>((r) => (go = r)) });
+    const w = h.make();
+    w.start();
+    const leased = w.lease(lease());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await w.unwatch("linkedin@wren")).toBe(true);
+    go();
+    await leased;
+    expect(h.tabs).toHaveLength(1);
+    expect(h.tabs[0]?.gone).toBe(true);
+    expect(h.released).toEqual(["linkedin@wren"]);
     await w.stop();
   });
 

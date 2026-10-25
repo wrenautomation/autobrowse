@@ -96,6 +96,8 @@ export interface WatchersDeps {
 interface Live {
   lease: WatchLease;
   held: HeldTab | null;
+  /** The open in flight: a lease and the sweep that meet share it, so one tab (one pin) opens. */
+  opening: Promise<void> | null;
   state: WatchState;
   timer: ReturnType<typeof setInterval> | null;
   openedAt: number;
@@ -200,6 +202,7 @@ export class Watchers {
     const l: Live = {
       lease,
       held: null,
+      opening: null,
       timer: null,
       openedAt: 0,
       retryAt: 0,
@@ -240,11 +243,20 @@ export class Watchers {
     }
   }
 
-  private async open(l: Live): Promise<void> {
+  private open(l: Live): Promise<void> {
+    l.opening ??= this.opened(l).finally(() => {
+      l.opening = null;
+    });
+    return l.opening;
+  }
+
+  private async opened(l: Live): Promise<void> {
     const spec = this.specs[l.lease.site];
     if (!spec || !this.d.runner.tab) return;
     try {
       const held = await this.d.runner.tab(watchId(l.lease));
+      // Unwatched or lapsed while the tab opened: let it go, or its pin keeps the browser open.
+      if (this.live.get(l.state.id) !== l) return void (await held.release());
       l.held = held;
       const page = held.page;
       if (!held.shared)
