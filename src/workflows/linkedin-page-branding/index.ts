@@ -1,6 +1,6 @@
 /**
  * Set a LinkedIn company Page's name, logo, banner and website from its admin editor.
- * Hand-written from the 2026-10-05 explore run on Wren's Page, branches mapped
+ * Hand-written from the 2026-10-05 explore run on a company Page, branches mapped
  * from its aria tree the same day. What the editor does:
  * - A logo and a banner saved together keep only the banner: each change gets
  *   its own flow run and its own Save, and is memoized once it reads back.
@@ -18,8 +18,7 @@
  * - The name sits on the info tab; only it changes, the public URL field is never touched.
  *   A name LinkedIn refuses shows an inline error under the field: its words go to a person.
  * - Only a super admin opens the editor: a Content admin is sent to the dashboard (2026-10-07).
- * Runs in the profile where William's LinkedIn signs in (Google): a Page admin.
- * Wren's own account can't be one until LinkedIn verifies it (government ID, William's step).
+ * Runs in the profile where a Page admin's LinkedIn signs in.
  */
 
 import { createHash } from "node:crypto";
@@ -41,11 +40,11 @@ import { type ImageRule, imageProblem } from "../image.js";
 
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
-  companyId: z.string().regex(/^\d+$/).default("143656154").describe("The Page's numeric id"),
-  logoFile: z.string().min(1).optional().describe("Logo, square"), // e.g. "/Users/williamjin/Documents/wren_automation/autobrowse/assets/brand/wren-pfp-lavender-on-white.png"
-  bannerFile: z.string().min(1).optional().describe("Banner, 1584x396"), // e.g. "/Users/williamjin/Documents/wren_automation/autobrowse/assets/brand/wren-banner-linkedin-lavender-on-white.png"
-  website: z.string().url().optional().describe("Website URL"), // e.g. "https://wrenautomation.com"
-  name: z.string().trim().min(1).max(100).optional().describe("Page name"), // e.g. "Wren"
+  companyId: z.string().regex(/^\d+$/).describe("The Page's numeric id"), // e.g. "1234567"
+  logoFile: z.string().min(1).optional().describe("Logo, square"), // e.g. "assets/logo.png"
+  bannerFile: z.string().min(1).optional().describe("Banner, 1584x396"), // e.g. "assets/banner.png"
+  website: z.string().url().optional().describe("Website URL"), // e.g. "https://example.com"
+  name: z.string().trim().min(1).max(100).optional().describe("Page name"), // e.g. "Example Co"
 });
 export type Plan = z.infer<typeof planSchema>;
 
@@ -378,7 +377,7 @@ async function setName(fp: FlowPage, id: string, name: string, before: EditorSta
 const brandPageFlow = defineFlow<BrandPageInput, BrandPageOutput>({
   site: "linkedin",
   name: "brand-page",
-  // William's account signs in by Google: its session lives in that profile.
+  // The Page admin signs in there: its session lives in that profile.
   profile: "provider",
   async run(fp, { companyId: id, change }) {
     await openEditor(fp, id, "info");

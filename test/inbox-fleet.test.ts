@@ -158,6 +158,7 @@ const plan = {
     { name: GOOGLE, mailboxes: "google_workspace" as const },
   ],
   sender: "Will Jin",
+  site: "https://example.com",
 };
 const parse = (over: Record<string, unknown> = {}) =>
   inboxFleetWorkflow.plan.parse({ ...plan, ...over });

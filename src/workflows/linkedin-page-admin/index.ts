@@ -1,18 +1,18 @@
 /**
  * Make a member an admin of a LinkedIn company Page, from its Manage admins
- * screen. Hand-written from read-only runs on Wren's Page (2026-10-07,
+ * screen. Hand-written from read-only runs on a company Page (2026-10-07,
  * aria trees and the typeahead's own calls). What the screen does:
  * - `/company/<id>/admin/settings/manage-admins/` lists admins in a table:
  *   one row per admin, a link to `/in/<vanity>/`, the role as text.
  * - "Add admin" opens "Add page admin": a member search (combobox), roles as
  *   radios (Super admin, Content admin, Analyst), Save. The radios and Save
  *   stay disabled until a member is picked.
- * - Results are name + degree + headline only: many "Will Jin"s, no link.
+ * - Results are name + degree + headline only: many people share a name, no link.
  *   The typeahead's graphql answer (`voyagerSearchDashReusableTypeahead`)
  *   lists the same people in the same order with each one's profile URN, so
  *   the option is picked by URN, never by name.
  * - Members need not be 1st-degree connections (LinkedIn's banner, 2026-10).
- * Runs in the profile where William's LinkedIn signs in (Google): the Page's
+ * Runs in the profile where a Page admin's LinkedIn signs in: the Page's
  * super admin. dryRun goes as far as picking the member and the role, then
  * dismisses the dialog: nothing saved.
  */
@@ -40,24 +40,21 @@ export type Role = keyof typeof ROLES;
 
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
-  companyId: z.string().regex(/^\d+$/).default("143656154").describe("The Page's numeric id"),
+  companyId: z.string().regex(/^\d+$/).describe("The Page's numeric id"), // e.g. "1234567"
   vanity: z
     .string()
     .regex(/^[A-Za-z0-9_%-]{2,100}$/)
-    .default("will-jin-15b0b1434")
-    .describe("The member's handle (after /in/): linkedin@wren"),
+    .describe("The member's handle (after /in/)"), // e.g. "sam-lee-1a2b3c"
   memberId: z
     .string()
     .regex(/^ACoAA[A-Za-z0-9_-]+$/)
-    .default("ACoAAG2mApcBGns9ElJU3jCZg1KjAzEhkDRamiA")
     .describe(
       "The member's profile id (urn:li:fsd_profile:<id>): what the search result is matched by",
     ),
   query: z
     .string()
     .min(2)
-    .default("Will Jin Founder, Wren")
-    .describe("What to type in the member search: name plus headline words narrows it"),
+    .describe("What to type in the member search: name plus headline words narrows it"), // e.g. "Sam Lee Founder, Example"
   role: z.enum(["content", "super", "analyst"]).default("content"),
 });
 export type Plan = z.infer<typeof planSchema>;
@@ -117,7 +114,7 @@ const SEARCH: Hints = { css: `${DIALOG} [role=combobox]` };
 const TYPEAHEAD = /voyagerSearchDashReusableTypeahead/;
 const SAVE: Hints = { role: "button", name: "/^save$/i" };
 /**
- * LinkedIn's refusal inside the dialog. Seen 2026-10-07 adding linkedin@wren (3rd+, out of network):
+ * LinkedIn's refusal inside the dialog. Seen 2026-10-07 adding a 3rd+ member (out of network):
  * "This member could not be added as a page admin. Ask the member to verify their account if they
  * have not already, and then try again." The member's ID verification is a person's step.
  */
@@ -288,7 +285,7 @@ async function addAdmin(fp: FlowPage, id: string, add: NonNullable<PageAdminInpu
 export const pageAdminFlow = defineFlow<PageAdminInput, PageAdminOutput>({
   site: "linkedin",
   name: "page-admin",
-  // William's account signs in by Google: its session lives in that profile.
+  // The Page admin signs in there: its session lives in that profile.
   profile: "provider",
   async run(fp, { companyId: id, add }) {
     const admins = await openManage(fp, id);

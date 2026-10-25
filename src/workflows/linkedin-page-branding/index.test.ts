@@ -33,14 +33,15 @@ const banner = file("banner.png", png(1584, 396));
 
 const plan = (dryRun: boolean, extra: Record<string, string> = {}) =>
   planSchema.parse({
+    companyId: "1234567",
     dryRun,
     logoFile: logo,
     bannerFile: banner,
-    website: "https://wrenautomation.com",
+    website: "https://example.com",
     ...extra,
   });
 
-const live: EditorState = { logo: "L1", banner: "B1", website: "", name: "Wren Automation" };
+const live: EditorState = { logo: "L1", banner: "B1", website: "", name: "Example Co" };
 
 /** A browser whose Page shows `state`; `failOn` throws when that item is set. */
 const deps = (runs: BrandPageInput[], state = live, failOn?: string) => ({
@@ -83,12 +84,12 @@ describe("linkedin-page-branding", () => {
 
   it("leaves out a website that is already live, and asks nothing when that is all", async () => {
     const runs: BrandPageInput[] = [];
-    const state = { ...live, website: "https://www.wrenautomation.com/" };
+    const state = { ...live, website: "https://www.example.com/" };
     const out = await runFlow(
       memoryEffects().fx,
       workflow,
       deps(runs, state),
-      planSchema.parse({ dryRun: false, website: "https://wrenautomation.com" }),
+      planSchema.parse({ companyId: "1234567", dryRun: false, website: "https://example.com" }),
     );
     expect(out.status).toBe("done");
     expect(out.results.brand?.detail).toBe("already set");
@@ -98,17 +99,17 @@ describe("linkedin-page-branding", () => {
   it("renames the Page alone, behind the send gate, and skips a name already live", async () => {
     const runs: BrandPageInput[] = [];
     const { fx } = memoryEffects();
-    const rename = planSchema.parse({ dryRun: false, name: "Wren" });
+    const rename = planSchema.parse({ companyId: "1234567", dryRun: false, name: "Example" });
     const out = await runFlow(fx, workflow, deps(runs), rename, (gate) => {
-      expect(gate.prompt).toBe('Set LinkedIn Page 143656154: name "Wren"?');
+      expect(gate.prompt).toBe('Set LinkedIn Page 1234567: name "Example"?');
       return yes();
     });
     expect(out.status).toBe("done");
-    expect(runs.map((r) => r.change)).toEqual([null, { item: "name", name: "Wren" }]);
-    expect(out.results.check?.detail).toContain('name "Wren Automation"');
+    expect(runs.map((r) => r.change)).toEqual([null, { item: "name", name: "Example" }]);
+    expect(out.results.check?.detail).toContain('name "Example Co"');
 
     const again: BrandPageInput[] = [];
-    const named = { ...live, name: "Wren" };
+    const named = { ...live, name: "Example" };
     const same = await runFlow(memoryEffects().fx, workflow, deps(again, named), rename);
     expect(same.results.brand?.detail).toBe("already set");
     expect(items(again)).toEqual(["read"]);
@@ -143,7 +144,7 @@ describe("linkedin-page-branding", () => {
       memoryEffects().fx,
       workflow,
       deps(runs),
-      planSchema.parse({ dryRun: false }),
+      planSchema.parse({ companyId: "1234567", dryRun: false }),
     );
     expect(out.status).toBe("done");
     expect(items(runs)).toEqual(["read"]);
@@ -177,7 +178,7 @@ describe("image checks", () => {
   });
 
   it("treats URLs that differ only in scheme, www, case or a slash as the same", () => {
-    expect(sameUrl("https://wrenautomation.com", "http://WWW.wrenautomation.com/")).toBe(true);
-    expect(sameUrl("https://wrenautomation.com", "https://wren.com")).toBe(false);
+    expect(sameUrl("https://example.com", "http://WWW.example.com/")).toBe(true);
+    expect(sameUrl("https://example.com", "https://other.com")).toBe(false);
   });
 });

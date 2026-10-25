@@ -18,7 +18,7 @@ import {
 
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
-  profilePhotoFile: z.string().min(1).describe("Change photo"), // e.g. "/Users/williamjin/Documents/wren_automation/autobrowse/assets/brand/wren-pfp.png"
+  profilePhotoFile: z.string().min(1).describe("Change photo"), // e.g. "assets/me.png"
 });
 export type Plan = z.infer<typeof planSchema>;
 

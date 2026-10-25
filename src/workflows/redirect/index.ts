@@ -9,13 +9,12 @@ import { defineWorkflow, done, type StepCtx, type StepDef } from "../../engine/w
 import type { DomainDeps } from "../domain/deps.js";
 import { planSchema as domainPlan } from "../domain/plan.js";
 
-export const MAIN_SITE = "https://wrenautomation.com";
 /** RFC 5737 TEST-NET: never routed, so only Cloudflare's proxy ever answers for it. */
 export const PLACEHOLDER_IP = "192.0.2.1";
 
 /** The fields the redirect steps read; `sender-domain` adds them to the domain plan. */
 export const redirectFields = {
-  redirectTo: z.string().url().default(MAIN_SITE).describe("Where every URL on the domain 301s to"),
+  redirectTo: z.string().url().describe("Where every URL on the domain 301s to"), // e.g. "https://example.com"
 };
 
 export const redirectPlanSchema = z.object({

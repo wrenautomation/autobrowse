@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { runFlow } from "../src/engine/run.js";
 import { domainWorkflow } from "../src/workflows/domain/index.js";
-import { MAIN_SITE, PLACEHOLDER_IP, redirectWorkflow } from "../src/workflows/redirect/index.js";
+import { PLACEHOLDER_IP, redirectWorkflow } from "../src/workflows/redirect/index.js";
+
+const MAIN_SITE = "https://example.com";
+
 import { senderDomainWorkflow } from "../src/workflows/sender-domain/index.js";
 import { fakeCloudflare, fakeDeps, fakeEffects, scriptedAnswers } from "./fakes.js";
 
@@ -10,7 +13,7 @@ const redirect = (cf: ReturnType<typeof fakeCloudflare>, over: Record<string, un
     fakeEffects().fx,
     redirectWorkflow,
     { cloudflare: cf },
-    redirectWorkflow.plan.parse({ domain: "wren-old.test", ...over }),
+    redirectWorkflow.plan.parse({ domain: "wren-old.test", redirectTo: MAIN_SITE, ...over }),
     scriptedAnswers({}).answer,
   );
 
@@ -66,6 +69,7 @@ describe("sender-domain workflow", () => {
     const deps = fakeDeps({ cloudflare: fakeCloudflare({ registered: true, zone: "z1" }) });
     const plan = senderDomainWorkflow.plan.parse({
       domain: "wren-new.test",
+      redirectTo: MAIN_SITE,
       inboxes: [{ local: "will", givenName: "William", familyName: "Jin" }],
     });
     const out = await runFlow(

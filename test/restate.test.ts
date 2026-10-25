@@ -91,6 +91,13 @@ async function until<T>(fn: () => Promise<T>, ok: (v: T) => boolean, ms = 30_000
   }
 }
 
+/** The run object posts its notice after it writes status: wait for the notice, never assume it. */
+const notified = (h: { subjects: () => string[] }, subject: string) =>
+  until(
+    async () => h.subjects(),
+    (all) => all.includes(subject),
+  );
+
 const inbox = [{ local: "will", givenName: "W", familyName: "J" }];
 
 describe("domain run object", () => {
@@ -104,7 +111,7 @@ describe("domain run object", () => {
     expect(waiting.gate).toMatchObject({ name: "purchase", step: "buy" });
     expect(waiting.outcome).toMatchObject({ status: "waiting" });
     expect(waiting.outcome?.results.check?.status).toBe("done");
-    expect(host.subjects()).toContain("fresh.test: approve purchase?");
+    await notified(host, "fresh.test: approve purchase?");
     await expect(object(domain).run(null)).rejects.toThrow(/waiting at a gate/);
 
     await expect(object(domain).approve({ name: "human" })).rejects.toThrow(
@@ -118,7 +125,7 @@ describe("domain run object", () => {
     expect(finished.gate).toBeNull();
     expect(finished.outcome?.results.buy?.detail).toBe("bought for $10.44");
     expect(finished.outcome?.results.loops?.status).toBe("done");
-    expect(host.subjects()).toContain("fresh.test: done");
+    await notified(host, "fresh.test: done");
     expect(deps.calls).toContain("buy fresh.test");
     const rows = await until(
       () => registry().list(),
@@ -237,7 +244,7 @@ describe("Compiled object", () => {
       (s) => s.outcome?.status === "done",
     );
     expect(finished).toMatchObject({ workflow: "example-title", key: "k1" });
-    expect(host.subjects()).toContain("k1: done");
+    await notified(host, "k1: done");
     const rows = await until(
       () => registry().list(),
       (r) => r.some((x) => x.workflow === "example-title" && x.key === "k1"),
@@ -287,7 +294,7 @@ describe("Compiled object", () => {
       (s) => s.outcome?.status === "failed",
     );
     expect(failed.outcome?.results).toEqual({});
-    expect(host.subjects()).toContain("k2: failed");
+    await notified(host, "k2: failed");
     await compiled("example-title", "k2").reset();
     await expect(compiled("example-title", "k2").run({ dryRun: false })).rejects.toThrow(
       /no compiled workflow/,
@@ -321,7 +328,7 @@ describe("two owners on one Restate", () => {
     expect(done.outcome?.results.loops?.status).toBe("skipped");
     expect(acmeDeps.calls).toContain(`buy ${domain}`);
     expect(deps.calls).not.toContain(`buy ${domain}`);
-    expect(acmeHost.subjects()).toContain(`${domain}: done`);
+    await notified(acmeHost, `${domain}: done`);
     expect(host.subjects().some((s) => s.startsWith(domain))).toBe(false);
     const rows = await until(
       () => acmeRegistry().list({}),

@@ -9,11 +9,11 @@ const deps = () => ({
 
 describe("instagram-change-email", () => {
   it("parses the recorded example", () => {
-    expect(planSchema.parse({ newEmail: "william@wrenautomation.com" }).dryRun).toBe(false);
+    expect(planSchema.parse({ newEmail: "me@example.com", account: "example" }).dryRun).toBe(false);
   });
 
   it("dry run plans and stops before anything irreversible", async () => {
-    const plan = planSchema.parse({ dryRun: true, newEmail: "william@wrenautomation.com" });
+    const plan = planSchema.parse({ dryRun: true, newEmail: "me@example.com", account: "example" });
     const out = await runFlow(memoryEffects().fx, workflow, deps(), plan);
     expect(out.status).toBe("planned");
     expect(out.results["add-and-verify-email"]?.status).toBe("planned");

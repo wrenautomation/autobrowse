@@ -16,6 +16,18 @@ const dir = mkdtempSync(join(tmpdir(), "li-basics-"));
 const photo = join(dir, "me.png");
 writeFileSync(photo, png(660, 660));
 
+const base = {
+  account: "linkedin",
+  firstName: "Sam",
+  lastName: "Lee",
+  headline: "Founder, Example Co",
+  city: "Toronto",
+  industry: "Business Consulting and Services",
+  about: "I run Example Co.",
+  websites: [{ url: "https://example.com", type: "Company" as const }],
+  position: { title: "Founder", company: "Example Co", since: 2026 },
+};
+
 const read: Profile = {
   firstName: "Test",
   lastName: "Person",
@@ -23,7 +35,7 @@ const read: Profile = {
   city: "Toronto, Ontario, Canada",
   about: "",
   websites: [],
-  positions: ["Founder Wren Automation Oct 2026 - Present · 1 mo"],
+  positions: ["Founder Example Co Oct 2026 - Present · 1 mo"],
 };
 
 type Call = { site: string; input: BasicsInput | { file: string | null } };
@@ -40,24 +52,24 @@ const yes = () => ({ approved: true, note: null, at: new Date().toISOString() })
 const parts = (calls: Call[]) => calls.map((c) => ("part" in c.input ? c.input.part : "photo"));
 
 describe("linkedin-profile-basics", () => {
-  it("dry run reads linkedin@wren and changes nothing", async () => {
+  it("dry run reads the account and changes nothing", async () => {
     const calls: Call[] = [];
-    const plan = planSchema.parse({ dryRun: true, photoFile: photo });
+    const plan = planSchema.parse({ ...base, dryRun: true, photoFile: photo });
     const out = await runFlow(memoryEffects().fx, workflow, deps(calls), plan);
     expect(out.status).toBe("planned");
-    expect(calls).toEqual([{ site: "linkedin@wren", input: { part: "read" } }]);
+    expect(calls).toEqual([{ site: "linkedin", input: { part: "read" } }]);
   });
 
   it("gates each part, sets them in order, and a rerun skips them", async () => {
     const calls: Call[] = [];
     const { fx } = memoryEffects();
-    const plan = planSchema.parse({ photoFile: photo });
+    const plan = planSchema.parse({ ...base, photoFile: photo });
     expect((await runFlow(fx, workflow, deps(calls), plan)).status).toBe("waiting");
     const out = await runFlow(fx, workflow, deps(calls), plan, yes);
     expect(out.status).toBe("done");
     expect(parts(calls)).toEqual(["read", "intro", "about", "websites", "photo"]);
-    expect(calls.every((c) => c.site === "linkedin@wren")).toBe(true);
-    expect(calls[1]?.input).toMatchObject({ firstName: "Will", lastName: "Jin" });
+    expect(calls.every((c) => c.site === "linkedin")).toBe(true);
+    expect(calls[1]?.input).toMatchObject({ firstName: "Sam", lastName: "Lee" });
     expect(Object.keys(out.memo).sort()).toEqual(["about", "intro", "photo", "websites"]);
 
     // A new run with the same values: every part skips on the memo.
@@ -69,7 +81,7 @@ describe("linkedin-profile-basics", () => {
 
   it("stops before any edit when the position is missing", async () => {
     const calls: Call[] = [];
-    const plan = planSchema.parse({ photoFile: photo });
+    const plan = planSchema.parse({ ...base, photoFile: photo });
     const out = await runFlow(
       memoryEffects().fx,
       workflow,
@@ -83,6 +95,6 @@ describe("linkedin-profile-basics", () => {
   });
 
   it("matches a website however LinkedIn echoes it", () => {
-    expect(bareUrl("https://www.Wrenautomation.com/")).toBe(bareUrl("wrenautomation.com"));
+    expect(bareUrl("https://www.Example.com/")).toBe(bareUrl("example.com"));
   });
 });

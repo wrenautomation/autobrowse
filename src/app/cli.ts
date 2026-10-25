@@ -17,7 +17,6 @@ import { ownerKeys } from "../owner.js";
 import { accent, bad, bold, columns, dim, good, warn } from "../style.js";
 import { DEFAULT_TLDS, domainIdeas } from "../workflows/domain/ideas.js";
 import { type PlanInput, parseInboxSpec } from "../workflows/domain/index.js";
-import { MAIN_SITE } from "../workflows/redirect/index.js";
 import { localBackend, proofsOf, spentKeysFor, workflowsOf } from "./backend.js";
 import { registerAccessCommands } from "./cli-access.js";
 import { registerAccountsCommands } from "./cli-accounts.js";
@@ -378,8 +377,8 @@ program
   .option("--photo-url <url>", "each inbox's profile picture (a GIF stays animated)")
   .option("--no-handoff", "do not touch wren's roster or loops")
   .option(
-    "--redirect [url]",
-    "then 301 the domain's site to the main one (runs sender-domain = domain + redirect)",
+    "--redirect <url>",
+    "then 301 the domain's site to this URL (runs sender-domain = domain + redirect)",
   )
   .option("--dry-run", "plan only; stop before the first irreversible step")
   .action(
@@ -387,7 +386,7 @@ program
       domain: string,
       o: {
         inbox: string[];
-        redirect?: string | true;
+        redirect?: string;
         niches: string;
         signatureFile?: string;
         buy: boolean;
@@ -411,7 +410,7 @@ program
         dryRun: o.dryRun ?? false,
       };
       const flow = o.redirect ? "sender-domain" : "domain";
-      const redirect = typeof o.redirect === "string" ? { redirectTo: o.redirect } : {};
+      const redirect = o.redirect ? { redirectTo: o.redirect } : {};
       await patient(api.run(flow, domain).run({ ...plan, ...redirect }));
       console.log(`started ${flow}/${domain}; watch: autobrowse status ${flow} ${domain}`);
     },
@@ -420,7 +419,7 @@ program
 program
   .command("redirect <domain>")
   .description("301 every URL on a domain (already on Cloudflare) to the main site")
-  .option("--to <url>", "where it lands", MAIN_SITE)
+  .requiredOption("--to <url>", "where it lands")
   .action(async (domain: string, o: { to: string }) => {
     await patient(api.run("redirect", domain).run({ domain, redirectTo: o.to }));
     console.log(`started redirect/${domain}; watch: autobrowse status redirect ${domain}`);

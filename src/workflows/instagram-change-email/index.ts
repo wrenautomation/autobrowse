@@ -19,7 +19,9 @@ import {
 
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
-  newEmail: z.string().min(1).describe("Enter email"), // e.g. "william@wrenautomation.com"
+  newEmail: z.string().min(1).describe("Enter email"), // e.g. "me@example.com"
+  /** The Accounts Center lists each account as "<handle> Instagram": the one that gets the email. */
+  account: z.string().min(1).describe("The Instagram handle"), // e.g. "example"
 });
 export type Plan = z.infer<typeof planSchema>;
 
@@ -76,7 +78,7 @@ const openContactInfoFlow = defineFlow<OpenContactInfoInput, void>({
     await fp.act(
       { kind: "click" },
       { role: "button", name: "/^Contact info/" },
-      { goal: "click Contact info jinwilliam.jin+wren@gmail.com" },
+      { goal: "click Contact info" },
     ); // page.getByRole("button", { name: /^Contact info/ })
   },
 });
@@ -123,6 +125,7 @@ const startAddEmail: Step<"start-add-email"> = {
 
 export interface AddAndVerifyEmailInput {
   newEmail: string;
+  account: string;
   code: string;
 }
 
@@ -150,9 +153,9 @@ const addAndVerifyEmailFlow = defineFlow<AddAndVerifyEmailInput, void>({
     ); // page.getByRole("textbox", { name: "Enter email", exact: true })
     await fp.act(
       { kind: "click" },
-      { role: "checkbox", name: "wrenautomation Instagram" },
-      { goal: "click wrenautomation Instagram" },
-    ); // page.getByRole("checkbox", { name: "wrenautomation Instagram", exact: true })
+      { role: "checkbox", name: `${input.account} Instagram` },
+      { goal: `click ${input.account} Instagram` },
+    );
     await fp.act({ kind: "click" }, { role: "button", name: "Next" }, { goal: "click Next" }); // page.getByRole("button", { name: "Next", exact: true })
     await fp.act(
       { kind: "fill", value: input.code },
@@ -180,7 +183,11 @@ const addAndVerifyEmail: Step<"add-and-verify-email"> = {
     // Outside fx.run on purpose: the journal must never hold it.
     const code = await deps.secrets.get("code");
     await fx.run("browser add-and-verify-email", () =>
-      deps.browser.run(addAndVerifyEmailFlow, { newEmail: plan.newEmail, code }),
+      deps.browser.run(addAndVerifyEmailFlow, {
+        newEmail: plan.newEmail,
+        account: plan.account,
+        code,
+      }),
     );
     // TODO proof: GET https://accountscenter.instagram.com/youraccount/contact_points/ shows the new email listed as verified/confirmed on the account.
     return done(

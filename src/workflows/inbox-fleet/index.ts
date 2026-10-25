@@ -14,7 +14,6 @@ import type { InboxInsidersClient } from "../../clients/inbox-insiders.js";
 import type { InstantlyClient } from "../../clients/instantly.js";
 import { defineWorkflow } from "../../engine/workflow.js";
 import { DOMAIN } from "../domain/plan.js";
-import { MAIN_SITE } from "../redirect/index.js";
 import * as s from "./steps.js";
 
 export const planSchema = z.object({
@@ -32,11 +31,7 @@ export const planSchema = z.object({
     .string()
     .regex(/^\S+(\s+\S+)+$/, "first and last name")
     .describe("The name on every mailbox, first and last"),
-  site: z
-    .string()
-    .url()
-    .default(MAIN_SITE)
-    .describe("What each domain's web address shows (masked)"),
+  site: z.string().url().describe("What each domain's web address shows (masked)"), // e.g. "https://example.com"
   brand: z.string().optional().describe("Brand name Inbox Insiders writes into the mailboxes"),
   dryRun: z.boolean().default(false),
 });

@@ -5,8 +5,7 @@ import { planSchema, type UploadProfilePhotoInput, workflow } from "./index.js";
 const plan = (dryRun: boolean) =>
   planSchema.parse({
     dryRun,
-    profilePhotoFile:
-      "/Users/williamjin/Documents/wren_automation/autobrowse/assets/brand/wren-pfp.png",
+    profilePhotoFile: "/tmp/me.png",
   });
 
 const deps = (runs: UploadProfilePhotoInput[]) => ({
@@ -34,7 +33,7 @@ describe("instagram-profile-basics", () => {
     expect(runs.map((r) => r.submit)).toEqual([false]);
     const uploaded = await runFlow(fx, workflow, deps(runs), plan(false), (gate) => {
       expect(gate.name).toBe("send");
-      expect(gate.prompt).toContain("wren-pfp.png");
+      expect(gate.prompt).toContain("me.png");
       return { approved: true, note: null, at: new Date().toISOString() };
     });
     expect(uploaded.status).toBe("done");

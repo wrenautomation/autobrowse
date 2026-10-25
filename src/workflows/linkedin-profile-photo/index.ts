@@ -1,6 +1,5 @@
 /**
- * Set William's personal LinkedIn profile photo. Only when he asks: it is his
- * account. Mapped read-only from his profile 2026-10-05 (the new UI, classes
+ * Set a member's LinkedIn profile photo. Mapped read-only 2026-10-05 (the new UI, classes
  * obfuscated, so roles and names only):
  * - /in/me/ shows a link "Profile photo"; it opens dialog "Profile photo" with
  *   "Edit", "Update", "Frames", "Delete". A profile with no photo may open the
@@ -9,7 +8,7 @@
  * - The file lands in "Edit image" (crop, filter, adjust); "Save changes" saves it.
  * - Anything after that asking to share the update is declined; its post button is never clicked.
  * - The photo reads back by URL: a new upload gets a new asset id.
- * Runs in the profile where his LinkedIn signs in (Google).
+ * Runs in the profile where the member's LinkedIn signs in.
  */
 
 import { createHash } from "node:crypto";
@@ -30,7 +29,7 @@ import { type ImageRule, imageProblem } from "../image.js";
 
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
-  photoFile: z.string().min(1).describe("A square photo of William, 400px or more"), // e.g. "/Users/williamjin/Documents/wren_automation/autobrowse/assets/people/william-headshot-square.png"
+  photoFile: z.string().min(1).describe("A square photo, 400px or more"), // e.g. "assets/me.png"
 });
 export type Plan = z.infer<typeof planSchema>;
 
@@ -109,7 +108,7 @@ async function openProfile(fp: FlowPage): Promise<void> {
     await fp.open(ME);
   }
   if (!(await fp.has(PHOTO_LINK, 20_000)))
-    fp.human(`no profile photo on ${fp.url()}: not William's profile, or the page changed`);
+    fp.human(`no profile photo on ${fp.url()}: not the member's own profile, or the page changed`);
 }
 
 /** The top card's photo URL: the profile-displayphoto image inside the photo link. */
@@ -122,11 +121,11 @@ async function readPhoto(fp: FlowPage): Promise<string | null> {
     .catch(() => null);
 }
 
-/** Signs in as the flow's site: `{ ...profilePhotoFlow, site: "linkedin@wren" }` runs it there. */
+/** Signs in as the flow's site: `{ ...profilePhotoFlow, site: "linkedin@work" }` runs it there. */
 export const profilePhotoFlow = defineFlow<ProfilePhotoInput, ProfilePhotoOutput>({
   site: "linkedin",
   name: "profile-photo",
-  // William's account signs in by Google: its session lives in that profile.
+  // The member signs in there: its session lives in that profile.
   profile: "provider",
   async run(fp, { file }) {
     await openProfile(fp);
@@ -184,7 +183,7 @@ const set: Step<"set"> = {
   async run({ fx, deps, plan, memo, gate }) {
     const mark = sha(plan.photoFile);
     if (memo.saved === mark) return skipped("already set");
-    const answer = gate("send", `Set William's LinkedIn profile photo to ${plan.photoFile}?`);
+    const answer = gate("send", `Set the LinkedIn profile photo to ${plan.photoFile}?`);
     if (!answer.approved) return rejected(answer.note ?? "not changed");
     await fx.run("browser set the profile photo", () =>
       deps.browser.run(profilePhotoFlow, { file: plan.photoFile }),
@@ -197,7 +196,7 @@ const set: Step<"set"> = {
 export const workflow = defineWorkflow<Deps, Memo>()({
   name: "linkedin-profile-photo",
   description:
-    "Set William's personal LinkedIn profile photo (only when he asks): file checked, uploaded, saved, read back, any share prompt declined.",
+    "Set a member's LinkedIn profile photo: file checked, uploaded, saved, read back, any share prompt declined.",
   plan: planSchema,
   steps: [check, set],
   emptyMemo: () => ({}),

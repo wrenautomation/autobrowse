@@ -1,7 +1,6 @@
 /**
- * linkedin@wren's profile basics: name, headline, city, About, Wren's websites, photo.
- * The member account William uses as Wren's founder (william@wrenautomation.com), never his
- * personal one. Mapped read-only 2026-10-06 (new UI, classes obfuscated, so roles and labels):
+ * A member's profile basics: name, headline, city, About, websites, photo.
+ * Mapped read-only 2026-10-06 (new UI, classes obfuscated, so roles and labels):
  * - /in/me/ redirects to /in/<vanity>/. Each part is an edit form at a URL under it, opened
  *   as a native <dialog> with "Save" and "Dismiss".
  * - edit/intro/: First name, Last name and Headline have no accessible name; each follows a
@@ -11,7 +10,7 @@
  *   "Website type" select. LinkedIn keeps three.
  * - details/experience/: one link per position, named "<title> <company> <Mon YYYY> - ...".
  * Each part reads its form first and saves only what differs, then reads it back. The
- * position is read, never edited: the form's "Notify network" posts to his network.
+ * position is read, never edited: the form's "Notify network" posts to the network.
  */
 
 import { createHash } from "node:crypto";
@@ -35,38 +34,22 @@ const WEBSITE_TYPES = ["Blog", "Company", "Other", "Personal", "Portfolio", "RSS
 
 export const planSchema = z.object({
   dryRun: z.boolean().default(false),
-  account: z.string().default("linkedin@wren"),
-  // "Will": DMs show the first name.
-  firstName: z.string().min(1).default("Will"),
-  lastName: z.string().min(1).default("Jin"),
-  headline: z
-    .string()
-    .max(220)
-    .default("Founder, Wren Automation | Lead gen and hiring outreach for recruiting firms"),
-  city: z.string().min(1).default("Toronto"),
+  /** The Chrome profile the member account signs in from. */
+  account: z.string().min(1), // e.g. "linkedin"
+  // DMs show the first name.
+  firstName: z.string().min(1), // e.g. "Sam"
+  lastName: z.string().min(1), // e.g. "Lee"
+  headline: z.string().max(220), // e.g. "Founder, Example Co | What the company does"
+  city: z.string().min(1), // e.g. "Toronto"
   // Required by the intro form, never shown on the profile; set only while empty.
-  industry: z.string().min(1).default("Business Consulting and Services"),
-  about: z
-    .string()
-    .max(2600)
-    .default(
-      "I run Wren Automation in Toronto. I build lead gen and hiring outreach systems for recruiting firms and agencies, so their teams book more meetings without adding reps. If you run a recruiting firm, I'd like to hear what slows your team down.",
-    ),
-  // Wren's only, never his personal accounts. The LinkedIn Page shows through the position.
-  websites: z
-    .array(z.object({ url: z.url(), type: z.enum(WEBSITE_TYPES) }))
-    .max(3)
-    .default([
-      { url: "https://wrenautomation.com", type: "Company" },
-      { url: "https://www.youtube.com/channel/UCJvP02ENWoDeOZxec-hoz9Q", type: "Other" },
-      { url: "https://x.com/wren_automation", type: "Other" },
-    ]),
+  industry: z.string().min(1), // e.g. "Business Consulting and Services"
+  about: z.string().max(2600), // e.g. "I run Example Co. ..."
+  // The LinkedIn Page shows through the position.
+  websites: z.array(z.object({ url: z.url(), type: z.enum(WEBSITE_TYPES) })).max(3), // e.g. [{ url: "https://example.com", type: "Company" }]
   /** The position that must show, read only: "<title> <company> ... <year>". */
-  position: z
-    .object({ title: z.string(), company: z.string(), since: z.number().int() })
-    .default({ title: "Founder", company: "Wren Automation", since: 2026 }),
+  position: z.object({ title: z.string(), company: z.string(), since: z.number().int() }), // e.g. { title: "Founder", company: "Example Co", since: 2026 }
   /** Empty = leave the photo. */
-  photoFile: z.string().default("assets/people/william-headshot-square.png"),
+  photoFile: z.string().default(""),
 });
 export type Plan = z.infer<typeof planSchema>;
 
@@ -348,7 +331,7 @@ const check: Step<"check"> = {
     );
     if (!has)
       throw new Error(
-        `no "${p.title} at ${p.company}" since ${p.since} on ${plan.account}: add it by hand (its form notifies his network)`,
+        `no "${p.title} at ${p.company}" since ${p.since} on ${plan.account}: add it by hand (its form notifies the network)`,
       );
     return done(
       `${profile.firstName} ${profile.lastName}, "${profile.headline}", ${profile.city}; ${profile.websites.length} website(s); position shows`,
@@ -403,7 +386,7 @@ const websites = part(
   (p) => `Add ${p.websites.map((w) => w.url).join(", ")} to ${p.account}'s contact info?`,
 );
 
-// The photo flow, signed in as the plan's account in its own profile (not his Google one).
+// The photo flow, signed in as the plan's account in its own profile (not a Google sign-in one).
 const { profile: _google, ...photoFlow } = profilePhotoFlow;
 const photo: Step<"photo"> = {
   name: "photo",
@@ -425,7 +408,7 @@ const photo: Step<"photo"> = {
 export const workflow = defineWorkflow<Deps, Memo>()({
   name: "linkedin-profile-basics",
   description:
-    "Set linkedin@wren's name, headline, city, About, Wren's websites and photo: each form read first, saved only where it differs, read back; the position is checked, never edited.",
+    "Set a member's name, headline, city, About, websites and photo: each form read first, saved only where it differs, read back; the position is checked, never edited.",
   plan: planSchema,
   steps: [check, intro, about, websites, photo],
   emptyMemo: () => ({}),
