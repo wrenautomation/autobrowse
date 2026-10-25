@@ -246,10 +246,17 @@ export const authorsOf = (data: Tweet[]) => [
   ).values(),
 ];
 
-async function feed(fp: FlowPage, url: string, i: Feed) {
+async function feed(
+  fp: FlowPage,
+  url: string,
+  i: Feed,
+  /** After the first posts show: put the page on the rows to read (a tab). */
+  ready?: (fp: FlowPage) => Promise<void>,
+) {
   const state = await landed(fp, url);
   if (state === "missing") return notFound(`nothing at ${url}`);
   if (state === "empty") return { data: [], meta: { result_count: 0 } };
+  await ready?.(fp);
   const noReposts = /retweets/.test(i.exclude ?? "");
   const { rows } = await scrollCollect(fp, {
     read: async () =>
@@ -529,6 +536,38 @@ export const xSearch = defineFlow<SearchInput, unknown>({
   site: "x",
   name: "search",
   run: (fp, i) => feed(fp, searchUrl(i.query), i),
+});
+
+/**
+ * Home opens on the tab used last, often "For you" (strangers X picks). The Following tab is
+ * only the accounts this one follows, newest first: the API's reverse-chronological timeline.
+ */
+const FOLLOWING_TAB = { role: "tab", name: "/^following$/i" };
+
+const selectedTab = (fp: FlowPage): Promise<string> =>
+  fp.page.evaluate(
+    () => document.querySelector('[role=tab][aria-selected="true"]')?.innerText.trim() ?? "",
+  );
+
+async function following(fp: FlowPage): Promise<void> {
+  if (/^following$/i.test(await selectedTab(fp))) return;
+  await fp.act({ kind: "click" }, FOLLOWING_TAB, { goal: "open the Following tab" });
+  for (let n = 0; n < RENDER_MS / SETTLE_MS; n++) {
+    await fp.wait(SETTLE_MS);
+    if (/^following$/i.test(await selectedTab(fp))) {
+      // The For you rows go as the Following rows come in.
+      await fp.wait(2 * SETTLE_MS);
+      return;
+    }
+  }
+  throw new Error(`x/home: the Following tab did not open (${fp.url()})`);
+}
+
+/** The signed-in account's home: posts from the accounts it follows, newest first. */
+export const xHome = defineFlow<Feed, unknown>({
+  site: "x",
+  name: "home",
+  run: (fp, i) => feed(fp, `${WEB}/home`, i, following),
 });
 
 export const xPost = defineFlow<{ id: string }, { data: Tweet } | NotFound>({

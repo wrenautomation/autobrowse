@@ -15,8 +15,10 @@
  * `/api/v1/friendships/<ds_user_id>/following/` call, `{ users: [{ username, full_name }], next_max_id }`.
  * The flow makes that call from the signed-in page, a page at a time, with a person's pause between.
  */
+import type { Response } from "playwright";
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
+import { scrollCollect } from "../scroll-collect.js";
 import { firstShown, RENDER_MS, SETTLE_MS } from "./kit.js";
 
 const WEB = "https://www.instagram.com";
@@ -235,7 +237,9 @@ export function postCodesOf(hrefs: readonly string[]): string[] {
 /** The little of the DOM the page script touches; the project compiles without lib dom. */
 declare const document: {
   cookie: string;
-  querySelectorAll(sel: string): Iterable<{ getAttribute(n: string): string | null }>;
+  querySelectorAll(
+    sel: string,
+  ): Iterable<{ getAttribute(n: string): string | null; textContent: string | null }>;
 };
 
 export interface SearchInput {
@@ -336,5 +340,138 @@ export const instagramFollowing = defineFlow<
     } while (after && rows.size < cap);
     const data = [...rows.values()];
     return { data, meta: { result_count: data.length } };
+  },
+});
+
+/** The home feed's timeline data: in the page's preloaded scripts, then in its GraphQL answers. */
+const FEED_CALL = /\/graphql\/query|\/api\/v1\/feed\/timeline/;
+const FEED_DATA = /feed__timeline|"feed_items"/;
+
+/** JSON text as the page sends it: one object, or one per line (a streamed answer). */
+function jsonsOf(text: string): unknown[] {
+  try {
+    return [JSON.parse(text)];
+  } catch {
+    return text.split("\n").flatMap((line) => {
+      try {
+        return line.trim() ? [JSON.parse(line)] : [];
+      } catch {
+        return [];
+      }
+    });
+  }
+}
+
+interface Media {
+  code?: unknown;
+  taken_at?: unknown;
+  like_count?: unknown;
+  comment_count?: unknown;
+  caption?: { text?: unknown } | null;
+  user?: { username?: unknown; friendship_status?: { following?: unknown } } | null;
+}
+
+const countOrNull = (n: unknown) => (typeof n === "number" ? n : null);
+
+/**
+ * Every post in a timeline answer, found by shape (a `code`, a `taken_at` and a `user`), so the
+ * GraphQL and v1 shapes both read. Ads and posts by accounts ours does not follow are left.
+ */
+export function feedPostsOf(body: unknown): IgPost[] {
+  const out: IgPost[] = [];
+  const walk = (v: unknown): void => {
+    if (!v || typeof v !== "object") return;
+    if (Array.isArray(v)) {
+      for (const x of v) walk(x);
+      return;
+    }
+    const o = v as Record<string, unknown>;
+    // An ad: the node holds an `ad` beside its `media`, or the media carries `ad_id` (v1).
+    if (o.ad_id || o.ad_action || o.is_ad || (o.ad && typeof o.ad === "object")) return;
+    const m = o as Media;
+    const username = m.user?.username;
+    if (
+      typeof m.code === "string" &&
+      typeof m.taken_at === "number" &&
+      typeof username === "string"
+    ) {
+      if (m.user?.friendship_status?.following === false) return;
+      out.push({
+        shortcode: m.code,
+        url: postUrl(m.code),
+        username,
+        caption: typeof m.caption?.text === "string" ? m.caption.text : "",
+        likes: countOrNull(m.like_count),
+        comments: countOrNull(m.comment_count),
+        timestamp: new Date(m.taken_at * 1000).toISOString(),
+      });
+      return;
+    }
+    for (const x of Object.values(o)) walk(x);
+  };
+  walk(body);
+  return out;
+}
+
+/**
+ * The signed-in account's home feed: posts by the accounts it follows, newest first as Instagram
+ * orders them, with caption and counts, in one load scrolled deep. Read off the page's own
+ * timeline data; the flow makes no call of its own.
+ */
+export const instagramFeed = defineFlow<
+  { max?: number },
+  { data: IgPost[]; meta: { result_count: number } }
+>({
+  site: "instagram",
+  name: "feed",
+  async run(fp, { max }) {
+    const cap = Math.min(Math.max(1, max ?? 20), 50);
+    const bodies: unknown[] = [];
+    const pending: Array<Promise<void>> = [];
+    const onResponse = (r: Response) => {
+      if (!FEED_CALL.test(r.url())) return;
+      pending.push(
+        r.text().then(
+          (t) => {
+            if (FEED_DATA.test(t)) bodies.push(...jsonsOf(t));
+          },
+          () => undefined,
+        ),
+      );
+    };
+    fp.page.on("response", onResponse);
+    try {
+      await openIg(fp, `${WEB}/`);
+      const preloaded = async () =>
+        (
+          await fp.page.evaluate(() =>
+            [...document.querySelectorAll('script[type="application/json"]')].map(
+              (s) => s.textContent ?? "",
+            ),
+          )
+        ).filter((t) => FEED_DATA.test(t));
+      for (let i = 0; i < RENDER_MS / SETTLE_MS; i++) {
+        await Promise.all(pending);
+        if (bodies.length || (await preloaded()).length) break;
+        await fp.wait(SETTLE_MS);
+      }
+      const { rows } = await scrollCollect(fp, {
+        read: async () => {
+          await Promise.all(pending);
+          const scripts = (await preloaded()).flatMap(jsonsOf);
+          return [...scripts, ...bodies].flatMap(feedPostsOf);
+        },
+        // The next page is a network call, not rows already in the DOM: give it time.
+        idle: 5,
+        settleMs: 2_000,
+        key: (p) => p.shortcode,
+        max: cap,
+      });
+      if (!rows.length && !bodies.length && !(await preloaded()).length)
+        return fp.human(`the Instagram home feed showed no timeline data (${fp.url()})`);
+      return { data: rows, meta: { result_count: rows.length } };
+    } finally {
+      fp.page.off("response", onResponse);
+    }
   },
 });

@@ -282,7 +282,16 @@ export const x: SiteApi = {
   probe: { path: "/2/users/me" },
   auth: { oauth: xOAuth },
   // Well under what a person scrolls in a day; reads look like one reader, not a scraper.
-  caps: { profile: 150, posts: 100, search: 50, follow: 20, like: 50, reply: 30, following: 4 },
+  caps: {
+    profile: 150,
+    posts: 100,
+    search: 50,
+    feed: 12,
+    follow: 20,
+    like: 50,
+    reply: 30,
+    following: 4,
+  },
   pace: { gapMs: 5_000, jitterMs: 10_000 },
   routes: [
     route({
@@ -404,6 +413,15 @@ export const x: SiteApi = {
       meter: () => ({ posts: 1 }),
       browser: { flow: "x/posts" },
       api: ({ id: userId, ...q }, leg) => get(leg, `/2/users/${userId}/tweets`, q),
+    }),
+    route({
+      method: "GET",
+      path: "/2/users/{id}/timelines/reverse_chronological",
+      summary:
+        "The signed-in account's home: posts from the accounts it follows, newest first (the Following tab, scrolled to `max_results`; `since_id` cursor; ads left out). Browser only: the API bills each post read",
+      request: timeline,
+      meter: () => ({ feed: 1 }),
+      browser: { flow: "x/home" },
     }),
     route({
       method: "GET",

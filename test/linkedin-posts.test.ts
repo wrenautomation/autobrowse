@@ -9,6 +9,7 @@ import {
   countOf,
   idTime,
   linkedinCompanyPosts,
+  linkedinFeed,
   linkedinListPosts,
   linkedinPost,
   linkedinSearchPosts,
@@ -333,6 +334,23 @@ describe("linkedin posts: the flows and the routes", () => {
       "click menuitem /^recent$/i",
     ]);
     expect(out.posts.map((p) => p.urn)).toEqual(["urn:li:activity:7001"]);
+  });
+
+  it("feed: the home feed set to Recent; ads and LinkedIn's suggestions are left", async () => {
+    const ad = { ...CLASSIC, ids: ["urn:li:activity:7008"], text: "Ad Co\nPromoted\nBuy now." };
+    const picked = {
+      ...CLASSIC,
+      ids: ["urn:li:activity:7009"],
+      text: `Suggested\n${CLASSIC.text}`,
+    };
+    const { fp, acts, opened } = scripted([[ad, CLASSIC, picked, SDUI]]);
+    const out = await linkedinFeed.run(fp, { max: 5 });
+    expect(opened).toEqual(["https://www.linkedin.com/feed/"]);
+    expect(acts.map((a) => `${a.op.kind} ${a.hints.role}`)).toEqual([
+      "click button",
+      "click menuitem",
+    ]);
+    expect(out.posts.map((p) => p.urn)).toEqual(["urn:li:activity:7001", "urn:li:ugcPost:7002"]);
   });
 
   it("company: no sort menu, the page is read as it is", async () => {

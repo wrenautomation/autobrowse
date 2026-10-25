@@ -99,6 +99,8 @@ const webSearch = z.object({
   max: z.coerce.number().int().min(1).max(30).default(12),
 });
 
+const feed = z.object({ max: z.coerce.number().int().min(1).max(50).default(20) });
+
 const following = z.object({ max: z.coerce.number().int().min(1).max(1000).optional() });
 
 const profileName = z.object({
@@ -156,7 +158,16 @@ export const instagram: SiteApi = {
   probe: { path: "/me" },
   auth: { oauth: instagramOAuth },
   // Acts on others' accounts go through the page (no API does them): a person's pace, per account.
-  caps: { follow: 15, like: 40, comment: 10, post: 60, comments: 40, search: 10, following: 8 },
+  caps: {
+    follow: 15,
+    like: 40,
+    comment: 10,
+    post: 60,
+    comments: 40,
+    search: 10,
+    following: 8,
+    feed: 12,
+  },
   pace: { gapMs: 8_000, jitterMs: 12_000 },
   routes: [
     route({
@@ -450,6 +461,15 @@ export const instagram: SiteApi = {
       request: webSearch,
       meter: () => ({ search: 1 }),
       browser: { flow: "instagram/search" },
+    }),
+    route({
+      method: "GET",
+      path: "/web/feed",
+      summary:
+        "The signed-in home feed: posts by the accounts ours follows, as Instagram orders them, with caption, counts and time, in one load scrolled deep: `{ data: [{ shortcode, url, username, caption, likes, comments, timestamp }], meta: { result_count } }` (`max`, default 20). Ads and suggested posts are left. Reads only",
+      request: feed,
+      meter: () => ({ feed: 1 }),
+      browser: { flow: "instagram/feed" },
     }),
     route({
       method: "GET",

@@ -369,6 +369,8 @@ export const linkedin: SiteApi = {
     audience: 4,
     // Posts by others to comment on (search, a company's Posts tab): reads run only as linkedin@wren.
     posts: 40,
+    // The home feed, scrolled deep (up to 50 posts a load): reach reads it once a pass.
+    feed: 12,
     // One post's analytics page or the dashboard, on Wren's own account: wren reads its own numbers.
     analytics: 10,
     // Likes on others' posts and follows: wren's reach loop, as linkedin@wren only.
@@ -833,6 +835,15 @@ export const linkedin: SiteApi = {
       request: searchPosts,
       meter: () => ({ posts: 1 }),
       browser: { flow: "linkedin/search-posts" },
+    }),
+    route({
+      method: "GET",
+      path: "/feed",
+      summary:
+        "The signed-in account's home feed, Recent where the menu shows (`max`, default 20, up to 50), in the search's shape: posts and dropped. Ads and LinkedIn's suggested posts are left. Reads only",
+      request: z.object({ max: postsMax }),
+      meter: () => ({ feed: 1 }),
+      browser: { flow: "linkedin/feed" },
     }),
     route({
       method: "GET",

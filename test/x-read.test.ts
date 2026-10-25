@@ -11,6 +11,7 @@ import {
   timelineTweets,
   tweetOf,
   userOf,
+  xHome,
   xPosts,
 } from "../src/browser/flows/x-read.js";
 import { scrollCollect } from "../src/browser/scroll-collect.js";
@@ -316,6 +317,44 @@ describe("x timeline data", () => {
       username: "gone",
       name: "gone",
     });
+  });
+
+  it("x/home opens the Following tab, then reads its posts newest first; an ad is left", async () => {
+    let tab = "For you";
+    const clicks: string[] = [];
+    const opened: string[] = [];
+    const following = [
+      raw({ user: "Ana\n@ana\n·\n1h", href: "/ana/status/1972000000000000003" }),
+      raw({ user: "Ad\n@brand\n·\nAd", href: null, time: null }), // an ad has no status link
+      raw({ user: "Bo\n@bo\n·\n2h", href: "/bo/status/1972000000000000002" }),
+    ];
+    const { fp } = fakePage({ text: ["Wren"], present: () => true });
+    fp.page = {
+      evaluate: async (fn: unknown) => {
+        const f = String(fn);
+        if (f.includes("aria-selected")) return tab;
+        return f.includes("article") ? (tab === "Following" ? following : [raw({})]) : 900;
+      },
+    } as unknown as FlowPage["page"];
+    fp.open = async (to) => {
+      opened.push(to);
+    };
+    fp.url = () => "https://x.com/home";
+    fp.act = async (_a, hints, o) => {
+      clicks.push(`${hints.role} ${hints.name}: ${o?.goal}`);
+      tab = "Following";
+      return { ok: true } as never;
+    };
+    fp.scroll = async () => {};
+    fp.wait = async () => {};
+    const out = (await xHome.run(fp, { max_results: 2 })) as { data: { id: string }[] };
+    expect(opened).toEqual(["https://x.com/home"]);
+    expect(clicks).toEqual(["tab /^following$/i: open the Following tab"]);
+    expect(out.data.map((t) => t.id)).toEqual(["1972000000000000003", "1972000000000000002"]);
+    // On the Following tab already: no click.
+    clicks.length = 0;
+    await xHome.run(fp, { max_results: 2 });
+    expect(clicks).toEqual([]);
   });
 
   it("x/posts without replies excluded reads the Replies tab's data, newest first, as the API answers", async () => {

@@ -429,6 +429,20 @@ export const linkedinCompanyPosts = defineFlow<CompanyPostsInput, Posts>({
   run: (fp, input) => readPosts(fp, companyPostsUrl(input.company), input.max ?? 20, sortRecent),
 });
 
+/** A card LinkedIn put in the feed itself: an ad, or a stranger's post it picked. */
+const NOT_CHOSEN = /^(promoted|suggested)$/im;
+
+/**
+ * The signed-in account's home feed, set to Recent where the menu shows: posts from the people
+ * and pages it follows and its connections. Ads and LinkedIn's suggestions are left.
+ */
+export const linkedinFeed = defineFlow<{ max?: number }, Posts>({
+  site: "linkedin",
+  name: "feed",
+  run: (fp, input) =>
+    readPosts(fp, `${WEB}/feed/`, input.max ?? 20, sortRecent, (p) => !NOT_CHOSEN.test(p.raw.text)),
+});
+
 /** `GET /rest/posts/{urn}` as the API answers it, plus what the page shows that the API keeps elsewhere. */
 export interface RestPost {
   id: string;

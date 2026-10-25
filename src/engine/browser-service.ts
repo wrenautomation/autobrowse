@@ -28,6 +28,7 @@ import { googleSearch } from "../browser/flows/google-search.js";
 import { googleWorkspaceLogo } from "../browser/flows/google-workspace-logo.js";
 import {
   instagramComment,
+  instagramFeed,
   instagramFollow,
   instagramFollowing,
   instagramLike,
@@ -53,6 +54,7 @@ import { linkedinOauthConsent } from "../browser/flows/linkedin-oauth-consent.js
 import { linkedinPostAnalytics } from "../browser/flows/linkedin-post-analytics.js";
 import {
   linkedinCompanyPosts,
+  linkedinFeed,
   linkedinListPosts,
   linkedinPost,
   linkedinSearchPosts,
@@ -101,7 +103,7 @@ import { tiktokOauthConsent } from "../browser/flows/tiktok-oauth-consent.js";
 import { tiktokVideoAnalytics } from "../browser/flows/tiktok-video-analytics.js";
 import { xFollow, xLike, xReply } from "../browser/flows/x-act.js";
 import { xOauthConsent } from "../browser/flows/x-oauth-consent.js";
-import { xFollowing, xPost, xPosts, xProfile, xSearch } from "../browser/flows/x-read.js";
+import { xFollowing, xHome, xPost, xPosts, xProfile, xSearch } from "../browser/flows/x-read.js";
 import { youtubeCommunityPost } from "../browser/flows/youtube-community-post.js";
 import { youtubeStudioAnalytics } from "../browser/flows/youtube-studio-analytics.js";
 import { youtubeThumbnail } from "../browser/flows/youtube-thumbnail.js";
@@ -150,6 +152,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     threadsOauthConsent,
     instagramCreatePost,
     instagramFollow,
+    instagramFeed,
     instagramFollowing,
     instagramLike,
     instagramComment,
@@ -174,6 +177,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     linkedinDashboard,
     linkedinSearchPosts,
     linkedinCompanyPosts,
+    linkedinFeed,
     linkedinListPosts,
     linkedinPost,
     linkedinWithdraw,
@@ -202,6 +206,7 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     xOauthConsent,
     xPost,
     xFollowing,
+    xHome,
     xPosts,
     xProfile,
     xSearch,

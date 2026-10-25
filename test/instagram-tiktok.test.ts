@@ -4,7 +4,7 @@ import type { CodeKind, SignInContext } from "../src/auth/login.js";
 import { SITE_LOGINS } from "../src/auth/sites.js";
 import { signInToTiktok, TIKTOK_LOGIN_URL } from "../src/auth/tiktok.js";
 import { countOf } from "../src/browser/flows/dialog-following.js";
-import { followedOfIg } from "../src/browser/flows/instagram-act.js";
+import { feedPostsOf, followedOfIg } from "../src/browser/flows/instagram-act.js";
 import { instagramOauthConsent } from "../src/browser/flows/instagram-oauth-consent.js";
 import { followedOfThreads } from "../src/browser/flows/threads-following.js";
 import { followedOfTiktok } from "../src/browser/flows/tiktok-following.js";
@@ -398,6 +398,47 @@ describe("instagram following rows", () => {
     });
     expect(followedOfIg({ full_name: "No Handle" })).toBeNull();
     expect(followedOfIg(null)).toBeNull();
+  });
+});
+
+describe("instagram home feed", () => {
+  const media = (code: string, username: string, following = true) => ({
+    code,
+    taken_at: 1_792_000_000,
+    like_count: 12,
+    comment_count: 3,
+    caption: { text: `post ${code}` },
+    user: { username, friendship_status: { following } },
+  });
+  it("reads posts by shape from the timeline answer; ads and accounts we don't follow are left", () => {
+    const body = {
+      data: {
+        xdt_api__v1__feed__timeline__connection: {
+          edges: [
+            { node: { media: media("AAA111", "sam_synth") } },
+            { node: { ad: { ad_id: "9" }, media: media("ADS999", "brand_synth") } },
+            { node: { media: media("SUG222", "stranger_synth", false) } },
+            {
+              node: {
+                media: { ...media("BBB333", "kim_synth"), caption: null, like_count: undefined },
+              },
+            },
+          ],
+        },
+      },
+    };
+    expect(feedPostsOf(body)).toEqual([
+      {
+        shortcode: "AAA111",
+        url: "https://www.instagram.com/p/AAA111/",
+        username: "sam_synth",
+        caption: "post AAA111",
+        likes: 12,
+        comments: 3,
+        timestamp: new Date(1_792_000_000_000).toISOString(),
+      },
+      expect.objectContaining({ shortcode: "BBB333", caption: "", likes: null }),
+    ]);
   });
 });
 
