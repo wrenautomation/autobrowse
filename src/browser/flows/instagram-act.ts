@@ -344,7 +344,7 @@ export const instagramFollowing = defineFlow<
 });
 
 /** The home feed's timeline data: in the page's preloaded scripts, then in its GraphQL answers. */
-const FEED_CALL = /\/graphql\/query|\/api\/v1\/feed\/timeline/;
+const FEED_CALL = /\/graphql\b|\/api\/v1\/feed\//;
 const FEED_DATA = /feed__timeline|"feed_items"/;
 
 /** JSON text as the page sends it: one object, or one per line (a streamed answer). */
@@ -426,7 +426,10 @@ export function feedPostsOf(body: unknown, left?: Set<string>): IgPost[] {
  */
 export const instagramFeed = defineFlow<
   { max?: number },
-  { data: IgPost[]; meta: { result_count: number; left: number; pages: number } }
+  {
+    data: IgPost[];
+    meta: { result_count: number; left: number; pages: number; calls?: string[] };
+  }
 >({
   site: "instagram",
   name: "feed",
@@ -434,7 +437,12 @@ export const instagramFeed = defineFlow<
     const cap = Math.min(Math.max(1, max ?? 20), 50);
     const bodies: unknown[] = [];
     const pending: Array<Promise<void>> = [];
+    /** The page's API calls by name, to say what came when no next page did. */
+    const calls = new Set<string>();
     const onResponse = (r: Response) => {
+      if (!/\/(graphql|api)\//.test(r.url())) return;
+      const name = /fb_api_req_friendly_name=(\w+)/.exec(r.request().postData() ?? "")?.[1];
+      calls.add(`${name ?? new URL(r.url()).pathname} ${r.status()}`);
       if (!FEED_CALL.test(r.url())) return;
       pending.push(
         r.text().then(
@@ -481,7 +489,12 @@ export const instagramFeed = defineFlow<
       for (const b of [...(await preloaded()).flatMap(jsonsOf), ...bodies]) feedPostsOf(b, left);
       return {
         data: rows,
-        meta: { result_count: rows.length, left: left.size, pages: bodies.length },
+        meta: {
+          result_count: rows.length,
+          left: left.size,
+          pages: bodies.length,
+          ...(bodies.length ? {} : { calls: [...calls].slice(0, 30) }),
+        },
       };
     } finally {
       fp.page.off("response", onResponse);
