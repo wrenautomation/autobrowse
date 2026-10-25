@@ -9,14 +9,12 @@
 import { z } from "zod";
 import { type JsonResponse, mustOk } from "../clients/http.js";
 import { authorizeEndpoint, tokenEndpoint } from "../oauth/providers.js";
-import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import { type ApiLeg, bearer, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { Seen, VerifyGet, VerifyRead } from "./verdict.js";
 import { arr, isoOf, rec, sameName, str, text, unclear } from "./verify-kit.js";
 
 export const OUTLOOK_ORIGIN = "https://graph.microsoft.com";
 const V1 = `${OUTLOOK_ORIGIN}/v1.0`;
-
-const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 
 const must = <T>(res: JsonResponse<T>, what: string): T => mustOk(res, `${V1}/${what}`);
 

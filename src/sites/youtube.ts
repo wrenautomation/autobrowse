@@ -17,7 +17,7 @@ import { z } from "zod";
 import { currentCall } from "../browser/attempt.js";
 import { HttpError, type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
-import { type ApiLeg, type OAuthSpec, route, type SiteApi, SiteError } from "./types.js";
+import { type ApiLeg, bearer, type OAuthSpec, route, type SiteApi, SiteError } from "./types.js";
 import { once } from "./uploads.js";
 import type { Seen, VerifyGet, VerifyRead } from "./verdict.js";
 import { arr, isoOf, rec, str, text, unclear } from "./verify-kit.js";
@@ -90,8 +90,6 @@ async function ownChannel(get: VerifyGet): Promise<{ id: string; uploads: string
 /** A comment's words as its author sees them; `textDisplay` is HTML, so tags go. */
 const commentText = (snippet: Record<string, unknown>): string =>
   str(snippet.textOriginal) ?? text(snippet.textDisplay).replace(/<[^>]+>/g, " ");
-
-const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 
 const must = <T>(res: JsonResponse<T>, what: string, origin = YOUTUBE_ORIGIN): T =>
   mustOk(res, `${origin}/${what}`, googleWords);

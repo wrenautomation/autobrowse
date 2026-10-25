@@ -45,6 +45,9 @@ export interface ApiLeg {
   render?: Render;
 }
 
+/** The header a token-bearing API call carries. */
+export const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
+
 /**
  * A route's browser leg: a hand-written flow by `site/name`, or a compiled
  * workflow by name (what a recording becomes), and how the request and the

@@ -8,13 +8,11 @@
 import { z } from "zod";
 import { HttpError, type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
-import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import { bearer, type OAuthSpec, route, type SiteApi } from "./types.js";
 import { googleReason } from "./why.js";
 
 export const DRIVE_ORIGIN = "https://www.googleapis.com";
 const FILES = `${DRIVE_ORIGIN}/drive/v3/files`;
-
-const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 
 const must = <T>(res: JsonResponse<T>, what: string): T =>
   mustOk(res, `${FILES}/${what}`, googleReason);

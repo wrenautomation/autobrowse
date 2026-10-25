@@ -10,7 +10,7 @@ import { z } from "zod";
 import { type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { WEB_REDIRECT } from "./oauth.js";
-import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import { bearer, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { Seen } from "./verdict.js";
 import { rec, str, text, unclear } from "./verify-kit.js";
 import { graphWhy } from "./why.js";
@@ -20,7 +20,6 @@ export const THREADS_VERSION = "v1.0";
 /** A post's text cap, in characters. */
 export const THREADS_MAX = 500;
 
-const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 const id = z.string().regex(/^[0-9]+$/, "a numeric Threads id");
 /** "me" stands for the token's own profile wherever a user id goes. */
 const user = z.union([id, z.literal("me")]);

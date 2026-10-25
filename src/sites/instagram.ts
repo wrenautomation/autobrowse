@@ -11,7 +11,7 @@ import { z } from "zod";
 import { type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { WEB_REDIRECT } from "./oauth.js";
-import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import { bearer, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { Seen, VerifyGet, VerifyRead } from "./verdict.js";
 import { arr, hasNext, isoOf, rec, str, text, unclear } from "./verify-kit.js";
 
@@ -25,7 +25,6 @@ export const INSTAGRAM_ORIGIN = "https://graph.instagram.com";
 /** Graph API versions live about two years. */
 export const INSTAGRAM_VERSION = "v23.0";
 
-const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 const id = z.string().regex(/^[0-9]+$/, "a numeric Instagram id");
 
 const me = z.object({ fields: z.string().default("user_id,username,account_type") });
