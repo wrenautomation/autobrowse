@@ -10,15 +10,13 @@ import { MAX_COMMENTS } from "../browser/flows/tiktok-comments.js";
 import { HttpError, type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { pollWaits } from "./poll.js";
-import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import { type ApiLeg, bearer, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { Seen, VerifyGet, VerifyRead } from "./verdict.js";
 import { arr, isoOf, rec, sameName, str, text, unclear } from "./verify-kit.js";
 import { bytesOf } from "./youtube.js";
 
 export const TIKTOK_ORIGIN = "https://open.tiktokapis.com";
 const INIT_URL = `${TIKTOK_ORIGIN}/v2/post/publish/video/init/`;
-
-const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 
 /** Why a fresh video is not in the list at once. */
 const LISTS_LATE =

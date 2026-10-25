@@ -14,7 +14,7 @@ import { HttpError, type JsonResponse, mustOk } from "../clients/http.js";
 import type { Amount } from "../gates/spend.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { WEB_REDIRECT } from "./oauth.js";
-import { type ApiLeg, type OAuthSpec, route, type SiteApi, SiteError } from "./types.js";
+import { type ApiLeg, bearer, type OAuthSpec, route, type SiteApi, SiteError } from "./types.js";
 import type { Seen, VerifyGet, VerifyRead, VerifyRow } from "./verdict.js";
 import { arr, hasNext, isoOf, rec, str, text, unclear } from "./verify-kit.js";
 import { type GraphFailure, graphNote, graphWhy } from "./why.js";
@@ -74,7 +74,6 @@ function dmRows(bodies: readonly unknown[], ours: (from: string) => boolean): Ve
     .sort((a, b) => (b.at ?? "").localeCompare(a.at ?? ""));
 }
 
-const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 const id = z.string().regex(/^[0-9]+$/, "a numeric Graph id");
 /** An ad account id without its `act_` prefix (the path carries the prefix). */
 const adAccount = z.string().regex(/^[0-9]+$/, "the ad account's number (after act_)");

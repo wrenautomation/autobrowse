@@ -12,7 +12,7 @@ import { basename, extname } from "node:path";
 import { z } from "zod";
 import { HttpError, type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
-import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import { type ApiLeg, bearer, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { VerifyRead, VerifyRow } from "./verdict.js";
 import { arr, isoOf, rec, str, text, unclear, withoutLinks } from "./verify-kit.js";
 import { bodyWords } from "./why.js";
@@ -44,7 +44,6 @@ const xRows = (body: unknown, skip?: string): VerifyRead => ({
   complete: false,
 });
 
-const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 const id = z.string().regex(/^[0-9]+$/, "a numeric X id");
 
 const me = z.object({

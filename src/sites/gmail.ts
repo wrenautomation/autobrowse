@@ -9,15 +9,13 @@
 import { z } from "zod";
 import { type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
-import { type ApiLeg, type OAuthSpec, route, type SiteApi } from "./types.js";
+import { bearer, type OAuthSpec, route, type SiteApi } from "./types.js";
 import type { Seen, VerifyRead, VerifyRow } from "./verdict.js";
 import { arr, isoOf, mimeText, rec, str, text, unclear } from "./verify-kit.js";
 import { googleReason } from "./why.js";
 
 export const GMAIL_ORIGIN = "https://gmail.googleapis.com";
 const ME = `${GMAIL_ORIGIN}/gmail/v1/users/me`;
-
-const bearer = (leg: ApiLeg) => ({ authorization: `Bearer ${leg.token}` });
 
 const must = <T>(res: JsonResponse<T>, what: string): T =>
   mustOk(res, `${ME}/${what}`, googleReason);
