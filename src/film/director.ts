@@ -19,6 +19,7 @@ import {
   takePanes,
 } from "../browser/film.js";
 import { FILM_PACE, handsFor } from "../browser/human/index.js";
+import { holdsSecret } from "../browser/secrets.js";
 import type { Tape, TapeStep } from "./tape.js";
 
 /** Terminal colours a viewer reads at 1x on a phone. */
@@ -83,7 +84,7 @@ export async function filmTape(
     await open(page, port, tape.theme);
     rec = await filmPage(page, dir, "term", { width, height });
     say(`filming ${dir}`);
-    const hands = handsFor(FILM_PACE, Math.random, filmLog);
+    const hands = handsFor(FILM_PACE, Math.random, filmLog, holdsSecret);
     await page.locator("textarea.xterm-helper-textarea").focus();
     await page.waitForTimeout(800);
     // What the terminal showed before the last key: a wait looks only past it.

@@ -5,6 +5,7 @@
  */
 import type { Command } from "commander";
 import { shipWording } from "../shots/ship.js";
+import { scrubWording } from "../shots/trace-scrub.js";
 import { sweepWording, traceWording } from "../shots/traces.js";
 import type { Settings } from "./config.js";
 import { shipperFor, tracesFor } from "./services.js";
@@ -48,6 +49,23 @@ export function registerShotsCommands(program: Command, settings: Settings): voi
       const r = await t.backup(o.dry ? { dry: true } : {});
       for (const line of traceWording(r, t.where)) console.log(line);
       if (r.refused) process.exitCode = 1;
+    });
+  traces
+    .command("scrub")
+    .description(
+      "Mask secrets (passwords, codes, cookies) in every trace on this disk, in place; --backup scrubs the kept copies too",
+    )
+    .option(
+      "--backup",
+      "also fetch, scrub and put back each trace only in TRACES_TO (billed per GB fetched)",
+    )
+    .action(async (o: { backup?: boolean }) => {
+      const t = keeper();
+      if (!t) return;
+      const r = await t.scrub({ backup: !!o.backup, log: (l) => console.log(l) });
+      for (const line of scrubWording(r)) console.log(line);
+      if (r.local.leaks || r.backup.leaks || r.local.failed || r.backup.failed)
+        process.exitCode = 1;
     });
   traces
     .command("sweep")

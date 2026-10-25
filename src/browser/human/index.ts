@@ -30,7 +30,8 @@
  * `handsFor(null)` is instant hands: demos, tests, a console answering at once.
  * `handsFor(pace, random, log)` also says each act to `log` as it happens (a
  * pointer step, a press, a key, a wheel step), on the epoch-ms clock: a film
- * draws its cursor and plays its sounds from that (`browser/film.ts`).
+ * draws its cursor and plays its sounds from that (`browser/film.ts`). Each key
+ * of a text `hidden` names (a password) goes to `log` as `•`.
  * `showPointer` draws the pointer on the page (a dot), to watch a headed run;
  * it puts an element in the page, so it is for watching, never for real runs.
  *
@@ -155,6 +156,8 @@ export type HandEvent =
 export type HandsLog = (page: Page, e: HandEvent) => void;
 
 const unlogged: HandsLog = () => {};
+/** What the hands log shows for a key of a secret. */
+const HIDDEN_KEY = "•";
 
 export interface ActTimeout {
   timeout: number;
@@ -328,6 +331,7 @@ export function handsFor(
   pace: Pace | null,
   random: Random = Math.random,
   log: HandsLog = unlogged,
+  hidden: (text: string) => boolean = () => false,
 ): Hands {
   if (!pace) return instantHands;
   const key = (page: Page, k: string) => log(page, { kind: "key", t: Date.now(), key: k });
@@ -424,8 +428,9 @@ export function handsFor(
       }
       // The click focused the control: keys go to the page's keyboard from here, not
       // through the locator, which re-checks and re-focuses the control on every key.
+      const hide = hidden(text);
       for (const k of typingPlan(text, pace.typing, random)) {
-        key(page, k.ch);
+        key(page, hide && k.ch !== BACKSPACE ? HIDDEN_KEY : k.ch);
         // `delay` is how long the key is held: down, wait, up.
         if (k.ch === BACKSPACE) await page.keyboard.press(BACKSPACE, { delay: k.hold });
         else await page.keyboard.type(k.ch, { delay: k.hold });
@@ -442,8 +447,9 @@ export function handsFor(
       // it all in the first box. Keys, as a person types them, move the widget along.
       if ([...text].length > 1 && (await boxWidth(target)) === 1) {
         await target.fill("", o);
+        const hide = hidden(text);
         for (const ch of text) {
-          key(target.page(), ch);
+          key(target.page(), hide ? HIDDEN_KEY : ch);
           await target.page().keyboard.type(ch, { delay: drawMs(pace.typing.hold, random) });
         }
         return;

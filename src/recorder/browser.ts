@@ -7,7 +7,9 @@
 import { mkdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import { inPage } from "../browser/in-page.js";
+import { secret as holdSecret } from "../browser/secrets.js";
 import type { Session } from "../browser/session.js";
+import { scrubSecretsFile } from "../browser/trace-secrets.js";
 import type { DistributiveOmit } from "../types.js";
 import { BINDING, OBSERVER_SCRIPT } from "./observer.js";
 import { looksLikeSecretField, looksLikeSecretValue, REDACTED } from "./redact.js";
@@ -61,6 +63,8 @@ export type RawAction =
 export function redactRaw(raw: RawAction): ActionBody {
   if (raw.kind !== "input") return raw;
   const secret = looksLikeSecretField(raw.target) || looksLikeSecretValue(raw.value);
+  // Held, so the trace scrub masks it too (designs/2026-10-24-trace-secrets.md).
+  if (secret) holdSecret(raw.value);
   return {
     kind: "input",
     target: raw.target,
@@ -159,6 +163,10 @@ export async function startBrowserRecording(opts: {
         () => "trace.zip",
         () => null,
       );
+      if (trace)
+        await scrubSecretsFile(file).catch((e) =>
+          console.warn(`trace secrets not scrubbed: ${e instanceof Error ? e.message : e}`),
+        );
     }
     await session.close();
     return { actions, trace };

@@ -101,6 +101,8 @@ describe("traces", () => {
       async putFile() {
         if (++calls > 1) throw new Error("AccessDenied");
       },
+      async *keys() {},
+      async getFile() {},
     };
     const r = await backupTraces({ ...opts, store: refusing });
     expect(r).toMatchObject({ shipped: 1, pending: 2, refused: "AccessDenied" });

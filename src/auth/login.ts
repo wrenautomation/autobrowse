@@ -14,6 +14,7 @@ import type { FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
 import { pageState, untilLoaded } from "../browser/page-state.js";
 import { type Screen, type Walk, walk } from "../browser/screens.js";
+import { secret } from "../browser/secrets.js";
 import { wallOf } from "../browser/session.js";
 import { safeUrls } from "../clients/http.js";
 import { type CodeKind, type CodeSource, inboxLock } from "./codes.js";
@@ -203,7 +204,7 @@ export function passwordOf(site: string, cred: Credential): string {
       site,
       `the ${site} credential has no password (it signs in via ${cred.via})`,
     );
-  return cred.password;
+  return secret(cred.password);
 }
 
 /**
@@ -751,7 +752,7 @@ export function signInContext(p: SignInParts): SignInContext {
       const req = hint ? { site, kind, since: from, hint } : { site, kind, since: from };
       const c = await p.codes.get(req, cred);
       if (!c) throw new LoginFailed(site, `no ${kind} code available`);
-      return c;
+      return secret(c);
     },
     offers: (kind) => p.codes.offers(kind, cred),
     inbox: (kind) => p.codes.inbox(kind, cred),

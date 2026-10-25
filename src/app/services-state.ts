@@ -39,6 +39,7 @@ import { modFixes, modScreens, withModFixes, withModScreens } from "../mods/mod.
 import { isDefaultOwner, ownerKeys } from "../owner.js";
 import { s3BlobStore, s3TraceStore } from "../shots/s3.js";
 import { keepArtifact, keepRecording, type ShipReport, shipShots } from "../shots/ship.js";
+import { scrubKeptTraces } from "../shots/trace-scrub.js";
 import { backupTraces, dirTraceStore, sweepTraces, traceDirName } from "../shots/traces.js";
 import { fileSendJournal, type SendJournal } from "../sites/index.js";
 import { fileMintedTokens } from "../sites/oauth.js";
@@ -175,6 +176,18 @@ export function tracesFor(settings: Settings) {
     where: store.where,
     keepDays: settings.tracesKeepDays,
     backup: (o: { dry?: boolean } = {}) => backupTraces({ ...base, store, ...o }),
+    scrub: (o: { backup: boolean; log?: (line: string) => void }) => {
+      const push = () => backupTraces({ ...base, store });
+      return scrubKeptTraces({
+        ...base,
+        ...o,
+        store,
+        push,
+        under: "traces/",
+        doneFile: join(stateDirFor(settings), "traces-scrubbed.tsv"),
+        workDir: join(stateDirFor(settings), "traces-scrub-work"),
+      });
+    },
     sweep: (o: { dry?: boolean } = {}) =>
       sweepTraces({ ...base, keepDays: settings.tracesKeepDays, now: new Date(), ...o }),
   };

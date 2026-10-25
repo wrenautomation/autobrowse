@@ -14,6 +14,9 @@ export interface TraceStore {
   /** Names the target in messages: `s3://bucket/prefix`, a folder. */
   where: string;
   putFile(key: string, path: string, size: number): Promise<void>;
+  /** Every kept key under `under`, with its size: the scrub walks the backup with it. */
+  keys(under: string): AsyncGenerator<{ key: string; size: number }>;
+  getFile(key: string, path: string): Promise<void>;
 }
 
 /** A folder that holds traces: autobrowse's own artifacts, or a caller's `artifactsDir`. */
@@ -52,7 +55,8 @@ async function* zips(dir: string, depth = 0): AsyncGenerator<string> {
   }
 }
 
-async function traces(o: TraceOptions) {
+/** Every trace on this disk, oldest first, with its key and ledger line. */
+export async function traces(o: TraceOptions) {
   const out: Array<{ path: string; key: string; line: string; size: number; mtime: number }> = [];
   for (const d of o.dirs)
     for await (const path of zips(d.dir)) {
@@ -132,6 +136,21 @@ export function dirTraceStore(root: string): TraceStore {
       const to = join(root, ...key.split("/"));
       await mkdir(dirname(to), { recursive: true });
       await copyFile(path, to);
+    },
+    async *keys(under) {
+      const top = join(root, ...under.split("/").filter(Boolean));
+      const walk = async function* (dir: string): AsyncGenerator<{ key: string; size: number }> {
+        for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+          const p = join(dir, e.name);
+          if (e.isDirectory()) yield* walk(p);
+          else if (e.isFile())
+            yield { key: relative(root, p).split(sep).join("/"), size: (await stat(p)).size };
+        }
+      };
+      yield* walk(top);
+    },
+    async getFile(key, path) {
+      await copyFile(join(root, ...key.split("/")), path);
     },
   };
 }

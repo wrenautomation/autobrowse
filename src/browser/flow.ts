@@ -61,6 +61,7 @@ import {
   type ScreenReader,
   type Trail,
 } from "./screens.js";
+import { holdsSecret } from "./secrets.js";
 import {
   type Artifacts,
   type BrowserOptions,
@@ -72,6 +73,7 @@ import {
   pageHtml,
   type Session,
 } from "./session.js";
+import { scrubSecretsFile } from "./trace-secrets.js";
 import { type Watch, watches, watchSteps } from "./watch.js";
 import type { Passkeys } from "./webauthn.js";
 
@@ -494,6 +496,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
     runner.pace === undefined ? HUMAN_PACE : runner.pace,
     Math.random,
     filmLog,
+    holdsSecret,
   );
   const park = runner.park;
   const runsDir = runner.runs === undefined ? statsDirOf("flows") : null;
@@ -1068,8 +1071,12 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
                 () => true,
                 () => false,
               )
-            )
+            ) {
               artifacts.trace = trace;
+              await scrubSecretsFile(trace).catch((e) =>
+                console.warn(`trace secrets not scrubbed: ${e instanceof Error ? e.message : e}`),
+              );
+            }
           }
           const kind: FailureRecord["kind"] =
             err instanceof NeedsHuman

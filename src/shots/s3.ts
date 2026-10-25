@@ -2,7 +2,9 @@
  * The one file that names the bucket vendor. S3 by default; any S3-compatible
  * store (Cloudflare R2) by `endpoint`, with its keys in the usual AWS names.
  */
+import { createWriteStream } from "node:fs";
 import { open } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
 import type { AwsConfig } from "../owner.js";
 import type { BlobStore } from "./ship.js";
 import type { TraceStore } from "./traces.js";
@@ -28,12 +30,36 @@ export function s3BlobStore(o: { bucket: string; aws: AwsConfig; endpoint?: stri
 
 /** Traces, streamed (one can be hundreds of MB), in Glacier Instant Retrieval; the bucket encrypts at rest. */
 export function s3TraceStore(o: { bucket: string; prefix: string; aws: AwsConfig }): TraceStore {
-  const client = import("@aws-sdk/client-s3").then(({ S3Client, PutObjectCommand }) => ({
-    s3: new S3Client(o.aws),
-    PutObjectCommand,
+  const client = import("@aws-sdk/client-s3").then((sdk) => ({
+    s3: new sdk.S3Client(o.aws),
+    ...sdk,
   }));
   return {
     where: `s3://${o.bucket}/${o.prefix}`,
+    async *keys(under) {
+      const { s3, ListObjectsV2Command } = await client;
+      let token: string | undefined;
+      do {
+        const page = await s3.send(
+          new ListObjectsV2Command({
+            Bucket: o.bucket,
+            Prefix: `${o.prefix}${under}`,
+            ContinuationToken: token,
+          }),
+        );
+        for (const c of page.Contents ?? [])
+          if (c.Key) yield { key: c.Key.slice(o.prefix.length), size: c.Size ?? 0 };
+        token = page.IsTruncated ? page.NextContinuationToken : undefined;
+      } while (token);
+    },
+    async getFile(key, path) {
+      const { s3, GetObjectCommand } = await client;
+      const got = await s3.send(
+        new GetObjectCommand({ Bucket: o.bucket, Key: `${o.prefix}${key}` }),
+      );
+      if (!got.Body) throw new Error(`no body for ${key}`);
+      await pipeline(got.Body as NodeJS.ReadableStream, createWriteStream(path));
+    },
     async putFile(key, path, size) {
       // Open before the SDK call, so a file gone since the list fails as ENOENT here.
       const handle = await open(path, "r");

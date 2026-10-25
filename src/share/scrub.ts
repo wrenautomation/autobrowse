@@ -42,12 +42,12 @@ const URL_ATTRS = new Set(["href", "src", "__playwright_current_src__", "action"
 /** Action params that carry what was typed or uploaded. */
 const TYPED_PARAMS = new Set(["value", "text", "values", "localPaths", "files", "payloads"]);
 
-function escapeRe(s: string): string {
+export function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** Each way a value shows in a trace: raw, URL-encoded, form-encoded, JSON- and HTML-escaped. */
-function forms(value: string): string[] {
+export function forms(value: string): string[] {
   const out = new Set([
     value,
     encodeURIComponent(value),
@@ -114,7 +114,7 @@ function scrubber(known: Known[]): Scrubber {
   return { text, url, check };
 }
 
-type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
+export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 
 /** Every string in a value, through `text`; keys that carry typed input become `<typed>`. */
 function deep(v: Json, s: Pass, key = ""): Json {

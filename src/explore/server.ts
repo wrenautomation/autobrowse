@@ -62,6 +62,7 @@ import {
 import { checkRows, type RecordsOp, type Row, readRecords } from "../browser/records.js";
 import { snapshotPage } from "../browser/repair.js";
 import { lookAt, type PageLook, urlShape } from "../browser/screens.js";
+import { holdsSecret, secret } from "../browser/secrets.js";
 import { type BrowserOptions, bodyText, looksLikeWall, NeedsHuman } from "../browser/session.js";
 import type { SecretSink } from "../deps/sink.js";
 import { macDesktop } from "../desktop/mac.js";
@@ -821,7 +822,7 @@ async function serve(
     flowYes.grant(flow, FLOW_MS);
   };
   /** Instant for a console; a person's hands when an agent drives (`pace`). */
-  const hands = handsFor(opts.pace ?? null, Math.random, filmLog);
+  const hands = handsFor(opts.pace ?? null, Math.random, filmLog, holdsSecret);
   const gate = async (act: "fill" | "select" | "click", t: Target, wait: boolean) => {
     // A click is judged by what the button says too: `#checkout` or `.btn` alone names nothing.
     const said =
@@ -863,7 +864,7 @@ async function serve(
       throw new Error(
         `place: ${name} is not available now (a code: the site's message has not arrived in the inbox this run reads yet, wait and retry); ${placeHint(name)}`,
       );
-    return value;
+    return secret(value);
   };
   /** A field of the owner's profile. */
   const profileValue = async (
@@ -1009,6 +1010,8 @@ async function serve(
       throw new Error(
         `place: ${c.secret}: ${card.label} has no ${want.field} (fields: number, exp, expMonth, expYear, expYY, cvc, name, postal; from its owner's profile: ${ADDRESS_FIELDS.join(", ")})`,
       );
+    // The number and code are the card's secrets; a name or postal code is plain text.
+    if (want.field === "number" || want.field === "cvc") secret(value);
     const key = `${card.label}@${host}`;
     if (!cardsYes.has(key)) {
       await decide(
@@ -1091,7 +1094,7 @@ async function serve(
       );
     await audit(true);
     await hands.think(page);
-    await hands.paste(find(c), code, { timeout: 10_000 });
+    await hands.paste(find(c), secret(code), { timeout: 10_000 });
     journalAct(c, (target) => ({
       kind: "input",
       target,
