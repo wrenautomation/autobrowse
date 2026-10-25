@@ -60,21 +60,23 @@ export function s3TraceStore(o: { bucket: string; prefix: string; aws: AwsConfig
       if (!got.Body) throw new Error(`no body for ${key}`);
       await pipeline(got.Body as NodeJS.ReadableStream, createWriteStream(path));
     },
-    async putFile(key, path, size) {
+    async putFile(key, path) {
       // Open before the SDK call, so a file gone since the list fails as ENOENT here.
       const handle = await open(path, "r");
-      const { s3, PutObjectCommand } = await client;
+      const [{ s3 }, { Upload }] = await Promise.all([client, import("@aws-sdk/lib-storage")]);
       try {
-        await s3.send(
-          new PutObjectCommand({
+        // In parts the SDK retries one by one: a stream sent whole cannot be retried, so one
+        // dropped connection ended the push (2026-10-25).
+        await new Upload({
+          client: s3,
+          params: {
             Bucket: o.bucket,
             Key: `${o.prefix}${key}`,
             Body: handle.createReadStream({ autoClose: false }),
-            ContentLength: size,
             ContentType: "application/zip",
             StorageClass: "GLACIER_IR",
-          }),
-        );
+          },
+        }).done();
       } finally {
         await handle.close();
       }

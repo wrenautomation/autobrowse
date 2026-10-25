@@ -64,7 +64,8 @@ export function registerShotsCommands(program: Command, settings: Settings): voi
       if (!t) return;
       const r = await t.scrub({ backup: !!o.backup, log: (l) => console.log(l) });
       for (const line of scrubWording(r)) console.log(line);
-      if (r.local.leaks || r.backup.leaks || r.local.failed || r.backup.failed)
+      if (r.pushed) for (const line of traceWording(r.pushed, t.where)) console.log(line);
+      if (r.local.leaks || r.backup.leaks || r.local.failed || r.backup.failed || r.pushed?.refused)
         process.exitCode = 1;
     });
   traces

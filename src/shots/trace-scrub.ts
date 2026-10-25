@@ -8,6 +8,7 @@
 import { appendFile, mkdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { scrubSecretsFile } from "../browser/trace-secrets.js";
+import type { ShipReport } from "./ship.js";
 import { type TraceOptions, type TraceStore, traces } from "./traces.js";
 
 export interface ScrubTotals {
@@ -23,6 +24,8 @@ export interface ScrubTotals {
 export interface ScrubReport {
   local: ScrubTotals;
   backup: ScrubTotals;
+  /** The push of changed local traces, when one ran: a refusal leaves them for the next push. */
+  pushed: ShipReport | null;
 }
 
 const totals = (): ScrubTotals => ({
@@ -44,14 +47,18 @@ export async function scrubKeptTraces(
     /** Under the store's prefix: `traces/`, every machine's. */
     under: string;
     /** Back to the backup: the push, so a changed local trace replaces its kept copy. */
-    push: () => Promise<unknown>;
+    push: () => Promise<ShipReport>;
     backup: boolean;
     log?: (line: string) => void;
   },
 ): Promise<ScrubReport> {
   const done = new Set((await readFile(o.doneFile, "utf8").catch(() => "")).split("\n"));
   const mark = (line: string) => appendFile(o.doneFile, `${line}\n`);
-  const report: ScrubReport = { local: totals(), backup: totals() };
+  const report: ScrubReport = { local: totals(), backup: totals(), pushed: null };
+  const failed = (what: string, err: unknown) =>
+    o.log?.(
+      `${what}: not scrubbed: ${(err instanceof Error ? err.message : String(err)).split("\n")[0]}`,
+    );
   const add = (t: ScrubTotals, r: { changed: boolean; masked: number; leaks: number }) => {
     t.traces++;
     if (r.changed) t.changed++;
@@ -66,11 +73,12 @@ export async function scrubKeptTraces(
       add(report.local, await scrubSecretsFile(t.path));
       const s = await stat(t.path);
       await mark(`local\t${t.key}\t${s.size}\t${Math.trunc(s.mtimeMs)}`);
-    } catch {
+    } catch (err) {
       report.local.failed++;
+      failed(t.key, err);
     }
   }
-  if (report.local.changed && o.store) await o.push();
+  if (report.local.changed && o.store) report.pushed = await o.push();
   if (!o.backup || !o.store) return report;
 
   const here = new Set(local.map((t) => t.key));
@@ -85,8 +93,9 @@ export async function scrubKeptTraces(
       add(report.backup, r);
       if (r.changed) await o.store.putFile(key, work, (await stat(work)).size);
       await mark(`backup\t${key}`);
-    } catch {
+    } catch (err) {
       report.backup.failed++;
+      failed(key, err);
     } finally {
       await rm(work, { force: true });
     }

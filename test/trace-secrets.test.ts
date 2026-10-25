@@ -188,6 +188,7 @@ describe("scrubKeptTraces", () => {
         under: "traces/",
         push: async () => {
           pushes++;
+          return { shipped: 1, bytes: 1, pending: 0, unreadable: [], refused: null };
         },
         backup: true,
       });
@@ -195,6 +196,7 @@ describe("scrubKeptTraces", () => {
     expect(r.local).toMatchObject({ traces: 1, changed: 1, leaks: 0, failed: 0 });
     expect(r.backup).toMatchObject({ traces: 1, changed: 1, leaks: 0, failed: 0 });
     expect(pushes).toBe(1);
+    expect(r.pushed?.shipped).toBe(1);
     for (const f of [join(artifacts, "new.zip"), only])
       expect(await unzipped(f)).not.toContain(PASSWORD);
     const again = await run();
