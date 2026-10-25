@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -13,7 +13,7 @@ import { devices, enroll, type Iam, putOnlyPolicy, revoke } from "../src/autotra
 import { comboOf, importSession } from "../src/autotrack/import.js";
 import { listSessions, parseKey } from "../src/autotrack/store.js";
 import { loadRecording } from "../src/recorder/store.js";
-import { fixtureStore, NEW, OLD } from "./autotrack-fixture.js";
+import { bundledFixtureStore, fixtureStore, NEW, OLD } from "./autotrack-fixture.js";
 
 const good: TrackCode = {
   v: 1,
@@ -263,6 +263,40 @@ describe("track keys and sessions", () => {
     });
     expect(rows[1]?.bytes).toBeGreaterThan(0);
     expect(await listSessions(fixtureStore(), "other")).toEqual([]);
+  });
+});
+
+/** Every file under `dir`, by path relative to it, with its bytes. */
+const tree = (dir: string): Record<string, Buffer> =>
+  Object.fromEntries(
+    (readdirSync(dir, { recursive: true }) as string[])
+      .filter((f) => statSync(join(dir, f)).isFile())
+      .map((f) => [f, readFileSync(join(dir, f))]),
+  );
+
+describe("bundled segments (autotrack 0.4.0)", () => {
+  it("list and read the same as one object per file", async () => {
+    const store = bundledFixtureStore();
+    expect([...store.raw.objects.keys()].some((k) => k.includes("/frames/"))).toBe(false);
+    expect(await listSessions(store)).toEqual(await listSessions(fixtureStore()));
+    for (const s of [OLD, NEW]) {
+      const a = await importSession(fixtureStore(), s, {
+        root: mkdtempSync(join(tmpdir(), "track-plain-")),
+      });
+      const b = await importSession(bundledFixtureStore(), s, {
+        root: mkdtempSync(join(tmpdir(), "track-bundled-")),
+      });
+      expect({ ...b, dir: "" }).toEqual({ ...a, dir: "" });
+      expect(tree(b.dir)).toEqual(tree(a.dir));
+    }
+  });
+
+  it("reads a file it never listed from its segment's index", async () => {
+    const plain = fixtureStore();
+    const key = [...plain.objects.keys()].find((k) => k.includes("/frames/")) as string;
+    const store = bundledFixtureStore();
+    expect(await store.get(key)).toEqual(plain.objects.get(key));
+    await expect(store.get(`${key}.missing`)).rejects.toThrow(/NoSuchKey/);
   });
 });
 

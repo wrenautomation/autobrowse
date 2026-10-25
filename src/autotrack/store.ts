@@ -2,6 +2,8 @@
  * Reading the track bucket (deploy/terraform track.tf). Layout, written by `autotrack ship`:
  *   <device>/<session>/session.json
  *   <device>/<session>/<segment>/events.jsonl.gz
+ *   <device>/<session>/<segment>/files.bin + files.json  (autotrack 0.4.0 on: the files below,
+ *                                                     end to end, and where each sits; see `bundled`)
  *   <device>/<session>/<segment>/frames/<n>.jpg      (n = frame number in the session)
  *   <device>/<session>/<segment>/trees/<n>.json.gz   (accessibility tree; `.txt.gz` for a web page outline)
  *   <device>/<session>/<segment>/crops/<n>.jpg       (native-pixel crop at a pointer act; not gzipped)
@@ -19,6 +21,76 @@ export interface TrackObject {
 export interface TrackStore {
   list(prefix: string): Promise<TrackObject[]>;
   get(key: string): Promise<Buffer>;
+  /** `size` bytes of `key` from byte `at`; without it a read takes the whole object. */
+  getRange?(key: string, at: number, size: number): Promise<Buffer>;
+}
+
+/** `files.json`: each file of `files.bin` by name, at byte `at`, `size` bytes long. */
+export interface FilesIndex {
+  v: 1;
+  files: { name: string; at: number; size: number }[];
+}
+
+/** Segment indexes read at once while listing. */
+const INDEX_READS = 16;
+
+/**
+ * A segment's files.bin read as the per-file keys it holds (`<segment>/frames/<n>.jpg`, …), so
+ * every reader sees one layout whichever autotrack shipped it. `list` swaps each files.json for
+ * the files it names (files.bin itself is not listed); `get` of one of them reads its byte range.
+ * A key never listed still resolves: its segment's index is read on first use.
+ */
+export function bundled<S extends TrackStore>(raw: S): S {
+  const where = new Map<string, { bin: string; at: number; size: number }>();
+  const indexes = new Map<string, Promise<FilesIndex | null>>();
+  const expand = (seg: string): Promise<FilesIndex | null> => {
+    let p = indexes.get(seg);
+    if (!p) {
+      p = raw
+        .get(`${seg}/files.json`)
+        .then((b) => {
+          const index = JSON.parse(b.toString("utf8")) as FilesIndex;
+          for (const f of index.files)
+            where.set(`${seg}/${f.name}`, { bin: `${seg}/files.bin`, at: f.at, size: f.size });
+          return index;
+        })
+        .catch(() => null);
+      indexes.set(seg, p);
+    }
+    return p;
+  };
+  return {
+    ...raw,
+    async list(prefix) {
+      const objects = await raw.list(prefix);
+      const out: TrackObject[] = [];
+      const segs: string[] = [];
+      for (const o of objects) {
+        if (o.key.endsWith("/files.json")) segs.push(o.key.slice(0, -"/files.json".length));
+        else if (!o.key.endsWith("/files.bin")) out.push(o);
+      }
+      for (let i = 0; i < segs.length; i += INDEX_READS) {
+        const batch = segs.slice(i, i + INDEX_READS);
+        const read = await Promise.all(batch.map(expand));
+        batch.forEach((seg, j) => {
+          for (const f of read[j]?.files ?? []) out.push({ key: `${seg}/${f.name}`, size: f.size });
+        });
+      }
+      return out;
+    },
+    async get(key) {
+      let w = where.get(key);
+      const k = w ? null : parseKey(key);
+      if (k && "segment" in k && k.kind !== "events" && k.kind !== "stats") {
+        await expand(`${k.device}/${k.session}/${k.segment}`);
+        w = where.get(key);
+      }
+      if (!w) return raw.get(key);
+      return raw.getRange
+        ? raw.getRange(w.bin, w.at, w.size)
+        : (await raw.get(w.bin)).subarray(w.at, w.at + w.size);
+    },
+  };
 }
 
 /**
@@ -31,7 +103,7 @@ export interface TrackWriter extends TrackStore {
 
 export function s3TrackStore(o: { bucket: string; aws: AwsConfig }): TrackWriter {
   const client = import("@aws-sdk/client-s3").then((sdk) => ({ s3: new sdk.S3Client(o.aws), sdk }));
-  return {
+  return bundled<TrackWriter>({
     async list(prefix) {
       const { s3, sdk } = await client;
       const out: TrackObject[] = [];
@@ -55,6 +127,18 @@ export function s3TrackStore(o: { bucket: string; aws: AwsConfig }): TrackWriter
       if (!got.Body) throw new Error(`${key}: empty body`);
       return Buffer.from(await got.Body.transformToByteArray());
     },
+    async getRange(key, at, size) {
+      const { s3, sdk } = await client;
+      const got = await s3.send(
+        new sdk.GetObjectCommand({
+          Bucket: o.bucket,
+          Key: key,
+          Range: `bytes=${at}-${at + size - 1}`,
+        }),
+      );
+      if (!got.Body) throw new Error(`${key}: empty body`);
+      return Buffer.from(await got.Body.transformToByteArray());
+    },
     async put(key, body, contentType = "application/json") {
       const { s3, sdk } = await client;
       await s3.send(
@@ -66,7 +150,7 @@ export function s3TrackStore(o: { bucket: string; aws: AwsConfig }): TrackWriter
         }),
       );
     },
-  };
+  });
 }
 
 export interface SessionRow {

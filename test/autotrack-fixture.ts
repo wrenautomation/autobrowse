@@ -7,6 +7,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { gzipSync } from "node:zlib";
+import { bundled, type FilesIndex } from "../src/autotrack/store.js";
 import { memoryStore } from "./autotrack-events.js";
 
 export const FIXTURE = join(import.meta.dirname, "fixtures", "track");
@@ -36,3 +37,31 @@ export function fixtureObjects(): Map<string, Buffer> {
 
 /** A writable in-memory bucket holding the fixtures: nothing here touches a real one. */
 export const fixtureStore = () => memoryStore(fixtureObjects());
+
+/**
+ * The same bucket as autotrack 0.4.0 ships it: each segment's frames, crops, trees and OCR in one
+ * `files.bin` with its `files.json`, read through `bundled`.
+ */
+export function bundledFixtureStore() {
+  const objects = new Map<string, Buffer>();
+  const segs = new Map<string, { index: FilesIndex; bodies: Buffer[]; at: number }>();
+  for (const [key, body] of fixtureObjects()) {
+    const p = key.split("/");
+    if (p.length !== 5) {
+      objects.set(key, body);
+      continue;
+    }
+    const seg = p.slice(0, 3).join("/");
+    const s = segs.get(seg) ?? { index: { v: 1 as const, files: [] }, bodies: [], at: 0 };
+    s.index.files.push({ name: p.slice(3).join("/"), at: s.at, size: body.length });
+    s.bodies.push(body);
+    s.at += body.length;
+    segs.set(seg, s);
+  }
+  for (const [seg, s] of segs) {
+    objects.set(`${seg}/files.bin`, Buffer.concat(s.bodies));
+    objects.set(`${seg}/files.json`, Buffer.from(JSON.stringify(s.index)));
+  }
+  const raw = memoryStore(objects);
+  return Object.assign(bundled(raw), { raw });
+}
