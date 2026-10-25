@@ -21,6 +21,8 @@ export const Tape = z
   .object({
     /** The page, CSS px. */
     size: z.tuple([z.number().int().min(320), z.number().int().min(240)]).default([1920, 1080]),
+    /** Each browser the commands open, CSS px; default `size`. A narrow terminal beside a wide page. */
+    browser: z.tuple([z.number().int().min(320), z.number().int().min(240)]).optional(),
     theme: z.enum(["dark", "light"]).default("dark"),
     fontSize: z.number().int().min(8).max(64).default(26),
     /** The shell starts here; default the folder `film` runs in. */

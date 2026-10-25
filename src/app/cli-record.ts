@@ -6,7 +6,7 @@ import type { Command } from "commander";
 import { urlWithoutQuery } from "../auth/guard.js";
 import type { SecretValues } from "../auth/signup.js";
 import { DEFAULT_IDLE_MINUTES } from "../explore/lease.js";
-import { expandHome } from "../google/auth.js";
+import { expandHome, shortHome } from "../google/auth.js";
 import { explorerOpener, type LocalBackend } from "./backend.js";
 import type { Settings } from "./config.js";
 import { headed } from "./display.js";
@@ -781,9 +781,10 @@ export function registerRecordCommands(
       } else {
         out = await backend.compile(await loadRecording(backend.recordingsDir, name));
       }
-      for (const f of Object.keys(out.files)) console.log(join(COMPILED_DIR, out.outline.name, f));
+      for (const f of Object.keys(out.files))
+        console.log(shortHome(join(COMPILED_DIR, out.outline.name, f)));
       if (out.defaultsFile)
-        console.log(`${out.defaultsFile}  (your values; the module names none)`);
+        console.log(`${shortHome(out.defaultsFile)}  (your values; the module names none)`);
       if (out.lint.length) {
         const { formatHits } = await import("../compiler/index.js");
         console.log(`personal data left (make it a plan field):\n${formatHits(out.lint)}`);

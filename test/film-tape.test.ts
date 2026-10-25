@@ -18,6 +18,14 @@ describe("tape", () => {
     expect(tape.steps[1]).toEqual({ wait: "❯", timeoutS: 60 });
   });
 
+  it("keeps a browser size apart from the terminal's; unset, the browser takes `size`", async () => {
+    const wide = await loadTape(
+      tapeFile({ size: [760, 1080], browser: [1440, 810], steps: [{ type: "ls" }] }),
+    );
+    expect(wide).toMatchObject({ size: [760, 1080], browser: [1440, 810] });
+    expect((await loadTape(tapeFile({ steps: [{ type: "ls" }] }))).browser).toBeUndefined();
+  });
+
   it("refuses a step it does not know, with the file in the error", async () => {
     const f = tapeFile({ steps: [{ click: "#go" }] });
     await expect(loadTape(f)).rejects.toThrow(`${f} is not a tape`);

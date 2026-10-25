@@ -70,6 +70,7 @@ import {
   WORKFLOWS,
   workspaceInboxDepsFor,
 } from "./services.js";
+import { stepLines } from "./step-lines.js";
 
 // `--owner` picks whose env, files and names load, so it is read before anything else.
 const argvOwner = ownerFromArgv(process.argv);
@@ -344,7 +345,7 @@ program
         // A proof is its own kind of run: gates declined, nothing bought, the outcome kept beside the flow.
         if (!backend.prove) throw new Error("no browser here to prove with");
         const proof = await backend.prove(name, raw);
-        for (const s of proof.steps) console.log(`${s.name.padEnd(28)} ${s.status}  ${s.detail}`);
+        for (const line of stepLines(proof.steps)) console.log(line);
         console.log(proof.status);
         if (proof.status !== "done") process.exitCode = 1;
         return;
@@ -368,8 +369,8 @@ program
             ? null
             : { approved: true, note: "autobrowse try", at: new Date().toISOString() },
       );
-      for (const [step, r] of Object.entries(out.results))
-        if (r) console.log(`${step.padEnd(28)} ${r.status}  ${r.detail}`);
+      const steps = Object.entries(out.results).flatMap(([name, r]) => (r ? [{ name, ...r }] : []));
+      for (const line of stepLines(steps)) console.log(line);
       console.log(out.status);
       if (out.status !== "done") process.exitCode = 1;
     },

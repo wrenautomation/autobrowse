@@ -71,6 +71,11 @@ export function expandHome(path: string): string {
   return path === "~" || path.startsWith("~/") ? `${homedir()}${path.slice(1)}` : path;
 }
 
+/** The other way: a path under the home folder as `~/...`, for what a terminal shows. */
+export function shortHome(path: string, home = homedir()): string {
+  return path === home || path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
+}
+
 /**
  * Read and check the JSON key Google Cloud issues for a service account. `path`
  * is the key file, or — for hosts with no filesystem to keep one on (Lambda) —

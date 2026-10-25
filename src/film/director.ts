@@ -72,7 +72,7 @@ export async function filmTape(
         ...process.env,
         ZDOTDIR: home,
         AUTOBROWSE_FILM: dir,
-        AUTOBROWSE_FILM_SIZE: `${width}x${height}`,
+        AUTOBROWSE_FILM_SIZE: (tape.browser ?? tape.size).join("x"),
       },
       stdio: "ignore",
     },
