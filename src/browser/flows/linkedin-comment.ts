@@ -472,8 +472,30 @@ export function countsOwners(texts: string[]): string[] {
   return [...out];
 }
 
-/** The counts bar's labels outside every comment, first of each kind: `12 reactions`, `3 comments`. */
+/**
+ * The post's counts. The 10-24 layout puts them in the post's own action buttons (the first
+ * Reaction button, then Comment and Repost beside it), blank at zero. The older layout has a bar
+ * of labels outside every comment, first of each kind: `12 reactions`, `3 comments`.
+ */
 export const READ_BAR = `(() => {
+  const like = document.querySelector('button[aria-label^="Reaction button state"]');
+  if (like) {
+    let row = like.parentElement;
+    while (row && !row.querySelector('button[aria-label="Comment"]')) row = row.parentElement;
+    if (row) {
+      const count = (el) => {
+        const m = /([\\d.,]+)\\s*([KkMm])?/.exec((el && el.textContent) || "");
+        if (!m) return 0;
+        const n = Number(m[1].replace(/,/g, ""));
+        return Math.round(m[2] ? n * (/k/i.test(m[2]) ? 1e3 : 1e6) : n);
+      };
+      return {
+        reactions: count(like),
+        comments: count(row.querySelector('button[aria-label="Comment"]')),
+        reposts: count(row.querySelector('button[aria-label="Repost"]')),
+      };
+    }
+  }
   const out = {};
   const words = { reaction: "reactions", comment: "comments", repost: "reposts" };
   for (const el of document.querySelectorAll("button, a, span, li")) {

@@ -264,4 +264,24 @@ describe("linkedin post counts from the page", () => {
       await browser.close();
     }
   });
+
+  it("reads the counts from the post's action buttons (10-24 layout), blank as zero", async () => {
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      const bar = (likes: string, comments: string) => `<div>
+        <div><div><button aria-label="Reaction button state: no reaction"><span><span>${likes}</span></span></button></div>
+        <button aria-label="Open reactions menu"></button></div>
+        <button aria-label="Comment"><span>${comments}</span></button><button aria-label="Repost"><span>&#8203;</span></button></div>`;
+      const comment = `<div><button aria-label="Reaction button state: Like 1 reaction">9</button><button>Reply</button></div>`;
+      await page.setContent(
+        `<main><button aria-label="Repost"></button>${bar("1.2K", "2")}${comment}</main>`,
+      );
+      expect(await page.evaluate(READ_BAR)).toEqual({ reactions: 1200, comments: 2, reposts: 0 });
+      await page.setContent(`<main>${bar("&#8203;", "")}</main>`);
+      expect(await page.evaluate(READ_BAR)).toEqual({ reactions: 0, comments: 0, reposts: 0 });
+    } finally {
+      await browser.close();
+    }
+  });
 });
