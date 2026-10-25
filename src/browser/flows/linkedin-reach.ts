@@ -708,9 +708,15 @@ export type NoInvite = "connected" | "pending" | "follow-only";
  * `follow-only` (no Connect, Message or Pending on the card; Connect hidden or not offered). A
  * card that shows Connect anyway is a person's call.
  */
+/** LinkedIn's notice when the account's invitations for the week are used. */
+export const INVITE_LIMIT =
+  /weekly invitation limit|too many invitations|reached the weekly limit/i;
+
 export const linkedinConnect = defineFlow<
   ConnectInput,
-  { sent: true; note: boolean; notesLeft?: number } | { sent: false; relationship: NoInvite }
+  | { sent: true; note: boolean; notesLeft?: number }
+  | { sent: false; relationship: NoInvite }
+  | { sent: false; limit: string }
 >({
   site: "linkedin",
   name: "connect",
@@ -755,7 +761,14 @@ export const linkedinConnect = defineFlow<
     }
     await fp.wait(SETTLE_MS);
     const text = await fp.text();
-    if (/weekly invitation limit|too many invitations|couldn.t send|try again/i.test(text))
+    // The weekly limit is LinkedIn's no, not a broken page: the route answers it as a 429.
+    const limit = INVITE_LIMIT.exec(text);
+    if (limit)
+      return {
+        sent: false,
+        limit: squash(text.slice(Math.max(0, limit.index - 60), limit.index + 120)),
+      };
+    if (/couldn.t send|try again/i.test(text))
       return fp.human(`LinkedIn did not take the invitation: ${text.slice(0, 200)}`);
     return {
       sent: true,

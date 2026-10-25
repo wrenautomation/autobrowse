@@ -10,6 +10,7 @@ import { defineFlow, type FlowRunner } from "../src/browser/flow.js";
 import { HttpError, httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import { route, type SiteApi, type SiteFacade, siteFacade } from "../src/sites/index.js";
+import { SiteError } from "../src/sites/types.js";
 
 /** What the fake platform holds, and what its next write does. */
 export const platform = {
@@ -23,6 +24,7 @@ export const platform = {
     | "died"
     | "lost"
     | "refuse"
+    | "limit"
     | "hold"
     | "busy"
     | "missing"
@@ -167,6 +169,9 @@ export const scratch: SiteApi = {
         platform.writes.push(`video ${i.title}`);
         if (platform.mode === "refuse")
           throw new HttpError("POST", "https://scratch.test/videos", 403);
+        // The site's own no, read off the page after the submit (LinkedIn's weekly limit).
+        if (platform.mode === "limit")
+          throw new SiteError(429, "weekly limit; retry after 86400s", 86_400);
         const id = `v:${i.title}`;
         platform.videos.unshift({
           title: i.title,

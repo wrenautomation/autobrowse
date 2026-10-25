@@ -295,7 +295,11 @@ const messageOf = (err: unknown) => (err instanceof Error ? err.message : String
 
 /** The status of a platform's refusal of a write: an HTTP 4xx, not a timeout (408). Else null. */
 function refusalOf(err: unknown): number | null {
-  return err instanceof HttpError && err.status >= 400 && err.status < 500 && err.status !== 408
+  // A SiteError after the submit is the site's own no read off the page (LinkedIn's weekly limit).
+  return (err instanceof HttpError || err instanceof SiteError) &&
+    err.status >= 400 &&
+    err.status < 500 &&
+    err.status !== 408
     ? err.status
     : null;
 }

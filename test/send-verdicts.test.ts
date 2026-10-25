@@ -365,6 +365,20 @@ describe("after the submit step", () => {
     });
     expect(platform.reads).toBe(0);
   });
+
+  it("the site's own 429 after the submit step is `not_sent` refused, with its words", async () => {
+    platform.mode = "limit";
+    const { call } = build();
+    expect(
+      await call({ ...VIDEO, input: { title: "limited video" }, sendKey: "k-429" }),
+    ).toMatchObject({
+      verdict: "not_sent",
+      how: "refused",
+      status: 429,
+      reason: expect.stringMatching(/weekly limit; retry after 86400s/),
+    });
+    expect(platform.reads).toBe(0);
+  });
 });
 
 describe("no key", () => {

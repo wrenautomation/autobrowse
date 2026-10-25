@@ -341,6 +341,9 @@ function withTotal(r: SiteRoute<never, unknown>): SiteRoute<never, unknown> {
   };
 }
 
+/** How long LinkedIn's weekly invitation limit holds the caller's invites: a day, then one try. */
+const INVITE_LIMIT_WAIT_S = 86_400;
+
 export const linkedin: SiteApi = {
   site: "linkedin",
   origin: LINKEDIN_ORIGIN,
@@ -365,7 +368,7 @@ export const linkedin: SiteApi = {
     // Our own audience (profile + Page, two page loads): on demand from wren, never on a timer.
     audience: 4,
     // Posts by others to comment on (search, a company's Posts tab): reads run only as linkedin@wren.
-    posts: 12,
+    posts: 40,
     // One post's analytics page or the dashboard, on Wren's own account: wren reads its own numbers.
     analytics: 10,
     // Likes on others' posts and follows: wren's reach loop, as linkedin@wren only.
@@ -771,7 +774,20 @@ export const linkedin: SiteApi = {
       // No invite offered sent nothing: a profile look, not one of the day's invites.
       used: (_q, out) =>
         (out as { sent?: boolean } | null)?.sent === false ? { profile: 1 } : undefined,
-      browser: { flow: "linkedin/connect" },
+      browser: {
+        flow: "linkedin/connect",
+        // LinkedIn's weekly limit: a refusal with a day's wait, so the caller holds its invites.
+        output: (o) => {
+          const limit = (o as { limit?: string } | null)?.limit;
+          if (limit)
+            throw new SiteError(
+              429,
+              `linkedin weekly invitation limit: ${limit}; retry after ${INVITE_LIMIT_WAIT_S}s`,
+              INVITE_LIMIT_WAIT_S,
+            );
+          return o;
+        },
+      },
     }),
     route({
       method: "POST",

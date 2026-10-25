@@ -495,20 +495,20 @@ describe("linkedin posts: the flows and the routes", () => {
     ).rejects.toThrow();
   });
 
-  it("the posts cap: 12 a day as linkedin@wren across both routes, off as linkedin and linkedin@alt", async () => {
-    expect(linkedin.caps?.posts).toBe(12);
+  it("the posts cap: 40 a day as linkedin@wren across both routes, off as linkedin and linkedin@alt", async () => {
+    expect(linkedin.caps?.posts).toBe(40);
     expect(linkedin.accountCaps?.linkedin?.posts).toBe(0);
     expect(linkedin.accountCaps?.["linkedin@alt"]?.posts).toBe(0);
     const caps = memoryCaps(() => NOW.getTime());
     const sites = facade({ run: async () => ({ posts: [], dropped: 0 }) as never }, caps);
     const search = (who: string) =>
       sites.call("linkedin", "GET", "/search/results/content", { keywords: "ria" }, who);
-    for (let i = 0; i < 6; i++) await search("linkedin@wren");
-    for (let i = 0; i < 6; i++)
+    for (let i = 0; i < 20; i++) await search("linkedin@wren");
+    for (let i = 0; i < 20; i++)
       await sites.call("linkedin", "GET", "/company/sample-co/posts", {}, "linkedin@wren");
     await expect(search("linkedin@wren")).rejects.toMatchObject({ status: 429 });
     await expect(search("linkedin")).rejects.toThrow(/posts reads are off/);
     await expect(search("linkedin@alt")).rejects.toThrow(/posts reads are off/);
-    expect(caps.today()["linkedin|linkedin.wren@x.test|posts"]).toBe(12);
+    expect(caps.today()["linkedin|linkedin.wren@x.test|posts"]).toBe(40);
   });
 });
