@@ -5,7 +5,16 @@
  * once they are older than `TRACES_KEEP_DAYS`. A trace is swept only when the ledger shows this
  * exact file (key, size, mtime) in the backup; with no backup set, nothing is swept.
  */
-import { appendFile, copyFile, mkdir, readdir, readFile, stat, unlink } from "node:fs/promises";
+import {
+  appendFile,
+  copyFile,
+  mkdir,
+  readdir,
+  readFile,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { basename, dirname, join, relative, sep } from "node:path";
 import type { ShipReport } from "./ship.js";
 
@@ -39,6 +48,33 @@ export interface SweepReport {
   bytes: number;
   /** Old enough, but not in the backup yet: kept. */
   unkept: number;
+}
+
+/** How often one failure (site, flow, error shape) keeps a trace: its repeats add only disk. */
+const REPEAT_MS = 24 * 3_600_000;
+
+/** An error with its ids, counts and URLs taken out: the same failure on another post reads the same. */
+export const failureShape = (site: string, flow: string, error: string): string =>
+  `${site}\t${flow}\t${error.replace(/https?:\/\/\S+/g, "<url>").replace(/[0-9]+/g, "#")}`;
+
+/**
+ * True when this failure shape kept no trace in the last day, and marks it kept. The marks
+ * live in `<dir>/.trace-shapes.json`; a file that cannot be read keeps the trace.
+ */
+export async function firstTraceOfShape(
+  dir: string,
+  shape: string,
+  now = Date.now(),
+): Promise<boolean> {
+  const file = join(dir, ".trace-shapes.json");
+  const seen: Record<string, number> = await readFile(file, "utf8")
+    .then((t) => JSON.parse(t) as Record<string, number>)
+    .catch(() => ({}));
+  for (const [k, at] of Object.entries(seen)) if (now - at >= REPEAT_MS) delete seen[k];
+  if (seen[shape] !== undefined) return false;
+  seen[shape] = now;
+  await writeFile(file, JSON.stringify(seen)).catch(() => undefined);
+  return true;
 }
 
 /** A caller's folder gets its parent's name too, so two `artifacts` folders never share keys. */

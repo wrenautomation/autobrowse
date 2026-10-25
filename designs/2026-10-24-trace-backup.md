@@ -14,7 +14,8 @@ Traces are William's "super important data". Keep every one for good, off this M
 ## Design
 
 - `src/shots/traces.ts`: `backupTraces` copies each zip not yet kept, oldest first, streamed. Ledger `traces-kept.tsv` in the state folder: key, size, mtime.
-- `sweepTraces` removes a zip older than `TRACES_KEEP_DAYS` (14) only when the ledger has its exact line. A changed file is kept.
+- `sweepTraces` removes a zip older than `TRACES_KEEP_DAYS` (3; 14 until 10-25) only when the ledger has its exact line. A changed file is kept.
+- A failure whose shape (site, flow, error with numbers and URLs taken out) kept a trace in the last day keeps no new trace (`firstTraceOfShape`, marks in `<artifacts>/.trace-shapes.json`). 10-25: a broken LinkedIn post-stats read failed 115 times a day at ~20 MB each.
 - `TRACES_TO`: `s3://bucket[/prefix]` or a folder. Unset = no copy, no sweep. It does not need `SHOTS_BUCKET`.
 - `TRACE_DIRS`: callers' artifact folders (comma list). Key: `traces/<machine>/<parent>-<dir>/<file>`.
 - S3 store: Glacier Instant Retrieval, the bucket's SSE-S3 (AES256). Key under the owner's segment, so owner IAM fences hold.

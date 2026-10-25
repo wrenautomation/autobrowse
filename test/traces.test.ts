@@ -12,6 +12,8 @@ import { describe, expect, it } from "vitest";
 import {
   backupTraces,
   dirTraceStore,
+  failureShape,
+  firstTraceOfShape,
   sweepTraces,
   type TraceStore,
   traceDirName,
@@ -107,5 +109,28 @@ describe("traces", () => {
     const r = await backupTraces({ ...opts, store: refusing });
     expect(r).toMatchObject({ shipped: 1, pending: 2, refused: "AccessDenied" });
     expect(readFileSync(opts.ledgerFile, "utf8").trim().split("\n")).toHaveLength(1);
+  });
+});
+
+describe("firstTraceOfShape", () => {
+  it("keeps one trace a day for a failure that repeats on other posts", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "shapes-"));
+    const a = failureShape(
+      "example",
+      "post-stats",
+      "no counts for urn:li:ugcPost:111 (https://example.com/p/111)",
+    );
+    const b = failureShape(
+      "example",
+      "post-stats",
+      "no counts for urn:li:ugcPost:222 (https://example.com/p/222)",
+    );
+    const c = failureShape("example", "post-stats", "timed out");
+    const t = now.getTime();
+    expect(a).toBe(b);
+    expect(await firstTraceOfShape(dir, a, t)).toBe(true);
+    expect(await firstTraceOfShape(dir, b, t + 1000)).toBe(false);
+    expect(await firstTraceOfShape(dir, c, t + 1000)).toBe(true);
+    expect(await firstTraceOfShape(dir, a, t + DAY)).toBe(true);
   });
 });

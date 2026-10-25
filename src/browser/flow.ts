@@ -21,6 +21,7 @@ import { tallied } from "../llm/ledger.js";
 import { redactAria, redactText } from "../recorder/redact.js";
 import { type FlowOutcome, type FlowRunRow, type FlowRuns, fileFlowRuns } from "../runs/flows.js";
 import { shareOff, shareTrace } from "../share/share.js";
+import { failureShape, firstTraceOfShape } from "../shots/traces.js";
 import { currentCall, type DoneActs, markSubmitted } from "./attempt.js";
 import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js";
 import { filmLog } from "./film.js";
@@ -1064,7 +1065,15 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               artifacts.html = file;
             }
           }
-          if (tracing) {
+          const shape = failureShape(
+            flow.site,
+            flow.name,
+            err instanceof Error ? err.message : String(err),
+          );
+          if (tracing && !(await firstTraceOfShape(artifactsDir, shape))) {
+            // The same failure kept a trace today: end the trace without a file.
+            await session.context.tracing.stop().catch(() => undefined);
+          } else if (tracing) {
             const trace = join(artifactsDir, `${stamp}.zip`);
             if (
               await session.context.tracing.stop({ path: trace }).then(

@@ -156,8 +156,8 @@ const schema = z.object({
         .map((d) => d.trim())
         .filter(Boolean),
     ),
-  /** A kept trace stays on this disk this long, then is swept. */
-  tracesKeepDays: z.coerce.number().min(0).default(14),
+  /** A kept trace stays on this disk this long, then is swept (the backup holds it for good). */
+  tracesKeepDays: z.coerce.number().min(0).default(3),
   logLevel: z.string().default("info"),
   /** Where the Restate endpoint listens; the UI is on `uiPort`. */
   restatePort: z.coerce.number().int().default(9081),
