@@ -21,7 +21,7 @@ export interface Mark {
   name: string | null;
 }
 
-interface Box {
+export interface Box {
   x: number;
   y: number;
   w: number;
@@ -236,13 +236,20 @@ export function marksFor() {
   let taken = new Map<number, Hints>();
   return {
     /** Numbers the controls in view, shoots the page with the boxes on, takes the boxes away. */
-    async take(page: Page, shoot: () => Promise<string>): Promise<{ file: string; marks: Mark[] }> {
+    async take(
+      page: Page,
+      shoot: () => Promise<string>,
+      /** Before the boxes go on: the clean page, for a run's record. */
+      clean?: () => Promise<unknown>,
+    ): Promise<{ file: string; marks: Mark[]; boxes: Box[] }> {
       const found = await findAll(page, attr);
       taken = new Map(found.map((f) => [f.n, f.hints]));
+      await clean?.();
       await page.evaluate(layerScript(attr, found));
       try {
         return {
           file: await shoot(),
+          boxes: found.map((f) => f.box),
           marks: found.map(({ n, hints: h }) => ({
             n,
             tag: h.tag ?? "",

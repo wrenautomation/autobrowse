@@ -37,6 +37,7 @@ import { expandHome } from "../google/auth.js";
 import { registerDataLogins } from "../mods/login.js";
 import { modFixes, modScreens, withModFixes, withModScreens } from "../mods/mod.js";
 import { isDefaultOwner, ownerKeys } from "../owner.js";
+import { clearRun, keepRun, packStale } from "../runs/capture.js";
 import { s3BlobStore, s3TraceStore } from "../shots/s3.js";
 import { keepArtifact, keepRecording, type ShipReport, shipShots } from "../shots/ship.js";
 import { scrubKeptTraces } from "../shots/trace-scrub.js";
@@ -136,17 +137,21 @@ export function shipperFor(
     aws: awsFor(settings),
     ...(settings.shotsEndpoint ? { endpoint: settings.shotsEndpoint } : {}),
   });
-  return () =>
-    shipShots({
+  const runs = runsDirFor(settings);
+  return () => {
+    packStale(runs);
+    return shipShots({
       roots: [
         { name: "artifacts", dir: artifacts, keep: keepArtifact },
         { name: "recordings", dir: expandHome(settings.recordingsDir), keep: keepRecording },
+        { name: "runs", dir: runs, keep: keepRun, clear: clearRun },
       ],
       store,
       ledgerFile: join(artifacts, ".shots-shipped.tsv"),
       machine: `${ownerKeys(settings.owner).shots}${settings.shotsMachine ?? hostname().replace(/\.local$/, "")}`,
       ...o,
     });
+  };
 }
 
 /** Traces kept for good (src/shots/traces.ts): null when no TRACES_TO is set. */

@@ -52,6 +52,8 @@ export type RunRow =
       resumed: boolean;
       /** The page's size in CSS px: what a screenshot of it would cost. */
       viewport: { width: number; height: number } | null;
+      /** The Claude Code session that started it: the link to its transcript. */
+      session?: string;
     }
   | { kind: "goal"; at: string; goal: string }
   | {
@@ -76,6 +78,16 @@ export type RunRow =
       /** A failed act's target in a few words (`targetOf`), and why the locator missed. */
       target?: string;
       miss?: MissCause;
+      /** The masked answer the caller read, by hash in the run's texts (`capture.ts`). */
+      obs?: string;
+      /** The whole aria tree after the act, masked, by hash. */
+      after?: string;
+      /** Pictures taken for this command (a new screen, a marks shot), by hash. */
+      pics?: string[];
+      /** A marks shot's boxes, CSS px in the viewport, in mark order. */
+      boxes?: Array<[number, number, number, number]>;
+      /** The Claude Code session that sent it, when not the one before. */
+      session?: string;
     }
   | {
       kind: "act";
@@ -92,6 +104,8 @@ export type RunRow =
       outcome: RunOutcome;
       summary: string | null;
       look: PageLook | null;
+      /** The page as the run ended. */
+      pic?: string;
     };
 
 type Row<K extends RunRow["kind"]> = Extract<RunRow, { kind: K }>;

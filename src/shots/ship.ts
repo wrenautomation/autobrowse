@@ -9,7 +9,7 @@
  * mid-way resumes where it left off. A file that changes (a manifest
  * rewritten) ships again. Trace zips go their own way (traces.ts): they hold field values.
  */
-import { appendFile, readdir, readFile, stat } from "node:fs/promises";
+import { appendFile, readdir, readFile, stat, unlink } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
 
 export interface ShotRoot {
@@ -18,6 +18,8 @@ export interface ShotRoot {
   dir: string;
   /** Which files under it ship (path relative to `dir`). */
   keep: (rel: string) => boolean;
+  /** Which shipped files leave this disk once the ledger shows them in the bucket. */
+  clear?: (rel: string) => boolean;
 }
 
 /** Where shots go. One adapter names the vendor (S3, or R2 by endpoint). */
@@ -44,6 +46,8 @@ export interface ShipReport {
   unreadable: string[];
   /** Why the store refused, when it did. */
   refused: string | null;
+  /** Shipped files taken off this disk (a root's `clear`). */
+  cleared?: number;
 }
 
 const IMAGES = new Set([".png", ".jpg", ".jpeg"]);
@@ -136,7 +140,27 @@ export async function shipShots(o: ShipOptions): Promise<ShipReport> {
     report.shipped++;
     report.bytes += f.size;
   }
+  if (!o.dry) report.cleared = await clearShipped(o);
   return report;
+}
+
+/** Removes each `clear` file the ledger shows shipped as it is now (key, size, mtime). */
+async function clearShipped(o: ShipOptions): Promise<number> {
+  const roots = o.roots.filter((r) => r.clear);
+  if (!roots.length) return 0;
+  const done = await shippedSet(o.ledgerFile);
+  let n = 0;
+  for (const root of roots)
+    for await (const path of walk(root.dir)) {
+      const rel = relative(root.dir, path);
+      if (!root.clear?.(rel)) continue;
+      const s = await stat(path).catch(() => null);
+      const key = [o.machine, root.name, ...rel.split(sep)].join("/");
+      if (!s || !done.has(`${key}\t${s.size}\t${Math.trunc(s.mtimeMs)}`)) continue;
+      await unlink(path).catch(() => undefined);
+      n++;
+    }
+  return n;
 }
 
 export function shipWording(r: ShipReport, bucket: string): string[] {
@@ -146,6 +170,7 @@ export function shipWording(r: ShipReport, bucket: string): string[] {
   if (r.refused) lines.push(`${bucket} refused: ${r.refused}; ${r.pending} left, shipped next run`);
   else if (r.pending) lines.push(`${r.pending} files to ship`);
   if (r.unreadable.length) lines.push(`could not read ${r.unreadable.length}: skipped`);
+  if (r.cleared) lines.push(`cleared ${r.cleared} shipped run files from this disk`);
   if (!lines.length) lines.push("nothing new to ship");
   return lines;
 }

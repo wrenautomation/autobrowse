@@ -50,6 +50,7 @@ import {
   diffHtml,
   diffShapes,
   htmlForFile,
+  isPersonalProfile,
   MAX_BODY_BYTES,
   MAX_ROWS,
   NETWORK_OFF,
@@ -126,6 +127,7 @@ import {
 } from "../recorder/redact.js";
 import { saveRecording } from "../recorder/store.js";
 import type { Action, LocatorHints, Recording } from "../recorder/types.js";
+import { type Capture, captureFor } from "../runs/capture.js";
 import { machine, type RunLog, type RunOutcome, runLog } from "../runs/log.js";
 import { missCause, targetOf } from "../runs/success.js";
 import {
@@ -570,6 +572,26 @@ async function serve(
       // not written
     }
   };
+  /**
+   * What the model saw, for training (designs/2026-10-26-run-observations.md); none on a
+   * personal profile. A command's pictures and marks boxes wait here for its row.
+   */
+  let capture: Capture | null = null;
+  let stepPics: string[] = [];
+  let stepBoxes: Array<[number, number, number, number]> | null = null;
+  /** The screen last pictured (URL shape and landmarks): a new one takes a picture. */
+  let lastScreen = "";
+  /** The Claude Code session that last sent a command: rows name a change. */
+  let lastSession: string | null = process.env.CLAUDE_CODE_SESSION_ID ?? null;
+  const picture = async (): Promise<string | null> => {
+    const c = capture;
+    if (!c || page.isClosed()) return null;
+    try {
+      return c.picture(await page.screenshot({ type: "jpeg", quality: 80, scale: "css" }));
+    } catch {
+      return null;
+    }
+  };
   const openRun = () => {
     if (!opts.runs || (history && !history.ended())) return;
     const was = carriedRun;
@@ -581,16 +603,25 @@ async function serve(
       history = runLog(opts.runs, opts.site);
     }
     if (runSide) writeFileSync(runSide, history.id, { mode: 0o600 });
+    const runs = opts.runs;
+    const id = history.id;
+    try {
+      capture = isPersonalProfile(opts.site) ? null : captureFor(runs, opts.site, id);
+    } catch {
+      capture = null;
+    }
+    lastScreen = "";
     const vp = page.viewportSize();
     logged((h) =>
       h.start({
-        run: h.id,
+        run: id,
         site: opts.site,
         driver: opts.driver ?? "console",
         goal: firstGoal,
         machine: machine(),
         resumed: was !== null,
         viewport: vp ? { width: vp.width, height: vp.height } : null,
+        ...(lastSession ? { session: lastSession } : {}),
       }),
     );
     firstGoal = null;
@@ -602,11 +633,18 @@ async function serve(
     if (!h || h.ended()) return;
     // A person who closed the browser ended on the page they last saw.
     const look = page.isClosed() ? handLook : await lookAt(page).catch(() => null);
-    logged((l) => l.end({ outcome, summary, look }));
+    const pic = await picture();
+    logged((l) => l.end({ outcome, summary, look, ...(pic ? { pic } : {}) }));
+    try {
+      capture?.close();
+    } catch {
+      // packed by the next ship (`packStale`)
+    }
+    capture = null;
     if (runSide && !resumable) rmSync(runSide, { force: true });
   };
-  /** What the whole accessibility tree would have cost, in chars; null when it takes too long. */
-  const wholePage = async (): Promise<number | null> => {
+  /** The whole accessibility tree: what a full answer would have cost; null when it takes too long. */
+  const wholePage = async (): Promise<string | null> => {
     const p = page;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<null>((resolve) => {
@@ -614,7 +652,7 @@ async function serve(
     });
     const tree = await Promise.race([ariaWithFrames(p).catch(() => null), late]);
     clearTimeout(timer);
-    return tree === null ? null : tree.length;
+    return tree;
   };
   /**
    * One command's row: how long, what its answer cost the caller in chars,
@@ -625,10 +663,21 @@ async function serve(
     c: Command,
     t0: number,
     error: string | null,
-    chars: number,
+    /** The answer as the caller got it: its length is the cost, its masked text the observation. */
+    answer: string,
     /** The whole error, call log included: why a locator missed. */
     detail?: string,
+    /** The Claude Code session that sent it (`x-claude-session`). */
+    session?: string,
   ) => {
+    // A session control answers mid-command: the pictures wait for the command they belong to.
+    const own = !IMMEDIATE.has(c.cmd);
+    const pics = own ? stepPics : [];
+    const boxes = own ? stepBoxes : null;
+    if (own) {
+      stepPics = [];
+      stepBoxes = null;
+    }
     const h = history;
     if (!h || h.ended()) return;
     const ms = now() - t0;
@@ -637,19 +686,37 @@ async function serve(
       error !== null && "hints" in c && c.hints && /^locator\.\w+: Timeout/.test(error)
         ? { target: redactText(targetOf(c.hints)), miss: missCause(detail ?? error) }
         : {};
-    const write = (full: number | null) =>
+    const cap = capture;
+    const stored = (text: string): string | null => {
+      try {
+        return cap ? cap.text(text) : null;
+      } catch {
+        return null;
+      }
+    };
+    const obs = stored(answer);
+    const by = session && session !== lastSession ? session : null;
+    if (session) lastSession = session;
+    const write = (tree: string | null) => {
+      const after = tree === null ? null : stored(tree);
       logged((l) =>
         l.cmd({
           cmd: c.cmd,
           ok: error === null,
           error: error === null ? null : redactText(error).slice(0, 200),
           ms,
-          chars,
-          full,
+          chars: answer.length,
+          full: tree === null ? null : tree.length,
           host,
           ...missed,
+          ...(obs ? { obs } : {}),
+          ...(after ? { after } : {}),
+          ...(pics.length ? { pics } : {}),
+          ...(boxes ? { boxes } : {}),
+          ...(by ? { session: by } : {}),
         }),
       );
+    };
     if (error !== null || !WHOLE_PAGE.has(c.cmd)) return write(null);
     void wholePage().then(write);
   };
@@ -786,7 +853,17 @@ async function serve(
   const marks = marksFor();
   /** The marks picture, names masked as `aria` masks them. */
   const takeMarks = async () => {
-    const taken = await marks.take(page, shoot);
+    const { boxes, ...taken } = await marks.take(page, shoot, async () => {
+      const pic = await picture();
+      if (pic) stepPics.push(pic);
+    });
+    if (capture)
+      stepBoxes = boxes.map((b) => [
+        Math.round(b.x),
+        Math.round(b.y),
+        Math.round(b.w),
+        Math.round(b.h),
+      ]);
     return {
       ...taken,
       marks: taken.marks.map((m) => ({ ...m, name: m.name && redactText(m.name) })),
@@ -1223,6 +1300,15 @@ async function serve(
     try {
       const helped = await helpedSince();
       if (history && LOOKED_AT.has(c.cmd)) lookBefore = await lookAt(page).catch(() => null);
+      // A new screen before an act: the picture of the state the act was chosen on.
+      const screen = lookBefore
+        ? `${urlShape(lookBefore.url)}\t${lookBefore.landmarks.join("|")}`
+        : "";
+      if (capture && screen && screen !== lastScreen) {
+        lastScreen = screen;
+        const pic = await picture();
+        if (pic) stepPics.push(pic);
+      }
       const out = await looked(c, wait);
       left = { url: page.url(), rows: out.rows ?? left?.rows ?? null };
       return helped && out.answer && typeof out.answer === "object" && !Array.isArray(out.answer)
@@ -1741,10 +1827,12 @@ async function serve(
       // resend loop); without it the gate answers 202 at once and the same command re-asks.
       const wait = new URL(req.url ?? "/", "http://x").searchParams.get("wait") === "1";
       const t = now();
+      const by = req.headers["x-claude-session"];
+      const session = typeof by === "string" && /^[\w-]{8,64}$/.test(by) ? by : undefined;
       try {
         const answer = await run(parsed, wait);
         const body = JSON.stringify(parsed.cmd === "url" ? answer : leanUrls(answer));
-        counted(parsed, t, null, body.length);
+        counted(parsed, t, null, body, undefined, session);
         res.end(body);
       } catch (err) {
         res.statusCode = err instanceof PaymentGate ? (err.reason === "asked" ? 202 : 403) : 500;
@@ -1761,7 +1849,7 @@ async function serve(
           ...(err instanceof PaymentGate ? { gate: err.gate, reason: err.reason } : {}),
           ...(shot ? { marks: shot, hint: 'act on a mark: "hints":{"mark":n}' } : {}),
         });
-        counted(parsed, t, error ?? "", body.length, detail);
+        counted(parsed, t, error ?? "", body, detail, session);
         res.end(body);
       }
     });
@@ -1825,12 +1913,12 @@ async function serve(
       const t = now();
       try {
         const answer = await run(c, true);
-        counted(c, t, null, JSON.stringify(answer ?? null).length);
+        counted(c, t, null, JSON.stringify(answer ?? null));
         return answer;
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         const error = detail.split("\n")[0] ?? "";
-        counted(c, t, error, error.length, detail);
+        counted(c, t, error, error, detail);
         throw err;
       }
     },

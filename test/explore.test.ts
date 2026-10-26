@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { zstdDecompressSync } from "node:zlib";
 import { memoryAudit } from "credvault";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -21,7 +22,9 @@ import type { Charge, Receipt } from "../src/money/charges.js";
 import type { Contacts } from "../src/money/profile.js";
 import { parseCardLine } from "../src/money/wallet.js";
 import { loadRecording } from "../src/recorder/store.js";
+import { clearRun, keepRun } from "../src/runs/capture.js";
 import { readRun } from "../src/runs/log.js";
+import { shipShots } from "../src/shots/ship.js";
 
 const sink = memorySink();
 const desktop = fakeDesktop([
@@ -858,6 +861,93 @@ describe("a missed act in the history", () => {
         (r) => r.kind === "cmd" && r.cmd === "click",
       );
       expect(missed).toMatchObject({ ok: false, target: 'button "Go"', miss: "covered" });
+    } finally {
+      await ex.exec({ cmd: "close" }).catch(() => undefined);
+      await ex.done;
+      await new Promise((r) => setTimeout(r, 500));
+      await rm(dir, { recursive: true, force: true, maxRetries: 5 });
+    }
+  }, 60_000);
+});
+
+describe("what the model saw, for training", () => {
+  it("keeps masked answers, the tree after an act, pictures and marks boxes; packs them at the end; a ship clears them", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "explore-obs-"));
+    const runs = join(dir, "runs");
+    const port = 9800 + Math.floor(Math.random() * 150);
+    const ex = await startExplore({
+      site: "scratch",
+      port,
+      recordingsDir: join(dir, "recordings"),
+      runs,
+      browser: {
+        tier: "local",
+        channel: "chromium",
+        profilesDir: join(dir, "profiles"),
+        artifactsDir: join(dir, "artifacts"),
+        headless: true,
+      },
+    });
+    try {
+      await ex.exec({
+        cmd: "open",
+        url: `data:text/html,${encodeURIComponent(
+          `<main><label>Note <input></label><button>Go</button></main>`,
+        )}`,
+      });
+      await ex.exec({
+        cmd: "fill",
+        hints: { role: "textbox", name: "Note" },
+        value: "sk-fake0000000000000000000000",
+      });
+      await ex.exec({ cmd: "aria", raw: true });
+      // Same screen: the fill took its picture, the click takes none.
+      await ex.exec({ cmd: "click", hints: { role: "button", name: "Go" } });
+      await ex.exec({ cmd: "marks" });
+      await ex.exec({ cmd: "done", outcome: "achieved" });
+      await new Promise((r) => setTimeout(r, 1_000));
+      const site = join(runs, "scratch");
+      const runFile = readdirSync(site).find((f) => /^\d{8}-\d{6}-[0-9a-f]{4}\.jsonl$/.test(f));
+      const rows = readRun(join(site, runFile as string));
+      const cmds = rows.filter((r) => r.kind === "cmd");
+      const click = cmds.find((r) => r.cmd === "click");
+      expect(click).toMatchObject({ obs: expect.any(String), after: expect.any(String) });
+      expect(cmds.find((r) => r.cmd === "fill")?.pics?.length).toBe(1);
+      expect(click?.pics).toBeUndefined();
+      const marked = cmds.find((r) => r.cmd === "marks");
+      expect(marked?.pics?.length).toBe(1);
+      expect(marked?.boxes?.length).toBe(2);
+      const end = rows.find((r) => r.kind === "end");
+      expect(end).toMatchObject({ pic: expect.any(String) });
+      // Packed at the end; nothing leaves the mask.
+      const packed = readdirSync(site).filter((f) => f.endsWith(".jsonl.zst"));
+      expect(packed).toHaveLength(1);
+      expect(readdirSync(site).some((f) => f.endsWith(".obs.jsonl"))).toBe(false);
+      const text = zstdDecompressSync(await readFile(join(site, packed[0] as string))).toString();
+      expect(text).not.toContain("sk-fake0000000000000000000000");
+      const lines = text
+        .trim()
+        .split("\n")
+        .map((l) => JSON.parse(l) as { h: string; text: string });
+      const hashes = new Set(lines.map((l) => l.h));
+      expect(hashes.has(click?.obs as string)).toBe(true);
+      expect(hashes.has(click?.after as string)).toBe(true);
+      const blobs = readdirSync(join(runs, "blobs"));
+      expect(blobs.length).toBeGreaterThanOrEqual(2);
+      // Shipped, then cleared: the texts and pictures go, the run file stays.
+      const put: string[] = [];
+      const report = await shipShots({
+        roots: [{ name: "runs", dir: runs, keep: keepRun, clear: clearRun }],
+        store: { put: async (key) => void put.push(key) },
+        ledgerFile: join(dir, "ledger.tsv"),
+        machine: "m",
+      });
+      expect(put.some((k) => k.endsWith(".jsonl.zst"))).toBe(true);
+      expect(put.some((k) => k === `m/runs/scratch/${runFile}`)).toBe(true);
+      expect(report.cleared).toBe(blobs.length + 1);
+      expect(readdirSync(join(runs, "blobs"))).toHaveLength(0);
+      expect(readdirSync(site).filter((f) => f.endsWith(".zst"))).toHaveLength(0);
+      expect(existsSync(join(site, runFile as string))).toBe(true);
     } finally {
       await ex.exec({ cmd: "close" }).catch(() => undefined);
       await ex.done;
