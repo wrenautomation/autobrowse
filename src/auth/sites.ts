@@ -816,9 +816,10 @@ const npm: SiteLogin = {
         submit: { role: "button", name: "Login" },
         hint: "npm",
       },
+      // No `asks`: the sign-in page's own banner can say "2FA" (10-26: the bypass-token
+      // notice did), so only the code box showing means npm wants a code.
       {
         kind: "totp",
-        asks: /authenticator|two-factor|2fa/i,
         field: { role: "textbox", name: "/code|one-time password/i" },
         submit: { role: "button", name: "/verify|submit|continue|login/i" },
       },
