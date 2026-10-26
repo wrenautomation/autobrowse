@@ -363,6 +363,12 @@ const schema = z.object({
 
 export type Settings = z.infer<typeof schema>;
 
+/** One setting's own check, for a value about to be written (`settings set`); null when it passes. */
+export function checkSetting(field: keyof Settings, value: string): string | null {
+  const r = schema.shape[field].safeParse(value);
+  return r.success ? null : r.error.issues.map((i) => i.message).join("; ");
+}
+
 export const ENV_KEYS = {
   owner: "AUTOBROWSE_OWNER",
   ownersDir: "OWNERS_DIR",

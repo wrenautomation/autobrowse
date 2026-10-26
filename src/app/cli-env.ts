@@ -23,6 +23,7 @@ import {
 import { expandHome } from "../google/auth.js";
 import { isDefaultOwner } from "../owner.js";
 import type { Settings } from "./config.js";
+import { editSetting, isSettingName, settingsPath } from "./settings-file.js";
 
 export interface EnvCliDeps {
   store: () => EnvStore;
@@ -132,9 +133,19 @@ export function registerEnvCommands(program: Command, settings: Settings, deps: 
       const chosen = names.length ? all.filter((e) => names.includes(e.name)) : all;
       // The store is the fleet's; a few names describe THIS machine and a blanket
       // pull would hand it the box's answer (a sealed credential file read as plain).
-      const entries = names.length ? chosen : chosen.filter((e) => !MACHINE_LOCAL.has(e.name));
+      let entries = names.length ? chosen : chosen.filter((e) => !MACHINE_LOCAL.has(e.name));
       const kept = chosen.length - entries.length;
       if (o.export) return out(toExports(entries));
+      // Settings that are no secret go to settings.json; the env file keeps secrets.
+      if (!o.stdout) {
+        const settled = entries.filter((e) => isSettingName(e.name));
+        for (const e of settled) editSetting(settingsPath(), e.name, e.value);
+        if (settled.length)
+          say(
+            `${settled.length} settings → ${settingsPath()}: ${settled.map((e) => e.name).join(", ")}`,
+          );
+        entries = entries.filter((e) => !isSettingName(e.name));
+      }
       const file = resolve(expandHome(o.out));
       // A multi-line value (a service-account JSON) goes to its own 0600 file beside the env file.
       const sidecars: Array<[string, string]> = [];

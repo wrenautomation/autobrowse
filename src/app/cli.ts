@@ -38,6 +38,7 @@ import { registerNeedsCommands } from "./cli-needs.js";
 import { registerReachCommands } from "./cli-reach.js";
 import { registerRecordCommands } from "./cli-record.js";
 import { registerRunsCommands } from "./cli-runs.js";
+import { registerSettingsCommands } from "./cli-settings.js";
 import { registerShareCommands, sendAfterCommand } from "./cli-share.js";
 import { registerShotsCommands } from "./cli-shots.js";
 import { registerSiteCommands } from "./cli-site.js";
@@ -853,6 +854,7 @@ registerAccountsCommands(program, () => ({
   push: (text) => envStoreFor(settings).put("AUTOBROWSE_ACCOUNTS", text),
 }));
 registerEnvCommands(program, settings, { store: () => envStoreFor(settings) });
+registerSettingsCommands(program, settings);
 registerDesktopCommands(program, tmpdir());
 registerWalletCommands(program, settings);
 registerFilesCommands(program, settings);

@@ -31,6 +31,8 @@ export default defineConfig({
       AUTOBROWSE_RESUME: "off",
       AUTOBROWSE_SHARE: "off",
       PLANS_DIR: join(tmpdir(), "autobrowse-test-plans"),
+      SETTINGS_FILE: join(tmpdir(), "autobrowse-test-settings", "settings.json"),
+      LIMITS_FILE: join(tmpdir(), "autobrowse-test-limits", "limits.json"),
     },
     testTimeout: 120_000,
     hookTimeout: 180_000,

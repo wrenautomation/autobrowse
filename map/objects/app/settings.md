@@ -20,7 +20,8 @@ One zod schema with defaults is the whole contract between the box, compose, `.e
 - `Settings = z.infer<typeof schema>` — `src/app/config.ts:302`; `ENV_KEYS` — `:300-409`; `loadSettings(env)` — `:411`; `loadEnvFile(from)` — `:514`
 - Files it names: `credentialsFile`, `walletFile`, `accountsFile`, `accessFile`, `fixesFile`, `screensFile`, `capsFile`, `needsDoneFile` (`:40-243`), `artifactsDir`, `recordingsDir`, `profilesDir`; a non-default [[owner]]'s are fixed under `ownersDir` (`OWNER_PATHS`, `:428`)
 - Restate shape: `planEndpoint` (listen, or tunnel to Restate Cloud) — `src/app/endpoint.ts:17-63`
-- Where values come from: `.env` (local), the box's prod.env (outside git; never printed), SSM through credvault for secrets
+- Where values come from, first wins: the process env, `~/.config/autobrowse/settings.json` (settings that are no secret, by field name; `src/app/settings-file.ts`, `SETTINGS_FILE`), the env file (secrets only; `boot` names a setting left there), the default. Secrets also sit in SSM through credvault
+- `autobrowse settings [name] [--all]` shows each value and its source; `settings set|unset` checks the value as the boot does and notes it in `settings-changes.jsonl`; `env pull` sends settings to the file, secrets to the env file (`designs/2026-10-26-settings-file.md`)
 
 ## Connected to
 
@@ -37,8 +38,8 @@ One zod schema with defaults is the whole contract between the box, compose, `.e
 
 | Surface | Role |
 |---|---|
-| `.env`, compose, the box | write |
-| `autobrowse status`, UI `/api/settings` | read |
+| `settings.json` (`autobrowse settings set`), the env file (secrets), compose | write |
+| `autobrowse settings`, `autobrowse status`, UI `/api/settings` | read |
 
 ## See
 

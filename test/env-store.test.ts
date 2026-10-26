@@ -74,6 +74,21 @@ describe("autobrowse env", () => {
     await expect(t.run("pull", "NOPE")).rejects.toThrow(/not in the store: NOPE/);
   });
 
+  it("pulls a setting that is no secret into settings.json, not the env file", async () => {
+    const t = setup({ LOG_LEVEL: "debug", UI_TOKEN: "tok" });
+    const was = process.env.SETTINGS_FILE;
+    process.env.SETTINGS_FILE = join(t.dir, "settings.json");
+    try {
+      await t.run("pull");
+      expect(readFileSync(join(t.dir, ".env"), "utf8")).toBe("UI_TOKEN=tok\n");
+      expect(JSON.parse(readFileSync(join(t.dir, "settings.json"), "utf8"))).toEqual({
+        logLevel: "debug",
+      });
+    } finally {
+      process.env.SETTINGS_FILE = was;
+    }
+  });
+
   it("pushes named keys from .env, or every key of a file; refuses a bare push", async () => {
     const t = setup({});
     writeFileSync(

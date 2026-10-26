@@ -20,6 +20,7 @@ import {
   readDotenv,
   type Settings,
 } from "./config.js";
+import { applySettings, isSettingName, settingsPath } from "./settings-file.js";
 
 type Key = keyof Settings;
 
@@ -171,9 +172,19 @@ export function enterOwner(
   return owner;
 }
 
-/** Every entry point's first line: the operator's `.env`, the owner's view of it, the settings. */
+/**
+ * Every entry point's first line: the operator's `settings.json` and `.env`,
+ * the owner's view of them, the settings. A setting that is no secret and
+ * still sits in the env file is named on stderr: it belongs in `settings.json`.
+ */
 export function boot(from?: string): { root: string; settings: Settings } {
+  applySettings(process.env, settingsPath(process.env));
   const { root, names } = loadEnvFile(from);
+  const strays = names.filter(isSettingName);
+  if (strays.length)
+    console.error(
+      `settings in the env file; move them to ${settingsPath(process.env)} (\`autobrowse settings set\`): ${strays.join(", ")}`,
+    );
   enterOwner(process.env, names);
   const settings = loadSettings();
   // Library defaults (`deps/stats`) land where this owner's reports read them.
