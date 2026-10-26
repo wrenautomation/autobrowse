@@ -56,6 +56,7 @@ import type { Recording } from "../recorder/types.js";
 import { shareFlow } from "../share/share.js";
 import { fileCaps } from "../sites/caps.js";
 import { type SiteFacade, sitesFor } from "../sites/index.js";
+import { fileLimits } from "../sites/limits.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import type { Jobs } from "../ui/jobs.js";
 import { type CompiledCatalog, compiledCatalog } from "../workflows/compiled.js";
@@ -423,7 +424,7 @@ export function localParts(settings: Settings, o: { headless?: boolean } = {}): 
       kept: () => sink.list(),
       reload: (have) => missingEntries(sink, have),
       caps: fileCaps(expandHome(settings.capsFile)),
-      capsScale: settings.capsScale,
+      limits: fileLimits(expandHome(settings.limitsFile)),
       spent: spentKeysFor(settings),
       keys: keysDepFor(settings),
       keeper: keyKeeperFor(settings),

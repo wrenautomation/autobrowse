@@ -16,8 +16,8 @@ import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import { fingerprint, memorySpent } from "../src/reach/key-ring.js";
 import { fileCaps, memoryCaps } from "../src/sites/caps.js";
-import { pacedBy, scaledBy } from "../src/sites/facade.js";
 import { linkedin, SiteError, siteFacade, web, x } from "../src/sites/index.js";
+import { fileLimits } from "../src/sites/limits.js";
 import { usernameOf } from "../src/sites/wire.js";
 import { fakeBrowser, fakeFetch } from "./fakes.js";
 
@@ -173,31 +173,51 @@ describe("a named account", () => {
   });
 });
 
-describe("CAPS_SCALE", () => {
-  it("2 doubles the site's and the account's caps; a 0 stays 0; pace gaps halve", async () => {
+describe("limits.json", () => {
+  it("sets an account's caps over the code's; a change holds from the next call; a bad file keeps the last good", async () => {
     const browser = fakeBrowser([]);
     browser.on(linkedinCompanyJobs, async () => ({ companyId: "1", jobs: [] }));
-    const caps = memoryCaps(() => noon);
-    const sites = siteFacade([{ ...linkedin, pace: { gapMs: 0 } }], {
+    const limits = fileLimits(join(mkdtempSync(join(tmpdir(), "limits-")), "limits.json"));
+    limits.write({
+      linkedin: { accounts: { linkedin: { company: 15 } }, pace: { gapMs: 0, jitterMs: 0 } },
+    });
+    const sites = siteFacade([linkedin], {
       http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
       env: () => undefined,
       sink: memorySink(),
       runner: browser,
       flow: (n) => (n === "linkedin/company-jobs" ? (linkedinCompanyJobs as never) : null),
-      caps,
-      capsScale: 2,
+      caps: memoryCaps(() => noon),
+      limits,
       accountOf: async (_site, name) => ({ linkedin: "me@x.com" })[name] ?? null,
     });
     const jobs = () => sites.call("linkedin", "GET", "/company/stripe/jobs", {}, "linkedin");
-    // The personal account's company cap of 10 is 20 now.
-    for (let i = 0; i < 20; i++) await jobs();
+    // The personal account's company cap is 10 in code, 15 in the file.
+    for (let i = 0; i < 15; i++) await jobs();
     await expect(jobs()).rejects.toMatchObject({ status: 429 });
-    expect(scaledBy({ a: 25, off: 0 }, 2)).toEqual({ a: 50, off: 0 });
-    expect(pacedBy({ gapMs: 30_000, jitterMs: 9_000, maxWaitMs: 1 }, 2)).toEqual({
-      gapMs: 15_000,
-      jitterMs: 4_500,
-      maxWaitMs: 1,
+    const [row] = sites.limits("linkedin");
+    expect(row?.accountCaps?.linkedin?.company).toBe(15);
+    expect(row?.accountCaps?.linkedin?.profile).toBe(linkedin.accountCaps?.linkedin?.profile);
+    expect(row?.caps?.connect).toBe(linkedin.caps?.connect);
+    expect(row?.pace).toEqual({ ...linkedin.pace, gapMs: 0, jitterMs: 0 });
+    expect(row?.set).toEqual({
+      accounts: { linkedin: { company: 15 } },
+      pace: { gapMs: 0, jitterMs: 0 },
     });
+    // A new mtime: the file is read again.
+    await new Promise((r) => setTimeout(r, 5));
+    limits.write({
+      linkedin: { accounts: { linkedin: { company: 16 } }, pace: { gapMs: 0, jitterMs: 0 } },
+    });
+    await jobs();
+    await expect(jobs()).rejects.toMatchObject({ status: 429 });
+    await new Promise((r) => setTimeout(r, 5));
+    writeFileSync(limits.path, "{ not json");
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(limits.read().linkedin?.accounts?.linkedin?.company).toBe(16);
+    expect(err).toHaveBeenCalledOnce();
+    err.mockRestore();
+    expect(() => limits.write({ linkedin: { caps: { connect: -1 } } })).toThrow();
   });
 });
 

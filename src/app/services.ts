@@ -40,6 +40,7 @@ import {
   sitesFor,
   sitesService,
 } from "../sites/index.js";
+import { fileLimits } from "../sites/limits.js";
 import { fileRefusedTokens } from "../sites/refused.js";
 import { fileUploadSessions } from "../sites/uploads.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
@@ -336,7 +337,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       kept: () => sink.list(),
       reload: (have) => missingEntries(sink, have),
       caps: fileCaps(expandHome(settings.capsFile)),
-      capsScale: settings.capsScale,
+      limits: fileLimits(expandHome(settings.limitsFile)),
       spent: fileSpent(join(dirname(expandHome(settings.capsFile)), "spent-keys.json")),
       keys: keysDepFor(settings),
       keeper: keyKeeperFor(settings),

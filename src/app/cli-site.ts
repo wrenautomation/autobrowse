@@ -8,8 +8,9 @@
  */
 
 import type { Command } from "commander";
-import type { CapsReport } from "../sites/facade.js";
+import type { CapsReport, LimitsRow } from "../sites/facade.js";
 import { type CheckRow, checkSite, type Method } from "../sites/index.js";
+import type { SiteLimits } from "../sites/limits.js";
 import { refusedLine, utcOf } from "../sites/refused.js";
 import { accent, bad, bold, columns, dim, good, warn } from "../style.js";
 import type { LocalBackend } from "./backend.js";
@@ -49,7 +50,118 @@ export const checkRow = (c: CheckRow): string[] => [
   c.ok ? good(`ok ${c.ms}ms`) : c.why === "no probe" ? dim(c.why) : bad(c.why ?? "failed"),
 ];
 
+const secs = (ms: number) => `${ms / 1000}s`;
+
+/** One site's limits: `*` marks a value `limits.json` sets; then today's use per account. */
+export function printLimits(r: LimitsRow, used: Record<string, number>): void {
+  const mark = (on: boolean) => (on ? warn("*") : "");
+  const line = (caps: Record<string, number>, set: Record<string, number> = {}) =>
+    Object.entries(caps)
+      .map(([b, n]) => `${b} ${n}${mark(b in set)}`)
+      .join("  ");
+  const pace = r.pace
+    ? `pace ${secs(r.pace.gapMs)}${r.pace.jitterMs ? ` + up to ${secs(r.pace.jitterMs)}` : ""}${mark(Boolean(r.set.pace))}`
+    : "no pace";
+  console.log(`${accent(r.site)}  ${pace}`);
+  if (r.caps) console.log(`  caps  ${line(r.caps, r.set.caps)}`);
+  for (const [name, caps] of Object.entries(r.accountCaps ?? {}))
+    console.log(`  account ${name}  ${line(caps, r.set.accounts?.[name])}`);
+  const today = new Map<string, string[]>();
+  for (const [k, n] of Object.entries(used).sort()) {
+    const [, account = "", bucket] = k.split("|");
+    today.set(account, [...(today.get(account) ?? []), `${bucket} ${n}`]);
+  }
+  for (const [account, parts] of today)
+    console.log(dim(`  used today by ${maskAddress(account)}  ${parts.join("  ")}`));
+}
+
+function registerLimitCommands(program: Command, local: LocalBackend): void {
+  const facade = () => {
+    const sites = local().backend.sites;
+    if (!sites) throw new Error("no site apis here");
+    return sites;
+  };
+  const edit = (name: string, fn: (l: SiteLimits) => SiteLimits) => {
+    const { before, after, path } = facade().editLimits(name, fn);
+    console.log(`${path}: ${name} ${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
+  };
+  const count = (v: string) => {
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < 0) throw new Error(`${v}: a whole number, 0 or more`);
+    return n;
+  };
+  const limits = program
+    .command("limits [site]")
+    .description(
+      "Each site's daily caps, each account's own caps and the pace between calls; * marks what limits.json sets over the code's defaults",
+    )
+    .option("--json", "the rows as JSON")
+    .action((name: string | undefined, o: { json?: boolean }) => {
+      const sites = facade();
+      const rows = sites.limits(name);
+      if (o.json) return console.log(JSON.stringify(rows, null, 2));
+      const { used } = sites.caps(undefined, name);
+      for (const r of rows)
+        printLimits(
+          r,
+          Object.fromEntries(Object.entries(used).filter(([k]) => k.startsWith(`${r.site}|`))),
+        );
+    });
+  limits
+    .command("set <site> <bucket> <n>")
+    .description(
+      "A daily cap for every account of the site, or with --account for one; 0 turns the bucket off",
+    )
+    .option("--account <name>", "the credential name (as `creds` lists it)")
+    .action((name: string, bucket: string, n: string, o: { account?: string }) =>
+      edit(name, (l) => {
+        if (!o.account) return { ...l, caps: { ...l.caps, [bucket]: count(n) } };
+        const accounts = l.accounts ?? {};
+        return {
+          ...l,
+          accounts: { ...accounts, [o.account]: { ...accounts[o.account], [bucket]: count(n) } },
+        };
+      }),
+    );
+  limits
+    .command("pace <site> <gapMs> [jitterMs]")
+    .description(
+      "The least gap between one account's calls to the site, plus up to jitterMs at random",
+    )
+    .action((name: string, gap: string, jitter: string | undefined) =>
+      edit(name, (l) => ({
+        ...l,
+        pace: {
+          ...l.pace,
+          gapMs: count(gap),
+          ...(jitter !== undefined ? { jitterMs: count(jitter) } : {}),
+        },
+      })),
+    );
+  limits
+    .command("unset <site> [bucket]")
+    .description("Back to the code's default: one bucket, the pace (--pace), or the whole site")
+    .option("--account <name>", "the bucket of this account's own caps")
+    .option("--pace", "the pace")
+    .action((name: string, bucket: string | undefined, o: { account?: string; pace?: boolean }) =>
+      edit(name, (l) => {
+        if (o.pace) {
+          const { pace: _, ...rest } = l;
+          return rest;
+        }
+        if (!bucket) return {};
+        const drop = (c: Record<string, number> = {}) => {
+          const { [bucket]: _, ...rest } = c;
+          return rest;
+        };
+        if (!o.account) return { ...l, caps: drop(l.caps) };
+        return { ...l, accounts: { ...l.accounts, [o.account]: drop(l.accounts?.[o.account]) } };
+      }),
+    );
+}
+
 export function registerSiteCommands(program: Command, local: LocalBackend, box?: Ingress): void {
+  registerLimitCommands(program, local);
   const site = program
     .command("site")
     .description("Services under their official API's shape: API with a token, browser without")

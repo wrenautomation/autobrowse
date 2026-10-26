@@ -26,7 +26,8 @@ import type { Approver } from "../gates/payment.js";
 import { envSource, ringCount, type SpentKeys } from "../reach/key-ring.js";
 import { type KeysDep, keyCall } from "../reach/key-source.js";
 import type { Proof, RunAs } from "../workflows/proof.js";
-import type { DailyCaps, MeteredCall, Pace } from "./caps.js";
+import type { DailyCaps, MeteredCall } from "./caps.js";
+import { type Effective, effective, type LimitStore, type SiteLimits } from "./limits.js";
 import {
   accessTokens,
   accountEnv,
@@ -41,17 +42,6 @@ import type { RefusedToken } from "./refused.js";
 import type { UploadSessions } from "./uploads.js";
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-/** Caps times `scale`, rounded down; a 0 (a bucket kept off) stays 0. */
-export const scaledBy = (caps: Record<string, number> = {}, scale: number) =>
-  Object.fromEntries(Object.entries(caps).map(([b, n]) => [b, Math.floor(n * scale)]));
-
-/** A pace whose gaps are `scale` times shorter: `scale` times the calls in the same time. */
-export const pacedBy = (pace: Pace, scale: number): Pace => ({
-  ...pace,
-  gapMs: Math.round(pace.gapMs / scale),
-  ...(pace.jitterMs !== undefined ? { jitterMs: Math.round(pace.jitterMs / scale) } : {}),
-});
 
 import type { RenewReport } from "./renew.js";
 import {
@@ -114,8 +104,8 @@ export interface SiteFacadeDeps {
   approve?: Approver | null;
   /** Counts routes' `meter` against the site's `caps`, per account per day, and books `pace` slots; absent: nothing is capped. */
   caps?: DailyCaps;
-  /** Times `caps` and the accounts' own caps, and divides `pace` gaps (`CAPS_SCALE`); 1 when absent. */
-  capsScale?: number;
+  /** The operator's limits over each site's `caps`, `accountCaps` and `pace` (`limits.json`); absent: the defaults. */
+  limits?: LimitStore;
   /** Paid keys out of credit (`reach/key-ring.ts`), for `capsPerKey` and api legs that rotate keys. */
   spent?: SpentKeys;
   /** The vault's keys and their audit (`reach/key-source.ts`); absent, paid keys are the env names and no use is audited. */
@@ -232,6 +222,11 @@ export interface SendSpec {
   parse(path: string, input: Record<string, unknown>): unknown;
 }
 
+export interface LimitsRow extends Effective {
+  site: string;
+  set: SiteLimits;
+}
+
 export interface SiteFacade {
   list(): Promise<SiteRow[]>;
   status(site: string): Promise<SiteRow>;
@@ -251,6 +246,13 @@ export interface SiteFacade {
   sendSpec?(site: string, method: Method, path: string): SendSpec;
   /** A day's capped reads (today when absent): what each bucket used and every metered call, who asked. */
   caps(day?: string, site?: string): CapsReport;
+  /** Each capped or paced site's limits now (`effective`), and what `limits.json` sets of them (`set`). */
+  limits(site?: string): LimitsRow[];
+  /** Change one site's limits in `limits.json` (`LimitStore.edit`); 404 for an unknown site. */
+  editLimits(
+    site: string,
+    fn: (l: SiteLimits) => SiteLimits,
+  ): { before: SiteLimits; after: SiteLimits; path: string };
   /** Run one setup step; what it makes lands in the sink (under the account's name, with one). */
   setup(
     site: string,
@@ -365,7 +367,7 @@ function resolveInput(v: unknown, env: SiteFacadeDeps["env"], account: string | 
 }
 
 export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): SiteFacade {
-  const scale = deps.capsScale ?? 1;
+  const limitsOf = (s: SiteApi) => effective(s, deps.limits?.read() ?? {});
   const byName = new Map(sites.map((s) => [s.site, s]));
   // A site that rolls its refresh token on every mint (X) hands the new one to the sink.
   const minted = accessTokens(
@@ -615,10 +617,10 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     };
   };
   /** The chosen account's own caps (`SiteApi.accountCaps`), its credential names read as addresses. */
-  const capsOfAccount = async (s: SiteApi, chosen: string | null) => {
-    if (!s.accountCaps || !chosen) return {};
+  const capsOfAccount = async (s: SiteApi, lim: Effective, chosen: string | null) => {
+    if (!lim.accountCaps || !chosen) return {};
     const who = chosen.trim().toLowerCase();
-    for (const [name, caps] of Object.entries(s.accountCaps)) {
+    for (const [name, caps] of Object.entries(lim.accountCaps)) {
       const address = (await deps.accountOf?.(deps.providerOf?.(s) ?? s.site, name)) ?? name;
       if (address.trim().toLowerCase() === who) return caps;
     }
@@ -627,11 +629,12 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
   /** `capsPerKey` buckets at their cap times the ring's live keys (one at least, so a missing key says so). */
   const capsOfKeys = async (
     s: SiteApi,
+    lim: Effective,
     keyAccount: string | null,
   ): Promise<Record<string, number>> => {
     const out: Record<string, number> = {};
     for (const [bucket, base] of Object.entries(s.capsPerKey ?? {})) {
-      const cap = s.caps?.[bucket];
+      const cap = lim.caps?.[bucket];
       if (cap === undefined || !deps.spent) continue;
       // A call that names its key counts on that key's own bucket: one key's cap.
       if (keyAccount) {
@@ -651,6 +654,18 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
   return {
     list: () => Promise.all(sites.map(status)),
     status: (name) => status(site(name)),
+    limits(only) {
+      const file = deps.limits?.read() ?? {};
+      return sites
+        .filter((s) => !only || s.site === only)
+        .map((s) => ({ site: s.site, ...effective(s, file), set: file[s.site] ?? {} }))
+        .filter((r) => r.caps || r.accountCaps || r.pace);
+    },
+    editLimits(name, fn) {
+      site(name);
+      if (!deps.limits) throw new SiteError(409, "no limits file here");
+      return { ...deps.limits.edit(name, fn), path: deps.limits.path };
+    },
     caps(day, only) {
       const today = new Date((deps.now ?? Date.now)()).toISOString().slice(0, 10);
       const at = day ?? today;
@@ -711,8 +726,9 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       }
       const byBrowser = !(r.api && token !== null) && Boolean(r.browser);
       const use = r.meter?.(parsed.data as never);
+      const lim = limitsOf(s);
       const note = (outcome: MeteredCall["outcome"], bucket?: string) => {
-        if (!use || !s.caps || !deps.caps) return;
+        if (!use || !lim.caps || !deps.caps) return;
         deps.caps.note({
           at: new Date((deps.now ?? Date.now)()).toISOString(),
           site: s.site,
@@ -727,8 +743,8 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       };
       // Paced before counted: a refusal here spends none of the day's cap.
       const slot =
-        byBrowser && s.pace && deps.caps
-          ? deps.caps.slot(s.site, chosen ?? s.site, pacedBy(s.pace, scale))
+        byBrowser && lim.pace && deps.caps
+          ? deps.caps.slot(s.site, chosen ?? s.site, lim.pace)
           : null;
       if (slot && !slot.ok) note("paced");
       if (slot && !slot.ok)
@@ -738,11 +754,11 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           slot.retryAfter,
         );
       let taken = false;
-      if (use && s.caps && deps.caps) {
+      if (use && lim.caps && deps.caps) {
         const limits = {
-          ...scaledBy(s.caps, scale),
-          ...(await capsOfKeys(s, keyAccount)),
-          ...scaledBy(await capsOfAccount(s, chosen), scale),
+          ...lim.caps,
+          ...(await capsOfKeys(s, lim, keyAccount)),
+          ...(await capsOfAccount(s, lim, chosen)),
         };
         const t = deps.caps.take(s.site, chosen ?? s.site, use, limits);
         if (!t.ok) {
@@ -776,7 +792,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           throw e;
         }
         note("failed");
-        if (!use || !s.caps || e instanceof SiteError) throw e;
+        if (!use || !lim.caps || e instanceof SiteError) throw e;
         // The slot is spent whatever broke: a durable retry would spend one per try, so
         // a failed metered read ends here and the caller chooses (six reads ate 40, 2026-10-01).
         // A platform's lasting refusal keeps its status (a 403 is a missing scope to the caller).
