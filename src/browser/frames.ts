@@ -91,6 +91,9 @@ async function visibleFrames(
   return out;
 }
 
+/** The page's visible frames, outermost first, each with the chain a `frame` hint takes. */
+export const framesInView = (page: Page) => visibleFrames(page.mainFrame(), null, 1, []);
+
 /** The page's snapshot, then each visible frame's under `- iframe "<chain>":`. */
 export async function ariaWithFrames(page: Page): Promise<string> {
   const tree = await page.locator("body").ariaSnapshot();

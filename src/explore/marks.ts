@@ -2,10 +2,12 @@
  * Set-of-marks: a numbered box on each control in view, for a target that hints and the aria
  * tree miss (designs/2026-10-25-explore-marks.md). A mark resolves to the control's locator
  * hints and its place among their matches, so the journal and a compiled flow replay it
- * without the picture. Never a press at a point.
+ * without the picture. Never a press at a point. Controls in iframes are marked too; their
+ * hints carry the frame chain.
  */
 import { randomBytes } from "node:crypto";
-import type { Page } from "playwright";
+import type { Frame, Page } from "playwright";
+import { framesInView } from "../browser/frames.js";
 import { type Hints, locateAll, planLocator } from "../browser/locate.js";
 import { HINTS_JS } from "../recorder/observer.js";
 
@@ -19,9 +21,24 @@ export interface Mark {
   name: string | null;
 }
 
+interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** A control one frame's script found: `k` its place in that frame, the box in that frame. */
+interface Raw {
+  k: number;
+  box: Box;
+  hints: Hints;
+}
+
+/** A control on the picture: the box in the page's viewport, the hints with any frame chain. */
 interface Found {
   n: number;
-  box: { x: number; y: number; w: number; h: number };
+  box: Box;
   hints: Hints;
 }
 
@@ -35,7 +52,7 @@ export const missed = (err: unknown): boolean =>
     (err.name === "TimeoutError" ||
       /strict mode violation|resolved to 0 elements|no usable locator hints/.test(err.message)));
 
-/** In the page: each control in view, top to bottom, tagged `attr`=n, with its hints. */
+/** In one frame: each control in its view, top to bottom, tagged `attr`=`t<k>` until numbered. */
 const findScript = (attr: string, max: number) => `(() => {
 ${HINTS_JS}
   const ATTR = ${JSON.stringify(attr)};
@@ -75,11 +92,113 @@ ${HINTS_JS}
     seen.push({ el, r });
   }
   seen.sort((a, b) => Math.round(a.r.top / 8) - Math.round(b.r.top / 8) || a.r.left - b.r.left);
-  return seen.slice(0, ${max}).map(({ el, r }, i) => {
-    el.setAttribute(ATTR, String(i + 1));
-    return { n: i + 1, box: { x: r.left, y: r.top, w: r.width, h: r.height }, hints: hints(el) };
+  return seen.slice(0, ${max}).map(({ el, r }, k) => {
+    el.setAttribute(ATTR, 't' + k);
+    return { k, box: { x: r.left, y: r.top, w: r.width, h: r.height }, hints: hints(el) };
   });
 })()`;
+
+/** In one frame: `t<k>` becomes the mark's number; a control past the cap loses its tag. */
+const numberScript = (attr: string, numbers: Record<number, number>) => `(() => {
+  const ATTR = ${JSON.stringify(attr)};
+  const numbers = ${JSON.stringify(numbers)};
+  const roots = [document];
+  while (roots.length) {
+    const root = roots.shift();
+    for (const el of root.querySelectorAll('*')) {
+      if (el.shadowRoot) roots.push(el.shadowRoot);
+      const v = el.getAttribute(ATTR);
+      if (!v || v[0] !== 't') continue;
+      const n = numbers[v.slice(1)];
+      if (n) el.setAttribute(ATTR, String(n));
+      else el.removeAttribute(ATTR);
+    }
+  }
+})()`;
+
+/** In the page: of these points, the ones where the top element is a frame (no dialog over it). */
+const framesOnTop = (points: Array<[number, number]>) => `(() =>
+  ${JSON.stringify(points)}.map(([x, y]) => {
+    const top = document.elementFromPoint(x, y);
+    return !!top && (top.tagName === 'IFRAME' || top.tagName === 'FRAME');
+  }))()`;
+
+/** Where a frame's viewport starts in the page's: its element's box plus its border. */
+async function offsetOf(frame: Frame): Promise<{ x: number; y: number } | null> {
+  const el = await frame.frameElement().catch(() => null);
+  if (!el) return null;
+  try {
+    const box = await el.boundingBox();
+    if (!box) return null;
+    // No DOM lib in this build: the frame element's border widths, read in the page.
+    const edge = await el.evaluate((e) => {
+      const { clientLeft: l, clientTop: t } = e as unknown as {
+        clientLeft: number;
+        clientTop: number;
+      };
+      return { l, t };
+    });
+    return { x: box.x + edge.l, y: box.y + edge.t };
+  } catch {
+    return null;
+  } finally {
+    await el.dispose().catch(() => undefined);
+  }
+}
+
+/** Every control in view, in the page and its visible frames, numbered top to bottom. */
+async function findAll(page: Page, attr: string): Promise<Found[]> {
+  const frames: Array<{ frame: Frame; chain: string | null; at: { x: number; y: number } }> = [
+    { frame: page.mainFrame(), chain: null, at: { x: 0, y: 0 } },
+  ];
+  for (const { frame, chain } of await framesInView(page)) {
+    const at = await offsetOf(frame);
+    if (at) frames.push({ frame, chain, at });
+  }
+  const view = page.viewportSize() ?? {
+    width: Number.POSITIVE_INFINITY,
+    height: Number.POSITIVE_INFINITY,
+  };
+  const all: Array<Omit<Found, "n"> & { f: number; k: number }> = [];
+  for (const [f, { frame, chain, at }] of frames.entries()) {
+    // A frame that went away between the list and the read has no marks.
+    const raw = await frame.evaluate<Raw[]>(findScript(attr, MAX_MARKS)).catch(() => [] as Raw[]);
+    const inView = raw
+      .map(({ k, box, hints: h }) => ({
+        f,
+        k,
+        box: { ...box, x: box.x + at.x, y: box.y + at.y },
+        hints: chain ? { ...h, frame: chain } : h,
+      }))
+      .filter(
+        ({ box }) =>
+          box.x + box.w > 0 && box.y + box.h > 0 && box.x < view.width && box.y < view.height,
+      );
+    if (!chain || !inView.length) {
+      all.push(...inView);
+      continue;
+    }
+    // A dialog in the page over the frame hides its controls.
+    const onTop = await page
+      .evaluate<boolean[]>(
+        framesOnTop(
+          inView.map(({ box }) => [
+            Math.min(Math.max(box.x + box.w / 2, 0), view.width - 1),
+            Math.min(Math.max(box.y + box.h / 2, 0), view.height - 1),
+          ]),
+        ),
+      )
+      .catch(() => inView.map(() => false));
+    all.push(...inView.filter((_, i) => onTop[i]));
+  }
+  all.sort((a, b) => Math.round(a.box.y / 8) - Math.round(b.box.y / 8) || a.box.x - b.box.x);
+  const kept = all.slice(0, MAX_MARKS).map((m, i) => ({ ...m, n: i + 1 }));
+  for (const [f, { frame }] of frames.entries()) {
+    const numbers = Object.fromEntries(kept.filter((m) => m.f === f).map((m) => [m.k, m.n]));
+    await frame.evaluate(numberScript(attr, numbers)).catch(() => undefined);
+  }
+  return kept.map(({ n, box, hints: h }) => ({ n, box, hints: h }));
+}
 
 const COLOURS = ["#e5484d", "#0090ff", "#30a46c", "#f76b15", "#8e4ec6", "#d6409f"];
 
@@ -118,7 +237,7 @@ export function marksFor() {
   return {
     /** Numbers the controls in view, shoots the page with the boxes on, takes the boxes away. */
     async take(page: Page, shoot: () => Promise<string>): Promise<{ file: string; marks: Mark[] }> {
-      const found = await page.evaluate<Found[]>(findScript(attr, MAX_MARKS));
+      const found = await findAll(page, attr);
       taken = new Map(found.map((f) => [f.n, f.hints]));
       await page.evaluate(layerScript(attr, found));
       try {
@@ -143,12 +262,14 @@ export function marksFor() {
     async hints(page: Page, n: number): Promise<Hints> {
       const h = taken.get(n);
       if (!h) throw new StaleMark(`no mark ${n}: take marks first ({"cmd":"marks"})`);
-      if (!(await page.locator(`[${attr}="${n}"]`).count()))
+      const root = h.frame ? page.frameLocator(h.frame) : page;
+      if (!(await root.locator(`[${attr}="${n}"]`).count()))
         throw new StaleMark(`mark ${n} is stale (the page changed): take marks again`);
       const { nth: _, ...own } = h;
       const tries: Hints[] = [own];
-      if (own.role) tries.push({ tag: own.tag, role: own.role });
-      if (own.tag) tries.push({ tag: own.tag, css: own.tag });
+      const frame = own.frame ? { frame: own.frame } : {};
+      if (own.role) tries.push({ tag: own.tag, role: own.role, ...frame });
+      if (own.tag) tries.push({ tag: own.tag, css: own.tag, ...frame });
       for (const t of tries) {
         if (!planLocator(t)) continue;
         const i = await locateAll(page, t).evaluateAll(

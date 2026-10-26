@@ -6,6 +6,7 @@ import { digest, hintsFor } from "../src/agent/digest.js";
 import { ariaWithFrames, withFrame } from "../src/browser/frames.js";
 import { HUMAN_PACE, handsFor } from "../src/browser/human/index.js";
 import { locate } from "../src/browser/locate.js";
+import { marksFor } from "../src/explore/marks.js";
 
 describe("iframes in the outline", () => {
   it("shows a nested cross-site checkbox with a ref whose hints reach it, and a paced hand ticks it", async () => {
@@ -105,6 +106,42 @@ describe("iframes in the outline", () => {
       // No wait asked, nothing found yet: the hints come back as they were.
       const none = await withFrame(page, { role: "button", name: "Pay" });
       expect(none).toEqual({ role: "button", name: "Pay" });
+    } finally {
+      await browser.close();
+      srv.close();
+    }
+  });
+});
+
+describe("marks in iframes", () => {
+  it("numbers a cross-site frame's control in page order, skips one under a dialog, and acts through the frame", async () => {
+    const srv = createServer((req, res) => {
+      res.setHeader("content-type", "text/html");
+      if (req.url === "/outer")
+        res.end(`<button style="display:block;margin-top:100px">Top</button>
+          <iframe id="widget" style="display:block" width="300" height="80" src="http://127.0.0.1:${port}/box"></iframe>
+          <button>Bottom</button>
+          <iframe id="covered" style="display:block" width="300" height="80" src="http://127.0.0.1:${port}/box"></iframe>
+          <div style="position:absolute;left:0;top:232px;width:400px;height:120px;background:#fff">dialog</div>`);
+      else
+        res.end(`<span role="checkbox" aria-checked="false" tabindex="0" aria-label="Agree"
+          onclick="this.setAttribute('aria-checked','true')" style="display:inline-block;width:24px;height:24px;border:1px solid"></span>`);
+    }).listen(0);
+    const port = (srv.address() as AddressInfo).port;
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      await page.goto(`http://localhost:${port}/outer`);
+      await page.frameLocator("iframe#widget").getByRole("checkbox").waitFor();
+      const marks = marksFor();
+      const { marks: taken } = await marks.take(page, async () => "shot.png");
+      // Out of process, offset by the frame's box; the covered frame's control has no mark.
+      expect(taken.map((m) => m.name)).toEqual(["Top", "Agree", "Bottom"]);
+      const hints = await marks.hints(page, 2);
+      expect(hints).toMatchObject({ role: "checkbox", name: "Agree", frame: "iframe#widget" });
+      const target = locate(page, hints);
+      await target.click();
+      expect(await target.getAttribute("aria-checked")).toBe("true");
     } finally {
       await browser.close();
       srv.close();

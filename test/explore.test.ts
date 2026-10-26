@@ -523,6 +523,33 @@ describe("explore mode", () => {
     expect((miss.body.marks as { marks: unknown[] }).marks).toHaveLength(3);
   }, 60_000);
 
+  it("marks: a control in an iframe gets a number in page order and acts through its frame", async () => {
+    // The explore browser here loads no second server as a frame; test/frames.test.ts marks a
+    // cross-site one.
+    const box = `<span role="checkbox" aria-checked="false" tabindex="0" aria-label="Agree" onclick="this.setAttribute('aria-checked','true')" style="display:inline-block;width:24px;height:24px;border:1px solid"></span>`;
+    const page = `data:text/html,${encodeURIComponent(
+      `<button style="display:block;margin-top:100px">Top</button><iframe id="widget" style="display:block" width="300" height="80" srcdoc="${box.replaceAll('"', "&quot;")}"></iframe><button>Bottom</button>`,
+    )}`;
+    await send({ cmd: "open", url: page });
+    const taken = (await send({ cmd: "marks" })).body as {
+      marks: Array<{ n: number; role: string | null; name: string | null }>;
+    };
+    // The frame's offset is added: the checkbox sits between the page's buttons, not above them.
+    expect(taken.marks.map((m) => m.name)).toEqual(["Top", "Agree", "Bottom"]);
+    const agree = taken.marks[1] as { n: number };
+    await send({ cmd: "click", hints: { mark: agree.n } });
+    const { actions } = (await send({ cmd: "journal", last: 1 })).body as {
+      actions: Array<{ target: Record<string, unknown> }>;
+    };
+    expect(actions[0]?.target).toMatchObject({
+      role: "checkbox",
+      name: "Agree",
+      frame: "iframe#widget",
+    });
+    const { aria } = (await send({ cmd: "aria" })).body as { aria: string };
+    expect(aria).toMatch(/checkbox "Agree" \[checked\]/);
+  }, 60_000);
+
   it("reads a list as rows with the driver's code and journals the op a walk replays", async () => {
     const list = `data:text/html,${encodeURIComponent(
       "<ul><li><b>Acme</b> <a href='https://acme.test/'>site</a></li><li><b>Globex</b></li></ul>",
