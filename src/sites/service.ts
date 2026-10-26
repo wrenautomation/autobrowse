@@ -89,6 +89,11 @@ const call = site.extend({
   armId: z.string().uuid().optional(),
   /** A write with a key answers a `SendVerdict`, once per key (`send-journal.ts`). */
   sendKey: z.string().min(1).max(200).optional(),
+  /**
+   * A write's day ends here (ISO time). A write the desk first runs past it is not sent: the Mac
+   * was off for its whole day, so it goes back to its caller and never lands a day late.
+   */
+  until: z.string().datetime({ offset: true }).optional(),
 });
 const verdictReq = z.object({ sendKey: z.string().min(1).max(200) });
 const setup = site.extend({ step: z.string().min(1) });
@@ -613,6 +618,20 @@ export function sitesService(
           route: `${req.method} ${req.path}`,
           ...from,
         };
+        if (write && req.until) {
+          const until = req.until;
+          const key = req.sendKey;
+          // Only a write that never started: a started one is settled by its own record.
+          const late = await ctx.run(
+            `${step} until ${until}`,
+            () => Date.now() > Date.parse(until) && !(key && journal.get(key)),
+          );
+          if (late) {
+            const why = `missed its day: the desk ran it after ${until}`;
+            if (key) return notSent(why, "before_submit");
+            throw new restate.TerminalError(why, { errorCode: 410 });
+          }
+        }
         let attempt = 0;
         const once = async () => {
           if (write && req.sendKey) return await keyedCall(ctx, req, req.sendKey, from);

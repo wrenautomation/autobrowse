@@ -52,6 +52,20 @@ import {
 /** The port deploy/desk/install.sh points the Cloudflare Tunnel at. */
 const DESK_PORT = 9083;
 
+/**
+ * The Mac sleeps or is off for hours (10-26: 4 h asleep left 70 calls paused). Restate's
+ * default gives up after about 70 tries a minute apart. Here a call tries once a minute for
+ * about a day, so a post or a send waits for the Mac and goes through. Past that it pauses:
+ * the caller's own budget (to the end of its day) decides what is lost.
+ */
+const OUTAGE_RETRY = {
+  initialInterval: 1_000,
+  exponentiationFactor: 2,
+  maxInterval: 60_000,
+  maxAttempts: 1_500,
+  onMaxAttempts: "pause",
+} as const;
+
 const { settings } = boot();
 const log = pino({ level: settings.logLevel });
 const app = await buildApp(settings, log);
@@ -94,6 +108,7 @@ await new Promise<void>((ok) =>
       createEndpointHandler({
         services,
         identityKeys: [settings.restateBoxIdentityKey],
+        defaultServiceOptions: { retryPolicy: OUTAGE_RETRY },
       }),
     )
     .listen(DESK_PORT, "127.0.0.1", ok),

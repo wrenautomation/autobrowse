@@ -78,6 +78,36 @@ describe("a keyed write answers a verdict", () => {
     expect(platform.keys).toEqual(["send k-ok"]);
   });
 
+  it("10-26 Mac off all day: a write first run past its `until` is `not_sent`, and nothing is written (old code: it landed a day late)", async () => {
+    const { call } = build();
+    const past = new Date(Date.now() - 60_000).toISOString();
+    expect(await call({ ...say("late words", "k-late"), until: past })).toMatchObject({
+      verdict: "not_sent",
+      how: "before_submit",
+    });
+    expect(platform.writes).toEqual([]);
+    // Inside its day it goes as before.
+    const later = new Date(Date.now() + 3_600_000).toISOString();
+    expect(await call({ ...say("on time", "k-on-time"), until: later })).toMatchObject({
+      verdict: "sent",
+    });
+  });
+
+  it("a started write past its `until` is settled by its record, never called late", async () => {
+    const { call } = build();
+    const first = await call(say("started words", "k-started"));
+    const past = new Date(Date.now() - 60_000).toISOString();
+    expect(await call({ ...say("started words", "k-started"), until: past })).toEqual(first);
+  });
+
+  it("an unkeyed write past its `until` ends with a terminal 410", async () => {
+    const { call } = build();
+    const past = new Date(Date.now() - 60_000).toISOString();
+    await expect(
+      call({ ...COMMENT, input: { thread: "t1", text: "x" }, until: past }),
+    ).rejects.toMatchObject({ code: 410 });
+  });
+
   it("writes `submitted` to disk before the act (old code kept no record)", async () => {
     journal = diskJournal();
     const onDisk: (boolean | undefined)[] = [];
