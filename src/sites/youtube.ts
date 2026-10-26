@@ -346,6 +346,19 @@ const commentThread = z.object({
     }),
   }),
 });
+const subscribe = z.object({
+  part: z.string().default("snippet"),
+  snippet: z.object({
+    resourceId: z.object({
+      kind: z.literal("youtube#channel").default("youtube#channel"),
+      channelId: z.string().min(1),
+    }),
+  }),
+});
+const rate = z.object({
+  id: z.string().min(1),
+  rating: z.enum(["like", "dislike", "none"]).default("like"),
+});
 const reply = z.object({
   part: z.string().default("snippet"),
   snippet: z.object({ parentId: z.string().min(1), textOriginal: z.string().min(1).max(10000) }),
@@ -414,7 +427,8 @@ export const youtube: SiteApi = {
   auth: { oauth: youtubeOAuth },
   // Analytics and Reporting have their own Google quotas: a day's reads per account, kept well under them.
   // Studio reads open a page as the channel: a Short per look, a few dozen a day.
-  caps: { analytics: 1000, reporting: 300, studio: 60 },
+  // Quota is 10,000 units a day: a comment, like or subscribe costs 50, a search 100.
+  caps: { analytics: 1000, reporting: 300, studio: 60, comment: 30, subscribe: 10, like: 30 },
   routes: [
     route({
       method: "POST",
@@ -667,6 +681,7 @@ export const youtube: SiteApi = {
       path: "/youtube/v3/commentThreads",
       summary: "A top-level comment on a video",
       request: commentThread,
+      meter: () => ({ comment: 1 }),
       irreversible: true,
       verify: {
         words: (b) => b.snippet.topLevelComment.snippet.textOriginal,
@@ -768,6 +783,44 @@ export const youtube: SiteApi = {
           ),
           "youtube/v3/comments",
         );
+      },
+    }),
+    route({
+      method: "POST",
+      path: "/youtube/v3/subscriptions",
+      summary:
+        "Subscribe our channel to another (`snippet.resourceId.channelId`); 50 quota units. Already subscribed answers `{ subscribed: true, already: true }`",
+      request: subscribe,
+      meter: () => ({ subscribe: 1 }),
+      api: async ({ part, ...body }, leg) => {
+        await onTheRightChannel(leg);
+        const res = await leg.http.json<unknown>(
+          `${YOUTUBE_ORIGIN}/youtube/v3/subscriptions?part=${encodeURIComponent(part)}`,
+          { method: "POST", headers: bearer(leg), body },
+        );
+        // A follow already made is done: a retry or a second pass must not read as a failure.
+        const reason = arr(rec(rec(res.body).error).errors).map((e) => str(rec(e).reason));
+        if (res.status === 400 && reason.includes("subscriptionDuplicate"))
+          return { subscribed: true, already: true };
+        return must(res, "youtube/v3/subscriptions");
+      },
+    }),
+    route({
+      method: "POST",
+      path: "/youtube/v3/videos/rate",
+      summary: "Like a video as our channel (`id`, `rating` like|dislike|none); 50 quota units",
+      request: rate,
+      meter: () => ({ like: 1 }),
+      api: async ({ id, rating }, leg) => {
+        await onTheRightChannel(leg);
+        must(
+          await leg.http.json<unknown>(
+            `${YOUTUBE_ORIGIN}/youtube/v3/videos/rate?id=${encodeURIComponent(id)}&rating=${rating}`,
+            { method: "POST", headers: bearer(leg) },
+          ),
+          "youtube/v3/videos/rate",
+        );
+        return { id, rating };
       },
     }),
     route({

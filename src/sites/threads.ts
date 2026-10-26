@@ -74,6 +74,18 @@ const replies = z.object({
   reverse: z.boolean().default(true),
 });
 
+/** Public posts on a word (`threads_keyword_search`; before Meta's review it finds only our own). */
+const search = z.object({
+  q: z.string().min(1),
+  search_type: z.enum(["TOP", "RECENT"]).default("RECENT"),
+  fields: z
+    .string()
+    .default("id,text,media_type,permalink,timestamp,username,has_replies,is_quote_post"),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  since: z.coerce.number().int().optional(),
+  until: z.coerce.number().int().optional(),
+});
+
 const must = <T>(res: JsonResponse<T>, what: string): T =>
   mustOk(res, `${THREADS_ORIGIN}/${what}`, graphWhy);
 const v = (path: string) => `${THREADS_ORIGIN}/${THREADS_VERSION}/${path}`;
@@ -120,8 +132,8 @@ export const threads: SiteApi = {
   origin: THREADS_ORIGIN,
   probe: { path: "/me" },
   auth: { oauth: threadsOAuth },
-  // 250 posts and 1,000 replies a profile a day (Threads' own caps).
-  caps: { post: 250, reply: 1000 },
+  // 250 posts and 1,000 replies a profile a day, 2,200 keyword searches (Threads' own caps).
+  caps: { post: 250, reply: 1000, search: 2200 },
   routes: [
     route({
       method: "GET",
@@ -248,6 +260,19 @@ export const threads: SiteApi = {
             { headers: bearer(leg) },
           ),
           `${userId}/threads_insights`,
+        ),
+    }),
+    route({
+      method: "GET",
+      path: "/keyword_search",
+      summary:
+        "Public posts on a word or phrase, newest first with RECENT (`q`, `search_type`, `fields`, `limit`, `since`/`until` unix). Until Meta reviews `threads_keyword_search`, Threads finds only our own posts",
+      request: search,
+      meter: () => ({ search: 1 }),
+      api: async (q, leg) =>
+        must(
+          await leg.http.json<unknown>(withQuery(v("keyword_search"), q), { headers: bearer(leg) }),
+          "keyword_search",
         ),
     }),
     route({
