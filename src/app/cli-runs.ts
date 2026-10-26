@@ -30,6 +30,7 @@ import { fileSiteCalls, readSiteCalls } from "../runs/calls.js";
 import { flowRunReport, formatFlowRunReport, readFlowRuns } from "../runs/flows.js";
 import { finishedCalls, fromCaps, fromRestate, newRows } from "../runs/import.js";
 import { baseSite, listRuns, openRuns, readRun, runFile } from "../runs/log.js";
+import { runSteps } from "../runs/steps.js";
 import { formatSuccessReport, successReport } from "../runs/success.js";
 import { formatTokenReport, readCmds, tokenReport } from "../runs/tokens.js";
 import type { MeteredCall } from "../sites/caps.js";
@@ -164,6 +165,29 @@ export function registerRunsCommands(
       if (open.length)
         console.log(`${open.length} still open (no end yet): ${open.map((r) => r.run).join(", ")}`);
       if (!all.length && !open.length) console.log("no runs yet: every explore session writes one");
+    });
+
+  explored
+    .command("steps [site]")
+    .description(
+      "Every run as training steps (obs, action, next, out, outcome) into a JSONL file; texts and pictures by hash",
+    )
+    .option("--out <file>", "where to write", join(runsDir, "steps.jsonl"))
+    .action((site: string | undefined, o: { out: string }) => {
+      const known = [...listRuns(runsDir), ...openRuns(runsDir)].filter(
+        (r) => !site || baseSite(r.site) === baseSite(site),
+      );
+      const ids = new Map(known.map((r) => [r.run, r.site]));
+      const lines: string[] = [];
+      let runs = 0;
+      for (const [id, s] of ids) {
+        const steps = runSteps(readRun(runFile(runsDir, s, id)));
+        if (!steps.length) continue;
+        runs++;
+        for (const step of steps) lines.push(JSON.stringify(step));
+      }
+      writeFileSync(o.out, lines.length ? `${lines.join("\n")}\n` : "", { mode: 0o600 });
+      console.log(`${lines.length} steps from ${runs} runs: ${o.out}`);
     });
 
   explored
