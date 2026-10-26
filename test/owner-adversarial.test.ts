@@ -618,6 +618,8 @@ describe("shots", () => {
       ...INGRESS,
       ARTIFACTS_DIR: join(root, "artifacts"),
       RECORDINGS_DIR: join(root, "recordings"),
+      // The runs folder sits beside it: this machine's own runs stay out of the test.
+      CREDENTIALS_FILE: join(root, "credentials.json"),
       SHOTS_BUCKET: "shots",
       SHOTS_MACHINE: "box",
     });
