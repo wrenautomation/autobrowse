@@ -423,6 +423,7 @@ export function localParts(settings: Settings, o: { headless?: boolean } = {}): 
       kept: () => sink.list(),
       reload: (have) => missingEntries(sink, have),
       caps: fileCaps(expandHome(settings.capsFile)),
+      capsScale: settings.capsScale,
       spent: spentKeysFor(settings),
       keys: keysDepFor(settings),
       keeper: keyKeeperFor(settings),

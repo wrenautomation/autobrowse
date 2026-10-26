@@ -26,7 +26,7 @@ import type { Approver } from "../gates/payment.js";
 import { envSource, ringCount, type SpentKeys } from "../reach/key-ring.js";
 import { type KeysDep, keyCall } from "../reach/key-source.js";
 import type { Proof, RunAs } from "../workflows/proof.js";
-import type { DailyCaps, MeteredCall } from "./caps.js";
+import type { DailyCaps, MeteredCall, Pace } from "./caps.js";
 import {
   accessTokens,
   accountEnv,
@@ -41,6 +41,17 @@ import type { RefusedToken } from "./refused.js";
 import type { UploadSessions } from "./uploads.js";
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Caps times `scale`, rounded down; a 0 (a bucket kept off) stays 0. */
+export const scaledBy = (caps: Record<string, number> = {}, scale: number) =>
+  Object.fromEntries(Object.entries(caps).map(([b, n]) => [b, Math.floor(n * scale)]));
+
+/** A pace whose gaps are `scale` times shorter: `scale` times the calls in the same time. */
+export const pacedBy = (pace: Pace, scale: number): Pace => ({
+  ...pace,
+  gapMs: Math.round(pace.gapMs / scale),
+  ...(pace.jitterMs !== undefined ? { jitterMs: Math.round(pace.jitterMs / scale) } : {}),
+});
 
 import type { RenewReport } from "./renew.js";
 import {
@@ -103,6 +114,8 @@ export interface SiteFacadeDeps {
   approve?: Approver | null;
   /** Counts routes' `meter` against the site's `caps`, per account per day, and books `pace` slots; absent: nothing is capped. */
   caps?: DailyCaps;
+  /** Times `caps` and the accounts' own caps, and divides `pace` gaps (`CAPS_SCALE`); 1 when absent. */
+  capsScale?: number;
   /** Paid keys out of credit (`reach/key-ring.ts`), for `capsPerKey` and api legs that rotate keys. */
   spent?: SpentKeys;
   /** The vault's keys and their audit (`reach/key-source.ts`); absent, paid keys are the env names and no use is audited. */
@@ -352,6 +365,7 @@ function resolveInput(v: unknown, env: SiteFacadeDeps["env"], account: string | 
 }
 
 export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): SiteFacade {
+  const scale = deps.capsScale ?? 1;
   const byName = new Map(sites.map((s) => [s.site, s]));
   // A site that rolls its refresh token on every mint (X) hands the new one to the sink.
   const minted = accessTokens(
@@ -713,7 +727,9 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       };
       // Paced before counted: a refusal here spends none of the day's cap.
       const slot =
-        byBrowser && s.pace && deps.caps ? deps.caps.slot(s.site, chosen ?? s.site, s.pace) : null;
+        byBrowser && s.pace && deps.caps
+          ? deps.caps.slot(s.site, chosen ?? s.site, pacedBy(s.pace, scale))
+          : null;
       if (slot && !slot.ok) note("paced");
       if (slot && !slot.ok)
         throw new SiteError(
@@ -724,9 +740,9 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       let taken = false;
       if (use && s.caps && deps.caps) {
         const limits = {
-          ...s.caps,
+          ...scaledBy(s.caps, scale),
           ...(await capsOfKeys(s, keyAccount)),
-          ...(await capsOfAccount(s, chosen)),
+          ...scaledBy(await capsOfAccount(s, chosen), scale),
         };
         const t = deps.caps.take(s.site, chosen ?? s.site, use, limits);
         if (!t.ok) {

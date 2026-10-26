@@ -87,6 +87,8 @@ export interface SiteParts {
   reload?: (have: (name: string) => boolean) => Promise<EnvEntry[]>;
   /** Per-account daily caps on metered routes (LinkedIn reads); absent: uncapped. */
   caps?: DailyCaps;
+  /** Times every cap and divides every pace gap (`CAPS_SCALE`); 1 when absent. */
+  capsScale?: number;
   /** Paid keys out of credit (Exa's ring); absent: each process remembers its own. */
   spent?: SpentKeys;
   /** The vault's keys, their audit and the call counter (`reach/key-source.ts`); absent: the env names. */
@@ -220,6 +222,7 @@ export function sitesFor(p: SiteParts): SiteFacade {
     oauthPort: p.oauthPort,
     approve: p.approve ?? null,
     ...(p.caps ? { caps: p.caps } : {}),
+    ...(p.capsScale !== undefined ? { capsScale: p.capsScale } : {}),
     ...(p.spent ? { spent: p.spent } : {}),
     ...(p.keys ? { keys: p.keys } : {}),
     ...(p.uploads ? { uploads: p.uploads } : {}),

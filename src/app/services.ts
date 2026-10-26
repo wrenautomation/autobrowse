@@ -336,6 +336,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       kept: () => sink.list(),
       reload: (have) => missingEntries(sink, have),
       caps: fileCaps(expandHome(settings.capsFile)),
+      capsScale: settings.capsScale,
       spent: fileSpent(join(dirname(expandHome(settings.capsFile)), "spent-keys.json")),
       keys: keysDepFor(settings),
       keeper: keyKeeperFor(settings),

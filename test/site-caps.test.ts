@@ -16,6 +16,7 @@ import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import { fingerprint, memorySpent } from "../src/reach/key-ring.js";
 import { fileCaps, memoryCaps } from "../src/sites/caps.js";
+import { pacedBy, scaledBy } from "../src/sites/facade.js";
 import { linkedin, SiteError, siteFacade, web, x } from "../src/sites/index.js";
 import { usernameOf } from "../src/sites/wire.js";
 import { fakeBrowser, fakeFetch } from "./fakes.js";
@@ -169,6 +170,34 @@ describe("a named account", () => {
     expect(
       caps.take("linkedin", "me@x.com", { profile: 1, total: 1 }, { profile: 20, total: 20 }),
     ).toMatchObject({ ok: false, bucket: "total", used: 20, cap: 20 });
+  });
+});
+
+describe("CAPS_SCALE", () => {
+  it("2 doubles the site's and the account's caps; a 0 stays 0; pace gaps halve", async () => {
+    const browser = fakeBrowser([]);
+    browser.on(linkedinCompanyJobs, async () => ({ companyId: "1", jobs: [] }));
+    const caps = memoryCaps(() => noon);
+    const sites = siteFacade([{ ...linkedin, pace: { gapMs: 0 } }], {
+      http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+      env: () => undefined,
+      sink: memorySink(),
+      runner: browser,
+      flow: (n) => (n === "linkedin/company-jobs" ? (linkedinCompanyJobs as never) : null),
+      caps,
+      capsScale: 2,
+      accountOf: async (_site, name) => ({ linkedin: "me@x.com" })[name] ?? null,
+    });
+    const jobs = () => sites.call("linkedin", "GET", "/company/stripe/jobs", {}, "linkedin");
+    // The personal account's company cap of 10 is 20 now.
+    for (let i = 0; i < 20; i++) await jobs();
+    await expect(jobs()).rejects.toMatchObject({ status: 429 });
+    expect(scaledBy({ a: 25, off: 0 }, 2)).toEqual({ a: 50, off: 0 });
+    expect(pacedBy({ gapMs: 30_000, jitterMs: 9_000, maxWaitMs: 1 }, 2)).toEqual({
+      gapMs: 15_000,
+      jitterMs: 4_500,
+      maxWaitMs: 1,
+    });
   });
 });
 
