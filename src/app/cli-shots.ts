@@ -69,6 +69,23 @@ export function registerShotsCommands(program: Command, settings: Settings): voi
         process.exitCode = 1;
     });
   traces
+    .command("steps")
+    .description(
+      "Every trace as training steps (act, frames before and after, error) into a JSONL file; frames named by their path in the trace",
+    )
+    .option("--backup", "also fetch each trace only in TRACES_TO (billed per GB fetched)")
+    .option("--out <file>", "where to write (default: trace-steps.jsonl in the state folder)")
+    .action(async (o: { backup?: boolean; out?: string }) => {
+      const t = keeper();
+      if (!t) return;
+      const r = await t.steps({ backup: !!o.backup, ...(o.out ? { out: o.out } : {}) });
+      const mb = (r.fetched / 1024 / 1024).toFixed(1);
+      console.log(
+        `${r.steps} steps from ${r.traces} traces${r.fetched ? ` (${mb} MB fetched)` : ""}${r.failed ? `; ${r.failed} unreadable` : ""}`,
+      );
+      if (r.failed) process.exitCode = 1;
+    });
+  traces
     .command("sweep")
     .description("Remove kept traces older than TRACES_KEEP_DAYS from this disk")
     .option("--dry", "name what would be removed")

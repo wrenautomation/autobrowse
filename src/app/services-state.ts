@@ -41,6 +41,7 @@ import { clearRun, keepRun, packStale } from "../runs/capture.js";
 import { s3BlobStore, s3TraceStore } from "../shots/s3.js";
 import { keepArtifact, keepRecording, type ShipReport, shipShots } from "../shots/ship.js";
 import { scrubKeptTraces } from "../shots/trace-scrub.js";
+import { keptTraceSteps } from "../shots/trace-steps.js";
 import { backupTraces, dirTraceStore, sweepTraces, traceDirName } from "../shots/traces.js";
 import { fileSendJournal, type SendJournal } from "../sites/index.js";
 import { fileMintedTokens } from "../sites/oauth.js";
@@ -195,6 +196,15 @@ export function tracesFor(settings: Settings) {
     },
     sweep: (o: { dry?: boolean } = {}) =>
       sweepTraces({ ...base, keepDays: settings.tracesKeepDays, now: new Date(), ...o }),
+    steps: (o: { backup: boolean; out?: string }) =>
+      keptTraceSteps({
+        ...base,
+        store,
+        backup: o.backup,
+        under: "traces/",
+        out: o.out ?? join(stateDirFor(settings), "trace-steps.jsonl"),
+        workDir: join(stateDirFor(settings), "traces-steps-work"),
+      }),
   };
 }
 

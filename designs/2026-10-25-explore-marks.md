@@ -6,7 +6,7 @@ An explore caller always has a way to point at a control, also when no hint and 
 
 ## Design
 
-- `{"cmd":"marks"}`: the page's controls in view get a number, top to bottom. A layer of numbered boxes goes on (a closed shadow root, `pointer-events:none`), the viewport is shot, the layer comes off. The answer is `{file, marks:[{n, tag, role, name}]}`, names masked as `aria` masks them.
+- `{"cmd":"marks"}`: the page's controls in view, and those in its visible iframes, get a number, top to bottom. A layer of numbered boxes goes on (a closed shadow root, `pointer-events:none`), the viewport is shot, the layer comes off. The answer is `{file, marks:[{n, tag, role, name}]}`, names masked as `aria` masks them.
 - Each marked control carries a random `data-m<hex>` attribute (one name per session), so the page never sees a tag that names autobrowse. The scripts run in Patchright's isolated world.
 - `hints:{"mark":n}` works on every target. At the top of `act`, a mark becomes the control's own hints (the recorder's `HINTS_JS`, so a mark journals as a recorded act does) plus `nth`, its place among their matches. If its name finds nothing, its role, then its tag, are tried. The rest of `act` is unchanged.
 - Stale: the page has no element with the mark's attribute (a load, a re-render). The act fails with "stale".
@@ -19,3 +19,4 @@ An explore caller always has a way to point at a control, also when no hint and 
 - 2026-10-25: boxes drawn in the page, not on the PNG. There is no image library here; a page layer needs none. It is on the page only for the shot.
 - 2026-10-25: a mark resolves to hints and `nth`, never to a point. A point does not replay on another screen size, and the journal would hold no target.
 - 2026-10-25: main frame only. A control in a cross-origin iframe (a Google button, card fields) needs a run per frame with `frame` set. Deferred: `withFrame` already finds those by hints, so the gap is small.
+- 2026-10-26: iframes marked (was main frame only). Each visible frame (`framesInView`, the same list `aria` and `withFrame` walk) runs the find script; its boxes move by the frame element's box plus border, in page coordinates. All controls sort together, then each frame tags its own with the final number. A frame control under a page dialog (the top element at its center is not a frame) gets no mark. Its hints carry the frame chain, so the journal and a flow replay it through `frameLocator`. Padding and CSS transforms on the frame element are not counted; embedded widgets rarely have them.
