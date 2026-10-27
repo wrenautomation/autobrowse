@@ -1,12 +1,17 @@
 /** `autobrowse login <site>` and `autobrowse record <name>`: the recorder's command line. */
 import { spawn } from "node:child_process";
-import { existsSync, openSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Command } from "commander";
+import type { StepRecord } from "../agent/explorer.js";
+import { runJson } from "../agent/run-json.js";
 import { urlWithoutQuery } from "../auth/guard.js";
 import type { SecretValues } from "../auth/signup.js";
+import type { Command as ExploreCommand } from "../explore/commands.js";
 import { DEFAULT_IDLE_MINUTES } from "../explore/lease.js";
+import type { Explorer } from "../explore/server.js";
 import { expandHome, shortHome } from "../google/auth.js";
+import type { LlmUsage } from "../llm/types.js";
 import { explorerOpener, type LocalBackend } from "./backend.js";
 import type { Settings } from "./config.js";
 import { headed } from "./display.js";
@@ -338,6 +343,15 @@ export function registerRecordCommands(
     .option("--max-steps <n>", "step budget", "25")
     .option("--port <port>", "loopback port", "9090")
     .option("--headed", "show the browser (default: BROWSER_HEADLESS)")
+    .option(
+      "--json <file>",
+      "write the run as JSON after every step: verdict, steps, a screenshot per look (what a benchmark reads)",
+    )
+    .option(
+      "--no-sign-in",
+      "never sign in with a stored account (a benchmark task, a stranger's site)",
+    )
+    .option("--no-os", "no desktop or shell acts: the browser only (task text you did not write)")
     .action(
       async (
         site: string,
@@ -350,6 +364,9 @@ export function registerRecordCommands(
           maxSteps: string;
           port: string;
           headed?: boolean;
+          json?: string;
+          signIn: boolean;
+          os: boolean;
         },
       ) => {
         let secrets: AgentRun["secrets"] = null;
@@ -376,6 +393,9 @@ export function registerRecordCommands(
           maxSteps: Number(o.maxSteps),
           port: Number(o.port),
           headed: o.headed ?? false,
+          signIn: o.signIn,
+          desktop: o.os,
+          ...(o.json ? { json: o.json } : {}),
         });
       },
     );
@@ -846,6 +866,10 @@ interface AgentRun {
     values: SecretValues;
     hosts: (host: string) => boolean;
   } | null;
+  /** False: the agent gets no os acts. */
+  desktop?: boolean;
+  /** The run as JSON here, rewritten after every step, so a killed run still leaves its evidence. */
+  json?: string;
 }
 
 /** One agent session: explore server up, agent to the goal, journal saved as a recording. */
@@ -865,11 +889,32 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<{ achieved: bo
     },
   );
   console.log(`agent on ${r.site}; pause: autobrowse cmd '{"cmd":"pause"}' --port ${ex.port}`);
+  const shots: string[] = [];
+  const steps: StepRecord[] = [];
+  const t0 = Date.now();
+  const writeJson = (end?: { achieved: boolean; summary: string; usage: LlmUsage }) => {
+    if (r.json)
+      writeFileSync(r.json, JSON.stringify(runJson(r.goal, steps, shots, t0, end), null, 2));
+  };
+  // A screenshot before every look: the page each model call saw.
+  const explorer: Explorer = r.json
+    ? Object.assign(Object.create(ex) as Explorer, {
+        exec: async (c: ExploreCommand) => {
+          if (c.cmd === "aria") {
+            const shot = (await ex.exec({ cmd: "screenshot" }).catch(() => null)) as {
+              file?: string;
+            } | null;
+            if (shot?.file) shots.push(shot.file);
+          }
+          return ex.exec(c);
+        },
+      })
+    : ex;
   try {
     if (r.url) await ex.exec({ cmd: "open", url: r.url });
     const { stepLedgerFor } = await import("./services.js");
     const result = await exploreWithAgent({
-      explorer: ex,
+      explorer,
       llm,
       goal: r.goal,
       inputs: r.inputs,
@@ -877,6 +922,7 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<{ achieved: bo
       ledger: stepLedgerFor(settings),
       ...(r.secrets ? { secrets: r.secrets.names } : {}),
       maxSteps: r.maxSteps,
+      ...(r.desktop === false ? { desktop: false } : {}),
       // Headed, the person does the captcha in the window and presses enter here.
       onHuman: async (reason) => {
         if (!r.headed) return false;
@@ -889,11 +935,21 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<{ achieved: bo
           rl.close();
         }
       },
-      onStep: (s) =>
+      onStep: (s) => {
+        steps.push(s);
+        writeJson();
         console.log(
           `${s.n}. ${s.step?.thought ?? "(unparsable reply)"}\n   ${s.step?.action.cmd ?? "-"} ${s.error ? `✗ ${s.error}` : "✓"}`,
-        ),
+        );
+      },
     });
+    if (r.json) {
+      const last = (await ex.exec({ cmd: "screenshot" }).catch(() => null)) as {
+        file?: string;
+      } | null;
+      if (last?.file) shots.push(last.file);
+      writeJson(result);
+    }
     console.log(`${result.achieved ? "achieved" : "not achieved"}: ${result.summary}`);
     console.log(`tokens in ${result.usage.inputTokens} out ${result.usage.outputTokens}`);
     const saved = (await ex.exec({ cmd: "save", name: r.save })) as { dir: string };

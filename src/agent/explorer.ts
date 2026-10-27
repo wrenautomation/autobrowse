@@ -139,6 +139,8 @@ export interface AgentOptions {
   onHuman?: (reason: string) => Promise<boolean>;
   /** Most controls the model sees per step. */
   maxRefs?: number;
+  /** False: no `os` acts. The prompt leaves them out and one sent fails; a run on a stranger's task text never reaches the desktop. */
+  desktop?: boolean;
   /** Most acts one model call may plan for one screen (6); at 1, one act per call. */
   maxBatch?: number;
   onStep?: (r: StepRecord) => void;
@@ -158,10 +160,11 @@ Any other action runs last, and the code skips the actions after it: a click on 
 Put done or human alone in their reply.
 The code stops a plan early when a target is gone, the URL changes, a dialog opens, or an error shows. Then you see the page again and the actions that did not run.`;
 
-/** The system prompt; `maxBatch` above 1 adds the batch rules. */
-const systemFor = (
-  maxBatch: number,
-) => `You drive a real web browser to reach a goal, a few steps at a time.
+/** The system prompt; `maxBatch` above 1 adds the batch rules; `desktop` false drops the os acts. */
+const systemFor = (maxBatch: number, desktop: boolean) =>
+  (desktop
+    ? (t: string) => t
+    : withoutOs)(`You drive a real web browser to reach a goal, a few steps at a time.
 Each turn you get the page URL, an outline of the page, and what your recent steps did.
 The outline: containers as role "name": with their contents indented beneath; controls as [n] plus a role code and the name; several on one line separated by " · "; plain text as itself.
 ${LEGEND}.
@@ -197,14 +200,23 @@ A "not in the tree:" section lists controls the outline misses (inside a closed 
 Rules: never invent values; use only the inputs given. Never buy, delete, or submit money-related forms: return human{reason} instead.
 Any captcha ("I'm not a robot", pick the squares, type the letters, drag a slider): use captcha. Only when it says it is not solved twice, return human{reason}.
 Prefer the shortest path. When the tree shows the goal is met, return done with achieved=true.
-If the same step fails twice, try another element or return done with achieved=false.${maxBatch > 1 ? `\n${BATCH}` : ""}`;
+If the same step fails twice, try another element or return done with achieved=false.${maxBatch > 1 ? `\n${BATCH}` : ""}`);
+
+/** The prompt with no line that offers an os act. */
+const withoutOs = (t: string) =>
+  t
+    .split("\n")
+    .filter((l) => !l.includes('{"cmd":"os"') && !l.startsWith("Use os acts"))
+    .join("\n")
+    .replace(", keep, os.", ", keep.");
 
 /** Run the agent until it says done, a person says stop, or the budget runs out. */
 export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
   const steps: StepRecord[] = [...(o.prior ?? [])];
   const max = steps.length + (o.maxSteps ?? 25);
   const maxBatch = Math.max(1, o.maxBatch ?? 6);
-  const system = systemFor(maxBatch);
+  const desktop = o.desktop ?? true;
+  const system = systemFor(maxBatch, desktop);
   const usage: LlmUsage = { inputTokens: 0, outputTokens: 0 };
   let nudged = false;
   /** The page the last journaled thought was on: one note per page keeps compiled steps page-sized. */
@@ -302,6 +314,20 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
         step: null,
         result: null,
         error: `your reply was not a valid action (${err.issues})`,
+        url: url.url,
+        usage: stepUsage,
+        ms: 0,
+        batch: n,
+        missed: null,
+      });
+      continue;
+    }
+    if (!desktop && plan.actions.some((a) => a.cmd === "os")) {
+      land({
+        n,
+        step: null,
+        result: null,
+        error: "os acts are off in this run: use the browser only",
         url: url.url,
         usage: stepUsage,
         ms: 0,

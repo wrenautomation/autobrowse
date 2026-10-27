@@ -142,6 +142,11 @@ a row; it is work.
   The journal is written as it grows: a session that dies (crash, restart)
   resumes on its last page with every act, and a dead agent session's
   resume goes on from its last step, not step 1. `--fresh` starts over.
+  Headed, an overlay shows the ref numbers, the act's target, the goal
+  and the model's thought. `--json <file>` writes the run for a script;
+  `--no-sign-in --no-os` keep a task text we did not write off our
+  accounts and the shell. `bench/bu.sh` scores the agent on Browser Use
+  Bench V2 (designs/2026-10-27-bench.md).
 - **Self-repairing.** Every flow failure writes `<stamp>.failure.json`
   (site, URL, last goal, error). `autobrowse repair <that file>` starts
   the agent on that page toward the flow's goal and records the way

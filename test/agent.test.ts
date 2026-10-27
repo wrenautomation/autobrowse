@@ -100,6 +100,19 @@ describe("exploreWithAgent", () => {
     expect(llm.requests[1]?.prompt).toContain("FAILED: locator.click");
     expect(r.summary).toMatch(/no verdict after 2 steps/);
   });
+  it("with desktop off, offers no os act and refuses one sent", async () => {
+    const { ex, calls } = fakeExplorer(['- button "Only"']);
+    const llm = fakeLlm([
+      { thought: "shell", action: { cmd: "os", act: { op: "tree" }, goal: "x" } },
+      { thought: "ok", action: { cmd: "done", summary: "s", achieved: true } },
+    ]);
+    const r = await exploreWithAgent({ explorer: ex, llm, goal: "g", desktop: false });
+    expect(llm.requests[0]?.system).not.toContain('"os"');
+    expect(llm.requests[0]?.system).toContain("captcha, keep.");
+    expect(r.steps[0]?.error).toMatch(/os acts are off/);
+    expect(calls.some((c) => c.cmd === "os")).toBe(false);
+    expect(r.achieved).toBe(true);
+  });
   it("rejects a ref the digest never listed, without touching the browser", async () => {
     const { ex, calls } = fakeExplorer(['- button "Only"']);
     const llm = fakeLlm([
