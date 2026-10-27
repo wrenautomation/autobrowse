@@ -30,7 +30,15 @@ One mechanism closes both gaps: `extrasOf(page)` in `src/browser/extras.ts`.
 
 ## Overlay (headed only)
 
-See the decision log entry for 10-27 and `src/explore/overlay.ts`.
+`src/explore/overlay.ts`. It is on by default when the session is headed (`ExploreOptions.overlay` turns it off).
+
+- **Boxes** on the outline's refs, with the same numbers the model reads. The agent sends `{"cmd":"overlay", refs}` after each digest. Each box resolves through the ref's own hints (400 ms cap, in parallel), so a number on screen is the number in the prompt.
+- **Target flash.** Before every act with hints, the server draws a pulsing box on the target, and the panel shows the act and its `goal`. This works for any driver, a Claude Code session included.
+- **Panel**, bottom left: step `n of max`, the goal, the model's thought, the act under way.
+- After an act, the boxes go: the page may have changed. A new document redraws the panel.
+- The layer is a fixed host on `<html>`, outside `body`, with a closed shadow root and `pointer-events: none`. The aria tree does not read it, `elementFromPoint` passes through it, and presses reach the page.
+- It is taken off for every screenshot (`shoot`, the run pictures, the receipt shot) and on `close`.
+- `overlay` is a session control: it never waits behind an act, opens a run, or writes a command row.
 
 ## Decision log
 
@@ -39,3 +47,6 @@ See the decision log entry for 10-27 and `src/explore/overlay.ts`.
 - **2026-10-27: extras go last, not in place.** Their place in the tree is unknown. Twins are told apart by their own checked `nth`, so order does not matter for acting.
 - **2026-10-27: iframes are not searched for extras.** The tree already covers iframes. Add it when a flow fails on one.
 - **2026-10-27: canvas apps out of scope.** Pixel clicks break the "never press at a point" rule. Site APIs instead.
+- **2026-10-27: overlay in the page, not CDP `Overlay.highlightNode`.** CDP highlights one node at a time and draws no text. A DOM layer shows 80 numbered boxes and a panel. Trade-off: a page script can see a node on `<html>`. The attribute name is random, and the layer only exists headed, where a person watches.
+- **2026-10-27: boxes from the refs' hints, not from marks' layout order.** The numbers must match the prompt. Cost: one `boundingBox` per ref per step, in parallel, headed only.
+
