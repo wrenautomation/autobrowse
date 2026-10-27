@@ -3,9 +3,11 @@
  * this Mac, read only, on the person's own subscription ($0 a question). The caller names the
  * folder it reads (under `root`, the folder holding this checkout) and the commands it may run;
  * the desk keeps Claude Code restricted whatever the caller says: file reads in those folders,
- * never a secret file, no edits, no other command, no MCP server, no session kept.
+ * never a secret file, no edits, no other command, no MCP server. The session is kept and named
+ * (`ask: <question>`), so `claude --resume <sessionId>` opens the run to read.
  */
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { isAbsolute, relative, resolve } from "node:path";
 import * as restate from "@restatedev/restate-sdk";
 import { z } from "zod";
@@ -51,6 +53,8 @@ export interface ClaudeAnswer {
   model: string;
   /** Tool calls the rules refused. */
   denied: number;
+  /** Open the run with `claude --resume <sessionId>` in `dir`. */
+  sessionId: string;
 }
 
 export type ClaudeRun = (args: string[], stdin: string, cwd: string) => Promise<string>;
@@ -80,7 +84,7 @@ function under(root: string, p: string): string {
   return abs;
 }
 
-export function argsOf(r: z.output<typeof request>, root: string): string[] {
+export function argsOf(r: z.output<typeof request>, root: string, sessionId: string): string[] {
   return [
     "-p",
     "--restricted",
@@ -99,7 +103,10 @@ export function argsOf(r: z.output<typeof request>, root: string): string[] {
     "--strict-mcp-config",
     "--mcp-config",
     '{"mcpServers":{}}',
-    "--no-session-persistence",
+    "--session-id",
+    sessionId,
+    "--name",
+    `ask: ${r.question.replace(/\s+/g, " ").slice(0, 60)}`,
     ...(r.system ? ["--append-system-prompt", r.system] : []),
   ];
 }
@@ -120,10 +127,13 @@ export function claudeService(root: string, name: string = CLAUDE_SERVICE, run =
         const r = request.safeParse(raw);
         if (!r.success) throw new restate.TerminalError(r.error.message, { errorCode: 400 });
         const cwd = under(root, r.data.dir);
-        const args = argsOf(r.data, root);
+        argsOf(r.data, root, ""); // refuse a bad folder before the run
         return ctx.run(
           "ask",
           async () => {
+            // A new id on each try: a retry must not reuse the id a failed try already took.
+            const sessionId = randomUUID();
+            const args = argsOf(r.data, root, sessionId);
             const t0 = Date.now();
             const out = JSON.parse(await run(args, r.data.question, cwd)) as Printed;
             if (out.is_error || typeof out.result !== "string")
@@ -136,6 +146,7 @@ export function claudeService(root: string, name: string = CLAUDE_SERVICE, run =
               turns: out.num_turns ?? 0,
               model: r.data.model,
               denied: out.permission_denials?.length ?? 0,
+              sessionId,
             };
           },
           { maxRetryAttempts: 2 },
