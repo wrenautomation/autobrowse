@@ -11,6 +11,7 @@ import { startUiServer } from "../ui/server.js";
 import { backendFor } from "./backend.js";
 import { ingress } from "./client.js";
 import { cloudAdminUrl, planEndpoint } from "./endpoint.js";
+import { holding } from "./metered.js";
 import { opsLane } from "./ops.js";
 import { awsFor, boot } from "./owner.js";
 import { registerDeployment } from "./register.js";
@@ -178,7 +179,10 @@ const shipShots = (why: string): Promise<void> => {
   return shipping;
 };
 if (ship && settings.shotsEveryMinutes > 0)
-  setInterval(() => void shipShots("timer"), settings.shotsEveryMinutes * 60_000).unref();
+  setInterval(
+    () => void holding(log).then((hold) => (hold ? undefined : shipShots("timer"))),
+    settings.shotsEveryMinutes * 60_000,
+  ).unref();
 keepTracesOnTimer(settings, log);
 // autotrack fleet health: the operator's worker checks each device's heartbeat hourly.
 if (isDefaultOwner(settings.owner) && settings.trackBucket) {

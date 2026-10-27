@@ -47,6 +47,7 @@ import { fileSendJournal, type SendJournal } from "../sites/index.js";
 import { fileMintedTokens } from "../sites/oauth.js";
 import { walkLogins } from "../walks/login.js";
 import type { Settings } from "./config.js";
+import { holding } from "./metered.js";
 import { type OpsLane, opsLane } from "./ops.js";
 import { awsFor } from "./owner.js";
 import { envStoreFor, ssmFor } from "./services-keys.js";
@@ -216,9 +217,10 @@ export function keepTracesOnTimer(settings: Settings, log: Logger): void {
   const tick = (): void => {
     if (busy) return;
     busy = true;
-    void keep
-      .backup()
-      .then(async (r) => {
+    void holding(log)
+      .then(async (hold) => {
+        if (hold) return;
+        const r = await keep.backup();
         const swept = await keep.sweep();
         if (r.shipped || r.refused || swept.removed)
           log.info({ ...r, unreadable: r.unreadable.length, swept }, "traces");
@@ -238,9 +240,11 @@ export function sendSharedOnTimer(log: Logger): void {
   const tick = (): void => {
     if (busy) return;
     busy = true;
-    void import("../share/share.js")
-      .then(({ sendShared }) => sendShared({ budgetMs: 120_000 }))
-      .then((r) => {
+    void holding(log)
+      .then(async (hold) => {
+        if (hold) return;
+        const { sendShared } = await import("../share/share.js");
+        const r = await sendShared({ budgetMs: 120_000 });
         if (r.sent || r.dropped) log.info(r, "share");
       })
       .catch((err) => log.warn({ err: err instanceof Error ? err.message : String(err) }, "share"))
@@ -263,9 +267,14 @@ export function reproofOnTimer(
   prove: (name: string, plan: Record<string, unknown>) => Promise<{ status: string }>,
 ): void {
   const tick = (): void => {
-    void import("../share/gate.js")
-      .then(({ reproofRegistry }) => reproofRegistry(root, prove))
+    void holding(log)
+      .then(async (hold) => {
+        if (hold) return null;
+        const { reproofRegistry } = await import("../share/gate.js");
+        return reproofRegistry(root, prove);
+      })
       .then((r) => {
+        if (!r) return;
         if (r.broken.length) log.warn(r, "registry re-proof: broken flows");
         else if (r.proven) log.info(r, "registry re-proof");
       })
@@ -285,6 +294,7 @@ export function keepSharedOnTimer(log: Logger): void {
     if (busy) return;
     busy = true;
     void (async () => {
+      if (await holding(log)) return;
       const { keepShared } = await import("../share/presidio.js");
       const r = await keepShared(token);
       if (r.held) log.warn(r, "share kept: traces held, the pass could not read them");

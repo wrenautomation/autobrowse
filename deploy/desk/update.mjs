@@ -128,7 +128,39 @@ function syncWren(state) {
   return next;
 }
 
+const METERED = join(homedir(), ".config/metered/metered.sh");
+
+/**
+ * The same rule as src/app/metered.ts: on a metered network a restart (Chrome, the watcher tabs)
+ * and the wren-desk fetch wait for wifi. The script decides; no script, no hold.
+ */
+function metered() {
+  if (!existsSync(METERED)) return false;
+  try {
+    const [mode, net] = execFileSync("bash", [METERED, "status"], {
+      encoding: "utf8",
+      timeout: 5_000,
+    })
+      .trim()
+      .split(/\s+/);
+    return mode === "on" || (mode === "auto" && net === "metered");
+  } catch {
+    return false;
+  }
+}
+
 async function main() {
+  if (metered()) {
+    if (!readState().metered) {
+      say("metered network: deploys and the wren-desk fetch wait for wifi");
+      writeState({ ...readState(), metered: true });
+    }
+    return;
+  }
+  if (readState().metered) {
+    say("unmetered: deploys resume");
+    writeState({ ...readState(), metered: false });
+  }
   syncWren(readState());
   if (sh("git", ["symbolic-ref", "--short", "HEAD"]) !== "main") return;
   const head = sh("git", ["rev-parse", "HEAD"]);
