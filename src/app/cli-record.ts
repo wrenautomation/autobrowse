@@ -925,7 +925,8 @@ async function runAgent(settings: Settings, r: AgentRun): Promise<{ achieved: bo
       ...(r.desktop === false ? { desktop: false } : {}),
       // Headed, the person does the captcha in the window and presses enter here.
       onHuman: async (reason) => {
-        if (!r.headed) return false;
+        // A scripted run (`--json`) has no person at the terminal.
+        if (!r.headed || r.json) return false;
         const { createInterface } = await import("node:readline/promises");
         const rl = createInterface({ input: process.stdin, output: process.stdout });
         try {

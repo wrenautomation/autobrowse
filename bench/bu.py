@@ -133,6 +133,9 @@ def run_one(task: dict, d: Path, a) -> dict:
         "BROWSER_HEADLESS": "false" if a.headed else "true",
         # Always set: the settings file's model belongs to its own provider.
         "LLM_MODEL": a.model,
+        # The captcha solver's eyes too, or it falls to a paid API key.
+        "EYES_PROVIDER": a.provider,
+        "EYES_MODEL": a.model,
     }
     argv = ["pnpm", "-s", "autobrowse", "agent", "bench", task["confirmed_task"],
             "--json", str(out), "--no-sign-in", "--no-os", "--max-steps", str(a.max_steps),
@@ -230,7 +233,7 @@ def main() -> None:
     s.add_argument("run")
     s.add_argument("--only")
     s.add_argument("--max-steps", type=int, default=100)  # the benchmark's own budget
-    s.add_argument("--timeout", type=int, default=900)
+    s.add_argument("--timeout", type=int, default=3600)  # run_eval's TASK_TIMEOUT
     s.add_argument("--provider", default="claude-code")
     s.add_argument("--model", default="sonnet")
     s.add_argument("--headed", action="store_true")
