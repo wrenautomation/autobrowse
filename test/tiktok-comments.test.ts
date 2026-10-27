@@ -356,8 +356,10 @@ describe("tiktok comments: the flow and the route", () => {
     expect(seen.at(-1)).toEqual({ videoId: VIDEO, max: 50 });
     await expect(sites.call("tiktok", "GET", path, {})).rejects.toMatchObject({ status: 429 });
     expect(seen).toHaveLength(24);
-    expect(tiktok.caps).toEqual({ analytics: 60, comments: 24, following: 4 });
-    const r = tiktok.routes.find((x) => x.path === "/web/videos/{videoId}/comments");
+    expect(tiktok.caps).toMatchObject({ analytics: 60, comments: 24, following: 4 });
+    const r = tiktok.routes.find(
+      (x) => x.method === "GET" && x.path === "/web/videos/{videoId}/comments",
+    );
     expect(r?.meter?.({} as never)).toEqual({ comments: 1 });
     expect(r?.browser).toEqual({ flow: "tiktok/post-comments" });
     expect(BROWSER_FLOWS["tiktok/post-comments"]).toBe(tiktokPostComments);

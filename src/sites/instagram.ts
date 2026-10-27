@@ -8,6 +8,7 @@
  * unproven until a developer app and an account exist.
  */
 import { z } from "zod";
+import { MAX_THREADS_SEARCH } from "../browser/flows/threads-act.js";
 import { type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
 import { WEB_REDIRECT } from "./oauth.js";
@@ -102,6 +103,14 @@ const webSearch = z.object({
 const feed = z.object({ max: z.coerce.number().int().min(1).max(50).default(20) });
 
 const following = z.object({ max: z.coerce.number().int().min(1).max(1000).optional() });
+const threadsPost = z.object({
+  username: z.string().regex(/^@?[\w.]{1,40}$/, "a Threads handle"),
+  code: z.string().regex(/^[\w-]{5,20}$/, "a post code"),
+});
+const threadsSearch = z.object({
+  q: z.string().trim().min(1).max(100),
+  max: z.coerce.number().int().min(1).max(MAX_THREADS_SEARCH).default(30),
+});
 
 const profileName = z.object({
   /** The new display name; the handle and profile link stay as they are. */
@@ -167,6 +176,11 @@ export const instagram: SiteApi = {
     search: 10,
     following: 8,
     feed: 12,
+    // Threads through the same profile: its own buckets, under wren's daily caps.
+    threads_search: 10,
+    threads_like: 30,
+    threads_reply: 15,
+    threads_follow: 10,
   },
   pace: { gapMs: 8_000, jitterMs: 12_000 },
   routes: [
@@ -488,6 +502,44 @@ export const instagram: SiteApi = {
       request: following,
       meter: () => ({ following: 1 }),
       browser: { flow: "instagram/threads-following" },
+    }),
+    route({
+      method: "GET",
+      path: "/web/threads/search",
+      summary:
+        "Threads posts for words, newest first, off the search page (the API's search finds only our own until Meta's review): `{ q, data: [{ code, url, username, text, at, likes, replies }] }` (`max`, default 30); replies to others are left. Reads only",
+      request: threadsSearch,
+      meter: () => ({ threads_search: 1 }),
+      browser: { flow: "instagram/threads-search" },
+    }),
+    route({
+      method: "POST",
+      path: "/web/threads/{username}/post/{code}/like",
+      summary: "Like a Threads post: `{ code, liked, already? }`",
+      request: threadsPost,
+      meter: () => ({ threads_like: 1 }),
+      browser: { flow: "instagram/threads-like" },
+    }),
+    route({
+      method: "POST",
+      path: "/web/threads/{username}/post/{code}/reply",
+      summary:
+        "Reply to another account's Threads post (the API needs a Graph id the web does not show; 500 characters): `{ code, replied }`",
+      request: threadsPost.extend({ text: z.string().trim().min(1).max(500) }),
+      irreversible: true,
+      verify: {
+        none: "the flow sees the reply dialog close; one left open goes to a person, never a second send",
+      },
+      meter: () => ({ threads_reply: 1 }),
+      browser: { flow: "instagram/threads-reply" },
+    }),
+    route({
+      method: "POST",
+      path: "/web/threads/{username}/follow",
+      summary: "Follow an account on Threads from its profile: `{ username, following, already? }`",
+      request: z.object({ username: z.string().regex(/^@?[\w.]{1,40}$/, "a Threads handle") }),
+      meter: () => ({ threads_follow: 1 }),
+      browser: { flow: "instagram/threads-follow" },
     }),
     route({
       method: "POST",

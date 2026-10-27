@@ -6,6 +6,7 @@
  * are browser-only.
  */
 import { z } from "zod";
+import { MAX_SEARCH } from "../browser/flows/tiktok-act.js";
 import { MAX_COMMENTS } from "../browser/flows/tiktok-comments.js";
 import { HttpError, type JsonResponse, mustOk } from "../clients/http.js";
 import { OAUTH_PROVIDERS } from "../oauth/providers.js";
@@ -175,6 +176,17 @@ const reply = z.object({
   text: z.string().min(1).max(150),
 });
 
+const video = z.object({
+  videoId: z.string().regex(/^\d+$/, "a video id"),
+  username: z.string().min(1).optional(),
+});
+const webSearch = z.object({
+  q: z.string().trim().min(1).max(100),
+  max: z.coerce.number().int().min(1).max(MAX_SEARCH).default(30),
+});
+const webComment = video.extend({ text: z.string().trim().min(1).max(150) });
+const webFollow = z.object({ username: z.string().regex(/^@?[\w.]{1,24}$/, "a TikTok handle") });
+
 const profileName = z.object({
   /** The new display name; the handle and profile link stay as they are. */
   name: z.string().trim().min(1).max(30),
@@ -228,6 +240,11 @@ export const tiktok: SiteApi = {
     following: 4,
     // A video's Studio analytics page: a look per video per day.
     analytics: 60,
+    // Engagement on others' videos (no API does it): wren's caps sit below these.
+    search: 20,
+    comment: 15,
+    like: 30,
+    follow: 10,
   },
   routes: [
     route({
@@ -366,6 +383,65 @@ export const tiktok: SiteApi = {
       request: following,
       meter: () => ({ following: 1 }),
       browser: { flow: "tiktok/following" },
+    }),
+    route({
+      method: "GET",
+      path: "/web/search",
+      summary:
+        "Videos for words as TikTok's search shows them, read from the page's own search call (no API searches): `{ q, data: [{ id, url, username, name, bio, text, at, likes, comments }] }` (`max`, default 30). Reads only",
+      request: webSearch,
+      meter: () => ({ search: 1 }),
+      browser: { flow: "tiktok/search" },
+    }),
+    route({
+      method: "POST",
+      path: "/web/videos/{videoId}/like",
+      summary: "Like another account's video (no API likes): `{ videoId, liked, already? }`",
+      request: video,
+      meter: () => ({ like: 1 }),
+      browser: { flow: "tiktok/like" },
+    }),
+    route({
+      method: "POST",
+      path: "/web/{username}/follow",
+      summary:
+        "Follow an account from its profile (no API follows): `{ username, following, already? }`",
+      request: webFollow,
+      meter: () => ({ follow: 1 }),
+      browser: { flow: "tiktok/follow" },
+    }),
+    route({
+      method: "POST",
+      path: "/web/videos/{videoId}/comments",
+      summary:
+        "Comment on another account's video (no API comments there; 150 characters): `{ videoId, commented, id }`",
+      request: webComment,
+      irreversible: true,
+      verify: {
+        words: (b) => b.text,
+        read: async (b, get): Promise<VerifyRead> => {
+          const info = await get("/v2/user/info/").catch(() => null);
+          const name = str(rec(rec(rec(info).data).user).display_name);
+          const r = rec(await get(`/web/videos/${b.videoId}/comments`, { max: 100 }));
+          return {
+            rows: arr(r.comments).map((e) => {
+              const c = rec(e);
+              return {
+                words: text(c.text),
+                at: isoOf(c.at),
+                id: str(c.id),
+                url: null,
+                mine: sameName(c.authorName, name) && !str(c.parentId),
+              };
+            }),
+            order: "ranked",
+            complete: false,
+          };
+        },
+      },
+      sentAs: (o) => ({ id: str(rec(o).id), url: null }),
+      meter: () => ({ comment: 1 }),
+      browser: { flow: "tiktok/comment" },
     }),
     route({
       method: "GET",

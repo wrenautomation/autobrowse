@@ -130,8 +130,24 @@ export {
   type SubscribeInput as RedditSubscribeInput,
 } from "./reddit.js";
 export { type ResetProbeInput, resetMailProbe } from "./reset-mail-probe.js";
+export {
+  postOfCard,
+  type ThreadsPost,
+  threadsFollow,
+  threadsLike,
+  threadsReply,
+  threadsSearch,
+} from "./threads-act.js";
 export { followedOfThreads, threadsFollowing } from "./threads-following.js";
 export { threadsOauthConsent } from "./threads-oauth-consent.js";
+export {
+  searchRows,
+  type TikTokVideo,
+  tiktokComment,
+  tiktokFollow,
+  tiktokLike,
+  tiktokSearch,
+} from "./tiktok-act.js";
 export {
   type TikTokPost,
   type TikTokPostInput,

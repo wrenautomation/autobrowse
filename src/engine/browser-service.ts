@@ -94,8 +94,20 @@ import {
   redditSubscribe,
 } from "../browser/flows/reddit.js";
 import { resetMailProbe } from "../browser/flows/reset-mail-probe.js";
+import {
+  threadsFollow,
+  threadsLike,
+  threadsReply,
+  threadsSearch,
+} from "../browser/flows/threads-act.js";
 import { threadsFollowing } from "../browser/flows/threads-following.js";
 import { threadsOauthConsent } from "../browser/flows/threads-oauth-consent.js";
+import {
+  tiktokComment,
+  tiktokFollow,
+  tiktokLike,
+  tiktokSearch,
+} from "../browser/flows/tiktok-act.js";
 import { tiktokPostComments } from "../browser/flows/tiktok-comments.js";
 import { tiktokCreatePost } from "../browser/flows/tiktok-create-post.js";
 import { tiktokFollowing } from "../browser/flows/tiktok-following.js";
@@ -201,7 +213,15 @@ export const BROWSER_FLOWS: FlowCatalog = Object.fromEntries(
     tiktokPostComments,
     tiktokVideoAnalytics,
     tiktokFollowing,
+    tiktokSearch,
+    tiktokComment,
+    tiktokLike,
+    tiktokFollow,
     threadsFollowing,
+    threadsSearch,
+    threadsReply,
+    threadsLike,
+    threadsFollow,
     tiktokCreatePost,
     xOauthConsent,
     xPost,
