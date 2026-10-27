@@ -146,6 +146,7 @@ import {
 import { type Journaled, readJournal } from "./journal.js";
 import { DEFAULT_IDLE_MINUTES } from "./lease.js";
 import { marksFor, missed } from "./marks.js";
+import { overlayFor } from "./overlay.js";
 
 export { type Command, commandSchema, placeHint } from "./commands.js";
 export { journalFileFor, readJournal, tokenFileFor } from "./journal.js";
@@ -244,6 +245,8 @@ export interface ExploreOptions {
   captcha?: RunnerOptions["captcha"];
   /** The desktop `os` acts run on; this Mac by default, none on a headless host. */
   desktop?: Desktop;
+  /** Draw the overlay (ref boxes, the act's target, the agent's goal and thought); default: when headed. */
+  overlay?: boolean;
   /** Writes `records` code when the command sends none; absent: `records` needs `code`. */
   llm?: Llm | null;
   /** Where `keep` puts a secret read off the page (.env locally, SSM in prod). */
@@ -505,6 +508,9 @@ async function serve(
   });
   /** The active page: it moves when a popup opens (OAuth) and comes back after; re-read per command. */
   let page: Page = fp.page;
+  const overlay = overlayFor(opts.overlay ?? opts.browser.headless === false);
+  // A new document wipes the layer: the panel comes back on it.
+  page.on("load", (p) => void overlay.loaded(p));
   let paused = false;
   let waiters: Array<() => void> = [];
   /** Acts a person did by hand since the last `pause`. */
@@ -588,7 +594,10 @@ async function serve(
     const c = capture;
     if (!c || page.isClosed()) return null;
     try {
-      return c.picture(await page.screenshot({ type: "jpeg", quality: 80, scale: "css" }));
+      const shot = await overlay.around(page, () =>
+        page.screenshot({ type: "jpeg", quality: 80, scale: "css" }),
+      );
+      return c.picture(shot);
     } catch {
       return null;
     }
@@ -671,6 +680,8 @@ async function serve(
     /** The Claude Code session that sent it (`x-claude-session`). */
     session?: string,
   ) => {
+    // The overlay is for a person who watches; a run's rows never count it.
+    if (c.cmd === "overlay") return;
     // A session control answers mid-command: the pictures wait for the command they belong to.
     const own = !IMMEDIATE.has(c.cmd);
     const pics = own ? stepPics : [];
@@ -810,7 +821,7 @@ async function serve(
   const shoot = async (): Promise<string> => {
     const file = join(shotsDir, `${String(shotN++).padStart(4, "0")}.png`);
     // A failed shot is an error, never a path to a file that is not there.
-    await page.screenshot({ path: file });
+    await overlay.around(page, () => page.screenshot({ path: file }));
     return file;
   };
   const journal = (a: Journaled) => {
@@ -1209,7 +1220,9 @@ async function serve(
     }
     if (receiptOutcome(whole) === "unclear" || stillAsking(whole)) return [];
     const text = redactText(whole).slice(0, 6_000);
-    const png = await page.screenshot({ fullPage: true, timeout: 15_000 }).catch(() => undefined);
+    const png = await overlay
+      .around(page, () => page.screenshot({ fullPage: true, timeout: 15_000 }))
+      .catch(() => undefined);
     const host = new URL(page.url()).host;
     const kept = placedCard
       ? null
@@ -1267,6 +1280,8 @@ async function serve(
     "pages",
     "close",
     "goal",
+    // Drawing is no page work: it never waits behind an act or opens a run.
+    "overlay",
   ]);
   let chain: Promise<unknown> = Promise.resolve();
   let lastTouch = now();
@@ -1325,7 +1340,7 @@ async function serve(
   const looked = async (c: Command, wait: boolean) => {
     if (!LOOKS.has(c.cmd)) return { answer: await act(c, wait), rows: null };
     const before = await rows();
-    const out = await act(c, wait);
+    const out = await act(c, wait).finally(() => overlay.after(fp.page));
     page = fp.page;
     const after = await rows();
     return { answer: { ...(out as object), changed: pageChange(before, after) }, rows: after };
@@ -1371,7 +1386,20 @@ async function serve(
             ),
           } as Command)
         : cmd;
+    if (overlay.enabled && LOOKED_AT.has(c.cmd) && "hints" in c && c.hints)
+      await overlay.flash(
+        page,
+        c.hints as Hints,
+        `${c.cmd}${"goal" in c && c.goal ? `: ${c.goal}` : ""}`,
+      );
     switch (c.cmd) {
+      case "overlay": {
+        const { cmd: _, refs, ...fields } = c;
+        return overlay.set(page, {
+          ...fields,
+          ...(refs ? { refs: refs.map((r) => ({ n: r.n, hints: r.hints as Hints })) } : {}),
+        });
+      }
       case "open": {
         // Through the runner: a login wall is signed through. A captcha comes back as the
         // wall, not an error: a checkbox one is clicked like any control, a puzzle goes to a person.
@@ -1800,6 +1828,7 @@ async function serve(
           closedWhy = c.why;
         }
         if (opts.journalFile && closing) rmSync(opts.journalFile, { force: true });
+        await overlay.remove(page);
         queueMicrotask(() => finish());
         return { ok: true };
     }

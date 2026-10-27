@@ -97,6 +97,22 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   /** A screenshot with a numbered box on each control in view, and the list; act with `hints:{mark:n}`. */
   z.object({ cmd: z.literal("marks") }),
   /**
+   * The headed overlay: panel fields (goal, step, thought, doing) and boxes on `refs` with their
+   * numbers; `clear` empties it first. Headless it draws nothing and says so.
+   */
+  z.object({
+    cmd: z.literal("overlay"),
+    goal: z.string().optional(),
+    step: z.string().optional(),
+    thought: z.string().optional(),
+    doing: z.string().optional(),
+    refs: z
+      .array(z.object({ n: z.number().int().positive(), hints: hintsSchema }))
+      .max(200)
+      .optional(),
+    clear: z.boolean().optional(),
+  }),
+  /**
    * The page calls (XHR, fetch, page loads), redacted: the newest `last` (40) as lines,
    * `filter` on the URL; `id` = one call with its body; `diff` = call shapes and response
    * keys against this site's last session. A personal profile's rows have no content.

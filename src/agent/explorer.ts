@@ -254,6 +254,17 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
     // The whole outline every step: a model with no memory between calls (claude-code) guessed refs from a delta.
     const page = digest(aria.aria, { maxRefs: o.maxRefs ?? 80, extras: aria.extras ?? [] });
     const shown = page.text;
+    // Headed, a person sees the refs the model gets and why it acts; headless this draws nothing.
+    await o.explorer
+      .exec({
+        cmd: "overlay",
+        goal: o.goal,
+        step: `${n} of ${max}`,
+        thought: "reading the page",
+        doing: "",
+        refs: page.refs.map((r) => ({ n: r.n, hints: hintsFor(r) })),
+      })
+      .catch(() => undefined);
     // About the last two batches: a batch's acts are one turn to the model.
     const history = steps
       .slice(-Math.max(6, 2 * maxBatch))
@@ -300,6 +311,7 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
       continue;
     }
     const step: Step = { thought: plan.thought, action: plan.actions[0] as Step["action"] };
+    await o.explorer.exec({ cmd: "overlay", thought: plan.thought }).catch(() => undefined);
     const rec: StepRecord = {
       n,
       step,
