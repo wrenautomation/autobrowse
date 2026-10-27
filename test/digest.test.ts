@@ -129,4 +129,31 @@ describe("pageForModel", () => {
     const c = digest(PAGE.replace('- button "Save"', '- button "Cancel"\n- button "Save"'));
     expect(pageForModel(a, c)).toBe(c.text);
   });
+
+  it("lists extras last, under their own line, with the hints they came with", () => {
+    const e = digest('- button "Save"', {
+      extras: [
+        {
+          role: "button",
+          name: "Closed Save",
+          hints: { role: "button", name: "Closed Save" },
+          why: "closed-shadow",
+        },
+        {
+          role: "clickable",
+          name: "Acme plan",
+          hints: { text: "/^\\s*Acme plan/", nth: 1 },
+          why: "pointer",
+        },
+      ],
+    });
+    expect(e.text).toBe("[1]B Save\nnot in the tree:\n [2]B Closed Save · [3]D Acme plan");
+    expect(hintsFor(e.refs[2] as never)).toEqual({ text: "/^\\s*Acme plan/", nth: 1 });
+    expect(
+      digest('- button "Save"', {
+        maxRefs: 1,
+        extras: [{ role: "clickable", name: "x", hints: {}, why: "pointer" }],
+      }).text,
+    ).toBe("[1]B Save\n(+1 more controls below; scroll or narrow the goal)");
+  });
 });

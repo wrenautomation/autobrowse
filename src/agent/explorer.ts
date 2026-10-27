@@ -9,6 +9,7 @@
  * commands, and `resume`; the agent re-observes and goes on.
  */
 import { z } from "zod";
+import type { Extra } from "../browser/extras.js";
 import { desktopOpSchema } from "../desktop/types.js";
 import type { ExploreCommand, Explorer } from "../explore/server.js";
 import { PaymentGate } from "../gates/payment.js";
@@ -192,6 +193,7 @@ ref is the [n] of a control in the outline; only those numbers exist.
 Use os acts only when the goal is outside the browser (an app, a system setting, a file, a command); look with tree before clicking.
 Control names carry content too: a link named "Name Jane Doe" tells you the name is Jane Doe. When the goal asks you to report or collect something, read it with read{ref,as} first, then quote it in the done summary. For a list (results, rows, items), use one records act, never one read per item: a read finds its element by the text it shows, so it finds only that same text again. Name a records or read "as" for what it holds ("stories", "price"), never after the values you typed: a workflow built from this run fills in other values.
 An "iframe:" section is a frame inside the page (a captcha, an embedded sign-in); its refs work like any other.
+A "not in the tree:" section lists controls the outline misses (inside a closed web component, or a card clickable only by script); click or fill them like any other ref.
 Rules: never invent values; use only the inputs given. Never buy, delete, or submit money-related forms: return human{reason} instead.
 Any captcha ("I'm not a robot", pick the squares, type the letters, drag a slider): use captcha. Only when it says it is not solved twice, return human{reason}.
 Prefer the shortest path. When the tree shows the goal is met, return done with achieved=true.
@@ -245,9 +247,12 @@ export async function exploreWithAgent(o: AgentOptions): Promise<AgentResult> {
     if (o.stopped?.()) return { achieved: false, summary: "stopped by a person", steps, usage };
     t0 = Date.now();
     const url = (await o.explorer.exec({ cmd: "url" })) as { url: string };
-    const aria = (await o.explorer.exec({ cmd: "aria", limit: 60_000 })) as { aria: string };
+    const aria = (await o.explorer.exec({ cmd: "aria", limit: 60_000, extras: true })) as {
+      aria: string;
+      extras?: Extra[];
+    };
     // The whole outline every step: a model with no memory between calls (claude-code) guessed refs from a delta.
-    const page = digest(aria.aria, { maxRefs: o.maxRefs ?? 80 });
+    const page = digest(aria.aria, { maxRefs: o.maxRefs ?? 80, extras: aria.extras ?? [] });
     const shown = page.text;
     // About the last two batches: a batch's acts are one turn to the model.
     const history = steps

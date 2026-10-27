@@ -13,6 +13,8 @@
  * then state marks (✓ checked, ✗ disabled, ▾ expanded, • selected).
  * Containers are `role "name":` with children indented one space.
  */
+
+import type { Extra } from "../browser/extras.js";
 import { frameOfSection } from "../browser/frames.js";
 import type { Hints } from "../browser/locate.js";
 
@@ -35,10 +37,12 @@ export const CODES: Record<string, string> = {
   spinbutton: "N",
   listbox: "LB",
   treeitem: "TI",
+  /** Not an aria role: an element clickable only by script (`src/browser/extras.ts`). */
+  clickable: "D",
 };
 /** The legend, for the system prompt. */
 export const LEGEND =
-  "[n] refs: L link, B button, T text field, X combobox, C checkbox, R radio, S switch, TAB tab, M menu item, O option, SL slider, N number field, LB listbox, TI tree item, H1-H6 heading, cell table cell; marks: ✓ checked, ✗ disabled, ▾ expanded, • selected";
+  "[n] refs: L link, B button, T text field, X combobox, C checkbox, R radio, S switch, TAB tab, M menu item, O option, SL slider, N number field, LB listbox, TI tree item, D clickable with no role, H1-H6 heading, cell table cell; marks: ✓ checked, ✗ disabled, ▾ expanded, • selected";
 
 const CONTEXT = new Set(["alert", "status"]);
 /** Table cells read as text; the controls inside them get the refs. */
@@ -97,6 +101,8 @@ export interface Ref {
   attrs: string;
   /** Inside an iframe: its selector chain from the page (`ariaWithFrames`). */
   frame?: string;
+  /** An extra the tree lacks: the hints that find it, used as they are. */
+  hints?: Hints;
 }
 
 export interface Digest {
@@ -113,6 +119,8 @@ export interface DigestOptions {
   textWidth?: number;
   /** A run of look-alike siblings longer than this is folded after this many. */
   maxRepeat?: number;
+  /** Controls the tree leaves out (closed shadow roots, script-only clicks): listed last. */
+  extras?: readonly Extra[];
 }
 
 interface Node {
@@ -399,12 +407,20 @@ export function digest(aria: string, o: DigestOptions = {}): Digest {
   };
 
   const lines = pack(fold(parseAria(aria), 0), width);
+  const extras = (o.extras ?? []).flatMap((e): Piece[] => {
+    const r = ref(e.role, e.name, "");
+    if (!r) return [];
+    r.hints = e.hints;
+    return [{ kind: "leaf", text: `[${r.n}]${CODES[e.role] ?? "D"} ${clip(e.name, 80)}` }];
+  });
+  if (extras.length) lines.push("not in the tree:", ...pack(extras, width - 1).map((l) => ` ${l}`));
   if (hiddenRefs) lines.push(`(+${hiddenRefs} more controls below; scroll or narrow the goal)`);
   return { text: lines.join("\n"), refs };
 }
 
 /** Hints that find the ref'd element again, in the recorder's vocabulary. */
 export function hintsFor(ref: Ref): Hints {
+  if (ref.hints) return ref.hints;
   const h: Hints = { role: ref.role };
   if (ref.name) h.name = ref.name;
   if (ref.nth) h.nth = ref.nth;

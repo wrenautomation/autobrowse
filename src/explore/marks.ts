@@ -59,6 +59,14 @@ ${HINTS_JS}
   const SEL = 'a[href], button, input:not([type=hidden]), select, textarea, summary, [contenteditable=""], [contenteditable=true], [onclick], [tabindex]:not([tabindex="-1"]), [role=button], [role=link], [role=checkbox], [role=radio], [role=switch], [role=tab], [role=menuitem], [role=option], [role=combobox], [role=textbox], [role=searchbox], [role=slider]';
   // A control inside one of these is the same press (a span in a button).
   const LEAF = 'a, button, summary, label, [role=button], [role=link], [role=option], [role=menuitem], [role=tab]';
+  // A card clickable only by script: the outermost element that sets cursor:pointer, holding no control.
+  const pointer = (el) => {
+    if (el.tagName === 'LABEL' || el.tagName === 'HTML' || el.tagName === 'BODY') return false;
+    if (getComputedStyle(el).cursor !== 'pointer') return false;
+    const p = el.parentElement || (el.getRootNode().host || null);
+    if (p && getComputedStyle(p).cursor === 'pointer') return false;
+    return !el.querySelector(SEL);
+  };
   const roots = [document];
   const all = [];
   while (roots.length) {
@@ -66,7 +74,7 @@ ${HINTS_JS}
     for (const el of root.querySelectorAll('*')) {
       if (el.hasAttribute(ATTR)) el.removeAttribute(ATTR);
       if (el.shadowRoot) roots.push(el.shadowRoot);
-      if (el.matches(SEL)) all.push(el);
+      if (el.matches(SEL) || pointer(el)) all.push(el);
     }
   }
   const W = innerWidth, H = innerHeight;

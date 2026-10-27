@@ -73,6 +73,8 @@ export const commandSchema = z.discriminatedUnion("cmd", [
     limit: z.number().int().positive().optional(),
     /** Secret-shaped strings are masked unless asked for raw. */
     raw: z.boolean().optional(),
+    /** Also the controls the tree leaves out: closed shadow roots, script-only clicks. */
+    extras: z.boolean().optional(),
   }),
   /** Interactive elements as one line each, what the repairer sees. */
   z.object({ cmd: z.literal("snapshot"), limit: z.number().int().positive().optional() }),

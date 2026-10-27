@@ -47,7 +47,7 @@ Any subset; `name` is the accessible name from `aria`. Or `{"mark":n}`: a number
 
 Look:
 - `{"cmd":"snapshot"}` — interactive elements, one line each. Start here.
-- `{"cmd":"aria"}` — accessibility tree, masked. `hints` scopes it, `limit` caps characters (default 12000).
+- `{"cmd":"aria"}` — accessibility tree, masked. `hints` scopes it, `limit` caps characters (default 12000). `extras:true` also lists what the tree misses (controls in closed shadow roots, cards clickable only by script), each with hints to act on.
 - `{"cmd":"text"}` — the page's words as laid out: side-by-side reads as a row (`Price | $40`), tables across, a sidebar as `[col 1/2]`. Costs what plain text does. `"coords":true` adds `@x,y` per line (+25%); `"layout":false` = DOM order.
 - `{"cmd":"url"}`, `{"cmd":"screenshot"}` (path back), `{"cmd":"count","hints":…}`.
 - `{"cmd":"marks"}` — a screenshot with a numbered box on each control in view, and the list `{n, tag, role, name}`. For a control the snapshot and `aria` do not name (an icon, a canvas widget). Act with `"hints":{"mark":n}`: the journal keeps the control's own hints, never the point. A load or re-render makes the marks stale: take them again.

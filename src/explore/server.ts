@@ -32,6 +32,7 @@ import { writeRecords } from "../agent/records.js";
 import { SecretLeak, urlWithoutQuery } from "../auth/guard.js";
 import type { SecretValues } from "../auth/signup.js";
 import { fetchFile } from "../browser/download.js";
+import { extrasOf } from "../browser/extras.js";
 import { filmLog } from "../browser/film.js";
 import {
   chooseOption,
@@ -1505,9 +1506,11 @@ async function serve(
         ).catch((e: Error) => `error: ${e.message}`);
         // Even raw: a password typed into a field is never something a caller may read back.
         const aria = out(redactAria(tree.slice(0, c.limit ?? 12_000)), c.raw);
-        return c.hints && tree.startsWith("error:")
-          ? { aria, hint: 'see the page: {"cmd":"marks"}' }
-          : { aria };
+        if (c.hints && tree.startsWith("error:"))
+          return { aria, hint: 'see the page: {"cmd":"marks"}' };
+        if (!c.extras || c.hints) return { aria };
+        const extras = (await extrasOf(page)).map((e) => ({ ...e, name: out(e.name, c.raw) }));
+        return { aria, extras };
       }
       case "snapshot":
         return {
