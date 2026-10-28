@@ -830,6 +830,43 @@ const npm: SiteLogin = {
 };
 
 /**
+ * Apple (App Store Connect, the developer account): one Apple ID widget in an
+ * iframe; the address, Continue, then the password shows late on the same
+ * form. 2FA is a code on William's own devices: a person's step. Hints from
+ * the 10-28 explore journal. UNVERIFIED until its first live run.
+ */
+const APPLE_WIDGET = "iframe#aid-auth-widget-iFrame";
+const apple: SiteLogin = {
+  site: "apple",
+  home: "https://appstoreconnect.apple.com/apps",
+  ask: "William's Apple ID for App Store Connect and the developer account",
+  loggedIn: async (fp) =>
+    /^https:\/\/(appstoreconnect|developer)\.apple\.com\/(?!login)/.test(fp.url()) &&
+    !(await fp.has(
+      { frame: APPLE_WIDGET, role: "textbox", name: "/email|phone|apple id|apple account/i" },
+      500,
+    )),
+  signIn: formLogin("apple", {
+    start: "https://appstoreconnect.apple.com/login",
+    username: {
+      frame: APPLE_WIDGET,
+      role: "textbox",
+      name: "/email|phone|apple id|apple account/i",
+    },
+    next: { frame: APPLE_WIDGET, role: "button", name: "Continue" },
+    password: { frame: APPLE_WIDGET, role: "textbox", name: "Password" },
+    submit: { frame: APPLE_WIDGET, role: "button", name: "Sign In" },
+    person: {
+      asks: /verification code|two-factor authentication/i,
+      why: "Apple sent a code to William's devices; type it in the window",
+    },
+    trust: { role: "button", name: "Trust" },
+    rejected: /check the account information you entered/i,
+    success: /^https:\/\/(appstoreconnect|developer)\.apple\.com\/(?!login)/,
+  }),
+};
+
+/**
  * Discord: email (or phone) and password on one page, then hCaptcha when it
  * doubts the device, then the authenticator when 2FA is on. A new location
  * is confirmed by a link Discord emails: that wall is a person's.
@@ -941,6 +978,7 @@ export const SITE_LOGINS: readonly SiteLogin[] = [
   tiktok,
   outlook,
   npm,
+  apple,
   github,
   reddit,
   perplexity,

@@ -44,7 +44,14 @@ export function registerDoCommands(program: Command, local: LocalBackend): void 
             typeof out.output === "string" ? out.output : JSON.stringify(out.output, null, 2),
           );
         if (out.session) console.log(`session ${out.session}`);
-        if (out.status === "failed") process.exitCode = 1;
+        // Nobody resumes a CLI run: a paused session would hold the process open forever.
+        if (out.status === "needs-human" && out.session) {
+          await backend.agent?.close(out.session).catch(() => undefined);
+          console.log(
+            "closed, journal kept: drive it headed from a chat (the browser subagent), or rerun with --site <a site with a login>",
+          );
+        }
+        if (out.status === "failed" || out.status === "needs-human") process.exitCode = 1;
       },
     );
   program

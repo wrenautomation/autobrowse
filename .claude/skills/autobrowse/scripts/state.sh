@@ -11,6 +11,9 @@ for t in "$DIR"/explore-*.token; do
   site=$(sed -nE 's/.*"site":"([^"]+)".*/\1/p' "$info" 2>/dev/null)
   [ -n "$site" ] || site=$(pgrep -fl "explore .* --port $p" 2>/dev/null | sed -nE 's/.*explore ([^ ]+) --port.*/\1/p' | head -1)
   # held = never idle-closes: say since when, so a forgotten one shows
+  # a dead server leaves its token: say so, or the skill thinks the port is taken
+  pid=$(sed -nE 's/.*"pid":([0-9]+).*/\1/p' "$info" 2>/dev/null)
+  if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then open+="${p}${site:+ ($site, stale: dead, start.sh reuses the port)} "; continue; fi
   held=$(grep -q '"held":true' "$info" 2>/dev/null && sed -nE 's/.*"startedAt":"([^".]+).*/, held since \1/p' "$info")
   open+="${p}${site:+ ($site$held)} "
 done

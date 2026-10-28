@@ -49,6 +49,16 @@ export interface PickRequest {
   earlier?: readonly { goal: string; ability: string }[];
 }
 
+/** A login site a host in the goal names (`appstoreconnect.apple.com` → apple): no model needed. */
+export function siteInGoal(goal: string, sites: readonly string[]): string | null {
+  const labels = new Set(
+    (goal.toLowerCase().match(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\b/g) ?? []).flatMap((h) =>
+      h.split(".").slice(0, -1),
+    ),
+  );
+  return sites.find((s) => labels.has(s)) ?? null;
+}
+
 export async function pickAbility(
   llm: Llm | null,
   req: PickRequest,
@@ -65,7 +75,13 @@ export async function pickAbility(
       usage: NONE,
     };
   if (!llm)
-    return { ability: null, input: {}, site: req.site ?? "scratch", why: "no model", usage: NONE };
+    return {
+      ability: null,
+      input: {},
+      site: req.site ?? siteInGoal(req.goal, sites) ?? "scratch",
+      why: "no model",
+      usage: NONE,
+    };
   const named = Object.entries(req.inputs)
     .map(([k, v]) => `- ${k} = ${v}`)
     .join("\n");
@@ -83,6 +99,8 @@ export async function pickAbility(
   const site =
     req.site ??
     ability?.site ??
-    (value.site && sites.includes(value.site) ? value.site : "scratch");
+    (value.site && sites.includes(value.site) ? value.site : null) ??
+    siteInGoal(req.goal, sites) ??
+    "scratch";
   return { ability, input: ability ? value.input : {}, site, why: value.why, usage };
 }

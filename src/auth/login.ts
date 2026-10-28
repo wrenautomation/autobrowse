@@ -186,6 +186,10 @@ export interface FormLoginSpec {
   rejected?: RegExp;
   /** A captcha the site may show after submit (Discord's hCaptcha): solved by the runner, else a person's. */
   captcha?: Hints;
+  /** A second step only a person can answer (Apple's code on William's devices): a pause, not a failure. */
+  person?: { asks: RegExp; why: string };
+  /** "Trust this browser?" after the second step: pressed, so the profile skips it next time. */
+  trust?: Hints;
 }
 
 export class LoginFailed extends Error {
@@ -313,6 +317,27 @@ function formWalk(
         },
       }),
     ),
+    ...(spec.person
+      ? [
+          {
+            name: "person's step",
+            looks: "a second step only a person's device can answer",
+            says: spec.person.asks,
+            act: ({ fp }: SignInContext) => fp.human(`${site}: ${spec.person?.why}`),
+          },
+        ]
+      : []),
+    ...(spec.trust
+      ? [
+          {
+            name: "trust browser",
+            looks: "a prompt to trust this browser after the second step",
+            shows: [spec.trust],
+            act: ({ fp }: SignInContext) =>
+              fp.act({ kind: "click" }, spec.trust as Hints, { goal: "trust this browser" }),
+          },
+        ]
+      : []),
     ...(spec.reveal
       ? [
           {

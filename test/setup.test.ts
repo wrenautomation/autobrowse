@@ -69,6 +69,7 @@ describe("setup", () => {
       "tiktok",
       "microsoft",
       "npm",
+      "apple",
       "github",
       "reddit",
       "perplexity",
@@ -97,6 +98,7 @@ describe("setup", () => {
       tiktok: { username: "wren", password: "t" },
       microsoft: { username: "w@outlook.com", password: "m" },
       npm: { username: "wrenautomation", password: "n" },
+      apple: { username: "w@x.com", password: "a" },
       github: { username: "wren", password: "g" },
       reddit: { username: "WrenAutomation", password: "r" },
       perplexity: { username: "w@x.com", password: "-", via: "google" },
@@ -112,7 +114,7 @@ describe("setup", () => {
       set: { llm: true, codesInbox: true },
     });
     expect(asked).toEqual([]);
-    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(22);
+    expect(said.filter((l) => l.endsWith(": stored")).length).toBe(23);
   });
 
   function envSink() {

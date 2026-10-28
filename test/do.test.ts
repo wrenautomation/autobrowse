@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { AgentSessions, SessionView } from "../src/agent/sessions.js";
 import { abilitiesOf, fieldLine, fieldsOf, parseSiteAbility } from "../src/do/catalog.js";
 import { type DoerDeps, doer, missingWorkflowName, recordingNameOf } from "../src/do/doer.js";
-import { pickAbility } from "../src/do/pick.js";
+import { pickAbility, siteInGoal } from "../src/do/pick.js";
 import { defineWorkflow, done } from "../src/engine/workflow.js";
 import { fakeLlm } from "../src/llm/fake.js";
 import type { SiteRow } from "../src/sites/facade.js";
@@ -444,5 +444,24 @@ describe("do", () => {
     });
     const out = await doer(d).do({ goal: "google-name", inputs: { name: "x" } });
     expect(out).toMatchObject({ status: "needs-human", output: "gate" });
+  });
+});
+
+describe("siteInGoal", () => {
+  it("names the login site a host in the goal belongs to", () => {
+    const sites = ["google", "apple", "npm"];
+    expect(siteInGoal("In appstoreconnect.apple.com pick build 1.0 (2)", sites)).toBe("apple");
+    expect(siteInGoal("open https://www.npmjs.com/settings", sites)).toBeNull();
+    expect(siteInGoal("rename the file", sites)).toBeNull();
+  });
+
+  it("is the fallback when no model picks a site", async () => {
+    const got = await pickAbility(
+      null,
+      { goal: "open appstoreconnect.apple.com", inputs: {} },
+      [],
+      ["apple"],
+    );
+    expect(got.site).toBe("apple");
   });
 });
