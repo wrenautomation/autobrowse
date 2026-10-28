@@ -33,6 +33,11 @@ Changing autobrowse's code: `map/CLAUDE.md`.
 - Secrets never pass through you. Never type a password, TOTP or code:
   `place` types it. A key a site shows goes to the store by `keep`. Never
   echo a secret, put one in a URL or a message, or screenshot a revealed key.
+- William's details are stored: profile `william` (`pnpm -s autobrowse profile list`)
+  holds his name, birthday, gender, email, phone, address and tax id. A form asks
+  for one: `place{secret:"profile.phone"}` (`.phoneLocal`, `.name`, `.birthday`,
+  `.address1`, signup.md). Never ask William for them. A `--signup` or `--login`
+  session types its account's own `phone` instead.
 - Money is William's call. A billing field, a button that spends, or an API
   route that `spends` waits for his yes at the payment gate. A no
   (`{"gate":"payment"}`, exit 1) ends the task: say what was refused. Never

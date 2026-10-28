@@ -263,6 +263,11 @@ describe("profiles", () => {
     expect(profileField(p, "taxId")).toBe("123456789RT0001");
     expect(profileField(p, "city")).toBe("Edmonton");
     expect(profileField({ id: "w", name: "W" }, "taxId")).toBeNull();
+    const t = { id: "w", name: "W", phone: "+15875550100", gender: "Male" };
+    expect(profileField(t, "gender")).toBe("Male");
+    expect(profileField(t, "phone")).toBe("+15875550100");
+    expect(profileField(t, "phoneLocal")).toBe("5875550100");
+    expect(profileField({ id: "w", name: "W" }, "phoneLocal")).toBeNull();
   });
   it("a billing form's email, phone and tax id are told apart by the field, and kept when they already match", () => {
     expect(billingKind("email billing_email email  Email")).toBe("email");

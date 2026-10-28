@@ -13,6 +13,7 @@ import {
 } from "@aws-sdk/client-ssm";
 import type { Cipher } from "credvault";
 import { z } from "zod";
+import { localPhone } from "../auth/phone.js";
 
 export const addressSchema = z.object({
   line1: z.string().trim().min(1),
@@ -168,10 +169,14 @@ export function profileField(p: Profile, field: string): string | null {
       return p.name.split(/\s+/).slice(1).join(" ") || null;
     case "birthday":
       return p.birthday ?? null;
+    case "gender":
+      return p.gender ?? null;
     case "email":
       return p.email ?? null;
     case "phone":
       return p.phone ?? null;
+    case "phoneLocal":
+      return p.phone ? localPhone(p.phone) : null;
     default:
       return addressField(p.address, field);
   }
