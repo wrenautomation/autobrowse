@@ -71,7 +71,8 @@ export interface Pace {
   showPointer?: boolean;
 }
 
-export const HUMAN_PACE: Pace = {
+/** A careful person's timings; `HUMAN_PACE` is this, brisker. */
+export const CALM_PACE: Pace = {
   think: [350, 1_600],
   drift: 0.35,
   typing: {
@@ -113,6 +114,43 @@ export const HUMAN_PACE: Pace = {
   },
 };
 
+type Range = [number, number];
+const by = (r: Range, k: number): Range => [Math.round(r[0] / k), Math.round(r[1] / k)];
+
+/** Every ms range `k` times shorter; chances, counts and pixels stay, so the shape a site watches is the same. */
+export function brisk(p: Pace, k: number): Pace {
+  const t = p.typing;
+  const m = p.mouse;
+  const s = p.scroll;
+  return {
+    ...p,
+    think: by(p.think, k),
+    typing: {
+      ...t,
+      hold: by(t.hold, k),
+      gap: by(t.gap, k),
+      beat: by(t.beat, k),
+      stallMs: by(t.stallMs, k),
+      notice: by(t.notice, k),
+      erase: by(t.erase, k),
+    },
+    mouse: {
+      ...m,
+      reach: by(m.reach, k),
+      perBit: by(m.perBit, k),
+      hover: by(m.hover, k),
+      hold: by(m.hold, k),
+      wanderRest: by(m.wanderRest, k),
+      hesitateMs: by(m.hesitateMs, k),
+      jitterGap: by(m.jitterGap, k),
+    },
+    scroll: { ...s, gap: by(s.gap, k), look: by(s.look, k) },
+  };
+}
+
+/** Twice the calm pace (William 10-28: "I move really fast"). */
+export const HUMAN_PACE: Pace = brisk(CALM_PACE, 2);
+
 /**
  * For a film: the pace of a demo. No slips, no stalls, no wander while
  * reading; keys at a steady clip, a calm reach a viewer can follow.
@@ -121,7 +159,7 @@ export const FILM_PACE: Pace = {
   think: [450, 900],
   drift: 0,
   typing: {
-    ...HUMAN_PACE.typing,
+    ...CALM_PACE.typing,
     hold: [40, 70],
     gap: [50, 85],
     tempo: [0.9, 1.1],
@@ -132,7 +170,7 @@ export const FILM_PACE: Pace = {
     typo: 0,
   },
   mouse: {
-    ...HUMAN_PACE.mouse,
+    ...CALM_PACE.mouse,
     reach: [260, 360],
     perBit: [110, 150],
     overshoot: 0,
@@ -142,7 +180,7 @@ export const FILM_PACE: Pace = {
     hesitate: 0,
     jitter: 0.2,
   },
-  scroll: { ...HUMAN_PACE.scroll, look: [500, 900] },
+  scroll: { ...CALM_PACE.scroll, look: [500, 900] },
 };
 
 /** What a hand did, when (epoch ms): page px, as the page's own events say them. */

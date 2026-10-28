@@ -380,7 +380,8 @@ function samePage(current: string, url: string): boolean {
   return strip(current) === strip(url);
 }
 
-const SETTLE_MS = 8_000;
+// Busy apps never go idle: this caps what each open pays (8 s was half of an App Store Connect step).
+const SETTLE_MS = 4_000;
 /** AWS's console → sign-in chain takes 30–60 s to DOMContentLoaded headless; Playwright's 30 s default cut it. */
 const NAVIGATE_MS = 90_000;
 

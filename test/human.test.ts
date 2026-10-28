@@ -7,6 +7,8 @@ import { drawMs } from "../src/browser/human/draw.js";
 import {
   aimPoint,
   BACKSPACE,
+  brisk,
+  CALM_PACE,
   FILM_PACE,
   type HandEvent,
   HUMAN_PACE,
@@ -424,5 +426,16 @@ describe("hands", () => {
 
   it("are instant with no pace", () => {
     expect(handsFor(null)).toBe(instantHands);
+  });
+});
+
+describe("brisk", () => {
+  it("shortens every ms range and keeps chances and counts", () => {
+    const p = brisk(CALM_PACE, 2);
+    expect(p.think).toEqual([175, 800]);
+    expect(p.typing.hold).toEqual([23, 60]);
+    expect(p.typing.typo).toBe(CALM_PACE.typing.typo);
+    expect(p.typing.run).toEqual(CALM_PACE.typing.run);
+    expect(p.scroll.notch).toEqual(CALM_PACE.scroll.notch);
   });
 });
