@@ -126,7 +126,9 @@ a row; it is work.
   at capture. `p` pauses (nothing captured), `q` finishes, any other line
   is a note. `--terminal` records the shell leg after. Raw recordings
   stay out of git.
-- **Explored.** `autobrowse agent <site> "<goal>"` finds the way itself:
+- **Explored.** From a chat session, Claude Code drives the explore skill
+  itself or through the `browser` subagent, headed. Unattended (the desk,
+  the bench), `autobrowse agent <site> "<goal>"` finds the way itself:
   each step the model sees the URL and an outline of the page (`[n]B Save`
   refs, containers kept, rows one line, repeats folded; ~1k chars for a
   GitHub issues page), picks one act, the

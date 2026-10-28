@@ -4,6 +4,11 @@ One browser stays open on a site, signed in through the site's stored login.
 You send one JSON command at a time over loopback. Every act that works is
 journaled; `save` writes a recording; `compile` makes it a workflow.
 
+From a chat session, drive it yourself, or spawn the `browser` subagent
+(`~/.claude/agents/browser.md`): headed, William watches and can take over.
+Never `autobrowse agent` from a chat: that is the headless loop for the
+desk and the bench.
+
 ## First: does something already do it?
 
 ```sh
