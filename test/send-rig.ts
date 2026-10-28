@@ -17,7 +17,7 @@ export const platform = {
   comments: [] as { text: string; at: string; id: string }[],
   videos: [] as { title: string; at: string; id: string; visible: boolean }[],
   /** `ok` answers; `close` posts then the page dies; `died` the page dies at the click, nothing posted. */
-  /** `missing`: the flow answers `{ found: false }` before any act; `already`: it is already there. */
+  /** `missing`: the flow answers `{ found: false }` before any act; `closed`: the same with a 403 (comments off); `already`: it is already there. */
   mode: "ok" as
     | "ok"
     | "close"
@@ -28,6 +28,7 @@ export const platform = {
     | "hold"
     | "busy"
     | "missing"
+    | "closed"
     | "already",
   /** The video list shows a new video only after processing. */
   lagging: false,
@@ -62,6 +63,8 @@ export const runner: FlowRunner = {
     const { thread } = input as { thread: string };
     if (platform.mode === "missing")
       return { found: false, reason: `no thread ${thread}` } as never;
+    if (platform.mode === "closed")
+      return { found: false, status: 403, reason: `comments are off on ${thread}` } as never;
     if (platform.mode === "already")
       return already({ id: "c0", url: "https://scratch.test/c/c0" }) as never;
     markSubmitted();

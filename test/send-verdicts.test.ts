@@ -342,6 +342,18 @@ describe("an answer with no submit step", () => {
     expect(journal.get("k-missing")?.verdict?.verdict).toBe("not_sent");
   });
 
+  it("10-27 TikTok: comments are off, the flow answers `{ found: false, status: 403 }`: `not_sent` refused, so wren drops it (old code: a person's job, re-slotted every pass)", async () => {
+    platform.mode = "closed";
+    const { call } = build();
+    expect(await call(say("a reply", "k-closed"))).toEqual({
+      verdict: "not_sent",
+      reason: "comments are off on t1",
+      how: "refused",
+      status: 403,
+    });
+    expect(platform.writes).toEqual([]);
+  });
+
   it("a flow that says it is already there (`already`) is `sent` how answer", async () => {
     platform.mode = "already";
     const { call } = build();

@@ -102,10 +102,47 @@ export const xLike = defineFlow<LikeInput, unknown>({
 const replyBox: Hints = { css: "[data-testid=tweetTextarea_0]" };
 const replyButton: Hints = { css: "[data-testid=tweetButtonInline]" };
 
-/** The signed-in handle, from the rail's profile link. */
-export function meOf(html: string): string | null {
-  const a = /<a\b[^>]*data-testid="AppTabBar_Profile_Link"[^>]*>/.exec(html)?.[0];
-  return a ? (/href="\/([A-Za-z0-9_]{1,15})"/.exec(a)?.[1] ?? null) : null;
+/** The little of the DOM `signedInAs` touches; the project compiles without lib dom. */
+declare const document: {
+  querySelector(sel: string): {
+    getAttribute(name: string): string | null;
+    textContent: string | null;
+  } | null;
+};
+
+/** What the rail shows of us: the profile link's href, the account menu's text. */
+export interface Rail {
+  href: string | null;
+  menu: string | null;
+}
+
+/** The signed-in handle, from the rail's profile link, else the `@handle` in the account menu. */
+export function meOf({ href, menu }: Rail): string | null {
+  return (
+    (href && /^\/([A-Za-z0-9_]{1,15})$/.exec(href)?.[1]) ||
+    (menu && /@([A-Za-z0-9_]{1,15})\b/.exec(menu)?.[1]) ||
+    null
+  );
+}
+
+/**
+ * The signed-in handle, read from the live page: html() is capped, and a long page (home, a
+ * thread) pushes the rail past the cap. X renamed the rail's test ids before, so labels back them.
+ */
+export async function signedInAs(fp: FlowPage): Promise<string | null> {
+  const rail = await fp.page.evaluate(() => ({
+    href:
+      document
+        .querySelector(
+          "a[data-testid=AppTabBar_Profile_Link], nav[aria-label=Primary] a[aria-label=Profile]",
+        )
+        ?.getAttribute("href") ?? null,
+    menu:
+      document.querySelector(
+        "[data-testid=SideNav_AccountSwitcher_Button], button[aria-label='Account menu']",
+      )?.textContent ?? null,
+  }));
+  return meOf(rail);
 }
 
 /** Post ids by `handle` linked on the page. */
@@ -140,7 +177,7 @@ export const xReply = defineFlow<ReplyInput, unknown>({
     const no = await replyReady(fp, id);
     if (no) return no;
     const before = await fp.html();
-    const me = meOf(before);
+    const me = await signedInAs(fp);
     if (!me) return fp.human("could not tell which X account this profile is signed in as");
     const seen = new Set(postsBy(before, me));
     await fp.act({ kind: "fill", value: text }, replyBox, { goal: "type the reply" });

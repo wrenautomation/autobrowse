@@ -296,6 +296,15 @@ export function unsentReasonOf(out: unknown): string {
   return typeof r === "string" && r ? r : "the leg answered before any irreversible act";
 }
 
+/**
+ * The 4xx `status` an answer with no submit step carries: the platform's standing no (comments
+ * off, the post gone). The send is refused, so the caller drops it, not slots it again.
+ */
+export function unsentStatusOf(out: unknown): number | undefined {
+  const s = (out as { status?: unknown } | null)?.status;
+  return typeof s === "number" && s >= 400 && s < 500 ? s : undefined;
+}
+
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 /** The status of a platform's refusal of a write: an HTTP 4xx, not a timeout (408). Else null. */
@@ -416,9 +425,16 @@ export function sitesService(
         ),
       );
       // An irreversible leg that answered with no act sent nothing (no post or comment found),
-      // unless it said the thing was already there.
-      if (spec.irreversible && !t.submitted && !t.already)
-        return { end: journal.settle(key, notSent(unsentReasonOf(out), "before_submit")) };
+      // unless it said the thing was already there. With a 4xx status it never will.
+      if (spec.irreversible && !t.submitted && !t.already) {
+        const status = unsentStatusOf(out);
+        return {
+          end: journal.settle(
+            key,
+            notSent(unsentReasonOf(out), status ? "refused" : "before_submit", status),
+          ),
+        };
+      }
       let ids: { id: string | null; url: string | null } = { id: null, url: null };
       try {
         ids = spec.sentAs?.(out) ?? ids;

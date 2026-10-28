@@ -128,7 +128,6 @@ describe("x acts", () => {
   });
 
   it("replies and returns the new post's id", async () => {
-    const rail = '<a href="/wren_automation" data-testid="AppTabBar_Profile_Link" role="link">';
     let sent = false;
     const { fp, acts } = fakePage({
       text: [""],
@@ -138,8 +137,12 @@ describe("x acts", () => {
         if (n === 2) sent = true;
       },
     });
+    // The rail is read off the live page: html() is capped and may end before it.
+    Object.assign(fp, {
+      page: { evaluate: async () => ({ href: "/wren_automation", menu: null }) },
+    });
     fp.html = async () =>
-      `${rail}<a href="/acme/status/5">x</a>${sent ? '<a href="/wren_automation/status/77">y</a>' : ""}`;
+      `<a href="/acme/status/5">x</a>${sent ? '<a href="/wren_automation/status/77">y</a>' : ""}`;
     expect(await xReply.run(fp, { id: "5", text: "hi" })).toEqual({
       data: { id: "77", text: "hi" },
     });
@@ -147,9 +150,11 @@ describe("x acts", () => {
   });
 
   it("reads who is signed in and their posts off the page", () => {
-    expect(
-      meOf('<a data-testid="AppTabBar_Profile_Link" href="/wren_automation" role="link">'),
-    ).toBe("wren_automation");
+    expect(meOf({ href: "/wren_automation", menu: null })).toBe("wren_automation");
+    expect(meOf({ href: null, menu: "WrenVerified account@wren_automation" })).toBe(
+      "wren_automation",
+    );
+    expect(meOf({ href: "/i/premium", menu: null })).toBeNull();
     expect(
       postsBy('<a href="/Me/status/1"></a><a href="/me/status/1/analytics"></a>', "me"),
     ).toEqual(["1"]);

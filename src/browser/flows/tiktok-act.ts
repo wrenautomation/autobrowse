@@ -148,14 +148,16 @@ export interface VideoInput {
 
 export const tiktokLike = defineFlow<
   VideoInput,
-  { videoId: string; liked: true; already?: true } | { found: false; reason: string }
+  | { videoId: string; liked: true; already?: true }
+  | { found: false; status: number; reason: string }
 >({
   site: "tiktok",
   name: "like",
   async run(fp, { videoId, username }) {
     await openTt(fp, videoUrl(videoId, username));
     const state = await videoShown(fp, [liked, like]);
-    if (state === "missing") return { found: false, reason: `no TikTok video ${videoId}` };
+    if (state === "missing")
+      return { found: false, status: 404, reason: `no TikTok video ${videoId}` };
     if (state === null) return fp.human(`no Like on video ${videoId} (${fp.url()})`);
     if (state === 0) return { videoId, liked: true, already: true };
     await fp.act({ kind: "click" }, like, { goal: `like video ${videoId}` });
@@ -170,7 +172,8 @@ const postButton: Hints = { css: '[data-e2e="comment-post"]' };
 
 export const tiktokComment = defineFlow<
   VideoInput & { text: string },
-  { videoId: string; commented: true; id: string | null } | { found: false; reason: string }
+  | { videoId: string; commented: true; id: string | null }
+  | { found: false; status: number; reason: string }
 >({
   site: "tiktok",
   name: "comment",
@@ -190,13 +193,15 @@ export const tiktokComment = defineFlow<
     await openTt(fp, videoUrl(videoId, username));
     const tab = { role: "button", name: "/^comments$/i" } as const;
     let state = await videoShown(fp, [commentBox, tab]);
-    if (state === "missing") return { found: false, reason: `no TikTok video ${videoId}` };
+    if (state === "missing")
+      return { found: false, status: 404, reason: `no TikTok video ${videoId}` };
     if (state === 1) {
       await fp.act({ kind: "click" }, tab, { goal: "show the comments panel" });
       state = (await fp.has(commentBox, RENDER_MS)) ? 0 : null;
     }
+    // No box once the panel is open: comments are off, so this comment never goes.
     if (state === null)
-      return fp.human(`no comment box on video ${videoId}: comments may be off (${fp.url()})`);
+      return { found: false, status: 403, reason: `comments are off on video ${videoId}` };
     await fp.act({ kind: "fill", value: text }, commentBox, { goal: "type the comment" });
     await fp.wait(SETTLE_MS);
     fp.page.on("response", onResponse);

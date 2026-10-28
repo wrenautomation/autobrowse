@@ -120,16 +120,18 @@ export interface CommentInput extends PostInput {
 
 export const instagramComment = defineFlow<
   CommentInput,
-  { shortcode: string; commented: true } | { found: false; reason: string }
+  { shortcode: string; commented: true } | { found: false; status: number; reason: string }
 >({
   site: "instagram",
   name: "comment",
   async run(fp, { shortcode, text }) {
     await openIg(fp, postUrl(shortcode));
     const state = await firstShown(fp, [commentBox], MISSING);
-    if (state === "missing") return { found: false, reason: `no Instagram post ${shortcode}` };
+    if (state === "missing")
+      return { found: false, status: 404, reason: `no Instagram post ${shortcode}` };
+    // The post shows but takes no comment: comments are off, so this comment never goes.
     if (state === null)
-      return fp.human(`no comment box on post ${shortcode}: comments may be off (${fp.url()})`);
+      return { found: false, status: 403, reason: `comments are off on post ${shortcode}` };
     await fp.act({ kind: "fill", value: text }, commentBox, { goal: "type the comment" });
     await fp.wait(SETTLE_MS);
     await fp.act({ kind: "click" }, postComment, {
