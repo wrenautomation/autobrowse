@@ -6,6 +6,7 @@ import type { Logger } from "pino";
 import { fileDoneActs } from "../browser/attempt.js";
 import type { FlowRunner } from "../browser/flow.js";
 import { flowRunner } from "../browser/flow.js";
+import { handsFor } from "../browser/human/index.js";
 import { SessionPark } from "../browser/park.js";
 import { renderer } from "../browser/render.js";
 import {
@@ -343,7 +344,12 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       keeper: keyKeeperFor(settings),
       uploads: fileUploadSessions(join(expandHome(settings.artifactsDir), "uploads")),
       // The fetch ladder's render and exit rungs: profiles `fetch` and `fetch@exit`, parked like flows' browsers.
-      render: renderer({ opts: browserOpts, ...(park ? { park } : {}) }),
+      // A wall that outlives the challenge wait goes to the flows' captcha solver.
+      render: renderer({
+        opts: browserOpts,
+        ...(park ? { park } : {}),
+        captcha: { hands: handsFor(paceFor(settings)), ...captchaFor(settings, http) },
+      }),
       started: fileDoneActs(join(expandHome(settings.artifactsDir), "started-calls")),
       walks: (name) => walkFor(settings, name, sink),
       refused: fileRefusedTokens(join(stateDirFor(settings), "refused-tokens.json")),
