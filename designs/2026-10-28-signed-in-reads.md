@@ -34,6 +34,13 @@ autobrowse, the best text, the least new code. **Pick A now.** B waits for a sit
 and D rejected for the reasons in the table. Reddit's route already fetches the `.json` twin from
 inside the signed-in page: that is the safe form of "login tokens".
 
+**Reddit reads signed out first** (changed while building, 10-28). `reddit-public` already
+answers a thread signed out: `.json` is 403 since 10-13, so the flow reads the thread's RSS feed
+and the rendered page's scores, in the same shape. Signed out has no account to ban; its only cost
+is the `threads` cap (160 a day). So weaver's `reddit` reader is always on when a worker is
+reachable. It reads signed out first and asks again signed in only when that misses and the
+caller named an account. A 404 is not asked again.
+
 **Which account.** The caller names it, autobrowse holds it. weaver reads `WEAVER_ACCOUNTS`
 (`reddit=reddit@alt`), passes `account` on each call, and names no account in code. Reason: the
 right account is per caller. wren posts as `reddit@wren`; research reads many pages and should not
