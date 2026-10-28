@@ -23,6 +23,10 @@ The password is minted and stored first, then an agent fills the form placing
 email, password, code and phone by name; it never sees them. `--by-hand` for a
 page with a bot check: William's browser, password on the clipboard.
 
+This is a headless loop for unattended runs. From a chat, sign up in explore
+instead (yourself or the `browser` subagent): `start.sh <site> <url> <port>
+--signup <address> --headed` mints and stores the password the same way.
+
 ## By hand in explore: secrets by name
 
 `place` types a secret only when the session was opened with the flag that

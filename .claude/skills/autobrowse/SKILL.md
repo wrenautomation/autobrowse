@@ -20,7 +20,7 @@ Right now:
 | Read a page, search the web, Google's own page, ask Perplexity | [research.md](research.md) |
 | Lead lists: Google Maps, LinkedIn people and companies | [leads.md](leads.md) |
 | Post, read or set up a site's API (YouTube, LinkedIn, X, Gmail, …) | [site-apis.md](site-apis.md) |
-| Drive a browser or the desktop: map a page, do a chore, fix a flow | [explore.md](explore.md) |
+| Drive a browser or the desktop: map a page, do a chore, fix a flow (yourself or the `browser` subagent) | [explore.md](explore.md) |
 | Make an account, sign in, type a secret without seeing it | [signup.md](signup.md), then explore.md |
 | Credentials, which account does what, keys and env, what William owes | [accounts.md](accounts.md) |
 
