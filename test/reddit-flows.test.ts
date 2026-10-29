@@ -310,9 +310,11 @@ describe("reddit/read", () => {
     });
   });
 
-  it("signed out (/api/me with no name) goes to a person", async () => {
+  it("signed out (/api/me with no name) is need_login, not a wait", async () => {
     const p = redditPage({ fetch: () => ({ status: 200, body: { data: {} } }) });
-    await expect(redditRead.run(p.fp, { path: "/api/me" })).rejects.toThrow(NeedsHuman);
+    await expect(redditRead.run(p.fp, { path: "/api/me" })).rejects.toMatchObject({
+      code: "need_login",
+    });
     const q = redditPage({ fetch: () => ({ status: 200, body: {} }) });
     await expect(redditRead.run(q.fp, { path: "/api/me" })).rejects.toThrow(/signed out/);
   });

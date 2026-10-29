@@ -594,9 +594,7 @@ export function traceRow(
               ? `${(f.cmds as unknown[]).length} commands`
               : c.cmd === "os"
                 ? String((f.act as { kind?: string }).kind)
-                : String(
-                    f.as ?? f["env"] ?? f.name ?? f.outcome ?? (hints ? hintLabel(hints) : ""),
-                  );
+                : String(f.as ?? f.env ?? f.name ?? f.outcome ?? (hints ? hintLabel(hints) : ""));
   const what = typeof f.goal === "string" && f.goal ? `${f.goal} · ${aim}` : aim;
   const detail = [
     ...(hints ? [`target ${JSON.stringify(hints)}`] : []),

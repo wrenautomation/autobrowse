@@ -476,7 +476,8 @@ export const redditRead = defineFlow<ReadInput, unknown>({
     }
     const out = read.slim(got.body);
     if (path === "/api/me" && !(out as Obj).name)
-      return fp.human(
+      throw new AccessRefused(
+        "need_login",
         "Reddit is signed out on this profile: `autobrowse login reddit@wren --headed`",
       );
     return out;
