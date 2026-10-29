@@ -8,6 +8,7 @@
 import { spawn } from "node:child_process";
 import type { FlowRunner } from "../browser/flow.js";
 import { wranglerLogin } from "../browser/flows/wrangler-login.js";
+import { runLeg } from "../engine/leg.js";
 import { cliTail } from "./cli-tail.js";
 
 export interface WranglerLoginOptions {
@@ -55,7 +56,7 @@ export async function wranglerLoginChore(
   });
   try {
     const url = await urlOf(() => out, done, o.urlMs ?? 60_000);
-    await browser.run(wranglerLogin, { url });
+    await runLeg(browser, wranglerLogin, { url });
     const exit = await Promise.race([
       done,
       new Promise<"late">((r) => setTimeout(() => r("late"), 30_000)),

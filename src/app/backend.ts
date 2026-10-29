@@ -32,6 +32,7 @@ import {
   writeRendered,
 } from "../compiler/index.js";
 import type { SecretSink } from "../deps/sink.js";
+import { statsDirOf } from "../deps/stats.js";
 import type { Ability } from "../do/catalog.js";
 import type { Doer } from "../do/doer.js";
 import { filePicks } from "../do/memory.js";
@@ -53,6 +54,7 @@ import { modWorkflowRoots } from "../mods/mod.js";
 import { fileSpent, type SpentKeys } from "../reach/key-ring.js";
 import { loadRecording } from "../recorder/store.js";
 import type { Recording } from "../recorder/types.js";
+import { type EngineRunsView, engineRunsView } from "../runs/engine.js";
 import { shareFlow } from "../share/share.js";
 import { fileCaps } from "../sites/caps.js";
 import { type SiteFacade, sitesFor } from "../sites/index.js";
@@ -60,7 +62,7 @@ import { fileLimits } from "../sites/limits.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import type { Jobs } from "../ui/jobs.js";
 import { type CompiledCatalog, compiledCatalog } from "../workflows/compiled.js";
-import { workflowCatalog } from "../workflows/legs.js";
+import { withLegs, workflowCatalog } from "../workflows/legs.js";
 import { filePlans, type PlanStore, withDefaults } from "../workflows/plans.js";
 import type { Proof } from "../workflows/proof.js";
 import { proofLine, proveWorkflow, writeProof } from "../workflows/proof.js";
@@ -164,6 +166,8 @@ export interface Backend {
   policy?: Policy;
   /** Installed mods, npm search, add a data mod, remove one. */
   mods?: ModsPort;
+  /** In-process engine runs (legs, compiled runs, `do`) from their ledger: the Runs page lists them too. */
+  engineRuns?: EngineRunsView;
 }
 
 /** The port allows a value or a loader for these; every face reads them the same way. */
@@ -452,7 +456,8 @@ export function localParts(
     }),
     credentials: credentialsFor(settings),
     bus: eventBus(),
-    workflows: async () => [...WORKFLOWS, ...(await catalog.list()).map((c) => c.workflow)],
+    workflows: async () =>
+      withLegs([...WORKFLOWS, ...(await catalog.list()).map((c) => c.workflow)]) as AnyWorkflow[],
     proofs: () => catalog.proofs(),
   };
 }
@@ -538,6 +543,7 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
     ...(o.llm ? { llm: o.llm, budget: () => budgetOf(o.llm) } : {}),
     ...(o.status ? { status: o.status } : {}),
     ledger: (since) => ledgerSince(auditFor(settings), spendLedgerFor(settings), since),
+    ...(statsDirOf("engine") ? { engineRuns: engineRunsView(statsDirOf("engine") as string) } : {}),
     owed: owedOf(needsContextFor(settings), fileDone(settings.needsDoneFile)),
     policy: policyOf(settings),
     mods: modsPort(modsDirFor(settings), {

@@ -8,6 +8,7 @@
 import { type Credential, type CredentialStore, credentialSchema } from "credvault";
 import { z } from "zod";
 import { defineFlow, type FlowPage, type FlowRunner } from "../browser/flow.js";
+import { runLeg } from "../engine/leg.js";
 import { accent, bold, columns, dim } from "../style.js";
 import { credentialFor, resolveLogin, type SiteLogin, viaLogin } from "./login.js";
 import { PROVIDERS } from "./providers.js";
@@ -141,7 +142,7 @@ export function accountsOf(opts: {
           return fp.human("not signed in after opening the home page");
         },
       });
-      return runner.run(flow, undefined);
+      return runLeg(runner, flow, undefined);
     },
   };
 }

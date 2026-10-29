@@ -28,6 +28,7 @@ const CONNECTOR_FLOWS: Record<ConnectorApp, BrowserFlow<never, unknown>> = {
   jobber: jobberConnectorKeys as BrowserFlow<never, unknown>,
 };
 
+import { runLeg } from "../engine/leg.js";
 import type { SiteFacade } from "../sites/facade.js";
 
 /** Read by wren's Lambda and box through `WREN_SSM_ENV_PARAM`; `/wren/prod/env` is near its cap. */
@@ -96,7 +97,8 @@ export function registerConnectorsCommands(
         const runner = deps.runner();
         const flow = CONNECTOR_FLOWS[app];
         const seen = new Map<string, string>();
-        await runner.run(
+        await runLeg(
+          runner,
           { ...flow, site: connectorProfile(app) },
           {
             url: CONNECTOR_URLS[app],

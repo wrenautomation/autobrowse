@@ -44,6 +44,7 @@ import type { UploadSessions } from "./uploads.js";
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+import { runLeg } from "../engine/leg.js";
 import type { RenewReport } from "./renew.js";
 import {
   type Leg,
@@ -508,10 +509,11 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     const held = await deps.runner.tab(flow.site);
     const prepare = flow.prepare.bind(flow);
     try {
-      await deps.runner.run(
+      await runLeg(
+        deps.runner,
         { ...flow, name: `${flow.name}.prepare`, run: (fp, i) => prepare(fp, i) },
         input,
-        { page: held.page },
+        { on: { page: held.page } },
       );
     } catch (err) {
       await held.release();
@@ -558,7 +560,8 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           ? { ...flow, site: profile }
           : { ...flow, profile: flow.profile ?? ("provider" as const) };
       return Object.assign(
-        (input: unknown, on?: { page: Page }) => deps.runner.run(sited, input, on),
+        (input: unknown, on?: { page: Page }) =>
+          runLeg(deps.runner, sited, input, on ? { on } : {}),
         { flow: sited },
       );
     }

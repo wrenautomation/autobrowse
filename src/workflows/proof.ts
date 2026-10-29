@@ -6,9 +6,11 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { currentCall } from "../browser/attempt.js";
 import type { FlowRunner } from "../browser/flow.js";
 import type { KeyKeeper } from "../deps/keys.js";
 import type { SecretSink } from "../deps/sink.js";
+import { engineRuns } from "../engine/leg.js";
 import { memoryEffects } from "../engine/memory.js";
 import { type Outcome, runFlow } from "../engine/run.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
@@ -47,6 +49,11 @@ export function runnerAs(browser: FlowRunner, as: RunAs | undefined): FlowRunner
   };
 }
 
+const recorded = () => {
+  const runs = engineRuns();
+  return runs ? { record: { runs, key: currentCall() } } : {};
+};
+
 export async function runCompiled(
   workflow: AnyWorkflow,
   browser: FlowRunner,
@@ -71,6 +78,7 @@ export async function runCompiled(
       o.approve
         ? { approved: true, note: "gated by the caller", at: new Date().toISOString() }
         : null,
+    recorded(),
   );
   const steps = Object.entries(out.results).flatMap(([name, r]) =>
     r ? [{ name, status: r.status, detail: r.detail }] : [],

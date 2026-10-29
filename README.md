@@ -492,7 +492,7 @@ pnpm autobrowse try domain --plan plan.json --ask     # same workflow in-process
 pnpm autobrowse inbox will@wren-six.com Will Jin      # one inbox, ready: user, sign-in, signature, Gmail consent, accounts row
 pnpm autobrowse warmup-match will@wren-six.com --dry-run   # which Instantly inboxes differ from that one's warmup settings; drop --dry-run to copy them
 pnpm autobrowse workflows                      # what this worker can run
-pnpm autobrowse flows --site reddit            # every deterministic leg: hand-written flows + the routes on them, compiled workflows + proof, walks
+pnpm autobrowse tools reddit                    # every workflow and leg on a site: the routes on each, proof, then walks
 pnpm autobrowse workflows bootstrap            # its steps (! = irreversible) and every input: type, default, what it is
 pnpm autobrowse workflows bootstrap --template > plan.json   # fill in, then: run bootstrap cf --plan plan.json
 pnpm autobrowse runs --limit 20                # the registry, newest first (--before <cursor> pages)

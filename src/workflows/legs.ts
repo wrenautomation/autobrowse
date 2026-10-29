@@ -6,6 +6,7 @@
 import { z } from "zod";
 import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import { FLOW_INPUTS } from "../browser/flows/inputs.gen.js";
+import { legName } from "../engine/leg.js";
 import { done, type Workflow } from "../engine/workflow.js";
 import type { CompiledCatalog } from "./compiled.js";
 
@@ -13,9 +14,7 @@ export interface LegDeps {
   browser: FlowRunner;
 }
 
-/** `google/oauth-consent` → `google-oauth-consent`; a name that starts with its site keeps it once. */
-export const legName = (flow: Pick<BrowserFlow<never, unknown>, "site" | "name">): string =>
-  flow.name.startsWith(`${flow.site}-`) ? flow.name : `${flow.site}-${flow.name}`;
+export { legName };
 
 const DRY = z.object({ dryRun: z.boolean().default(false) });
 
@@ -54,16 +53,21 @@ export function legWorkflow<I, O>(
   };
 }
 
+export type LegWorkflow = Workflow<{ dryRun: boolean }, LegDeps, Record<string, never>>;
+
 /** Every hand-written leg as a workflow, by name. */
-export const LEG_WORKFLOWS: ReadonlyMap<
-  string,
-  Workflow<{ dryRun: boolean }, LegDeps, Record<string, never>>
-> = new Map(
+export const LEG_WORKFLOWS: ReadonlyMap<string, LegWorkflow> = new Map(
   FLOW_INPUTS.map((e) => {
     const w = legWorkflow(e.flow, e.input as z.ZodType<never>);
     return [w.name, w] as const;
   }),
 );
+
+/** The catalog's workflows, then every leg none of them shadows by name. */
+export function withLegs<W extends { name: string }>(workflows: readonly W[]): (W | LegWorkflow)[] {
+  const taken = new Set(workflows.map((w) => w.name));
+  return [...workflows, ...[...LEG_WORKFLOWS.values()].filter((w) => !taken.has(w.name))];
+}
 
 /** One catalog: compiled workflows first (a recording may take a leg's name on purpose), then the legs. */
 export function workflowCatalog(compiled: CompiledCatalog) {

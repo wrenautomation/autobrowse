@@ -40,6 +40,7 @@ import type { RunRow } from "../engine/registry.js";
 import { cursorOf, LIST_LIMIT, type ListQuery, ROW_STATUSES } from "../engine/rows.js";
 import { commandSchema } from "../explore/server.js";
 import { listRecordingSummaries, loadRecording, recordingDir } from "../recorder/store.js";
+import { mergePages } from "../runs/engine.js";
 import { type Method, SiteError } from "../sites/index.js";
 import { withDefaults } from "../workflows/plans.js";
 import { needAffordances, runAffordances, setupAffordances } from "./affordances.js";
@@ -624,12 +625,14 @@ export function api(deps: ApiDeps): Hono<Env> {
     const { limit, before, status, workflow } = q.data;
     const scope = scopeOf(c);
     // One extra row says whether another page follows.
-    const rows = await deps.ingress.registry().list({
+    const asked = {
       limit: limit + 1,
       ...(before ? { before } : {}),
       ...(status ? { status } : {}),
       ...(workflow ? { workflow } : {}),
-    });
+    };
+    const held = await deps.ingress.registry().list(asked);
+    const rows = deps.engineRuns ? mergePages(held, deps.engineRuns.list(asked), limit + 1) : held;
     const shown = rows.slice(0, limit);
     const last = shown.at(-1);
     const next = rows.length > limit && last ? cursorOf(last) : null;
@@ -646,6 +649,9 @@ export function api(deps: ApiDeps): Hono<Env> {
     if (!path.ok) return path.res;
     const { workflow, key } = path.data;
     if (!(await find(workflow))) return fail(c, 404, `no workflow ${workflow}`);
+    // A ledger run ran in one process and stopped: nothing to answer or resume.
+    const ran = deps.engineRuns?.status(workflow, key);
+    if (ran) return c.json({ ...ran, actions: [] });
     const status = await runOf(workflow, key).status();
     return c.json({ ...status, actions: runAffordances(status) });
   });

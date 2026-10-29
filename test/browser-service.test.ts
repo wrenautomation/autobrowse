@@ -6,7 +6,7 @@ import {
   BROWSER_CODE,
   BROWSER_FLOWS,
   browserService,
-  runLeg,
+  terminalLeg,
 } from "../src/engine/browser-service.js";
 
 const flow = defineFlow<{ x: number }, string>({ site: "s", name: "f", run: async () => "ok" });
@@ -20,7 +20,7 @@ describe("browser service", () => {
         throw e;
       },
     };
-    const err = await runLeg(human, flow, { x: 1 }).catch((e: unknown) => e);
+    const err = await terminalLeg(human, flow, { x: 1 }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(restate.TerminalError);
     expect((err as restate.TerminalError).code).toBe(BROWSER_CODE.needsHuman);
     expect(JSON.parse((err as Error).message)).toMatchObject({
@@ -32,16 +32,21 @@ describe("browser service", () => {
       },
     };
     expect(
-      ((await runLeg(broken, flow, { x: 1 }).catch((e: unknown) => e)) as restate.TerminalError)
-        .code,
+      (
+        (await terminalLeg(broken, flow, { x: 1 }).catch(
+          (e: unknown) => e,
+        )) as restate.TerminalError
+      ).code,
     ).toBe(BROWSER_CODE.failed);
     const flaky: FlowRunner = {
       run: async () => {
         throw new Error("ECONNRESET");
       },
     };
-    await expect(runLeg(flaky, flow, { x: 1 })).rejects.toThrow(/ECONNRESET/);
-    await expect(runLeg(flaky, flow, { x: 1 })).rejects.not.toBeInstanceOf(restate.TerminalError);
+    await expect(terminalLeg(flaky, flow, { x: 1 })).rejects.toThrow(/ECONNRESET/);
+    await expect(terminalLeg(flaky, flow, { x: 1 })).rejects.not.toBeInstanceOf(
+      restate.TerminalError,
+    );
   });
   it("names the fixed legs site/name and builds the service", () => {
     expect(Object.keys(BROWSER_FLOWS).sort()).toEqual([

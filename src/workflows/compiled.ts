@@ -21,6 +21,7 @@ import type { AdvanceOptions } from "../engine/run.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import { named } from "../owner.js";
 import { type CompiledDeps, compiledDeps } from "./compiled-deps.js";
+import { LEG_WORKFLOWS } from "./legs.js";
 import { type Proof, readProof } from "./proof.js";
 
 export { type CompiledDeps, compiledDeps };
@@ -141,13 +142,15 @@ export function makeCompiledRunObject(o: {
     named(COMPILED_OBJECT.name, o.host.owner),
     async (objectKey) => {
       const ref = splitCompiledKey(objectKey);
-      const found = await o.catalog.get(ref.workflow);
-      if (!found)
+      // A hand-written leg runs here too, under its catalog name; a compiled one may take its name.
+      const workflow =
+        (await o.catalog.get(ref.workflow))?.workflow ?? LEG_WORKFLOWS.get(ref.workflow);
+      if (!workflow)
         throw new restate.TerminalError(`no compiled workflow named ${ref.workflow}`, {
           errorCode: 404,
         });
       return {
-        workflow: found.workflow,
+        workflow,
         deps: compiledDeps(o.browser, {
           ...(o.sink ? { sink: o.sink } : {}),
           ...(o.keys ? { keys: o.keys } : {}),

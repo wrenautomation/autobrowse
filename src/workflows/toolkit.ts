@@ -7,7 +7,7 @@ import type { SiteLogin } from "../auth/login.js";
 import { inputsOf } from "../engine/inputs.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
 import type { Findable } from "./find.js";
-import { LEG_WORKFLOWS } from "./legs.js";
+import { withLegs } from "./legs.js";
 
 export interface Tool {
   name: string;
@@ -51,10 +51,7 @@ export function toolOf(w: AnyWorkflow): Tool {
 
 /** The catalog's workflows, then every leg no workflow shadows by name. */
 export function toolsOf(workflows: readonly AnyWorkflow[]): Tool[] {
-  const taken = new Set(workflows.map((w) => w.name));
-  return [...workflows, ...[...LEG_WORKFLOWS.values()].filter((w) => !taken.has(w.name))].map(
-    toolOf,
-  );
+  return withLegs(workflows).map((w) => toolOf(w as AnyWorkflow));
 }
 
 /**

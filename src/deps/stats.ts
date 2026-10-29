@@ -1,7 +1,8 @@
 /**
- * Where usage stats land when a caller names no place: model calls (`llm/`)
- * and flow runs (`flows/`) under `~/.config/autobrowse`, the folder the CLI
- * reads (`autobrowse tokens`, `autobrowse success`). On by default, so a
+ * Where usage stats land when a caller names no place: model calls (`llm/`),
+ * flow runs (`flows/`) and in-process engine runs (`engine/`) under
+ * `~/.config/autobrowse`, the folder the CLI reads (`autobrowse tokens`,
+ * `autobrowse success`). On by default, so a
  * library caller gets token and failure history with no setup.
  * `AUTOBROWSE_STATS=off` turns it off; `AUTOBROWSE_STATS_DIR` moves it.
  */
@@ -14,7 +15,7 @@ export function statsDir(env: NodeJS.ProcessEnv = process.env): string | null {
 }
 
 /** A folder under the stats dir; null when stats are off. */
-export const statsDirOf = (part: "llm" | "flows"): string | null => {
+export const statsDirOf = (part: "llm" | "flows" | "engine"): string | null => {
   const d = statsDir();
   return d ? join(d, part) : null;
 };

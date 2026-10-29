@@ -9,6 +9,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import type { FlowRunner } from "../browser/flow.js";
 import { awsCliLogin } from "../browser/flows/aws-cli-login.js";
+import { runLeg } from "../engine/leg.js";
 import { cliTail } from "./cli-tail.js";
 
 export interface AwsLoginOptions {
@@ -51,7 +52,10 @@ export async function awsCliLoginChore(
     )
       if (!URL_RE.test(out)) child.stdin?.write("\n");
     const url = await waitForUrl(child, () => out, o.urlMs ?? 20_000);
-    const { code } = await browser.run(awsCliLogin, { url, ...(o.user ? { user: o.user } : {}) });
+    const { code } = await runLeg(browser, awsCliLogin, {
+      url,
+      ...(o.user ? { user: o.user } : {}),
+    });
     child.stdin?.write(`${code}\n`);
     // "Profile X is already configured to use session <arn>. Overwrite? (y/n)": only on request.
     const asked = await waitFor(child, () => /\(y\/n\)/.test(out), 15_000);

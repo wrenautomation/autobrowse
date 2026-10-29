@@ -22,7 +22,7 @@ Every act goes through `fp.act` with a goal in words, so the repairer, the trace
 - `FlowInterrupted` (browser died: host retries whole flow) and `FlowFailed` — `:241`, `:265`
 - `RunnerOptions`: `repairer`, `pace`, `login`, `captcha`, `fixes`, `learnedScreens`, `onRepair`, `done`, `runs`, `resume` — `:276-342`
 - Resume: a keyed run (`withCall`) that stops keeps its page; the next try's first `fp.open` goes there — `:568`, `:922`, `:982` ([[resume-record]])
-- The hand-written catalog: `src/browser/flows/index.ts` (OAuth consents, posts, tokens, LinkedIn reach + inbox + relationship, X reads, Reddit reads/submit/comment/message on old.reddit.com, Loom upload/rename/delete, display names on Instagram/X/TikTok/Reddit in `profile-name.ts`). `autobrowse flows [--site]` lists them all with the routes that call each, beside compiled workflows (proof state) and walks
+- The hand-written catalog: `src/browser/flows/index.ts` (OAuth consents, posts, tokens, LinkedIn reach + inbox + relationship, X reads, Reddit reads/submit/comment/message on old.reddit.com, Loom upload/rename/delete, display names on Instagram/X/TikTok/Reddit in `profile-name.ts`). `autobrowse tools <site>` lists them as workflows (`<site>-<name>`) with the routes that call each, beside compiled workflows (proof state) and walks. Outside a workflow's step a leg runs through `runLeg` (`engine/leg.ts`): a one-step engine run in the engine ledger
 - Feeds: `scrollCollect(fp, {read, key, max, stop?, skip?})` — `src/browser/scroll-collect.ts`: read what is on screen, scroll most of a window, keep rows by key (feeds are virtualized); ends at `max`, the cursor row, or after idle scrolls
 
 ## Connected to

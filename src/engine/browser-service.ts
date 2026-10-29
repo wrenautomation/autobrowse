@@ -120,6 +120,7 @@ import { youtubeCommunityPost } from "../browser/flows/youtube-community-post.js
 import { youtubeStudioAnalytics } from "../browser/flows/youtube-studio-analytics.js";
 import { youtubeThumbnail } from "../browser/flows/youtube-thumbnail.js";
 import { NeedsHuman } from "../browser/session.js";
+import { runLeg } from "./leg.js";
 
 export const BROWSER_SERVICE = "browser";
 export const BROWSER_CODE = { needsHuman: 460, failed: 461 } as const;
@@ -265,13 +266,13 @@ export interface BrowserServiceDeps {
 }
 
 /** Terminal for what a retry would not fix; everything else (network, browser) retries under RETRY. */
-export async function runLeg<I, O>(
+export async function terminalLeg<I, O>(
   runner: FlowRunner,
   flow: BrowserFlow<I, O>,
   input: I,
 ): Promise<O> {
   try {
-    return await runner.run(flow, input);
+    return await runLeg(runner, flow, input);
   } catch (err) {
     if (err instanceof NeedsHuman)
       throw new restate.TerminalError(
@@ -306,7 +307,7 @@ export function browserService(deps: BrowserServiceDeps, name: string = BROWSER_
         `browser ${flow.site}/${flow.name}`,
         () =>
           withCall(`${ctx.request().id} ${flow.site}/${flow.name}`, () =>
-            runLeg(deps.runner, flow, input),
+            terminalLeg(deps.runner, flow, input),
           ),
         RETRY,
       );

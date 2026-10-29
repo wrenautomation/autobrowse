@@ -9,6 +9,7 @@
 import { spawn } from "node:child_process";
 import type { FlowRunner } from "../browser/flow.js";
 import { googleOauthConsent } from "../browser/flows/oauth-consent.js";
+import { runLeg } from "../engine/leg.js";
 import { cliTail } from "./cli-tail.js";
 
 export interface GcloudLoginOptions {
@@ -44,7 +45,8 @@ export async function gcloudLoginChore(
   });
   try {
     const url = await urlOf(() => out, done, o.urlMs ?? 30_000);
-    const { landed } = await browser.run(
+    const { landed } = await runLeg(
+      browser,
       { ...googleOauthConsent, site: o.site ?? googleOauthConsent.site },
       { url, account: o.account },
     );

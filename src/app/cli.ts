@@ -10,6 +10,7 @@ import { Command } from "commander";
 import { cloudflare } from "../clients/cloudflare.js";
 import { httpClient } from "../clients/http.js";
 import type { GateName } from "../engine/effects.js";
+import { runLeg } from "../engine/leg.js";
 import { cursorOf } from "../engine/rows.js";
 import { summarize } from "../engine/run.js";
 import { expandHome } from "../google/auth.js";
@@ -198,13 +199,36 @@ program
 program
   .command("tools [site]")
   .description(
-    "The toolkit: every workflow and leg, by site (`(any)`: multi-site, run with `run`). No site: each site and its count; `--find`: a fuzzy search",
+    "The toolkit: every workflow and leg, by site (`(any)`: multi-site, run with `run`), with the routes that call it and its proof; a site's walks after. No site: each site and its count; `--find`: a fuzzy search",
   )
   .option("--find <words>", "search names, aims, sites, steps and inputs")
   .option("--json", "the rows as JSON")
   .action(async (site: string | undefined, o: { find?: string; json?: boolean }) => {
     const { find, findable, sitesTree, toolsOf } = await import("../workflows/toolkit.js");
-    const tools = toolsOf(await workflowsOf(local().backend));
+    const { legName } = await import("../engine/leg.js");
+    const { SITES } = await import("../sites/index.js");
+    const { proofLine } = await import("../workflows/proof.js");
+    const { backend } = local();
+    const [workflows, proofs] = await Promise.all([workflowsOf(backend), proofsOf(backend)]);
+    const tools = toolsOf(workflows);
+    // Each tool's callers: the official-API routes whose browser leg it is.
+    const callers = new Map<string, string[]>();
+    for (const s of SITES)
+      for (const r of s.routes) {
+        if (!r.browser) continue;
+        const [legSite = "", name = ""] = "flow" in r.browser ? r.browser.flow.split("/") : [];
+        const leg = "flow" in r.browser ? legName({ site: legSite, name }) : r.browser.workflow;
+        callers.set(leg, [...(callers.get(leg) ?? []), `${r.method} ${s.site}${r.path}`]);
+      }
+    const via = (name: string) => {
+      const c = callers.get(name) ?? [];
+      return c.length > 2 ? `${c.slice(0, 2).join(", ")} +${c.length - 2} more` : c.join(", ");
+    };
+    const proofOf = (name: string) => {
+      const proof = proofs[name];
+      if (proof) return proof.status === "done" ? good(proofLine(proof)) : bad(proofLine(proof));
+      return name in proofs ? warn("draft, never run") : "";
+    };
     if (!site && !o.find) {
       const tree = sitesTree(tools);
       if (o.json) return console.log(JSON.stringify(tree));
@@ -215,18 +239,42 @@ program
     const rows = o.find
       ? find(tools.filter((t) => !site || t.site === site).map(findable), o.find)
       : tools.filter((t) => t.site === site);
+    const { listWalks } = await import("../walks/spec.js");
+    const { walksDirFor } = await import("./services.js");
+    const walks = site ? listWalks(walksDirFor(settings)).filter((w) => w.site === site) : [];
     if (o.json)
       return console.log(
         JSON.stringify(
-          rows.map(({ name, site, aim, inputs, steps }) => ({ name, site, aim, inputs, steps })),
+          rows.map(({ name, site, aim, inputs, steps }) => ({
+            name,
+            site,
+            aim,
+            inputs,
+            steps,
+            routes: callers.get(name) ?? [],
+          })),
         ),
       );
-    if (!rows.length) return console.log(dim("none; `autobrowse tools` lists the sites"));
+    if (!rows.length && !walks.length)
+      return console.log(dim("none; `autobrowse tools` lists the sites"));
     for (const line of columns(
       rows.map((t) => [
         `${t.irreversible ? warn("!") : " "} ${accent(t.name)}`,
         t.inputs ? dim(t.inputs) : "",
         t.aim,
+        [proofOf(t.name), dim(via(t.name))].filter(Boolean).join("  "),
+      ]),
+    ))
+      console.log(line);
+    if (!walks.length) return;
+    console.log(`\n${bold("walks, built from runs")} ${dim(`(${walks.length})`)}`);
+    for (const line of columns(
+      walks.map((w) => [
+        `${w.irreversible ? warn("!") : " "} ${w.site}/walk-${w.name}`,
+        `${w.screens} screens from ${w.runs} runs`,
+        dim(
+          `${w.goal.replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "<email>").slice(0, 60)}${w.mod ? `  (mod ${w.mod})` : ""}`,
+        ),
       ]),
     ))
       console.log(line);
@@ -265,86 +313,6 @@ program
         r.signIn ? good("sign-in") : dim("no sign-in"),
         `${r.routes} routes`,
         `${r.workflows} workflows`,
-      ]),
-    ))
-      console.log(line);
-  });
-
-program
-  .command("flows")
-  .description(
-    "Every deterministic browser leg on this worker: hand-written flows with the routes that call them, compiled workflows with their proof, walks (`!` = irreversible)",
-  )
-  .option("--site <site>", "one site's legs")
-  .action(async (o: { site?: string }) => {
-    const { BROWSER_FLOWS } = await import("../engine/browser-service.js");
-    const { SITES } = await import("../sites/index.js");
-    const { listWalks } = await import("../walks/spec.js");
-    const { walksDirFor } = await import("./services.js");
-    const { backend } = local();
-    const [workflows, proofs] = await Promise.all([workflowsOf(backend), proofsOf(backend)]);
-    const site = o.site?.trim().toLowerCase();
-    // Each leg's callers: the official-API routes whose browser leg it is.
-    const callers = new Map<string, { route: string; irreversible: boolean }[]>();
-    for (const s of SITES)
-      for (const r of s.routes) {
-        if (!r.browser) continue;
-        const leg = "flow" in r.browser ? r.browser.flow : r.browser.workflow;
-        const list = callers.get(leg) ?? [];
-        list.push({
-          route: `${r.method} ${s.site}${r.path}`,
-          irreversible: Boolean(r.irreversible),
-        });
-        callers.set(leg, list);
-      }
-    const mark = (leg: string) => (callers.get(leg)?.some((c) => c.irreversible) ? "!" : " ");
-    const via = (leg: string) => {
-      const c = callers.get(leg) ?? [];
-      // No route: only `flow({name})` runs it. Many: the first two and a count.
-      if (!c.length) return "-";
-      const shown = c
-        .slice(0, 2)
-        .map((x) => x.route)
-        .join(", ");
-      return c.length > 2 ? `${shown} +${c.length - 2} more` : shown;
-    };
-    const flows = Object.keys(BROWSER_FLOWS)
-      .filter((n) => !site || n.startsWith(`${site}/`))
-      .sort();
-    const bang = (irreversible: boolean) => (irreversible ? warn("!") : " ");
-    const section = (title: string, n: number) => console.log(`${bold(title)} ${dim(`(${n})`)}`);
-    section("hand-written flows", flows.length);
-    for (const line of columns(flows.map((n) => [` ${bang(mark(n) === "!")} ${n}`, dim(via(n))])))
-      console.log(line);
-    const compiled = workflows.filter(
-      (w) => !site || w.name.startsWith(`${site}-`) || w.name.includes(`-${site}`),
-    );
-    const { proofLine } = await import("../workflows/proof.js");
-    const proofOf = (name: string) => {
-      const proof = proofs[name];
-      if (proof) return proof.status === "done" ? good(proofLine(proof)) : bad(proofLine(proof));
-      return name in proofs ? warn("draft, never run") : "hand-written";
-    };
-    console.log("");
-    section("compiled workflows", compiled.length);
-    for (const w of compiled) {
-      console.log(` ${bang(w.steps.some((s) => s.irreversible))} ${w.name}  ${proofOf(w.name)}`);
-      console.log(
-        dim(
-          `     ${w.steps.map((s) => `${s.name}${s.irreversible ? "!" : ""}`).join(" → ")}${via(w.name) === "-" ? "" : `; ${via(w.name)}`}`,
-        ),
-      );
-    }
-    const walks = listWalks(walksDirFor(settings)).filter((w) => !site || w.site === site);
-    console.log("");
-    section("walks, built from runs", walks.length);
-    for (const line of columns(
-      walks.map((w) => [
-        ` ${bang(w.irreversible)} ${w.site}/walk-${w.name}`,
-        `${w.screens} screens from ${w.runs} runs`,
-        dim(
-          `${w.goal.replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "<email>").slice(0, 60)}${w.mod ? `  (mod ${w.mod})` : ""}`,
-        ),
       ]),
     ))
       console.log(line);
@@ -818,7 +786,8 @@ program
               .browser()
               .flow({ name: "fingerprint/check", input: {}, ...(profile ? { profile } : {}) }),
           )
-        : await local({ headless: o.headed ? false : settings.browserHeadless }).parts.browser.run(
+        : await runLeg(
+            local({ headless: o.headed ? false : settings.browserHeadless }).parts.browser,
             flow,
             {},
           );

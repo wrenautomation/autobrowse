@@ -19,6 +19,7 @@ import type { KeyKeeper } from "../deps/keys.js";
 import { localShell, type Shell } from "../deps/shell.js";
 import type { SecretSink } from "../deps/sink.js";
 import { BROWSER_FLOWS } from "../engine/browser-service.js";
+import { runLeg } from "../engine/leg.js";
 import type { Llm } from "../llm/types.js";
 import type { SiteFacade } from "../sites/facade.js";
 import { SITES } from "../sites/index.js";
@@ -126,7 +127,7 @@ export function doerFor(p: DoerParts): Verb {
       if (!allowsSite(scope, name.split("/")[0] ?? name)) throw refuse(name);
       const flow = flows[name];
       if (!flow) throw new Error(`no flow named ${name}`);
-      return p.browser.run(flow as never, input);
+      return runLeg(p.browser, flow as never, input);
     },
     runTool: async (name, input) => {
       if (!allowsTool(scope, name)) throw refuse(name);

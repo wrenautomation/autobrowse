@@ -5,8 +5,10 @@
  * person. Everything it knows lives in host state under four keys, so a
  * new invocation, or a restart, picks up where the last one stopped.
  */
+import { randomUUID } from "node:crypto";
 import { FlowFailed } from "../browser/flow.js";
 import { NeedsHuman } from "../browser/session.js";
+import { type EngineRuns, stepRows } from "../runs/engine.js";
 import { type Effects, type GateAnswer, type GateName, GateOpen } from "./effects.js";
 import { ALL_GUARDS, type Guards, isGuard } from "./guards.js";
 import type { AnyWorkflow, PlanBase, StepNames, Workflow } from "./workflow.js";
@@ -229,7 +231,38 @@ export async function runFlow<P extends PlanBase, D, M, S extends string>(
   deps: D,
   plan: P,
   answer: (gate: OpenGate) => GateAnswer | null = () => null,
-  opts: AdvanceOptions = {},
+  opts: RunFlowOptions = {},
+): Promise<Outcome<S, M>> {
+  if (!opts.record) return loop(fx, workflow, deps, plan, answer, opts);
+  const started = Date.now();
+  const out = await loop(fx, workflow, deps, plan, answer, opts);
+  const gate = await fx.get<OpenGate>(KEYS.gate);
+  opts.record.runs.record({
+    workflow: workflow.name,
+    key: opts.record.key ?? randomUUID(),
+    site: workflow.site ?? null,
+    startedAt: new Date(started).toISOString(),
+    endedAt: new Date().toISOString(),
+    ms: Date.now() - started,
+    status: out.status,
+    gate: gate?.name ?? null,
+    steps: stepRows(out.results, gate),
+  });
+  return out;
+}
+
+export interface RunFlowOptions extends AdvanceOptions {
+  /** Write the run to a ledger as it stops (`runs/engine.ts`); `key` the call it ran under. */
+  record?: { runs: EngineRuns; key?: string | null };
+}
+
+async function loop<P extends PlanBase, D, M, S extends string>(
+  fx: Effects,
+  workflow: Workflow<P, D, M, S>,
+  deps: D,
+  plan: P,
+  answer: (gate: OpenGate) => GateAnswer | null,
+  opts: AdvanceOptions,
 ): Promise<Outcome<S, M>> {
   for (;;) {
     const a = await advance(fx, workflow, deps, plan, opts);

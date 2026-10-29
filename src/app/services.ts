@@ -54,6 +54,7 @@ import {
 import { domainWorkflow } from "../workflows/domain/index.js";
 import { inboxActivityWorkflow } from "../workflows/inbox-activity/index.js";
 import { inboxFleetWorkflow } from "../workflows/inbox-fleet/index.js";
+import { withLegs } from "../workflows/legs.js";
 import type { Proof } from "../workflows/proof.js";
 import { redirectWorkflow } from "../workflows/redirect/index.js";
 import { COMPILED_DIR, linkOnce, shippedRoots } from "../workflows/roots.js";
@@ -413,7 +414,8 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       }),
     ],
     channel,
-    workflows: async () => [...WORKFLOWS, ...(await compiledNow()).map((c) => c.workflow)],
+    workflows: async () =>
+      withLegs([...WORKFLOWS, ...(await compiledNow()).map((c) => c.workflow)]) as AnyWorkflow[],
     proofs: async () =>
       Object.fromEntries((await compiledNow()).map((c) => [c.workflow.name, c.proof])),
     catalog,

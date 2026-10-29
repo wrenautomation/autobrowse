@@ -44,9 +44,9 @@ Built (WA-961, 2026-10-29):
 - A recording's description is its date: its aim is its step names. A leg's aim is `site/name` for now.
 - `do` sends the model the search's top 10 plus the same goal's earlier pick. A goal that finds nothing sends the whole list.
 - Search is `workflows/find.ts`, apart from the toolkit, so `do` does not load all 108 legs.
-- The toolkit holds legs; `backend.workflows` does not yet. The Runs page and `run <name>` run through Restate objects, and a leg has none until pass two.
+- `backend.workflows` holds the legs (`withLegs`). The Runs page and `run <name>` start one on the compiled run object, which falls back to `LEG_WORKFLOWS`.
 - `sites` shows "sign-in" (a login spec exists), not "login stored": a stored check reads the credential store per site.
-- `flows` (legs with their route callers, walks) stays beside `tools` until pass two folds the run paths.
+- `flows` is gone: `tools <site>` shows each tool's route callers and proof, then the site's walks.
 
 ## 2. One catalog, one run path
 
@@ -142,6 +142,15 @@ First a run recorder (a run row with its steps, status and artifact paths, in th
 - Flows outside `flows/` (auth enroll, rotate-password, unsubscribe, walks) go the same way, in a second pass. They type passwords and keep one sign-in try per site, so they move alone, each with its own check.
 - Then `runner.run` is private to the engine, and a lint holds it there.
 
+Built (WA-963):
+- Recorder: `runFlow(…, {record})` writes one row per run as it stops to `<stats>/engine/engine-YYYY-MM.jsonl` (`runs/engine.ts`): workflow, key (the durable call, else a uuid), site, times, status, open gate, steps.
+  A done step keeps name and status only. A failed one keeps its error, masked, 300 chars, and its screenshot and trace paths.
+- `runLeg(runner, flow, input, {on})` (`engine/leg.ts`): a one-step run around the leg. The caller gets the leg's own answer and the same error object; the step sees only text. Input and the armed tab go to the leg as given.
+- On it: Restate `browser` handlers (`terminalLeg`), site route legs (`legOf`), armed `prepare`, `do`'s flows, the aws/gcloud/wrangler chores, the CLI's legs, the login check. `runCompiled` records too.
+- The Runs page lists ledger rows beside the registry's (`mergePages`). A ledger run's status has no actions: it stopped in its process.
+- Lint (`test/leg-lint.test.ts`): `runner.run(` / `browser.run(` outside `engine/`, `workflows/`, `browser/` fails, but for counted files: the guard's runner wrapper, the compiler's step template, explore's held page, and pass two (cli-auth's 4 password and enroll legs, unsubscribe, 2 walk runs).
+- Usage before (desk ledger, 2026-10-22 to 10-29): 23,177 settled site calls, 40.0% failed; 6,718 flow runs, 31.0% failed. The week after is read on 2026-11-05.
+
 Check that usage stays the same: the desk's `calls-*.jsonl` ledger, route success rates the week before and after.
 
 Cost: one more in-process call per leg (`advance` on memory effects), under 1 ms. No model, no network.
@@ -183,3 +192,7 @@ Cost: one more in-process call per leg (`advance` on memory effects), under 1 ms
 - 2026-10-29: A workflow names its site in code (`site`, rendered by the compiler), not in outline.json beside it: one source, and hand-tuned workflows have no outline.
 - 2026-10-29: `do` shortlists by search before the model: about 10 rows a pick instead of 150, so the pick prompt stays the same size as the catalog grows.
 - 2026-10-29: The trace holds each iteration's values (William: "at each iteration of the for loop what the values are").
+- 2026-10-29: The in-memory run recorder is a monthly jsonl ledger, not events into the Restate registry: a leg runs inside `ctx.run`, where no `ctx` call may go, and an HTTP write per leg would couple every leg to Restate. The Runs page reads both.
+- 2026-10-29: `runLeg` keeps the answer and error in a closure, not in the step's result: `advance` turns errors into strings, and Restate's retry and terminal codes need the same `NeedsHuman`, `FlowFailed`, `FlowInterrupted` objects.
+- 2026-10-29: An armed `prepare` is its own one-step run, not the leg's first step. Arm and run are two requests; one run would hold engine state beside the tab for no reader. A deviation from the plan above.
+- 2026-10-29: The lint allowlist counts per file, so a file with a pass-two leg cannot gain a new direct run.

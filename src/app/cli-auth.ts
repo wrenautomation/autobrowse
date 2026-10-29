@@ -36,6 +36,7 @@ import { expandHome } from "../google/auth.js";
 /** A copied secret lives on the clipboard for a minute, then is emptied if untouched. */
 const CLIPBOARD_MS = 60_000;
 
+import { runLeg } from "../engine/leg.js";
 import { macClipboard } from "./cli-env.js";
 import { type KeysCliDeps, registerKeyCommands } from "./cli-keys.js";
 import { credLinkUrl, type Settings } from "./config.js";
@@ -909,7 +910,7 @@ export function registerAuthCommands(
         return "closed";
       },
     });
-    return runner.run(check, undefined);
+    return runLeg(runner, check, undefined);
   };
 
   program
@@ -952,7 +953,7 @@ export function registerAuthCommands(
         login: loginFor(settings, gmailFor(settings)),
         captcha: captchaFor(settings),
       });
-      console.log(await runner.run(googleWorkspaceLogo, { file: resolve(file) }));
+      console.log(await runLeg(runner, googleWorkspaceLogo, { file: resolve(file) }));
     });
 
   program
@@ -973,7 +974,8 @@ export function registerAuthCommands(
         captcha: captchaFor(settings),
       });
       console.log(
-        await runner.run(
+        await runLeg(
+          runner,
           { ...googleProfilePhoto, site: accountSite(o.as) },
           { file: resolve(file) },
         ),
