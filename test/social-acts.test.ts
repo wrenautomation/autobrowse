@@ -224,6 +224,28 @@ describe("instagram acts", () => {
   });
 });
 
+describe("instagram follow proof", () => {
+  // button flips on click, gone again after the reload
+  it("hands a follow the reload undid to a person", async () => {
+    let done = false;
+    let opens = 0;
+    const { fp } = fakePage({
+      text: [""],
+      url: "https://www.instagram.com/acme/",
+      present: (h) => /following\|requested/.test(h.name ?? "") === (done && opens < 2),
+      onAct: () => {
+        done = true;
+      },
+    });
+    fp.open = async () => {
+      opens++;
+    };
+    await expect(instagramFollow.run(fp, { username: "acme" })).rejects.toThrow(
+      /did not keep the follow/,
+    );
+  });
+});
+
 describe("instagram follow names", () => {
   it("reads the profile button as Instagram names it (2026-10-29)", () => {
     const re = (h: Hints) => namePattern(h.name as string) as RegExp;

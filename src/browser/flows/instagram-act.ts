@@ -71,8 +71,17 @@ export const instagramFollow = defineFlow<
     } else await fp.act({ kind: "click" }, followButton, { goal: `follow @${username}` });
     await fp.wait(SETTLE_MS);
     await refused(fp, undo ? "unfollow" : "follow");
+    const what = undo ? "unfollow" : "follow";
     if (!(await fp.has(undo ? followButton : followingButton, RENDER_MS)))
-      return fp.human(`Instagram did not take the ${undo ? "unfollow" : "follow"} of @${username}`);
+      return fp.human(`Instagram did not take the ${what} of @${username}`);
+    // the button flips before the server answers; a limited account gets it undone (TikTok, 10-29): reload is the proof
+    await fp.wait(SETTLE_MS);
+    await openIg(fp, `${WEB}/${encodeURIComponent(username)}/`);
+    const kept = await firstShown(fp, [followingButton, followButton], MISSING);
+    if (kept !== (undo ? 1 : 0))
+      return fp.human(
+        `Instagram did not keep the ${what} of @${username}: the account may be limited`,
+      );
     return { username, following: !undo };
   },
 });
