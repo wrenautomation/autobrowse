@@ -41,9 +41,10 @@ import {
   type FlowPage,
   flowRunner,
   type RunnerOptions,
+  seedOf,
 } from "../browser/flow.js";
 import { ariaWithFrames, withFrame } from "../browser/frames.js";
-import { handsFor } from "../browser/human/index.js";
+import { freshSeed, handsFor, seeded } from "../browser/human/index.js";
 import { inPage } from "../browser/in-page.js";
 import { layoutText } from "../browser/layout.js";
 import { type Hints, locate, locateAll, textOf } from "../browser/locate.js";
@@ -632,6 +633,7 @@ async function serve(
         resumed: was !== null,
         viewport: vp ? { width: vp.width, height: vp.height } : null,
         ...(lastSession ? { session: lastSession } : {}),
+        ...(opts.pace ? { seed } : {}),
       }),
     );
     firstGoal = null;
@@ -920,8 +922,9 @@ async function serve(
     );
     flowYes.grant(flow, FLOW_MS);
   };
-  /** Instant for a console; a person's hands when an agent drives (`pace`). */
-  const hands = handsFor(opts.pace ?? null, Math.random, filmLog, holdsSecret);
+  /** Instant for a console; a person's hands when an agent drives (`pace`), on the session's seed. */
+  const seed = seedOf() ?? freshSeed();
+  const hands = handsFor(opts.pace ?? null, seeded(seed), filmLog, holdsSecret);
   const gate = async (act: "fill" | "select" | "click", t: Target, wait: boolean) => {
     // A click is judged by what the button says too: `#checkout` or `.btn` alone names nothing.
     const said =

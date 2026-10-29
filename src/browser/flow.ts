@@ -27,12 +27,14 @@ import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js
 import { filmLog } from "./film.js";
 import { type Fixes, flowKey } from "./fixes.js";
 import {
+  freshSeed,
   type Hands,
   HUMAN_PACE,
   handsFor,
   instantHands,
   type Pace,
   pickOption,
+  seeded,
 } from "./human/index.js";
 import { inPage } from "./in-page.js";
 import { type Hints, locate, textOf } from "./locate.js";
@@ -294,6 +296,8 @@ export interface RunnerOptions {
    * (tests, demos).
    */
   pace?: Pace | null;
+  /** Every run's motion seed, to replay a run's moves (`AUTOBROWSE_SEED`). Absent: fresh per run, kept in its row. */
+  seed?: number;
   /**
    * Solves a login wall for a site: "signed-in" to retry the open,
    * anything else to hand off. Absent = every wall is a person's.
@@ -372,6 +376,12 @@ function runRow(
     ms: Date.now() - startedAt,
     ...r,
   };
+}
+
+/** `AUTOBROWSE_SEED`: one run's seed, to replay its motions. */
+export function seedOf(given = process.env.AUTOBROWSE_SEED): number | undefined {
+  const n = Number(given);
+  return given && Number.isInteger(n) && n >= 0 ? n >>> 0 : undefined;
 }
 
 /** The same page, fragment aside. */
@@ -493,13 +503,11 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
   const artifactsDir = expandHome(opts.artifactsDir);
   const locks = runner.locks ?? new KeyedMutex();
   const repairer = runner.repairer ?? noRepairer;
-  // A filmed page hears every act (`browser/film`); the rest drop it.
-  const hands = handsFor(
-    runner.pace === undefined ? HUMAN_PACE : runner.pace,
-    Math.random,
-    filmLog,
-    holdsSecret,
-  );
+  // A filmed page hears every act (`browser/film`); the rest drop it. Hands per run, on that
+  // run's seed: runs on two profiles at once never share a stream.
+  const pace = runner.pace === undefined ? HUMAN_PACE : runner.pace;
+  const fixedSeed = runner.seed ?? seedOf();
+  const handsOn = (seed: number) => handsFor(pace, seeded(seed), filmLog, holdsSecret);
   const park = runner.park;
   const runsDir = runner.runs === undefined ? statsDirOf("flows") : null;
   const runs = runner.runs ?? (runsDir ? fileFlowRuns(runsDir) : null);
@@ -631,6 +639,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         let captchaTries = 0;
         let captchaSolved: boolean | null = null;
         const startedAt = Date.now();
+        const seed = fixedSeed ?? freshSeed();
+        const hands = handsOn(seed);
         let outcome: FlowOutcome = "ok";
         let failure: string | null = null;
         let submitted = false;
@@ -1140,6 +1150,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               llmCalls: run.tally.calls,
               inputTokens: run.tally.inputTokens,
               outputTokens: run.tally.outputTokens,
+              seed,
             }),
           );
           runner.fixes?.flush();

@@ -4,6 +4,25 @@
  */
 export type Random = () => number;
 
+/**
+ * A seeded source (mulberry32): the same seed plays the same draws, so a run's
+ * motions replay on the same page. Six lines, no dependency (this folder imports
+ * nothing but Playwright's types).
+ */
+export function seeded(seed: number): Random {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** A new run's seed: random, so no two runs move alike. */
+export const freshSeed = (): number => Math.floor(Math.random() * 2 ** 32);
+
 /** Log-uniform in [lo, hi]: mostly near the low end, now and then slow. Like a person. */
 export function drawLog([lo, hi]: readonly [number, number], random: Random): number {
   return Math.exp(Math.log(lo) + random() * (Math.log(hi) - Math.log(lo)));

@@ -3,7 +3,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Locator, Page } from "playwright";
 import { describe, expect, it } from "vitest";
-import { drawMs } from "../src/browser/human/draw.js";
+import { seedOf } from "../src/browser/flow.js";
+import { drawMs, freshSeed, seeded as mulberry } from "../src/browser/human/draw.js";
 import {
   aimPoint,
   BACKSPACE,
@@ -437,5 +438,26 @@ describe("brisk", () => {
     expect(p.typing.typo).toBe(CALM_PACE.typing.typo);
     expect(p.typing.run).toEqual(CALM_PACE.typing.run);
     expect(p.scroll.notch).toEqual(CALM_PACE.scroll.notch);
+  });
+});
+
+describe("motion seed", () => {
+  it("one seed, one stream; a fresh seed per call", () => {
+    const a = mulberry(42);
+    const b = mulberry(42);
+    const xs = Array.from({ length: 5 }, a);
+    expect(Array.from({ length: 5 }, b)).toEqual(xs);
+    expect(xs.every((x) => x >= 0 && x < 1)).toBe(true);
+    expect(Array.from({ length: 5 }, mulberry(43))).not.toEqual(xs);
+    expect(freshSeed()).not.toBe(freshSeed());
+  });
+
+  it("AUTOBROWSE_SEED takes a whole number only", () => {
+    expect(seedOf("123")).toBe(123);
+    expect(seedOf(undefined)).toBeUndefined();
+    expect(seedOf("")).toBeUndefined();
+    expect(seedOf("1.5")).toBeUndefined();
+    expect(seedOf("-1")).toBeUndefined();
+    expect(seedOf("x")).toBeUndefined();
   });
 });

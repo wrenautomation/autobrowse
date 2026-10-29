@@ -30,6 +30,8 @@ export interface FlowRunRow {
   llmCalls: number;
   inputTokens: number;
   outputTokens: number;
+  /** The human motions' seed: `AUTOBROWSE_SEED=<it>` replays them on the same page. Absent: no browser opened. */
+  seed?: number;
 }
 
 export interface FlowRuns {

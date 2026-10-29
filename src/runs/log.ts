@@ -54,6 +54,8 @@ export type RunRow =
       viewport: { width: number; height: number } | null;
       /** The Claude Code session that started it: the link to its transcript. */
       session?: string;
+      /** The human motions' seed: `AUTOBROWSE_SEED=<it>` replays them on the same page. */
+      seed?: number;
     }
   | { kind: "goal"; at: string; goal: string }
   | {

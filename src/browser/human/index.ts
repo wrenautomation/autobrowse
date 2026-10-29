@@ -51,7 +51,7 @@ import {
 import { type ScrollStyle, wheelPlan } from "./scroll.js";
 import { BACKSPACE, type TypingStyle, typingPlan } from "./typing.js";
 
-export { drawMs } from "./draw.js";
+export { drawMs, freshSeed, seeded } from "./draw.js";
 export type { MouseStyle, PathStep } from "./mouse.js";
 export { aimPoint, mousePath, restAt, tremor, wanderPath } from "./mouse.js";
 export type { ScrollStyle, WheelStep } from "./scroll.js";
