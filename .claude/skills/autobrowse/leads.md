@@ -3,9 +3,9 @@
 Output is a CSV that wren imports. Re-running a job resumes it.
 
 ```sh
-pnpm -s autobrowse maps "staffing agency in austin tx" --max-minutes 10   # listings with phone, site, emails → wren --format google-maps
-pnpm -s autobrowse people recruiting founder austin --pages 2 --enrich    # LinkedIn people → wren --format linkedin
-pnpm -s autobrowse people founder --company <handle> --enrich             # one firm's people; keywords narrow
+autobrowse maps "staffing agency in austin tx" --max-minutes 10   # listings with phone, site, emails → wren --format google-maps
+autobrowse people recruiting founder austin --pages 2 --enrich    # LinkedIn people → wren --format linkedin
+autobrowse people founder --company <handle> --enrich             # one firm's people; keywords narrow
 ```
 
 `maps`: several searches in one run; `--depth` goes further down each list
@@ -15,11 +15,11 @@ pnpm -s autobrowse people founder --company <handle> --enrich             # one 
 One LinkedIn read at a time, through the facade (paced and capped per day):
 
 ```sh
-pnpm -s autobrowse site call linkedin GET "/search/results/people?keywords=ria%20founder&pages=2"
-pnpm -s autobrowse site call linkedin GET "/in/<vanity>?company=true"          # every role + current employer's page
-pnpm -s autobrowse site call linkedin GET "/company/<handle>"                  # website, size, industry, HQ, phone
-pnpm -s autobrowse site call linkedin GET "/company/<handle>/people?keywords=founder&max=30"
-pnpm -s autobrowse site call linkedin GET "/company/<handle>/jobs?max=50"      # open roles; location= narrows
+autobrowse site call linkedin GET "/search/results/people?keywords=ria%20founder&pages=2"
+autobrowse site call linkedin GET "/in/<vanity>?company=true"          # every role + current employer's page
+autobrowse site call linkedin GET "/company/<handle>"                  # website, size, industry, HQ, phone
+autobrowse site call linkedin GET "/company/<handle>/people?keywords=founder&max=30"
+autobrowse site call linkedin GET "/company/<handle>/jobs?max=50"      # open roles; location= narrows
 ```
 
 LinkedIn reads run as the account the accounts policy names for research.

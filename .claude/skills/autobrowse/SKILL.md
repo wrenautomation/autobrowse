@@ -8,7 +8,7 @@ allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/state.sh)
 
 Sites signed in through stored logins, official APIs behind one facade, and a
 browser whose every act is journaled so it can compile into a workflow.
-CLI: `pnpm -s autobrowse <cmd>`, run in the autobrowse repo.
+CLI: `autobrowse <cmd>` from any folder (`bin/autobrowse` linked on PATH; it runs the repo HEAD). Without the link: `pnpm -s autobrowse <cmd>` in the repo.
 
 Right now:
 !`${CLAUDE_SKILL_DIR}/scripts/state.sh`
@@ -33,7 +33,7 @@ Changing autobrowse's code: `map/CLAUDE.md`.
 - Secrets never pass through you. Never type a password, TOTP or code:
   `place` types it. A key a site shows goes to the store by `keep`. Never
   echo a secret, put one in a URL or a message, or screenshot a revealed key.
-- William's details are stored: profile `william` (`pnpm -s autobrowse profile list`)
+- William's details are stored: profile `william` (`autobrowse profile list`)
   holds his name, birthday, gender, email, phone, address and tax id. A form asks
   for one: `place{secret:"profile.phone"}` (`.phoneLocal`, `.name`, `.birthday`,
   `.address1`, signup.md). Never ask William for them. A `--signup` or `--login`
@@ -49,7 +49,7 @@ Changing autobrowse's code: `map/CLAUDE.md`.
 - Never change or rotate a stored password. Never wipe a browser profile.
   Explore LinkedIn only as `linkedin@wren`: reads, under 20 page loads,
   stop on a 429. Never William's own LinkedIn in an explore session.
-- Stop every explore session you start (`stop.sh`). `pnpm -s autobrowse browsers`
+- Stop every explore session you start (`stop.sh`). `autobrowse browsers`
   lists our browsers and sessions (owner, memory, idle, held); `doctor` warns.
 - One sign-in try per site, then report. Repeated tries get accounts
   flagged (Google, X, Reddit).

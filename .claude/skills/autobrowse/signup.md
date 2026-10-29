@@ -1,12 +1,12 @@
 # Sign up and sign in
 
 Login is the profile's job: a session opens signed in through the site's stored
-login (`pnpm -s autobrowse login <site>` signs in by itself: password, the
+login (`autobrowse login <site>` signs in by itself: password, the
 Google button, TOTP, mail or SMS codes). If a wall stays up, say so and stop.
 
 ## Before a signup
 
-1. Does the address already have an account? `pnpm -s autobrowse known <site>`
+1. Does the address already have an account? `autobrowse known <site>`
    asks the site's forgot-password page and reads the inbox; nothing changes.
 2. The site's own agent path: `/agent-signup.md`, `/.well-known/agent-access.json`,
    `/llms.txt` (`autobrowse read <url>`). Telnyx has one.
@@ -16,7 +16,7 @@ Google button, TOTP, mail or SMS codes). If a wall stays up, say so and stop.
 ## The signup agent
 
 ```sh
-pnpm -s autobrowse signup <site> --email <address> --name "…" --handle <handle> [--headed]
+autobrowse signup <site> --email <address> --name "…" --handle <handle> [--headed]
 ```
 
 The password is minted and stored first, then an agent fills the form placing

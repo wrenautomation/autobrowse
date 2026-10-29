@@ -12,9 +12,9 @@ desk and the bench.
 ## First: does something already do it?
 
 ```sh
-pnpm -s autobrowse do "<goal>" --dry-run       # routes to a flow, a site route or a workflow
-pnpm -s autobrowse workflows [name]            # what exists; a name prints its inputs (--template for a plan file)
-pnpm -s autobrowse site status <site>          # the site's API and browser routes
+autobrowse do "<goal>" --dry-run       # routes to a flow, a site route or a workflow
+autobrowse workflows [name]            # what exists; a name prints its inputs (--template for a plan file)
+autobrowse site status <site>          # the site's API and browser routes
 ```
 
 ## Session
@@ -26,8 +26,8 @@ scripts/start.sh <site> [url] [port] [flags]   # default port 9090; prints "port
 scripts/cmd.sh <port> '<json>'                 # one command, JSON back
 scripts/stop.sh <port> achieved|failed "…"     # verdict, then close browser + socket
 scripts/state.sh                               # open sessions (held ones marked), resumable journals, profiles
-pnpm -s autobrowse browsers [--json]           # every browser of ours: owner, age, MB; sessions: idle, held
-pnpm -s autobrowse browsers stop <port>        # close a session, journal kept (--forget drops it)
+autobrowse browsers [--json]           # every browser of ours: owner, age, MB; sessions: idle, held
+autobrowse browsers stop <port>        # close a session, journal kept (--forget drops it)
 ```
 
 A session is a lease: it closes itself after 10 minutes with no command,
@@ -128,19 +128,19 @@ their URL and landmarks, each with the acts that worked on it. A walk runs
 as `<site>/walk-<name>` in the catalog, with no model in the loop.
 
 ```sh
-pnpm -s autobrowse explored <site>                         # runs: driver, goal, outcome, answer tokens
-pnpm -s autobrowse walks build <site> <name> --goal-like "<words>"   # or --run id,id
-pnpm -s autobrowse walks show <site>/<name>                # screens and ops, never values
-pnpm -s autobrowse walks run <site>/<name> --plan key=value [--yes]  # --yes when it has a final act
-pnpm -s autobrowse tokens --days 30                        # spend and the verdict
+autobrowse explored <site>                         # runs: driver, goal, outcome, answer tokens
+autobrowse walks build <site> <name> --goal-like "<words>"   # or --run id,id
+autobrowse walks show <site>/<name>                # screens and ops, never values
+autobrowse walks run <site>/<name> --plan key=value [--yes]  # --yes when it has a final act
+autobrowse tokens --days 30                        # spend and the verdict
 ```
 
 Or compile a saved recording to TypeScript:
 
 ```sh
-pnpm -s autobrowse compile <name>              # → src/workflows/<name>/
-pnpm -s autobrowse try <name>                  # run it here, no Restate: proof it is deterministic
-pnpm -s autobrowse repair <failure.json>       # an agent picks up where a flow stopped
+autobrowse compile <name>              # → src/workflows/<name>/
+autobrowse try <name>                  # run it here, no Restate: proof it is deterministic
+autobrowse repair <failure.json>       # an agent picks up where a flow stopped
 ```
 
 A flow that breaks gets fixed in the flow (a fallback path, a remap), not
