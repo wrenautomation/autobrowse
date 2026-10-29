@@ -95,10 +95,12 @@ const layerScript = (attr: string, s: OverlayState | undefined) => `(() => {
     for (const k of KINDS) window.addEventListener(k, (e) => {
       if (!ui.host || e.target !== ui.host) return;
       e.stopImmediatePropagation();
-      // mousedown's default moves focus; the list's wheel scroll is kept.
+      // mousedown's default moves focus.
       if (k === 'mousedown' || k === 'click' || k === 'auxclick' || k === 'contextmenu' || k === 'dblclick') e.preventDefault();
-      if (k !== 'click') return;
       const hit = ui.root && ui.root.elementFromPoint(e.clientX, e.clientY);
+      // A wheel scrolls the trace list, never the page under the panel.
+      if (k === 'wheel' && !(hit && hit.closest('.rows'))) e.preventDefault();
+      if (k !== 'click') return;
       const a = hit && hit.closest('[data-a]');
       if (!a) return;
       const act = a.getAttribute('data-a');

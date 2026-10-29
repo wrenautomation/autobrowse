@@ -51,8 +51,8 @@ describe("headed overlay", () => {
       const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
       // A control under the whole panel, a field with focus, and an observer-like capture listener.
       await page.setContent(
-        `<input id="f"><button id="big" style="position:fixed;inset:0;z-index:1" onclick="window.hits=(window.hits||0)+1">x</button>
-         <script>window.seen=0;document.addEventListener('mousedown',()=>window.seen++,true);document.addEventListener('click',()=>window.seen++,true)</script>`,
+        `<input id="f"><button id="big" style="position:fixed;inset:0;z-index:1" onclick="document.body.dataset.hits=+(document.body.dataset.hits||0)+1">x</button>
+         <script>const b=document.body.dataset;b.seen=0;document.addEventListener('mousedown',()=>b.seen++,true);document.addEventListener('click',()=>b.seen++,true)</script>`,
       );
       await page.focus("#f");
       const o = overlayFor(true);
@@ -61,15 +61,17 @@ describe("headed overlay", () => {
       await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, detail: [] });
       const panel = { x: 40, y: 580 };
       await page.mouse.click(panel.x, panel.y);
-      expect(await page.evaluate("[window.hits||0, window.seen]")).toEqual([0, 0]);
+      expect(
+        await page.evaluate("[+(document.body.dataset.hits||0), +document.body.dataset.seen]"),
+      ).toEqual([0, 0]);
       expect(await page.evaluate("document.activeElement.id")).toBe("f");
       await o.begin(page);
       await page.mouse.click(panel.x, panel.y);
-      expect(await page.evaluate("window.hits")).toBe(1);
+      expect(await page.evaluate("+document.body.dataset.hits")).toBe(1);
       await o.end(page, { cmd: "click", what: "x", ok: true, ms: 5, detail: [] });
       // Outside the panel, the page works as ever.
       await page.mouse.click(700, 50);
-      expect(await page.evaluate("window.hits")).toBe(2);
+      expect(await page.evaluate("+document.body.dataset.hits")).toBe(2);
     } finally {
       await browser.close();
     }
