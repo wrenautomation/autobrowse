@@ -58,7 +58,7 @@ describe("headed overlay", () => {
       const o = overlayFor(true);
       await o.set(page, { goal: "save the form" });
       await o.begin(page);
-      await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, detail: [] });
+      await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] });
       const panel = { x: 40, y: 580 };
       await page.mouse.click(panel.x, panel.y);
       expect(
@@ -68,7 +68,7 @@ describe("headed overlay", () => {
       await o.begin(page);
       await page.mouse.click(panel.x, panel.y);
       expect(await page.evaluate("+document.body.dataset.hits")).toBe(1);
-      await o.end(page, { cmd: "click", what: "x", ok: true, ms: 5, detail: [] });
+      await o.end(page, { cmd: "click", what: "x", ok: true, ms: 5, note: "", detail: [] });
       // Outside the panel, the page works as ever.
       await page.mouse.click(700, 50);
       expect(await page.evaluate("+document.body.dataset.hits")).toBe(2);
@@ -86,12 +86,12 @@ describe("headed overlay", () => {
       );
       const o = overlayFor(true);
       await o.set(page, { goal: "save the form" });
-      await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, detail: [] });
+      await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] });
       const ui = "window[Object.keys(window).find((k) => k.startsWith('__data-o'))]";
       // As the [×] button does.
       await page.evaluate(`${ui}.hidden = true; ${ui}.draw(${ui}.s)`);
       // A redraw from the session keeps it hidden.
-      await o.end(page, { cmd: "click", what: "x", ok: true, ms: 5, detail: [] });
+      await o.end(page, { cmd: "click", what: "x", ok: true, ms: 5, note: "", detail: [] });
       await page.mouse.click(200, 500);
       expect(await page.evaluate("+document.body.dataset.hits")).toBe(1);
       // The chip, bottom left: the page never sees it.
@@ -101,6 +101,69 @@ describe("headed overlay", () => {
     } finally {
       await browser.close();
     }
+  });
+
+  it("the corner grip resizes the panel, and the page sees no move", async () => {
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+      await page.setContent(
+        `<script>const b=document.body.dataset;b.moves=0;window.addEventListener('pointermove',()=>b.moves++)</script>`,
+      );
+      const o = overlayFor(true);
+      await o.set(page, { goal: "save the form" });
+      await o.end(page, {
+        cmd: "click",
+        what: "Save",
+        ok: true,
+        ms: 12,
+        note: "→ a.com/next",
+        detail: [],
+      });
+      const ui = "window[Object.keys(window).find((k) => k.startsWith('__data-o'))]";
+      const width = () =>
+        page.evaluate(`${ui}.tuiEl.getBoundingClientRect().toJSON()`) as Promise<DOMRect>;
+      const before = await width();
+      expect(before.width).toBe(460);
+      // The grip: the panel's top right corner (panel on the left).
+      await page.mouse.move(before.right - 4, before.top + 4);
+      await page.evaluate("document.body.dataset.moves = 0");
+      await page.mouse.down();
+      await page.mouse.move(before.right + 136, before.top - 76, { steps: 5 });
+      await page.mouse.move(before.right + 600, before.top - 76, { steps: 2 });
+      await page.mouse.up();
+      expect(await page.evaluate("+document.body.dataset.moves")).toBe(0);
+      expect(await page.evaluate(`[${ui}.w, ${ui}.sized]`)).toEqual([1000 - 24, true]);
+      // A redraw keeps the size.
+      await o.end(page, { cmd: "click", what: "x", ok: true, ms: 5, note: "", detail: [] });
+      expect((await width()).width).toBe(976);
+    } finally {
+      await browser.close();
+    }
+  });
+
+  it("a row's note says where the page went and what changed, never a value", () => {
+    const r = traceRow(
+      { cmd: "click", hints: { role: "button", name: "Go" } } as Command,
+      null,
+      9,
+      {
+        from: "https://a.com/x",
+        to: "https://a.com/next?token=t",
+        answer: { changed: { added: ["a", "b"], gone: 3, more: 1 } },
+      },
+    );
+    expect(r.note).toBe("→ a.com/next · +3 −3 controls");
+    const read = traceRow({ cmd: "read", hints: { css: "p" } } as Command, null, 1, {
+      from: "u",
+      to: "u",
+      answer: { as: "text", text: "secret words" },
+    });
+    expect(read.note).toBe("12 chars read");
+    expect(JSON.stringify(read)).not.toContain("secret");
+    expect(traceRow({ cmd: "click", hints: {} } as Command, new Error("gone\nstack"), 1).note).toBe(
+      "gone",
+    );
   });
 
   it("a trace row names the aim, never a typed value or a query", () => {

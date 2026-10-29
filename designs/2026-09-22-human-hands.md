@@ -64,3 +64,7 @@ settings still turns it all off.
    pointing research, not from William's own hands. The recorder already
    journals his acts. Fitting `HUMAN_PACE` to his real timings would make
    it his hands.
+
+## Decision log
+
+- **2026-10-28: one seed per run (William asked).** mulberry32 on a fresh 32-bit seed. The run row keeps it; `AUTOBROWSE_SEED=<seed>` replays it. Options: (a) `Math.random`, no replay; (b) one fixed seed, where every run moves the same way and that is a fingerprint; (c) a fresh seed per run, kept. Picked (c). Each run gets its own hands, so two runs at once never share a stream. Limit: a replay is exact only on the same page, because the draw order follows the layout (off-screen wheel, wander).

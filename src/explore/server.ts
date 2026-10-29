@@ -924,6 +924,7 @@ async function serve(
   };
   /** Instant for a console; a person's hands when an agent drives (`pace`), on the session's seed. */
   const seed = seedOf() ?? freshSeed();
+  if (opts.pace) overlay.tag(`seed ${seed}`);
   const hands = handsFor(opts.pace ?? null, seeded(seed), filmLog, holdsSecret);
   const gate = async (act: "fill" | "select" | "click", t: Target, wait: boolean) => {
     // A click is judged by what the button says too: `#checkout` or `.btn` alone names nothing.
@@ -1318,7 +1319,9 @@ async function serve(
     busy++;
     const began = now();
     let failed: unknown = null;
-    await overlay.begin(page);
+    let answer: unknown;
+    const from = page.url();
+    await overlay.begin(page, c.cmd);
     try {
       const helped = await helpedSince();
       if (history && LOOKED_AT.has(c.cmd)) lookBefore = await lookAt(page).catch(() => null);
@@ -1333,6 +1336,7 @@ async function serve(
       }
       const out = await looked(c, wait);
       left = { url: page.url(), rows: out.rows ?? left?.rows ?? null };
+      answer = out.answer;
       return helped && out.answer && typeof out.answer === "object" && !Array.isArray(out.answer)
         ? { helped, ...out.answer }
         : out.answer;
@@ -1340,7 +1344,10 @@ async function serve(
       failed = err;
       throw err;
     } finally {
-      await overlay.end(fp.page, traceRow(c, failed, now() - began));
+      await overlay.end(
+        fp.page,
+        traceRow(c, failed, now() - began, { from, to: fp.page.url(), answer }),
+      );
       busy--;
       quietAt = now() + HAND_GRACE_MS;
       lookBefore = null;
