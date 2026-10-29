@@ -31,7 +31,7 @@ It is off for every screenshot and every film frame. Nothing depends on it, so r
 - `[▸]`/`[◂]` moves it to the other side. `[_]`/`[+]` folds it.
 - `[×]` hides it to a chip at the bottom (`▌autobrowse ○ show`). Click the chip to show it again.
 - Drag the top corner grip to resize it.
-- Each choice carries to the next page. While a command runs, the whole panel lets clicks through.
+- Each choice carries to the next page. While a command runs, the whole panel lets clicks through and fades a little.
 
 ## Drive it (explore)
 

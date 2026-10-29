@@ -120,6 +120,8 @@ describe("headed overlay", () => {
       await o.begin(page, "flow");
       await o.begin(page);
       await o.end(page, row);
+      // Busy reads as faded: clicks go through.
+      expect(Number(await page.evaluate(`getComputedStyle(${ui}.tuiEl).opacity`))).toBe(0.6);
       await page.mouse.click(panel.x, panel.y);
       expect(await page.evaluate("+document.body.dataset.hits")).toBe(3);
       await o.end(page, row);

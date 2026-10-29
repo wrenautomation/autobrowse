@@ -218,7 +218,8 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       'border:1px solid ${T.accent};box-shadow:0 0 0 1px #000,0 10px 32px rgba(0,0,0,.55),0 0 22px rgba(165,150,214,.14);',
       'text-shadow:0 0 6px rgba(165,150,214,.22)}',
       '.tui.busy,.chip.busy{pointer-events:none}',
-      // Click-through shows: the panel fades back; a hover on its buttons brings it half up.
+      // Click-through shows: busy fades a little, the person's own mode more; a hover on its buttons brings it half up.
+      '.tui.busy{opacity:.6}',
       '.tui.through{pointer-events:none;opacity:.32}',
       '.tui.through:has(.btn:hover,.grip:hover){opacity:.7}',
       '.tui.through:not(.busy) :is(.btn,.grip){pointer-events:auto}',

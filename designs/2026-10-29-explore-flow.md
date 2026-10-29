@@ -51,6 +51,6 @@ Its result comes back as JSON. A failure leaves the page open, and the agent goe
 - 2026-10-29: Not reachable yet: the hand-written `BrowserFlow`s in `browser/flows/` (`cloudflare-token` and others). Their callers need worker deps.
   Later: a typed catalog of those flows, each with a zod input, so `flow` runs them too.
 - 2026-10-29: Overlay busy is a count. A `flow` command's steps nest in it, and `hold` covers hands between steps (a banner wait, a scroll). The panel takes clicks only while nothing of ours acts.
-- 2026-10-29: Click-through mode fades the panel to .32 opacity (William: "it should be translucent ... everything in it should be dimmed"). Busy does not fade: it flips per step and would blink; `● run` marks it.
+- 2026-10-29: Click-through mode fades the panel to .32 opacity (William: "it should be translucent ... everything in it should be dimmed"). Busy fades to .6: it lets clicks through too, and the count keeps it steady across a flow. A hand-driven command pulses it once.
 - 2026-10-29: Same-site legs only. `--login` sites hold place secrets, not a profile.
 - 2026-10-29: Overlay panel takes clicks by default (`[●]`). William: "defaulting to not clicks going through the panel is fine". While a command runs, the panel still lets every click through: the hands click at coordinates.
