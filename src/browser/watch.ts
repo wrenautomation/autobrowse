@@ -23,6 +23,7 @@ import {
 import { join } from "node:path";
 import type { Page } from "playwright";
 import { redactAria, redactText } from "../recorder/redact.js";
+import { bare } from "./bare.js";
 import type { Hints } from "./locate.js";
 
 export type StepKind = "open" | "act" | "captcha" | "new-ip" | "sign-in";
@@ -88,18 +89,20 @@ export function watchSteps(dir: string, now: () => number = Date.now): Watch {
   const capture = async (page: Page, base: string) => {
     const got: { shot?: string; aria?: string } = {};
     const shot = `${base}.jpg`;
-    const shotOk = await page
-      .screenshot({
-        path: join(dir, shot),
-        type: "jpeg",
-        quality: 60,
-        timeout: 5_000,
-        mask: page.frames().map((f) => f.locator(FIELDS)),
-      })
-      .then(
-        () => true,
-        () => false,
-      );
+    const shotOk = await bare(page, () =>
+      page
+        .screenshot({
+          path: join(dir, shot),
+          type: "jpeg",
+          quality: 60,
+          timeout: 5_000,
+          mask: page.frames().map((f) => f.locator(FIELDS)),
+        })
+        .then(
+          () => true,
+          () => false,
+        ),
+    );
     if (shotOk) got.shot = shot;
     const tree = await page
       .locator("body")

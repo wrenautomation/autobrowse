@@ -95,6 +95,7 @@ import {
   mintedTokensFor,
   missingEntries,
   modsDirFor,
+  overlayOn,
   paceFor,
   profilesForPlace,
   runsDirFor,
@@ -393,7 +394,10 @@ export type BackendParts = Pick<
  * browser, the configured sink. `try`, `heal`, `compile` and `workflows` run
  * on these in-process.
  */
-export function localParts(settings: Settings, o: { headless?: boolean } = {}): BackendParts {
+export function localParts(
+  settings: Settings,
+  o: { headless?: boolean; overlay?: boolean } = {},
+): BackendParts {
   const catalog = compiledCatalog(
     COMPILED_DIR,
     undefined,
@@ -406,6 +410,7 @@ export function localParts(settings: Settings, o: { headless?: boolean } = {}): 
     login: loginFor(settings, gmail),
     captcha: captchaFor(settings),
     pace: paceFor(settings),
+    overlay: overlayOn(settings, o),
   });
   const sink = sinkFor(settings);
   return {
@@ -530,6 +535,8 @@ export function backendFor(settings: Settings, app: BackendParts, o: BackendOpti
 
 export interface LocalOptions {
   headless?: boolean;
+  /** The flow overlay; absent: `AUTOBROWSE_OVERLAY`, then on when headed or filmed. */
+  overlay?: boolean;
   /** false: no model pass (compile is template-only; no agent, no heal). */
   llm?: boolean;
   proveAfterHeal?: boolean;

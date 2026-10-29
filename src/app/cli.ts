@@ -320,15 +320,43 @@ program
   .option("--ask", "stop at the first gate instead of approving it")
   .option("--headed", "show the browser")
   .option("--prove", "write the outcome as proof.json beside the compiled workflow")
+  .option(
+    "--overlay",
+    "draw the terminal panel and act boxes (default: when headed and not filmed; a film gets the rows in its json)",
+  )
+  .option("--no-overlay", "never draw them")
+  .option(
+    "--film [dir]",
+    "record the run: one mp4 per page (default ~/.config/autobrowse/films/<workflow>-<time>)",
+  )
   .action(
     async (
       name: string,
-      o: { plan?: string; dryRun?: boolean; ask?: boolean; headed?: boolean; prove?: boolean },
+      o: {
+        plan?: string;
+        dryRun?: boolean;
+        ask?: boolean;
+        headed?: boolean;
+        prove?: boolean;
+        overlay?: boolean;
+        film?: string | boolean;
+      },
     ) => {
       const { compiledDeps } = await import("../workflows/compiled.js");
       const { memoryEffects } = await import("../engine/memory.js");
       const { runFlow } = await import("../engine/run.js");
-      const { backend, parts } = local({ headless: o.headed ? false : settings.browserHeadless });
+      if (o.film) {
+        settings.film = expandHome(
+          typeof o.film === "string"
+            ? o.film
+            : `~/.config/autobrowse/films/${name}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`,
+        );
+        console.error(`film ${settings.film}`);
+      }
+      const { backend, parts } = local({
+        headless: o.headed ? false : settings.browserHeadless,
+        ...(o.overlay === undefined ? {} : { overlay: o.overlay }),
+      });
       const workflow = (await workflowsOf(backend)).find((w) => w.name === name);
       if (!workflow) throw new Error(`unknown workflow ${name}; see: autobrowse workflows`);
       // The domain family's APIs are built here too: its browser legs then sign in from

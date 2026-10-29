@@ -509,7 +509,10 @@ async function serve(
   });
   /** The active page: it moves when a popup opens (OAuth) and comes back after; re-read per command. */
   let page: Page = fp.page;
-  const overlay = overlayFor(opts.overlay ?? opts.browser.headless === false);
+  // A film stays clean: its rows go to the pane json.
+  const overlay = overlayFor(
+    opts.overlay ?? (opts.browser.headless === false && !opts.browser.film),
+  );
   // A new document wipes the layer: the panel comes back on it.
   page.on("load", (p) => void overlay.loaded(p));
   let paused = false;
@@ -1429,7 +1432,9 @@ async function serve(
       );
     switch (c.cmd) {
       case "overlay": {
-        const { cmd: _, refs, ...fields } = c;
+        const { cmd: _, refs, on, ...fields } = c;
+        if (on !== undefined) await overlay.toggle(page, on);
+        if (on === false) return { drawn: false };
         return overlay.set(page, {
           ...fields,
           ...(refs ? { refs: refs.map((r) => ({ n: r.n, hints: r.hints as Hints })) } : {}),

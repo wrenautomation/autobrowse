@@ -290,6 +290,17 @@ export function linqFor(
   };
 }
 
+/** Whether flow runs draw the overlay: a flag first, then the setting; auto is on for a watched run. */
+export function overlayOn(
+  settings: Settings,
+  o: { headless?: boolean; overlay?: boolean } = {},
+): boolean {
+  if (o.overlay !== undefined) return o.overlay;
+  if (settings.overlay !== "auto") return settings.overlay === "on";
+  // A film stays clean: its json carries each step, drawn on in the edit.
+  return o.headless === false && !settings.film;
+}
+
 /** The runner's pace from settings; `fast` means no delays at all. */
 export function paceFor(settings: Settings): Pace | null {
   // A film is watched: a demo's pace, whatever PACE says.

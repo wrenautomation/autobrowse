@@ -1,5 +1,6 @@
 import { chromium } from "playwright";
 import { describe, expect, it } from "vitest";
+import { bare } from "../src/browser/bare.js";
 import type { Command } from "../src/explore/commands.js";
 import { overlayFor, traceRow } from "../src/explore/overlay.js";
 
@@ -7,6 +8,7 @@ const PAGE = `<button onclick="this.textContent='Hit'">Save</button><a href="#x"
 
 /** Hosts we drew: our attribute name starts with `data-o`. */
 const layers = `document.querySelectorAll('html > div').length`;
+const ui = "window[Object.keys(window).find((k) => k.startsWith('__data-o'))]";
 
 describe("headed overlay", () => {
   it("draws boxes and a panel outside the tree, lets presses through, and is off for a shot", async () => {
@@ -37,9 +39,39 @@ describe("headed overlay", () => {
       const during = await o.around(page, () => page.evaluate(layers));
       expect(during).toBe(0);
       expect(await page.evaluate(layers)).toBe(1);
+      // Any shot through the seam (captcha, proof) gets the bare page too.
+      expect(await bare(page, () => page.evaluate(layers))).toBe(0);
       await o.after(page);
       await o.remove(page);
       expect(await page.evaluate(layers)).toBe(0);
+    } finally {
+      await browser.close();
+    }
+  });
+
+  it("by default the panel lets every click through; its toggle makes it take them", async () => {
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
+      await page.setContent(
+        `<button id="big" style="position:fixed;inset:0;z-index:1" onclick="document.body.dataset.hits=+(document.body.dataset.hits||0)+1">x</button>`,
+      );
+      const o = overlayFor(true);
+      await o.set(page, { goal: "save the form" });
+      await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] });
+      await page.mouse.click(40, 580);
+      expect(await page.evaluate("+document.body.dataset.hits")).toBe(1);
+      // The [⊙] button still takes its click.
+      const btn = await page.evaluate<{ x: number; y: number }>(
+        `(() => { const r = [...${ui}.tuiEl.querySelectorAll('.btn')].find((b) => b.getAttribute('data-a') === 'through').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
+      );
+      await page.mouse.click(btn.x, btn.y);
+      expect(await page.evaluate(`[${ui}.through, +document.body.dataset.hits]`)).toEqual([
+        false,
+        1,
+      ]);
+      await page.mouse.click(40, 580);
+      expect(await page.evaluate("+document.body.dataset.hits")).toBe(1);
     } finally {
       await browser.close();
     }
@@ -57,6 +89,7 @@ describe("headed overlay", () => {
       await page.focus("#f");
       const o = overlayFor(true);
       await o.set(page, { goal: "save the form" });
+      await page.evaluate(`${ui}.through = false`);
       await o.begin(page);
       await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] });
       const panel = { x: 40, y: 580 };
@@ -87,7 +120,6 @@ describe("headed overlay", () => {
       const o = overlayFor(true);
       await o.set(page, { goal: "save the form" });
       await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] });
-      const ui = "window[Object.keys(window).find((k) => k.startsWith('__data-o'))]";
       // As the [×] button does.
       await page.evaluate(`${ui}.hidden = true; ${ui}.draw(${ui}.s)`);
       // A redraw from the session keeps it hidden.
@@ -120,7 +152,7 @@ describe("headed overlay", () => {
         note: "→ a.com/next",
         detail: [],
       });
-      const ui = "window[Object.keys(window).find((k) => k.startsWith('__data-o'))]";
+      // Click-through (the default): the grip still takes the drag.
       const width = () =>
         page.evaluate(`${ui}.tuiEl.getBoundingClientRect().toJSON()`) as Promise<DOMRect>;
       const before = await width();
@@ -185,6 +217,27 @@ describe("headed overlay", () => {
     );
     expect(bad.ok).toBe(false);
     expect(bad.detail.at(-1)).toBe("error no such");
+  });
+
+  it("toggles off and on for the session, and keeps its trace", async () => {
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      await page.setContent(PAGE);
+      const o = overlayFor(true);
+      await o.set(page, { goal: "save the form" });
+      await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] });
+      await o.toggle(page, false);
+      expect(await page.evaluate(layers)).toBe(0);
+      // Off, the session's commands draw nothing.
+      await o.end(page, { cmd: "click", what: "x", ok: true, ms: 5, note: "", detail: [] });
+      expect(await page.evaluate(layers)).toBe(0);
+      await o.toggle(page, true);
+      expect(await page.evaluate(layers)).toBe(1);
+      expect(await page.evaluate(`${ui}.s.trace.length`)).toBe(1);
+    } finally {
+      await browser.close();
+    }
   });
 
   it("draws nothing when off", async () => {

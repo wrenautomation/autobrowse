@@ -121,6 +121,11 @@ const schema = z.object({
     .string()
     .regex(/^\d{3,4}x\d{3,4}$/, "WIDTHxHEIGHT")
     .default("1920x1080"),
+  /**
+   * The terminal panel and act boxes over a flow run's page (`explore/overlay`).
+   * auto: on for `try --headed` and a film; the worker only with `on`.
+   */
+  overlay: z.enum(["auto", "on", "off"]).default("auto"),
   /** Draw the pointer on the page as a dot, to watch a headed run; it adds an element sites can see. */
   showPointer: z
     .string()
@@ -411,6 +416,7 @@ export const ENV_KEYS = {
   browserKeepMax: "BROWSER_KEEP_MAX",
   pace: "PACE",
   showPointer: "SHOW_POINTER",
+  overlay: "AUTOBROWSE_OVERLAY",
   film: "AUTOBROWSE_FILM",
   filmSize: "AUTOBROWSE_FILM_SIZE",
   artifactsDir: "ARTIFACTS_DIR",

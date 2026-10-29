@@ -98,10 +98,12 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("marks") }),
   /**
    * The headed overlay: panel fields (goal, step, thought, doing) and boxes on `refs` with their
-   * numbers; `clear` empties it first. Headless it draws nothing and says so.
+   * numbers; `clear` empties it first; `on` turns it on or off for the session. Headless it
+   * draws nothing and says so, unless `on: true`.
    */
   z.object({
     cmd: z.literal("overlay"),
+    on: z.boolean().optional(),
     goal: z.string().optional(),
     step: z.string().optional(),
     thought: z.string().optional(),

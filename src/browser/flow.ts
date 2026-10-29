@@ -16,6 +16,9 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { FileChooser, Locator, Page } from "playwright";
 import { resumeDir, statsDirOf } from "../deps/stats.js";
+// Explore's panel; moves to browser/ once its open peer edit lands.
+import type { Command } from "../explore/commands.js";
+import { overlayFor, traceRow } from "../explore/overlay.js";
 import { expandHome } from "../google/auth.js";
 import { tallied } from "../llm/ledger.js";
 import { redactAria, redactText } from "../recorder/redact.js";
@@ -23,8 +26,9 @@ import { type FlowOutcome, type FlowRunRow, type FlowRuns, fileFlowRuns } from "
 import { shareOff, shareTrace } from "../share/share.js";
 import { failureShape, firstTraceOfShape } from "../shots/traces.js";
 import { currentCall, type DoneActs, markSubmitted } from "./attempt.js";
+import { bare } from "./bare.js";
 import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js";
-import { filmLog } from "./film.js";
+import { filmLog, filmStep } from "./film.js";
 import { type Fixes, flowKey } from "./fixes.js";
 import {
   freshSeed,
@@ -343,6 +347,13 @@ export interface RunnerOptions {
    */
   watch?: string;
   /**
+   * Draw the terminal panel and a pulsing box on each act's control
+   * (`explore/overlay`) for a person who watches or a film. Off by default:
+   * the desk runs headed on real accounts, and the layer is a node a page script can see.
+   * Never on a secret flow or the person's own browser.
+   */
+  overlay?: boolean;
+  /**
    * One line per run, success or not (`runs/flows`): outcome, time, acts,
    * captcha tries, model tokens. Absent = the stats dir (`deps/stats`,
    * `~/.config/autobrowse/flows`, read by `autobrowse success`); null = none.
@@ -645,6 +656,55 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         let failure: string | null = null;
         let submitted = false;
         let active = session.page;
+        const overlay = overlayFor(runner.overlay === true && !flow.secret && !session.shared);
+        // A new document wipes the layer: the panel comes back on every load, any tab.
+        const redraw = (p: Page) => void overlay.loaded(p);
+        const onPage = (p: Page) => p.on("load", redraw);
+        if (overlay.enabled) {
+          for (const p of session.context.pages()) onPage(p);
+          session.context.on("page", onPage);
+          overlay.tag(`seed ${seed}`);
+          await overlay.set(active, { goal: `${flow.site}/${flow.name}` });
+        }
+        /** One trace row per step: the act's box pulses first; never a typed value. */
+        const shown = async <T>(
+          s: { kind: string; goal: string; op?: string; hints?: Hints; url?: string },
+          run: () => Promise<T>,
+          answer?: (r: T) => unknown,
+        ): Promise<T> => {
+          // A film gets the rows, never the drawn layer.
+          const filmed = session.filmed === true && !flow.secret;
+          if (!overlay.enabled && !filmed) return run();
+          const page = active;
+          const from = page.url();
+          const started = Date.now();
+          const cmd = s.op ?? s.kind;
+          // An open's goal holds the whole URL: the row shows its host and path only.
+          const c = { cmd, hints: s.hints, url: s.url, ...(s.url ? {} : { goal: s.goal }) };
+          await overlay.begin(page, cmd);
+          if (s.hints) await overlay.flash(page, s.hints, `${cmd}: ${s.goal}`);
+          let failed: unknown = null;
+          let got: T | undefined;
+          try {
+            got = await run();
+            return got;
+          } catch (err) {
+            failed = err;
+            throw err;
+          } finally {
+            await overlay.after(active);
+            const row = traceRow(c as unknown as Command, failed, Date.now() - started, {
+              from,
+              to: active.url(),
+              ...(answer && got !== undefined ? { answer: answer(got) } : {}),
+            });
+            await overlay.end(active, row);
+            if (filmed) {
+              const { cmd, what, ok, ms, note } = row;
+              filmStep(page, { kind: "step", t: started, cmd, what, ok, ms, note });
+            }
+          }
+        };
         const learned = runner.learnedScreens ?? memoryScreens();
         const help: ScreenHelp = {
           look: () => lookAt(active),
@@ -660,16 +720,20 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             ? watchSteps(join(artifactsDir, stamp))
             : null;
         const stepped = <T>(
-          s: Parameters<Watch["step"]>[0],
+          s: Parameters<Watch["step"]>[0] & { url?: string },
           run: () => Promise<T>,
           outcome?: (r: T) => "ok" | "repaired" | "failed",
-        ): Promise<T> => (watch ? watch.step(s, () => active, run, outcome) : run());
+        ): Promise<T> => {
+          // The ledger keeps the redacted goal, never the raw url.
+          const { url: _, ...step } = s;
+          return shown(s, () => (watch ? watch.step(step, () => active, run, outcome) : run()));
+        };
         const fp: FlowPage = {
           get page() {
             return active;
           },
           open: (url, o = {}) =>
-            stepped({ kind: "open", goal: `open ${url}` }, () => openPage(url, o)),
+            stepped({ kind: "open", goal: `open ${url}`, url }, () => openPage(url, o)),
           url: () => active.url(),
           text: () => bodyText(active, 20_000),
           html: () => pageHtml(active, 400_000),
@@ -689,7 +753,11 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           read: async (hints) => {
             lastHints = hints;
             actsBefore = acts++;
-            return (await textOf(locate(active, hints))).slice(0, 2_000);
+            return shown(
+              { kind: "read", goal: "read", hints },
+              async () => (await textOf(locate(active, hints))).slice(0, 2_000),
+              (text) => ({ as: "text", text }),
+            );
           },
           wait: (ms) => active.waitForTimeout(ms),
           answer: (prefix, body) =>
@@ -1045,7 +1113,9 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           const shot = join(artifactsDir, `${stamp}.png`);
           if (
             !flow.secret &&
-            (await session.page.screenshot({ path: shot, fullPage: true }).then(
+            (await bare(session.page, () =>
+              session.page.screenshot({ path: shot, fullPage: true }),
+            ).then(
               () => true,
               () => false,
             ))
@@ -1155,6 +1225,12 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           );
           runner.fixes?.flush();
           learned.flush();
+          if (overlay.enabled) {
+            session.context.off("page", onPage);
+            for (const p of session.context.pages()) p.off("load", redraw);
+            // A parked browser serves the next run: nothing of this one stays drawn.
+            if (runner.park) await overlay.remove(active);
+          }
           // A watched run keeps its trace whatever happened; a failure saved one already.
           // A run that worked goes to the shared library too (`share/share`), scrubbed first.
           if (tracing) {

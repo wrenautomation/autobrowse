@@ -31,7 +31,18 @@ export const FILM_SIZE = { width: 1920, height: 1080 };
 /** Every pane's mp4 keeps time in slots of 1/this s, whatever rate the page painted at. */
 export const FILM_FPS = 60;
 
-export type PaneEvent = HandEvent | { kind: "load"; t: number; url: string };
+/** A flow step's overlay row, at its start; an editor draws the overlay from these. */
+export interface StepEvent {
+  kind: "step";
+  t: number;
+  cmd: string;
+  what: string;
+  ok: boolean;
+  ms: number;
+  note: string;
+}
+
+export type PaneEvent = HandEvent | { kind: "load"; t: number; url: string } | StepEvent;
 
 export interface Pane {
   name: string;
@@ -112,6 +123,8 @@ const filming = new WeakMap<Page, Recorder>();
 
 /** The hands' log for every filmed page; a page no one films drops it. */
 export const filmLog: HandsLog = (page, e) => filming.get(page)?.note(e);
+/** A step's row into the page's film; no-op when unfilmed. */
+export const filmStep = (page: Page, e: StepEvent) => filming.get(page)?.note(e);
 
 /** The first free `<kind>-<n>.json` in the folder, claimed. Names: `term`, `web-1`, `web-2`. */
 async function claim(dir: string, kind: Pane["kind"], start: number): Promise<string> {

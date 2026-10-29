@@ -17,6 +17,7 @@
  */
 import { randomBytes } from "node:crypto";
 import type { Page } from "playwright";
+import { drawsOn } from "../browser/bare.js";
 import { type Hints, locate } from "../browser/locate.js";
 import type { Command } from "./commands.js";
 import type { Box } from "./marks.js";
@@ -122,6 +123,8 @@ interface Prefs {
   trace: boolean;
   right: boolean;
   hidden: boolean;
+  /** Clicks pass through the panel to the page; only its buttons take them. Default on. */
+  through: boolean;
   /** Panel width and trace height, px; `sized` once a person dragged the grip. */
   w: number;
   h: number;
@@ -132,7 +135,7 @@ interface Prefs {
 const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) => `(() => {
   const K = '__${attr}';
   const ui = window[K] || (window[K] = { ...${JSON.stringify(prefs)}, open: null, scroll: 0 });
-  const prefs = () => ({ min: ui.min, trace: ui.trace, right: ui.right, hidden: ui.hidden, w: ui.w, h: ui.h, sized: ui.sized });
+  const prefs = () => ({ min: ui.min, trace: ui.trace, right: ui.right, hidden: ui.hidden, through: ui.through, w: ui.w, h: ui.h, sized: ui.sized });
   for (const old of document.querySelectorAll('[${attr}]')) old.remove();
   ui.host = null;
   const s = ${JSON.stringify(s ?? null)};
@@ -181,6 +184,7 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       const act = a.getAttribute('data-a');
       if (act === 'min') ui.min = !ui.min;
       else if (act === 'hide') ui.hidden = !ui.hidden;
+      else if (act === 'through') ui.through = !ui.through;
       else if (act === 'move') ui.right = !ui.right;
       else if (act === 'trace') ui.trace = !ui.trace;
       else if (act.startsWith('row:')) { const n = Number(act.slice(4)); ui.open = ui.open === n ? null : n; }
@@ -214,6 +218,9 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       'border:1px solid ${T.accent};box-shadow:0 0 0 1px #000,0 10px 32px rgba(0,0,0,.55),0 0 22px rgba(165,150,214,.14);',
       'text-shadow:0 0 6px rgba(165,150,214,.22)}',
       '.tui.busy,.chip.busy{pointer-events:none}',
+      '.tui.through{pointer-events:none}',
+      '.tui.through:not(.busy) :is(.btn,.grip){pointer-events:auto}',
+      '.btn.on{color:${T.accent}}',
       '.chip{position:fixed;bottom:12px;pointer-events:auto;cursor:pointer;user-select:none;padding:0 8px;font:700 11px/22px "JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace;color:${T.accent};background:${T.canvas};border:1px solid ${T.accent};box-shadow:0 4px 14px rgba(0,0,0,.4)}',
       '.chip:hover{color:${T.onAccent};background:${T.accent}}',
       '.chip .run{animation:blink 1s steps(2) infinite}',
@@ -271,8 +278,8 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
     const side = ui.right ? 'right:12px' : 'left:12px';
     if (ui.hidden) {
       // Folded away: one small chip, the page free around it.
-      const chip = el('div', 'chip' + (s.busy ? ' busy' : ''), '▌ab ', side);
-      chip.appendChild(el('span', s.busy ? 'run' : '', s.busy ? '●' : '○'));
+      const chip = el('div', 'chip' + (s.busy ? ' busy' : ''), '▌autobrowse ', side);
+      chip.appendChild(el('span', s.busy ? 'run' : '', s.busy ? '● run' : '○ show'));
       chip.setAttribute('data-a', 'hide');
       root.appendChild(chip);
       document.documentElement.appendChild(host);
@@ -280,7 +287,7 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       ui.root = root;
       return;
     }
-    const tui = el('div', 'tui' + (s.busy ? ' busy' : ''), null, side + ';width:' + ui.w + 'px');
+    const tui = el('div', 'tui' + (s.busy ? ' busy' : '') + (ui.through ? ' through' : ''), null, side + ';width:' + ui.w + 'px');
     ui.tuiEl = tui;
     tui.appendChild(el('div', 'grip ' + (ui.right ? 'l' : 'r')));
     const bar = el('div', 'bar');
@@ -290,9 +297,14 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
     bar.appendChild(el('span', 'fill'));
     if (s.meta) bar.appendChild(el('span', 'meta', s.meta));
     const btn = (a, t) => { const b = el('span', 'btn', t); b.setAttribute('data-a', a); return b; };
-    bar.appendChild(btn('move', ui.right ? '[⇤]' : '[⇥]'));
-    bar.appendChild(btn('min', ui.min ? '[+]' : '[_]'));
-    bar.appendChild(btn('hide', '[×]'));
+    const thru = btn('through', ui.through ? '[○]' : '[●]');
+    if (ui.through) thru.className += ' on';
+    thru.title = ui.through ? 'clicks pass to the page' : 'the panel takes clicks';
+    const tip = (b, t) => { b.title = t; return b; };
+    bar.appendChild(thru);
+    bar.appendChild(tip(btn('move', ui.right ? '[◂]' : '[▸]'), 'move to the other side'));
+    bar.appendChild(tip(btn('min', ui.min ? '[+]' : '[_]'), ui.min ? 'open' : 'fold'));
+    bar.appendChild(tip(btn('hide', '[×]'), 'hide to a chip'));
     tui.appendChild(bar);
     if (!ui.min) {
       const body = el('div', 'body');
@@ -362,7 +374,9 @@ const clipLine = (s: string | null | undefined, n: number) =>
   s ? (s.length > n ? `${s.slice(0, n - 1)}…` : s) : null;
 
 /** One session's overlay; `enabled` false makes every call a no-op. */
-export function overlayFor(enabled: boolean) {
+export function overlayFor(startOn: boolean) {
+  // `toggle` flips it for the session's life.
+  let enabled = startOn;
   // A random attribute name: the page sees a node, never one that names us.
   const attr = `data-o${randomBytes(4).toString("hex")}`;
   let state: OverlayState = { ...EMPTY };
@@ -372,6 +386,8 @@ export function overlayFor(enabled: boolean) {
     trace: true,
     right: false,
     hidden: false,
+    // A visual only: the page under the panel stays usable until a person opts in.
+    through: true,
     w: 460,
     h: 220,
     sized: false,
@@ -387,6 +403,17 @@ export function overlayFor(enabled: boolean) {
     if (!enabled) return;
     await paint(page, state);
     drawn = true;
+    drawsOn(page, (fn) => off(page, fn));
+  };
+  /** `fn` runs with the layer off: a screenshot shows the page, not us. */
+  const off = async <T>(page: Page, fn: () => Promise<T>): Promise<T> => {
+    if (!enabled || !drawn) return fn();
+    await paint(page, undefined);
+    try {
+      return await fn();
+    } finally {
+      await draw(page);
+    }
   };
   const boxOf = async (page: Page, hints: Hints): Promise<Box | null> => {
     const b = await locate(page, hints)
@@ -399,7 +426,19 @@ export function overlayFor(enabled: boolean) {
     return { x: b.x, y: b.y, w: b.width, h: b.height };
   };
   return {
-    enabled,
+    get enabled() {
+      return enabled;
+    },
+    /** On or off at any time; off takes the layer down and keeps the trace for when it comes back. */
+    async toggle(page: Page, on: boolean): Promise<{ drawn: boolean }> {
+      enabled = on;
+      if (on) await draw(page);
+      else if (drawn) {
+        drawn = false;
+        await paint(page, undefined);
+      }
+      return { drawn: on };
+    },
     /** Panel fields from a caller (the agent's goal, step, thought); `refs` boxes the outline's controls. */
     async set(
       page: Page,
@@ -474,21 +513,13 @@ export function overlayFor(enabled: boolean) {
       if (!drawn) return;
       return this.after(page);
     },
-    /** `fn` runs with the layer off: a screenshot shows the page, not us. */
-    async around<T>(page: Page, fn: () => Promise<T>): Promise<T> {
-      if (!enabled || !drawn) return fn();
-      await paint(page, undefined);
-      try {
-        return await fn();
-      } finally {
-        await draw(page);
-      }
-    },
+    around: off,
     /** The session ends: nothing of ours stays on the page. */
     async remove(page: Page): Promise<void> {
       if (!drawn) return;
       drawn = false;
       state = { ...EMPTY };
+      drawsOn(page, null);
       await paint(page, undefined);
     },
   };

@@ -150,6 +150,7 @@ export {
   linqFor,
   loginFor,
   ourPhone,
+  overlayOn,
   paceFor,
   phoneFor,
   recordsFile,
@@ -269,6 +270,8 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       ...(park ? { park } : {}),
       onFailure: (record, file) => failures.hook?.(record, file),
       pace: paceFor(settings),
+      // The worker draws only when asked: its headed runs are real accounts.
+      overlay: settings.overlay === "on",
       repairer: rememberingRepairer(memory, llm ? llmRepairer(llm) : noRepairer),
       login: loginFor(settings, gmail),
       captcha: captchaFor(settings, http),

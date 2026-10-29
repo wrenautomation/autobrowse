@@ -22,6 +22,7 @@ Right now:
 | Post, read or set up a site's API (YouTube, LinkedIn, X, Gmail, …) | [site-apis.md](site-apis.md) |
 | Drive a browser or the desktop: map a page, do a chore, fix a flow (yourself or the `browser` subagent) | [explore.md](explore.md) |
 | Make an account, sign in, type a secret without seeing it | [signup.md](signup.md), then explore.md |
+| The terminal panel over a headed page, toggles, recording a run as video | [overlay.md](overlay.md) |
 | Credentials, which account does what, keys and env, what William owes | [accounts.md](accounts.md) |
 
 The files sit in `${CLAUDE_SKILL_DIR}/`. Read only the one the job needs; read it

@@ -23,6 +23,7 @@
  * types and `../human`.
  */
 import type { FrameLocator, Locator, Page } from "playwright";
+import { bare } from "../bare.js";
 import type { Hands } from "../human/index.js";
 
 export type CaptchaKind = "checkbox" | "grid" | "text" | "slider" | "hold";
@@ -351,10 +352,12 @@ async function pickSquares(
     )
       .replace(/\s+/g, " ")
       .trim();
-    const png = await frame
-      .locator(parts.challenge)
-      .first()
-      .screenshot({ ...T, type: "png" });
+    const png = await bare(page, () =>
+      frame
+        .locator(parts.challenge)
+        .first()
+        .screenshot({ ...T, type: "png" }),
+    );
     const side = Math.round(Math.sqrt(count));
     const answer = await eyes.look(
       png,
@@ -453,7 +456,7 @@ async function canvasTask(
   )
     .replace(/\s+/g, " ")
     .trim();
-  const png = await canvas.screenshot({ ...T, type: "png" });
+  const png = await bare(page, () => canvas.screenshot({ ...T, type: "png" }));
   const scale = pngWidth(png) / box.width || 1;
   const answer = await eyes.look(
     png,
@@ -486,7 +489,7 @@ async function readLetters(page: Page, hands: Hands, eyes: Eyes): Promise<Step> 
   const picture = await shown(page, GENERIC.picture);
   const input = await shown(page, GENERIC.input);
   if (!picture || !input) return "gave-up";
-  const png = await picture.screenshot({ ...T, type: "png" });
+  const png = await bare(page, () => picture.screenshot({ ...T, type: "png" }));
   const answer = await eyes.look(
     png,
     'A text captcha: the letters and digits in the picture, exactly as shown (case matters). Reply {"text":"..."}.',
@@ -505,7 +508,7 @@ async function slide(page: Page, hands: Hands, eyes: Eyes, settleMs: number): Pr
   const box = await puzzle.boundingBox(T);
   const grip = await handle.boundingBox(T);
   if (!box || !grip) return "gave-up";
-  const png = await puzzle.screenshot({ ...T, type: "png" });
+  const png = await bare(page, () => puzzle.screenshot({ ...T, type: "png" }));
   const answer = await eyes.look(
     png,
     `A slider captcha ${Math.round(box.width)} pixels wide: a puzzle piece at the left must be dragged right into its gap. How many pixels right from where the piece is now does it go? Reply {"pixels":n}.`,
