@@ -140,6 +140,11 @@ const runParams = z.object({
 // a ledger leg may carry a part (`site-flow.prepare`); its key is the durable call (`<id> site/flow`)
 const ledgerRunParams = z.object({
   workflow: z.string().regex(/^[a-z][a-z0-9-]*(\.[a-z0-9-]+)?$/, "a workflow name"),
+  key: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[\p{L}\p{N}\p{P}\p{S} ]+$/u, "a run key"),
 });
 const recordingParam = z.object({
   name: z.string().regex(NAME, "a recording name: lowercase, dashes"),
