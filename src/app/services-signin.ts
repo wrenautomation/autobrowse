@@ -5,6 +5,7 @@ import type { Logger } from "pino";
 import {
   type CodeSource,
   codeSources,
+  fileSignInHolds,
   type LoginProvider,
   loginProvider,
   messageSource,
@@ -273,6 +274,7 @@ export function loginFor(
     }),
     codes: codesFor(settings, gmail, http),
     audit: auditFor(settings),
+    holds: fileSignInHolds(expandHome(settings.signInHoldsFile)),
     ...(notify ? { notify } : {}),
   });
 }

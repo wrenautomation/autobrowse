@@ -34,6 +34,7 @@ export type { PasskeySetupSpec, PasswordChangeSpec } from "./login.js";
 export {
   credentialFor,
   type FormLoginSpec,
+  fileSignInHolds,
   formLogin,
   LoginFailed,
   type LoginOptions,
@@ -45,7 +46,9 @@ export {
   passwordDomains,
   passwordOf,
   resolveLogin,
+  SIGN_IN_HOLD_MS,
   type SignInContext,
+  type SignInHolds,
   type SignInParts,
   type SiteLogin,
   signInContext,

@@ -39,6 +39,8 @@ const schema = z.object({
   ownerRoleArn: z.string().min(1).optional(),
   /** Needs marked done by hand (`autobrowse needs done`). */
   needsDoneFile: z.string().min(1).default("~/.config/autobrowse/needs-done.json"),
+  /** Refused sign-ins: no automatic password try on that credential till the hold ends. */
+  signInHoldsFile: z.string().min(1).default("~/.config/autobrowse/sign-in-holds.json"),
   /** Saved default plans, one `<workflow>.json` each: the operator's values for workflows that name no one (designs/2026-10-24-operator-defaults.md). */
   plansDir: z.string().min(1).default("~/.config/autobrowse/plans"),
   /** Restate ingress: Restate Cloud in prod (wren's loops share the env), a local restate-server otherwise. */
@@ -379,6 +381,7 @@ export const ENV_KEYS = {
   ownersDir: "OWNERS_DIR",
   ownerRoleArn: "AUTOBROWSE_OWNER_ROLE_ARN",
   needsDoneFile: "NEEDS_DONE_FILE",
+  signInHoldsFile: "SIGN_IN_HOLDS_FILE",
   plansDir: "PLANS_DIR",
   restateIngressUrl: "RESTATE_INGRESS_URL",
   restateAuthToken: "RESTATE_AUTH_TOKEN",
@@ -538,6 +541,7 @@ export const OWNER_PATHS = {
   limitsFile: "limits.json",
   accessFile: "access.json",
   needsDoneFile: "needs-done.json",
+  signInHoldsFile: "sign-in-holds.json",
   plansDir: "plans",
   walletFile: "wallet.sealed",
   filesDir: "files",

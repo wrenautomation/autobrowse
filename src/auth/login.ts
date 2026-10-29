@@ -9,13 +9,15 @@
  * branching one is a walk of screens (`google.ts`).
  */
 
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { Credential, CredentialStore, SecretAudit } from "credvault";
 import type { FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
 import { pageState, untilLoaded } from "../browser/page-state.js";
 import { type Screen, type Walk, walk } from "../browser/screens.js";
 import { secret } from "../browser/secrets.js";
-import { wallOf } from "../browser/session.js";
+import { NeedsHuman, wallOf } from "../browser/session.js";
 import { safeUrls } from "../clients/http.js";
 import { type CodeKind, type CodeSource, inboxLock } from "./codes.js";
 import { guardedPage, hostNamed, hostUnder, registrable } from "./guard.js";
@@ -657,7 +659,45 @@ export interface LoginOptions {
   notify?: (text: string) => Promise<void>;
   /** Where every password use is recorded (allowed or refused). */
   audit?: SecretAudit;
+  /** Refused sign-ins, so the next call does not type the password again (`fileSignInHolds`). */
+  holds?: SignInHolds;
   now?: () => Date;
+}
+
+/** No automatic sign-in on a credential this long after one was refused: repeated refusals flag an account. */
+export const SIGN_IN_HOLD_MS = 12 * 60 * 60 * 1000;
+
+/** Refused sign-ins by credential name: until when, and the refusal's words. */
+export interface SignInHolds {
+  get(name: string): { until: number; error: string } | null;
+  set(name: string, hold: { until: number; error: string }): void;
+  clear(name: string): void;
+}
+
+/** Holds in one JSON file (an absolute path); a broken file reads as none. */
+export function fileSignInHolds(file: string): SignInHolds {
+  type Marks = Record<string, { until: number; error: string }>;
+  const read = (): Marks => {
+    try {
+      return JSON.parse(readFileSync(file, "utf8")) as Marks;
+    } catch {
+      return {};
+    }
+  };
+  const write = (m: Marks) => {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, `${JSON.stringify(m, null, 2)}\n`);
+  };
+  return {
+    get: (name) => read()[name] ?? null,
+    set: (name, hold) => write({ ...read(), [name]: hold }),
+    clear(name) {
+      const m = read();
+      if (!(name in m)) return;
+      delete m[name];
+      write(m);
+    },
+  };
 }
 
 /**
@@ -843,6 +883,12 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
     }
     if (!cred) return known ? "no-credential" : "unknown-site";
     const since = now();
+    const hold = opts.holds?.get(name);
+    if (hold && hold.until > since.getTime())
+      throw new NeedsHuman(
+        `${name}: no sign-in till ${new Date(hold.until).toISOString()}, the last one was refused (${hold.error}); sign in by hand`,
+        "login",
+      );
     // One account, several ways in: each method in turn until one signs in.
     let first: unknown = null;
     for (const method of methodsOf(cred)) {
@@ -867,6 +913,7 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
       });
       try {
         await signInWith(name, login, ctx);
+        opts.holds?.clear(name);
         return "signed-in";
       } catch (err) {
         // Only a refused sign-in moves on; a page that needs a person stops here.
@@ -874,7 +921,16 @@ export function loginProvider(sites: readonly SiteLogin[], opts: LoginOptions) {
         first ??= err;
       }
     }
-    if (first) throw first;
+    if (first) {
+      if (opts.holds) {
+        const error = (first as Error).message.slice(0, 300);
+        opts.holds.set(name, { until: since.getTime() + SIGN_IN_HOLD_MS, error });
+        await opts
+          .notify?.(`${name}: sign-in refused, no more tries for 12 h: ${error}`)
+          .catch(() => undefined);
+      }
+      throw first;
+    }
     return "unknown-site";
   };
 }

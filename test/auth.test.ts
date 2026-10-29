@@ -17,7 +17,9 @@ import {
   type Message,
   messageSource,
   resolveLogin,
+  SIGN_IN_HOLD_MS,
   type SignInContext,
+  type SignInHolds,
   type SiteLogin,
   totpSource,
   viaLogin,
@@ -304,6 +306,47 @@ describe("loginProvider", () => {
     expect(await login(fakePage({ text: [], present: () => true }).fp, "other")).toBe(
       "unknown-site",
     );
+  });
+  it("a refused sign-in holds the credential: the next call types no password till the hold ends", async () => {
+    let tries = 0;
+    const refusing: SiteLogin = {
+      site: "s",
+      home: "https://site.test/",
+      loggedIn: async () => true,
+      async signIn() {
+        tries++;
+        throw new LoginFailed("s", "still on the login page");
+      },
+    };
+    const marks: Record<string, { until: number; error: string }> = {};
+    const holds: SignInHolds = {
+      get: (n) => marks[n] ?? null,
+      set: (n, h) => {
+        marks[n] = h;
+      },
+      clear: (n) => {
+        delete marks[n];
+      },
+    };
+    let t = Date.parse("2026-10-29T00:00:00Z");
+    const notes: string[] = [];
+    const login = loginProvider([refusing], {
+      credentials: memoryCredentials({ s: { username: "u", password: "p" } }),
+      codes: totpSource(),
+      holds,
+      notify: async (n) => {
+        notes.push(n);
+      },
+      now: () => new Date(t),
+    });
+    const page = () => fakePage({ text: [], present: () => true }).fp;
+    await expect(login(page(), "s")).rejects.toThrow(/still on the login page/);
+    await expect(login(page(), "s")).rejects.toThrow(/no sign-in till/);
+    expect(tries).toBe(1);
+    expect(notes).toHaveLength(1);
+    t += SIGN_IN_HOLD_MS + 1;
+    await expect(login(page(), "s")).rejects.toThrow(/still on the login page/);
+    expect(tries).toBe(2);
   });
   it("answers codes for the credential an OAuth sign-in swaps in, not the site's own", async () => {
     const viaGoogle: SiteLogin = {

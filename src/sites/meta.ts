@@ -75,6 +75,10 @@ function dmRows(bodies: readonly unknown[], ours: (from: string) => boolean): Ve
 }
 
 const id = z.string().regex(/^[0-9]+$/, "a numeric Graph id");
+/** A Graph object id: a Page post's is `<pageId>_<n>`. */
+const graphId = z
+  .string()
+  .regex(/^[0-9]+(_[0-9]+)?$/, "a Graph id (a Page post's is <pageId>_<n>)");
 /** An ad account id without its `act_` prefix (the path carries the prefix). */
 const adAccount = z.string().regex(/^[0-9]+$/, "the ad account's number (after act_)");
 const status = z.enum(["ACTIVE", "PAUSED", "ARCHIVED", "DELETED"]);
@@ -168,7 +172,7 @@ const update = z.object({
   lifetime_budget: minor.optional(),
 });
 const object = z.object({
-  objectId: z.string().regex(/^[0-9]+(_[0-9]+)?$/, "a Graph id (a Page post's is <pageId>_<n>)"),
+  objectId: graphId,
   fields: z.string().default("id"),
   /** The Page that owns the object (its video, photo or post): read with that Page's token. */
   pageId: id.optional(),
@@ -300,7 +304,8 @@ const igInsights = z.object({
   metric: z.string().default("reach,saved,likes,comments,shares,views"),
 });
 const igComments = z.object({
-  mediaId: id,
+  // a Facebook Page post's comments read here too
+  mediaId: graphId,
   fields: z.string().default("id,text,username,timestamp,like_count"),
   ...page,
 });
