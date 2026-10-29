@@ -197,6 +197,8 @@ export const workflow = defineWorkflow<Deps, Memo>()({
   name: "linkedin-profile-photo",
   description:
     "Set a member's LinkedIn profile photo: file checked, uploaded, saved, read back, any share prompt declined.",
+  site: "linkedin",
+  hosts: [],
   plan: planSchema,
   steps: [check, set],
   emptyMemo: () => ({}),

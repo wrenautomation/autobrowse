@@ -128,6 +128,7 @@
     "impit": "0.14.5",
     "libmime": "5.4.7",
     "mammoth": "1.13.0",
+    "minisearch": "7.2.0",
     "nodemailer": "10.0.15",
     "obs-websocket-js": "5.0.8",
     "patchright": "1.63.0",

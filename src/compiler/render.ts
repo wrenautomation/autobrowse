@@ -30,6 +30,17 @@ export interface Rendered {
 }
 
 const q = (s: string) => JSON.stringify(s);
+
+/** The hosts a workflow's browser steps open, in order, once each. */
+export const hostsOf = (o: Pick<Outline, "steps">): string[] => [
+  ...new Set(
+    o.steps.flatMap((s) => {
+      // a `{field}` in the host is the plan's: no fixed host
+      const host = s.kind === "browser" && s.url && URL.canParse(s.url) ? new URL(s.url).host : "";
+      return host && !host.includes("{") && !host.includes("%7B") ? [host] : [];
+    }),
+  ),
+];
 const pascal = (s: string) => {
   const c = camel(s);
   return c.charAt(0).toUpperCase() + c.slice(1);
@@ -377,6 +388,8 @@ ${steps.join("\n\n")}
 export const workflow = defineWorkflow<Deps, Memo>()({
   name: ${q(o.name)},
   description: ${q(o.description)},
+  site: ${q(o.site)},
+  hosts: ${JSON.stringify(hostsOf(o))},
   plan: planSchema,
   steps: [${o.steps.map((s) => camel(s.name)).join(", ")}],
   emptyMemo: () => ({}),

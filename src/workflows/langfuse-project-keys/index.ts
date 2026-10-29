@@ -85,6 +85,8 @@ const createNewApiKeys: Step<"create-new-api-keys"> = {
 export const workflow = defineWorkflow<Deps, Memo>()({
   name: "langfuse-project-keys",
   description: "Recorded 2026-09-22 on langfuse",
+  site: "langfuse",
+  hosts: ["cloud.langfuse.com"],
   plan: planSchema,
   steps: [createNewApiKeys],
   emptyMemo: () => ({}),

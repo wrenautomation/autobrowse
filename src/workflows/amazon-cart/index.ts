@@ -87,6 +87,8 @@ const wwwAmazonCom: Step<"www-amazon-com"> = {
 export const workflow = defineWorkflow<Deps, Memo>()({
   name: "amazon-cart",
   description: "Recorded 2026-10-29 on amazon",
+  site: "amazon",
+  hosts: ["www.amazon.com"],
   plan: planSchema,
   steps: [wwwAmazonCom],
   emptyMemo: () => ({}),

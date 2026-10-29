@@ -115,6 +115,8 @@ export const workflow = defineWorkflow<Deps, Memo>()({
   name: "aws-port25-request",
   description:
     "Ask AWS to remove the EC2 email sending limit for an Elastic IP and set its reverse DNS",
+  site: "aws",
+  hosts: [],
   plan: planSchema,
   steps: [fill, submit],
   emptyMemo: () => ({}),

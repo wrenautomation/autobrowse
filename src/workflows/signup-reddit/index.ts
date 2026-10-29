@@ -189,6 +189,8 @@ export const workflow = defineWorkflow<Deps, Memo>()({
   name: "signup-reddit",
   description:
     "Make a Reddit account with an email, a username and a minted password, confirming the emailed code.",
+  site: "reddit",
+  hosts: [],
   plan: planSchema,
   steps: [submitEmail, verifyEmail, createAccount],
   emptyMemo: () => ({}),

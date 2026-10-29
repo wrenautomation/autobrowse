@@ -48,6 +48,8 @@ const openPersonalInfo: Step<"open-personal-info"> = {
 export const workflow = defineWorkflow<Deps, Memo>()({
   name: "google-name",
   description: "Open the Personal info page on Google and report the display name.",
+  site: "google",
+  hosts: ["myaccount.google.com"],
   plan: planSchema,
   steps: [openPersonalInfo],
   emptyMemo: () => ({}),

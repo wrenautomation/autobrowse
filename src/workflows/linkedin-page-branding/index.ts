@@ -493,6 +493,8 @@ export const workflow = defineWorkflow<Deps, Memo>()({
   name: "linkedin-page-branding",
   description:
     "Set a LinkedIn company Page's name, logo, banner and website from its admin editor (super admin): files checked first, one save each, each read back, the share-your-edits post declined.",
+  site: "linkedin",
+  hosts: [],
   plan: planSchema,
   steps: [check, brand],
   emptyMemo: () => ({}),

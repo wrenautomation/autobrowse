@@ -100,6 +100,8 @@ export const workflow = defineWorkflow<Deps, Memo>()({
   name: "instagram-profile-basics",
   description:
     "Upload a new profile photo on Instagram by opening the photo-change dialog and selecting an image file to set as the account's profile picture.",
+  site: "instagram",
+  hosts: ["www.instagram.com"],
   plan: planSchema,
   steps: [fill, upload],
   emptyMemo: () => ({}),

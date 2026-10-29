@@ -50,6 +50,10 @@ export interface Workflow<P extends PlanBase, D, M, S extends string = string> {
   /** The Restate object name and the CLI verb. */
   name: string;
   description: string;
+  /** The site it works on (a login's `site` or a leg's); none for a multi-site workflow. Groups the toolkit. */
+  site?: string;
+  /** Hosts its steps open, for a site with no login (`hn.algolia.com`). */
+  hosts?: readonly string[];
   plan: z.ZodType<P>;
   steps: ReadonlyArray<StepDef<P, D, M, S>>;
   emptyMemo(): M;

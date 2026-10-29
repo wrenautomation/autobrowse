@@ -409,6 +409,8 @@ export const workflow = defineWorkflow<Deps, Memo>()({
   name: "linkedin-profile-basics",
   description:
     "Set a member's name, headline, city, About, websites and photo: each form read first, saved only where it differs, read back; the position is checked, never edited.",
+  site: "linkedin",
+  hosts: [],
   plan: planSchema,
   steps: [check, intro, about, websites, photo],
   emptyMemo: () => ({}),

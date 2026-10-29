@@ -77,6 +77,8 @@ export const workflow = defineWorkflow<Deps, Memo>()({
   name: "workspace-skip-passwords",
   description:
     "Workspace: let users skip their password for a passkey (on by default; enabled=false turns it off).",
+  site: "google-admin",
+  hosts: [],
   plan: planSchema,
   steps: [setSkipPasswords],
   emptyMemo: () => ({}),

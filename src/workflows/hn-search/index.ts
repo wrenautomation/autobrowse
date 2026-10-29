@@ -112,6 +112,8 @@ const searchQuery: Step<"search-query"> = {
 export const workflow = defineWorkflow<Deps, Memo>()({
   name: "hn-search",
   description: "Recorded 2026-10-25 on hn",
+  site: "hn",
+  hosts: ["hn.algolia.com"],
   plan: planSchema,
   steps: [openSearchPage, searchQuery],
   emptyMemo: () => ({}),

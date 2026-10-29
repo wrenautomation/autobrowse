@@ -158,6 +158,8 @@ export const workflow = defineWorkflow<Deps, Memo>()({
   name: "signup-instagram",
   description:
     "Sign up for a new Instagram account with name, username, email, password, birthday, and email confirmation code.",
+  site: "instagram",
+  hosts: ["www.instagram.com"],
   plan: planSchema,
   steps: [submitSignupForm, dismissNotificationsPrompt],
   emptyMemo: () => ({}),

@@ -286,6 +286,8 @@ export const workflow = defineWorkflow<Deps, Memo>()({
   name: "anthropic-console-api-key",
   description:
     "Create an Anthropic Console API key (no expiry), prove it answers, keep it as a key credential; with replaces, rotate that one.",
+  site: "anthropic",
+  hosts: [],
   plan: planSchema,
   steps: [checkKey, createKey],
   emptyMemo: () => ({}),

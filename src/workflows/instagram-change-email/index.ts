@@ -200,6 +200,8 @@ export const workflow = defineWorkflow<Deps, Memo>()({
   name: "instagram-change-email",
   description:
     "Change the email address on an Instagram account by navigating to Accounts Center, adding a new contact email, and verifying it with a confirmation code.",
+  site: "instagram",
+  hosts: ["www.instagram.com", "accountscenter.instagram.com"],
   plan: planSchema,
   steps: [openAccountsCenter, openContactInfo, startAddEmail, addAndVerifyEmail],
   emptyMemo: () => ({}),

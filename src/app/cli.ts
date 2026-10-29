@@ -196,6 +196,81 @@ program
   );
 
 program
+  .command("tools [site]")
+  .description(
+    "The toolkit: every workflow `flow` can run, by site. No site: each site and its count; `--find`: a fuzzy search",
+  )
+  .option("--find <words>", "search names, aims, sites, steps and inputs")
+  .option("--json", "the rows as JSON")
+  .action(async (site: string | undefined, o: { find?: string; json?: boolean }) => {
+    const { find, findable, sitesTree, toolsOf } = await import("../workflows/toolkit.js");
+    const tools = toolsOf(await workflowsOf(local().backend));
+    if (!site && !o.find) {
+      const tree = sitesTree(tools);
+      if (o.json) return console.log(JSON.stringify(tree));
+      for (const line of columns(tree.map((t) => [accent(t.site), String(t.tools)])))
+        console.log(line);
+      return console.log(dim("\nautobrowse tools <site>: its workflows; workflows <name>: one"));
+    }
+    const rows = o.find
+      ? find(tools.filter((t) => !site || t.site === site).map(findable), o.find)
+      : tools.filter((t) => t.site === site);
+    if (o.json)
+      return console.log(
+        JSON.stringify(
+          rows.map(({ name, site, aim, inputs, steps }) => ({ name, site, aim, inputs, steps })),
+        ),
+      );
+    if (!rows.length) return console.log(dim("none; `autobrowse tools` lists the sites"));
+    for (const line of columns(
+      rows.map((t) => [
+        `${t.irreversible ? warn("!") : " "} ${accent(t.name)}`,
+        t.inputs ? dim(t.inputs) : "",
+        t.aim,
+      ]),
+    ))
+      console.log(line);
+  });
+
+program
+  .command("sites")
+  .description(
+    "Supported sites: sign-in known, API routes, workflows; `--find` searches them by name",
+  )
+  .option("--find <words>", "fuzzy search over the site names")
+  .option("--json", "the rows as JSON")
+  .action(async (o: { find?: string; json?: boolean }) => {
+    const { SITE_LOGINS } = await import("../auth/sites.js");
+    const { SITES } = await import("../sites/index.js");
+    const { find, toolsOf } = await import("../workflows/toolkit.js");
+    const tools = toolsOf(await workflowsOf(local().backend));
+    const names = new Set([
+      ...SITE_LOGINS.map((l) => l.site),
+      ...SITES.map((s) => s.site),
+      ...tools.flatMap((t) => (t.site ? [t.site] : [])),
+    ]);
+    let rows = [...names].sort().map((site) => ({
+      name: site,
+      site,
+      aim: "",
+      signIn: SITE_LOGINS.some((l) => l.site === site),
+      routes: SITES.find((s) => s.site === site)?.routes.length ?? 0,
+      workflows: tools.filter((t) => t.site === site).length,
+    }));
+    if (o.find) rows = find(rows, o.find, 20);
+    if (o.json) return console.log(JSON.stringify(rows.map(({ name: _, aim: __, ...r }) => r)));
+    for (const line of columns(
+      rows.map((r) => [
+        accent(r.site),
+        r.signIn ? good("sign-in") : dim("no sign-in"),
+        `${r.routes} routes`,
+        `${r.workflows} workflows`,
+      ]),
+    ))
+      console.log(line);
+  });
+
+program
   .command("flows")
   .description(
     "Every deterministic browser leg on this worker: hand-written flows with the routes that call them, compiled workflows with their proof, walks (`!` = irreversible)",

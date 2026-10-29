@@ -142,6 +142,8 @@ describe("explore runs a compiled workflow on its page (flow)", () => {
       },
       workflows: {
         get: async (name) => flows[name as keyof typeof flows] ?? null,
+        // The toolkit: `search` works on this test's web host.
+        list: async () => [{ ...flows.search, site: "shop", hosts: [`localhost:${webPort}`] }],
         plan: async (_name, given) => ({ q: "saved", ...given }),
       },
       recordingsDir: join(dir, "recordings"),
@@ -194,6 +196,23 @@ describe("explore runs a compiled workflow on its page (flow)", () => {
       "flow shop-search done",
     ]);
   }, 30_000);
+
+  it("lists the site's tools once per site; a host with no site clears it", async () => {
+    const away = await send({ cmd: "open", url: `http://127.0.0.1:${webPort}/` });
+    expect(away.body.tools).toBeUndefined();
+    const here = await send({ cmd: "open", url: `http://localhost:${webPort}/` });
+    expect(here.body.tools).toMatchObject({
+      sites: ["shop"],
+      tools: [{ name: "search", inputs: "q?" }],
+      more: 0,
+    });
+    const again = await send({ cmd: "open", url: `http://localhost:${webPort}/?p=2` });
+    expect(again.body.tools).toBeUndefined();
+    const found = await send({ cmd: "tools", find: "serch" });
+    expect((found.body.tools as { name: string }[]).map((t) => t.name)).toContain("search");
+    const tree = await send({ cmd: "tools" });
+    expect(tree.body.sites).toEqual(expect.arrayContaining([{ site: "shop", tools: 1 }]));
+  });
 
   it("refuses a leg for another site's profile", async () => {
     const r = await send({ cmd: "flow", name: "elsewhere" });

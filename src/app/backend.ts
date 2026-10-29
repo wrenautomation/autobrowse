@@ -354,6 +354,7 @@ export function explorerOpener(
       // `flow`: any compiled workflow on the open page, its saved plan under the command's.
       workflows: {
         get: workflowCatalog(catalog).get,
+        list: async () => (await catalog.list()).map((c) => c.workflow),
         plan: (name, given) => withDefaults(plans, name, given),
         keys: keyKeeperFor(settings),
       },

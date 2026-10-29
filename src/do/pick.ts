@@ -6,6 +6,7 @@
  */
 import { z } from "zod";
 import { completeJson, type Llm, type LlmUsage } from "../llm/index.js";
+import { find } from "../workflows/find.js";
 import { type Ability, fieldLine } from "./catalog.js";
 
 export interface Pick {
@@ -59,6 +60,36 @@ export function siteInGoal(goal: string, sites: readonly string[]): string | nul
   return sites.find((s) => labels.has(s)) ?? null;
 }
 
+/** The model reads this many abilities, not the whole list. */
+export const PICK_MAX = 10;
+
+/**
+ * The search's top hits for the goal, plus what earlier same goals picked.
+ * A goal no word of which finds anything: the whole list.
+ */
+export function shortlist(
+  req: { goal: string; earlier?: PickRequest["earlier"] },
+  abilities: readonly Ability[],
+): readonly Ability[] {
+  if (abilities.length <= PICK_MAX) return abilities;
+  const hits = find(
+    abilities.map((a) => ({
+      a,
+      name: a.name,
+      site: a.site,
+      aim: a.summary,
+      words: a.inputs.map((f) => f.name).join(" "),
+    })),
+    req.goal,
+    PICK_MAX,
+  ).map((h) => h.a);
+  if (!hits.length) return abilities;
+  const before = new Set(
+    (req.earlier ?? []).filter((p) => p.goal === req.goal).map((p) => p.ability),
+  );
+  return [...hits, ...abilities.filter((a) => before.has(a.name) && !hits.includes(a))];
+}
+
 export async function pickAbility(
   llm: Llm | null,
   req: PickRequest,
@@ -82,6 +113,7 @@ export async function pickAbility(
       why: "no model",
       usage: NONE,
     };
+  const shown = shortlist(req, abilities);
   const named = Object.entries(req.inputs)
     .map(([k, v]) => `- ${k} = ${v}`)
     .join("\n");
@@ -92,7 +124,7 @@ export async function pickAbility(
   const { value, usage } = await completeJson(llm, choice, {
     purpose: "do-pick",
     system: SYSTEM,
-    prompt: `REQUEST: ${req.goal}\n\nNAMED INPUTS:\n${named || "(none)"}\n\nABILITIES:\n${abilities.map(line).join("\n") || "(none)"}\n\nSITES WITH A LOGIN: ${sites.join(", ") || "(none)"}${earlier ? `\n\nEARLIER PICKS:\n${earlier}` : ""}`,
+    prompt: `REQUEST: ${req.goal}\n\nNAMED INPUTS:\n${named || "(none)"}\n\nABILITIES:\n${shown.map(line).join("\n") || "(none)"}\n\nSITES WITH A LOGIN: ${sites.join(", ") || "(none)"}${earlier ? `\n\nEARLIER PICKS:\n${earlier}` : ""}`,
     maxTokens: 600,
   });
   const ability = value.ability ? (abilities.find((a) => a.name === value.ability) ?? null) : null;

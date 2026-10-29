@@ -258,6 +258,8 @@ export const workflow = defineWorkflow<Deps, Memo>()({
   name: "google-cloud-oauth-client",
   description:
     "In a Google Cloud project: enable an API, configure the OAuth consent screen (external, testing), create a Web OAuth client with a loopback redirect and keep its id and secret, add the account as a test user",
+  site: "google",
+  hosts: [],
   plan: planSchema,
   steps: [enableApi, consentAndClient, testUser],
   emptyMemo: () => ({}),

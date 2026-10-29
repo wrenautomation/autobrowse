@@ -36,6 +36,18 @@ A site route leg keeps today's durability: one Restate entry per leg (see "The f
 - Search: MiniSearch (MIT, in-process) over name, aim, site, step names and input names. Fuzzy 0.2 and prefix; an exact name ranks first.
 - `do` picks from the search's top 10, not the whole list.
 
+Built (WA-961, 2026-10-29):
+- `Workflow` has optional `site` and `hosts`. The compiler renders both (hosts = the browser steps' URL hosts). The 21 compiled workflows were backfilled once; hand-written multi-site ones have no site (the tree's `(any)`).
+- Host → sites (`workflows/toolkit.ts`): a login's exact `home` host first, then a shared registrable domain or `origins`, a workflow's own hosts, a domain named for the site (`loom.com` → loom).
+  On `admin.google.com` that is google-admin, then the rest of the google family.
+- Explore computes it only when the host changes. A host with no site clears it, so a return to the site lists it again.
+- A recording's description is its date: its aim is its step names. A leg's aim is `site/name` for now.
+- `do` sends the model the search's top 10 plus the same goal's earlier pick. A goal that finds nothing sends the whole list.
+- Search is `workflows/find.ts`, apart from the toolkit, so `do` does not load all 108 legs.
+- The toolkit holds legs; `backend.workflows` does not yet. The Runs page and `run <name>` run through Restate objects, and a leg has none until pass two.
+- `sites` shows "sign-in" (a login spec exists), not "login stored": a stored check reads the credential store per site.
+- `flows` (legs with their route callers, walks) stays beside `tools` until pass two folds the run paths.
+
 ## 2. One catalog, one run path
 
 See "The fold" below for the per-flow plan.
@@ -158,4 +170,6 @@ Cost: one more in-process call per leg (`advance` on memory effects), under 1 ms
 - 2026-10-29: A script's nested `flow` call waits for its own design.
 - 2026-10-29: Leg inputs are generated into one file, not written beside each of 108 legs. The types stay the one source; the generated file cannot drift past typecheck.
 - 2026-10-29: Pass two (run paths, lint) waits for the run recorder. A lint that forces a path with no record would be a no-op.
+- 2026-10-29: A workflow names its site in code (`site`, rendered by the compiler), not in outline.json beside it: one source, and hand-tuned workflows have no outline.
+- 2026-10-29: `do` shortlists by search before the model: about 10 rows a pick instead of 150, so the pick prompt stays the same size as the catalog grows.
 - 2026-10-29: The trace holds each iteration's values (William: "at each iteration of the for loop what the values are").

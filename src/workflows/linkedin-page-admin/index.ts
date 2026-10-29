@@ -369,6 +369,8 @@ export const workflow = defineWorkflow<Deps, Memo>()({
   name: "linkedin-page-admin",
   description:
     "Make a member an admin of a LinkedIn company Page (Content admin by default): the member picked by profile id, not name, then read back from the admin table. dryRun rehearses the pick and dismisses.",
+  site: "linkedin",
+  hosts: [],
   plan: planSchema,
   steps: [check, add],
   emptyMemo: () => ({}),

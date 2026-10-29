@@ -49,6 +49,8 @@ const readMainHeading: Step<"read-main-heading"> = {
 export const workflow = defineWorkflow<Deps, Memo>()({
   name: "example-title",
   description: "Recorded 2026-09-20 on example",
+  site: "example",
+  hosts: ["example.com"],
   plan: planSchema,
   steps: [readMainHeading],
   emptyMemo: () => ({}),

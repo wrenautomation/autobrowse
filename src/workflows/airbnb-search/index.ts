@@ -134,6 +134,8 @@ const wwwAirbnbCa: Step<"www-airbnb-ca"> = {
 export const workflow = defineWorkflow<Deps, Memo>()({
   name: "airbnb-search",
   description: "Recorded 2026-10-29 on airbnb",
+  site: "airbnb",
+  hosts: ["www.airbnb.ca"],
   plan: planSchema,
   steps: [wwwAirbnbCa],
   emptyMemo: () => ({}),

@@ -34,6 +34,7 @@ export function legWorkflow<I, O>(
   return {
     name,
     description: `${flow.site}/${flow.name}`,
+    site: flow.site,
     plan: plan as unknown as z.ZodType<{ dryRun: boolean }>,
     emptyMemo: () => ({}),
     steps: [

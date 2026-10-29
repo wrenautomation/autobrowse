@@ -92,6 +92,8 @@ export const workflow = defineWorkflow<Deps, Memo>()({
   name: "google-cloud-project",
   description:
     "A Google Cloud project to hold OAuth clients and API enablements; its id is kept as GOOGLE_CLOUD_PROJECT",
+  site: "google",
+  hosts: ["console.cloud.google.com"],
   plan: planSchema,
   steps: [createProject],
   emptyMemo: () => ({}),

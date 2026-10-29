@@ -13,6 +13,8 @@ desk and the bench.
 
 ```sh
 autobrowse do "<goal>" --dry-run       # routes to a flow, a site route or a workflow
+autobrowse tools [site] [--find words] # the toolkit by site; --find is a fuzzy search
+autobrowse sites --find <words>        # supported sites: sign-in, API routes, workflows
 autobrowse workflows [name]            # what exists; a name prints its inputs (--template for a plan file)
 autobrowse site status <site>          # the site's API and browser routes
 ```
@@ -80,6 +82,8 @@ Act (journaled):
   - `waiting` with `gate.name` `human`: fix it, then send the same command. The step runs again from its first `open`, so a fix the site keeps (a sign-in, a setting) holds; a fix on the page only (a closed dialog) does not. `choose`: send it again with `"choice":"…"`.
   - `failed`: the same command goes on from the failed step. `"fresh":true` starts over.
   - The journal keeps its acts flat, so `save` makes one recording. A secret flow keeps only its start and end notes.
+- `tools` in an answer: the first answer on a page of a known site lists that site's workflows (`{sites, tools:[{name, aim, inputs}], more}`; `q, max?` = required, optional). It comes once per site. Use one with `flow` before you do the job by hand.
+- `{"cmd":"tools"}` — each site and its count. `"site":"x"`: that site's workflows (past the 20 an answer shows). `"find":"words"`: a fuzzy search over all of them.
 
 Files (the Mac's sealed store, `autobrowse files`): start with `--files <set>[,<set>]`
 (`start.sh <site> <url> <port> --files coop`) to have a named set at the ready; the

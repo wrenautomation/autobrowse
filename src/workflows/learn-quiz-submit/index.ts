@@ -89,6 +89,7 @@ const submit: Step<"submit"> = {
 export const workflow = defineWorkflow<Deps, Memo>()({
   name: "learn-quiz-submit",
   description: "Answer and submit one LEARN (D2L) quiz attempt by option text",
+  site: "learn",
   plan: planSchema,
   steps: [check, submit],
   emptyMemo: () => ({}),

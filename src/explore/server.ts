@@ -31,6 +31,7 @@ import type { z } from "zod";
 import { writeRecords } from "../agent/records.js";
 import { SecretLeak, urlWithoutQuery } from "../auth/guard.js";
 import type { SecretValues } from "../auth/signup.js";
+import { SITE_LOGINS } from "../auth/sites.js";
 import { fetchFile } from "../browser/download.js";
 import { extrasOf } from "../browser/extras.js";
 import { filmLog } from "../browser/film.js";
@@ -143,6 +144,14 @@ import { machine, type RunLog, type RunOutcome, runLog } from "../runs/log.js";
 import { missCause, targetOf } from "../runs/success.js";
 import { compiledDeps } from "../workflows/compiled-deps.js";
 import {
+  findable,
+  find as findTools,
+  sitesTree,
+  type Tool,
+  toolkitFor,
+  toolsOf,
+} from "../workflows/toolkit.js";
+import {
   type Command,
   commandSchema,
   LOOKED_AT,
@@ -163,6 +172,9 @@ export { type Command, commandSchema, placeHint } from "./commands.js";
 export { journalFileFor, readJournal, tokenFileFor } from "./journal.js";
 
 /** How long one yes to pay on a host lasts. */
+/** A tool as an answer lists it: what to send `flow`. */
+const brief = ({ name, aim, inputs }: Tool) => ({ name, aim, inputs });
+
 const FLOW_MS = 30 * 60_000;
 /** How long a spending click's page gets to say paid or declined before it counts as no charge. */
 const SETTLE_MS = Number(process.env.EXPLORE_CHARGE_SETTLE_MS ?? 60_000);
@@ -264,6 +276,8 @@ export interface ExploreOptions {
    */
   workflows?: {
     get(name: string): Promise<AnyWorkflow | null>;
+    /** What `tools` and each new site's answer list; absent: legs only. */
+    list?(): Promise<readonly AnyWorkflow[]>;
     plan(name: string, given: Record<string, unknown>): Promise<Record<string, unknown>>;
     keys?: KeyKeeper;
   };
@@ -1375,8 +1389,12 @@ async function serve(
       const out = await looked(c, wait);
       left = { url: page.url(), rows: out.rows ?? left?.rows ?? null };
       answer = out.answer;
-      return helped && out.answer && typeof out.answer === "object" && !Array.isArray(out.answer)
-        ? { helped, ...out.answer }
+      const tools = await newSiteTools().catch(() => null);
+      return (helped || tools) &&
+        out.answer &&
+        typeof out.answer === "object" &&
+        !Array.isArray(out.answer)
+        ? { ...(helped ? { helped } : {}), ...out.answer, ...(tools ? { tools } : {}) }
         : out.answer;
     } catch (err) {
       failed = err;
@@ -1391,6 +1409,23 @@ async function serve(
       lookBefore = null;
       lookWhenQuiet();
     }
+  };
+  // The toolkit: the page's site's workflows, sent once per site (a host with no site clears it).
+  const toolsNow = async () =>
+    toolsOf(opts.workflows ? ((await opts.workflows.list?.()) ?? []) : []);
+  let toolsSent = "";
+  let toolsHost = "";
+  const newSiteTools = async () => {
+    if (!opts.workflows) return null;
+    const host = URL.canParse(page.url()) ? new URL(page.url()).host : "";
+    if (host === toolsHost) return null;
+    toolsHost = host;
+    const all = await toolsNow();
+    const kit = toolkitFor(host, SITE_LOGINS, all);
+    const key = kit?.sites.join(",") ?? "";
+    if (key === toolsSent) return null;
+    toolsSent = key;
+    return kit;
   };
   const looked = async (c: Command, wait: boolean) => {
     if (!LOOKS.has(c.cmd)) return { answer: await act(c, wait), rows: null };
@@ -2084,6 +2119,12 @@ async function serve(
         journal({ kind: "resume" });
         resume();
         return { paused: false, handActs };
+      }
+      case "tools": {
+        const all = await toolsNow();
+        if (c.find) return { tools: findTools(all.map(findable), c.find).map(brief) };
+        if (c.site) return { tools: all.filter((t) => t.site === c.site).map(brief) };
+        return { sites: sitesTree(all) };
       }
       case "journal":
         return { total: actions.length, actions: c.last ? actions.slice(-c.last) : actions };

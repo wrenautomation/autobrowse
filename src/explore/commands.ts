@@ -197,6 +197,15 @@ export const commandSchema = z.discriminatedUnion("cmd", [
     /** The option a `choose` gate it stopped on asked for. */
     choice: z.string().min(1).optional(),
   }),
+  /**
+   * The workflows `flow` can run (the toolkit). No field: the sites and their counts.
+   * `site`: that site's workflows. `find`: a fuzzy search over all of them.
+   */
+  z.object({
+    cmd: z.literal("tools"),
+    site: z.string().min(1).optional(),
+    find: z.string().min(1).max(200).optional(),
+  }),
   /** Write the journal as a recording under `recordingsDir/<name>`. */
   z.object({ cmd: z.literal("save"), name: z.string().regex(/^[a-z][a-z0-9-]*$/) }),
   /** What is recorded so far; `last` = only the newest n. */
