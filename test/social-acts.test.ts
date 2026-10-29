@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   countOf,
+  followButton as igFollowButton,
+  followingButton as igFollowingButton,
   igPostOf,
   instagramComment,
   instagramFollow,
@@ -20,7 +22,7 @@ import {
   xLike,
   xReply,
 } from "../src/browser/flows/x-act.js";
-import type { Hints } from "../src/browser/locate.js";
+import { type Hints, namePattern } from "../src/browser/locate.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
 import { instagram } from "../src/sites/instagram.js";
 import { linkedin } from "../src/sites/linkedin.js";
@@ -219,6 +221,19 @@ describe("instagram acts", () => {
       out: { shortcode: "AAA111", commented: true },
       acts: ["fill", "click"],
     });
+  });
+});
+
+describe("instagram follow names", () => {
+  it("reads the profile button as Instagram names it (2026-10-29)", () => {
+    const re = (h: Hints) => namePattern(h.name as string) as RegExp;
+    for (const n of ["Following Down chevron icon", "Following", "Requested"])
+      expect(re(igFollowingButton).test(n), n).toBe(true);
+    for (const n of ["Follow", "Follow Back"]) {
+      expect(re(igFollowButton).test(n), n).toBe(true);
+      expect(re(igFollowingButton).test(n), n).toBe(false);
+    }
+    expect(re(igFollowButton).test("Following Down chevron icon")).toBe(false);
   });
 });
 

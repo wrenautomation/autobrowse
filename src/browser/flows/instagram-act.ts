@@ -5,7 +5,8 @@
  * these have no API leg. Each is capped per account (sites/instagram.ts).
  *
  * Mapped 2026-10-09 in explore on the instagram profile. A profile's Follow is a `button` in
- * `main` ("Follow", "Follow Back"; "Following" or "Requested" once done; unfollowing asks again
+ * `main` ("Follow", "Follow Back"; "Following" or "Requested" once done, from 2026-10-29 with a
+ * " Down chevron icon" suffix; unfollowing asks again
  * with "Unfollow"). A post page (`/p/<code>/`, `/reel/<code>/`) puts the post's heart at 24px
  * (`svg[aria-label=Like][height="24"]`, `Unlike` once liked) and each comment's at 16px; the
  * comment box is `textarea[aria-label="Add a comment…"]` and its Post button a `div[role=button]`.
@@ -40,8 +41,9 @@ async function refused(fp: FlowPage, what: string): Promise<void> {
 }
 
 // The first match is the profile's own: suggested accounts below carry their own Follow.
-const followButton: Hints = { role: "button", name: "/^follow( back)?$/i" };
-const followingButton: Hints = { role: "button", name: "/^(following|requested)$/i" };
+// From 2026-10-29 the done state reads "Following Down chevron icon": a prefix, not the whole name.
+export const followButton: Hints = { role: "button", name: "/^follow( back)?\\b/i" };
+export const followingButton: Hints = { role: "button", name: "/^(following|requested)\\b/i" };
 const unfollow: Hints = { role: "button", name: "/^unfollow$/i" };
 
 export interface FollowInput {
