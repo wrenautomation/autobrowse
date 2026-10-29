@@ -26,7 +26,7 @@ import { profileBusyOf } from "../browser/browsers.js";
 import type { BrowserFlow, FlowRunner, HeldTab } from "../browser/flow.js";
 import type { Render } from "../browser/render.js";
 import { type AccessCode, AccessRefused, NeedsHuman } from "../browser/session.js";
-import { type HttpClient, HttpError, lastingRefusal } from "../clients/http.js";
+import { type HttpClient, lastingRefusal } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
 import { type JsonSchema, jsonSchemaOf } from "../engine/inputs.js";
 import type { AnyWorkflow } from "../engine/workflow.js";
@@ -54,6 +54,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 import { runLeg } from "../engine/leg.js";
 import type { RenewReport } from "./renew.js";
 import {
+  type ApiLeg,
   type Leg,
   legName,
   type Method,
@@ -69,6 +70,7 @@ import {
 } from "./types.js";
 import { withLocalFile } from "./upload-file.js";
 import type { NoVerify, RouteVerify } from "./verdict.js";
+import { tokenRefusal } from "./why.js";
 
 const CODE_STATUS: Record<AccessCode, number> = {
   need_login: 401,
@@ -157,6 +159,8 @@ export interface SiteFacadeDeps {
   accountOf?: (site: string, name: string) => Promise<string | null>;
   /** An API leg answered with the token kept under `name`: a refusal of it is over. */
   worked?: (name: string) => void;
+  /** The site's words when the value kept under `name` was refused; null when it may be called. */
+  held?: (name: string) => string | null;
 }
 
 export type CompiledRun = Pick<Proof, "status" | "steps" | "output">;
@@ -217,6 +221,8 @@ export interface Armed {
 export const ARM_MS = 20 * 60_000;
 /** The act a started irreversible API call is kept under. */
 const STARTED = "api started";
+/** How long a passed probe vouches for its bearer before a refusal asks it again. */
+const PROBED_OK_MS = 10 * 60_000;
 /** Why a rerun of a started publish is refused: a person checks the account, then sends again. */
 export const MAY_HAVE_GONE =
   "an earlier try may have gone through before its answer was saved; check the account before sending again";
@@ -448,6 +454,28 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     if (!parsed.success)
       throw new SiteError(400, parsed.error.issues.map((i) => i.message).join("; "));
     return parsed;
+  };
+  /** Kept names whose bearer the probe passed, till when: a scope 401 asks it once per window. */
+  const probedOk = new Map<string, number>();
+  /**
+   * A refusal on `path` means a dead bearer: on the probe itself, or when the probe with the same
+   * bearer is refused too. A probe that answers says the route refused, not the token.
+   */
+  const deadBearer = async (s: SiteApi, path: string, leg: ApiLeg, kept: string) => {
+    if (!s.probe) return false;
+    if (matchPath(path, s.probe.path)) return true;
+    const now = (deps.now ?? Date.now)();
+    if ((probedOk.get(kept) ?? 0) > now) return false;
+    const { r, params } = routeOf(s, "GET", s.probe.path);
+    if (!r.api) return false;
+    const req = requestOf(r, s.probe.path, params, s.probe.input ?? {});
+    try {
+      await r.api(req.data as never, leg);
+    } catch (e) {
+      return tokenRefusal(e);
+    }
+    probedOk.set(kept, now + PROBED_OK_MS);
+    return false;
   };
   const tokenFor = async (s: SiteApi, account?: string | null): Promise<string | null> =>
     "open" in s.auth
@@ -867,6 +895,10 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           if (!ok) throw new SiteError(403, `${what}: refused`);
         }
         if (r.api && token !== null) {
+          const kept = keptName(s, tokenAs);
+          // A refused value: no call till a re-make (or a person) changes it.
+          const held = kept ? deps.held?.(kept) : null;
+          if (kept && held) throw new TokenRefused(kept, held, { site: s.site, account: tokenAs });
           // A rerun of a durable call (Restate after a crash or a redeploy mid-call) must not
           // publish twice: the first try may have gone through before its answer was saved.
           const call = currentCall();
@@ -878,32 +910,30 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
               throw new SiteError(409, `${method} ${r.path}: ${MAY_HAVE_GONE}`);
             deps.started.add(call, STARTED);
           }
-          const kept = keptName(s, tokenAs);
+          const leg = (bearer: string): ApiLeg => ({
+            token: bearer,
+            http: deps.http,
+            env: deps.env,
+            keep: async (name, value) => deps.sink.put(name, value),
+            ...(deps.spent ? { spent: deps.spent } : {}),
+            ...(deps.keys
+              ? {
+                  keys: deps.keys.source,
+                  keyCall: keyCall(deps.keys, {
+                    by: from?.caller ?? "sites",
+                    reason: `${method} ${r.path}`,
+                    ...(keyAccount ? { account: keyAccount } : {}),
+                  }),
+                }
+              : {}),
+            ...(deps.uploads ? { uploads: deps.uploads } : {}),
+            ...(deps.render ? { render: deps.render } : {}),
+          });
           let out: unknown;
           try {
-            out = await r.api(parsed.data as never, {
-              token,
-              http: deps.http,
-              env: deps.env,
-              keep: async (name, value) => deps.sink.put(name, value),
-              ...(deps.spent ? { spent: deps.spent } : {}),
-              ...(deps.keys
-                ? {
-                    keys: deps.keys.source,
-                    keyCall: keyCall(deps.keys, {
-                      by: from?.caller ?? "sites",
-                      reason: `${method} ${r.path}`,
-                      ...(keyAccount ? { account: keyAccount } : {}),
-                    }),
-                  }
-                : {}),
-              ...(deps.uploads ? { uploads: deps.uploads } : {}),
-              ...(deps.render ? { render: deps.render } : {}),
-            });
+            out = await r.api(parsed.data as never, leg(token));
           } catch (e) {
-            // A 401 on the who-am-I probe: the bearer itself is dead, whatever minted it.
-            const probe = method === "GET" && s.probe && matchPath(r.path, s.probe.path);
-            if (probe && kept && e instanceof HttpError && e.status === 401)
+            if (kept && tokenRefusal(e) && (await deadBearer(s, r.path, leg(token), kept)))
               throw new TokenRefused(kept, e.message, { site: s.site, account: tokenAs });
             throw e;
           }

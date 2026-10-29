@@ -6,6 +6,8 @@
  * One row is one incident: the first refusal opens it and is said once, later calls add nothing.
  * Names, sites, dates and the site's words only; never a value.
  */
+
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -22,6 +24,8 @@ export interface RefusedToken {
   since: string;
   /** What the site said. */
   words: string;
+  /** `tokenMark` of the refused value: calls with it are held, a new value goes through. */
+  held?: string;
   /** Days (yyyy-mm-dd, UTC) a re-make started; a try that never ended still counts. */
   tries: string[];
   /** The last failed try's words. */
@@ -36,7 +40,7 @@ export interface RefusedTokens {
   list(): RefusedToken[];
   /** Record a refusal; `fresh` when it opens an incident, so its notice is sent once. */
   refuse(
-    r: Pick<RefusedToken, "name" | "site" | "account" | "words">,
+    r: Pick<RefusedToken, "name" | "site" | "account" | "words" | "held">,
     now: Date,
   ): { fresh: boolean; row: RefusedToken };
   /** Rows no re-make was queued or tried for yet, now marked queued: each incident once. */
@@ -57,6 +61,10 @@ export interface RefusedTokens {
   /** These names were made again or answered: their rows go. */
   clear(names: readonly string[]): RefusedToken[];
 }
+
+/** A short hash of a token value: names which value was refused, never the value. */
+export const tokenMark = (value: string) =>
+  createHash("sha256").update(value).digest("hex").slice(0, 16);
 
 export const dayOf = (now: Date) => now.toISOString().slice(0, 10);
 
@@ -82,7 +90,10 @@ function refusedTokens(io: {
     refuse: (r, now) =>
       change((rows) => {
         const had = rows.find((x) => x.name === r.name);
-        if (had) return { fresh: false, row: had };
+        if (had) {
+          if (r.held) had.held = r.held;
+          return { fresh: false, row: had };
+        }
         const row: RefusedToken = { ...r, since: now.toISOString(), tries: [] };
         rows.push(row);
         return { fresh: true, row };

@@ -37,6 +37,7 @@ import {
   type RefusedToken,
   type RefusedTokens,
   refusedLine,
+  tokenMark,
 } from "./refused.js";
 import {
   nextLapse,
@@ -243,8 +244,17 @@ export function sitesFor(p: SiteParts): SiteFacade {
             accountForSite(await (p.identities as () => Promise<Identity[]>)(), s, step),
         }
       : {}),
-    // A token that answers again ends its incident.
-    ...(p.refused ? { worked: (name: string) => void p.refused?.clear([name]) } : {}),
+    // A token that answers again ends its incident; the refused value is held till it changes.
+    ...(p.refused
+      ? {
+          worked: (name: string) => void p.refused?.clear([name]),
+          held: (name: string) => {
+            const row = p.refused?.list().find((r) => r.name === name);
+            const value = made.get(name) ?? env(name);
+            return row?.held && value && tokenMark(value) === row.held ? row.words : null;
+          },
+        }
+      : {}),
   });
   const refused = p.refused;
   const say = async (text: string, o?: { ping?: boolean }) => {
@@ -253,8 +263,15 @@ export function sitesFor(p: SiteParts): SiteFacade {
   /** Keep a refusal where `renew` reads it; the first of an incident is said, once. */
   const record = async (e: unknown) => {
     if (!refused || !(e instanceof TokenRefused) || !e.site) return;
+    const value = made.get(e.token) ?? env(e.token);
     const { fresh, row } = refused.refuse(
-      { name: e.token, site: e.site, account: e.account, words: e.why },
+      {
+        name: e.token,
+        site: e.site,
+        account: e.account,
+        words: e.why,
+        ...(value ? { held: tokenMark(value) } : {}),
+      },
       new Date(),
     );
     if (fresh)

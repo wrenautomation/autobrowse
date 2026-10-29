@@ -129,7 +129,8 @@ export class TokenRefused extends SiteError {
     why: string,
     at: { site: string; account: string | null } | null = null,
   ) {
-    super(409, `${token} was refused (${why}); re-consent the account`);
+    // need_login: callers hold the site till a re-make, as for a signed-out browser
+    super(409, `${token} was refused (${why}); re-consent the account`, undefined, "need_login");
     this.token = token;
     this.why = why;
     this.site = at?.site ?? null;

@@ -8,7 +8,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { linkedinOauthConsent } from "../src/browser/flows/linkedin-oauth-consent.js";
-import { HttpError, httpClient } from "../src/clients/http.js";
+import { HttpError, httpClient, mustOk } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import type { SiteFacade } from "../src/sites/facade.js";
 import { SiteError, sitesService } from "../src/sites/index.js";
@@ -21,6 +21,7 @@ import {
 } from "../src/sites/refused.js";
 import { renewals, renewWording } from "../src/sites/renew.js";
 import { type OAuthSpec, route, type SiteApi } from "../src/sites/types.js";
+import { graphWhy } from "../src/sites/why.js";
 import { REVOKED_WORDS, sitesFor } from "../src/sites/wire.js";
 import { fakeBrowser, fakeFetch } from "./fakes.js";
 
@@ -79,7 +80,7 @@ function wired(
   answer: Parameters<typeof fakeFetch>[0],
   env: Record<string, string>,
   refused: RefusedTokens = memoryRefusedTokens(),
-  o: { kept?: string[] } = {},
+  o: { kept?: string[]; site?: SiteApi } = {},
 ) {
   const said: { text: string; ping: boolean }[] = [];
   const api = fakeFetch(answer);
@@ -88,7 +89,7 @@ function wired(
     browser: fakeBrowser([]),
     sink: memorySink(),
     oauthPort: 9433,
-    sites: [acmeAt("https://acme.test")],
+    sites: [o.site ?? acmeAt("https://acme.test")],
     env: (n) => env[n],
     http: httpClient({ fetch: api.fetch }),
     flows: {},
@@ -101,6 +102,37 @@ function wired(
   });
   return { sites, said, refused, api };
 }
+
+const GRAPH = "GRAPH_TOKEN";
+/** Graph's answer to a dead bearer: code 190, as HTTP 400. */
+const DEAD = {
+  status: 400,
+  body: { error: { code: 190, error_subcode: 2069032, message: "Invalid OAuth 2.0 Access Token" } },
+};
+/** A site like Meta: a kept token, a `/me` probe, Graph's error shape. */
+const graphRoute = (path: string) =>
+  route({
+    method: "GET",
+    path,
+    summary: path,
+    request: z.object({}),
+    api: async (_b, leg) =>
+      mustOk(
+        await leg.http.json<unknown>(`https://graph.test${path}`, {
+          headers: { authorization: `Bearer ${leg.token}` },
+        }),
+        `https://graph.test${path}`,
+        graphWhy,
+      ),
+  });
+const graphLike: SiteApi = {
+  site: "graph",
+  origin: "https://graph.test",
+  probe: { path: "/me" },
+  auth: { token: GRAPH },
+  routes: [graphRoute("/me"), graphRoute("/posts")],
+  setup: [],
+};
 
 const refusing = () => ({
   body: { error: "invalid_grant", error_description: "Refresh token is invalid or expired" },
@@ -159,6 +191,58 @@ describe("refused tokens", () => {
     );
     await expect(w.sites.call("acme", "GET", "/me", {})).rejects.toThrow(/was refused/);
     expect(w.refused.list()[0]?.name).toBe(NAME);
+  });
+
+  it("Graph's 190 on the probe is a refusal, though Graph sends it as a 400", async () => {
+    const w = wired(() => DEAD, { [GRAPH]: "tk-1" }, undefined, { site: graphLike });
+    await expect(w.sites.call("graph", "GET", "/me", {})).rejects.toThrow(/was refused/);
+    expect(w.refused.list()[0]?.name).toBe(GRAPH);
+  });
+
+  it("a 190 off the probe is a refusal only when the probe is refused too", async () => {
+    // A live user token on a Page-owned read (10-14 to 10-22): the probe answers.
+    const live = wired(
+      (r) => (r.url.pathname === "/me" ? { body: { id: "1" } } : DEAD),
+      { [GRAPH]: "tk-1" },
+      undefined,
+      { site: graphLike },
+    );
+    for (let i = 0; i < 2; i++)
+      await expect(live.sites.call("graph", "GET", "/posts", {})).rejects.toThrow(/graph code 190/);
+    expect(live.refused.list()).toEqual([]);
+    // The probe vouches for a while: the second refusal asks it no more.
+    expect(live.api.calls.filter((c) => c.url.pathname === "/me")).toHaveLength(1);
+
+    const dead = wired(() => DEAD, { [GRAPH]: "tk-1" }, undefined, { site: graphLike });
+    await expect(dead.sites.call("graph", "GET", "/posts", {})).rejects.toThrow(/was refused/);
+    expect(dead.refused.list().map((r) => r.name)).toEqual([GRAPH]);
+  });
+
+  it("a refused value is held with no call to the site; a new value goes through", async () => {
+    const env: Record<string, string> = { [GRAPH]: "tk-1" };
+    const w = wired(
+      (r) => (r.headers.get("authorization") === "Bearer tk-2" ? { body: { data: [] } } : DEAD),
+      env,
+      undefined,
+      { site: graphLike },
+    );
+    await expect(w.sites.call("graph", "GET", "/posts", {})).rejects.toThrow(/was refused/);
+    const asked = w.api.calls.length;
+    for (let i = 0; i < 3; i++)
+      await expect(w.sites.call("graph", "GET", "/posts", {})).rejects.toThrow(/was refused/);
+    expect(w.api.calls.length).toBe(asked);
+    expect(w.said).toHaveLength(1);
+    env[GRAPH] = "tk-2";
+    await expect(w.sites.call("graph", "GET", "/posts", {})).resolves.toEqual({ data: [] });
+    expect(w.refused.list()).toEqual([]);
+  });
+
+  it("a refusal carries need_login, so callers hold the site", async () => {
+    const w = wired(() => DEAD, { [GRAPH]: "tk-1" }, undefined, { site: graphLike });
+    await expect(w.sites.call("graph", "GET", "/me", {})).rejects.toMatchObject({
+      status: 409,
+      code: "need_login",
+    });
   });
 
   it("two failed days and renew stops, with one notice that pings; a new token restarts it", async () => {

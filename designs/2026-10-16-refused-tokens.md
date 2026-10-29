@@ -7,9 +7,15 @@ days, and this one lapses next year.
 
 ## What happens now
 
-- **Kept.** A refusal (`invalid_grant` on the refresh, a revoke, a 401 on the site's who-am-I
-  probe) is kept by name, site, account, since when and the site's words
-  (`src/sites/refused.ts`, `refused-tokens.json` in the state dir). Never a value.
+- **Kept.** A refusal (`invalid_grant` on the refresh, a revoke, a 401 or Graph 190 on the
+  site's who-am-I probe) is kept by name, site, account, since when, the site's words and a
+  short hash of the refused value (`src/sites/refused.ts`, `refused-tokens.json` in the state
+  dir). Never a value.
+- **Confirmed by the probe.** A 401 or Graph 190 on any other route asks the probe once with
+  the same bearer. Refused too: a dead token. The probe answers: the route refused, the error
+  stays as it was. A passed probe vouches 10 min.
+- **Held.** While the kept value hashes to the refused one, a call throws the 409 with no call
+  to the site. A new value (a re-make, a paste) goes through. The 409 carries `need_login`.
 - **Said once.** The first refusal of an incident is one line in the ops Discord lane
   (`src/app/ops.ts`). Later calls add nothing.
 - **Re-made now.** When a `sites`/`desk` call fails 409 on a refusal, the service queues
@@ -38,7 +44,16 @@ days, and this one lapses next year.
   could serve the old grant's access token for up to an hour.
 - The one-off `revoke-tiktok-once.ts` was never committed to wren; nothing to delete.
 
+- 2026-10-29 (WA-976): Graph sends 190 as a 400, so the 401-only probe check missed a dead
+  Meta token, the daily probe too. A 190 is not always a dead token: the 170 of 10-14 to 10-22
+  were a live user token on a Page-owned read (fixed in ff7c433). So off the probe, the probe
+  decides. Rejected: every 190 is a refusal (a re-make cannot fix a wrong-token bug); a hold in
+  each wren loop only (every caller would need it).
+
 ## Wren
 
 `TokenRenewal/box` calls `sites/renew` every day (was: sleep until the next lapse, 1 to 7 days),
 so the probes and the refused re-makes run daily.
+
+A `need_login` refusal holds the read in `holdCap` for an hour (`LOGIN_HOLD_MS`): SocialWatch,
+metrics and the posts watch ask again after it, not each pass.
