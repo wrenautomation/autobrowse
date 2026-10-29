@@ -77,7 +77,7 @@ Act (journaled):
   Answer: `{status, steps, gate?, url}`. The page stays where it ended: go on by hand. Mix freely: sign in, explore, `flow`, explore again.
   - Its legs must be on this session's site. Another site's workflow needs its own session.
   - Every money act asks the person, as yours do. A workflow's `purchase`/`password`/`send` gate asks too. Send with `?wait=1` to hold for the answer.
-  - `waiting` with `gate.name` `human`: fix the page, then send the same command. The step runs again. `choose`: send it again with `"choice":"…"`.
+  - `waiting` with `gate.name` `human`: fix it, then send the same command. The step runs again from its first `open`, so a fix the site keeps (a sign-in, a setting) holds; a fix on the page only (a closed dialog) does not. `choose`: send it again with `"choice":"…"`.
   - `failed`: the same command goes on from the failed step. `"fresh":true` starts over.
   - The journal keeps its acts flat, so `save` makes one recording. A secret flow keeps only its start and end notes.
 

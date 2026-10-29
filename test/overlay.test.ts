@@ -110,6 +110,21 @@ describe("headed overlay", () => {
       // Outside the panel, the page works as ever.
       await page.mouse.click(700, 50);
       expect(await page.evaluate("+document.body.dataset.hits")).toBe(2);
+      // A flow command: its steps nest; the panel stays inert until the outer one ends.
+      const row = { cmd: "open", what: "x", ok: true, ms: 5, note: "", detail: [] };
+      await o.begin(page, "flow");
+      await o.begin(page);
+      await o.end(page, row);
+      await page.mouse.click(panel.x, panel.y);
+      expect(await page.evaluate("+document.body.dataset.hits")).toBe(3);
+      await o.end(page, row);
+      await page.mouse.click(panel.x, panel.y);
+      expect(await page.evaluate("+document.body.dataset.hits")).toBe(3);
+      // Hands between commands (a banner wait, a scroll): inert.
+      await o.hold(page, () => page.mouse.click(panel.x, panel.y));
+      expect(await page.evaluate("+document.body.dataset.hits")).toBe(4);
+      await page.mouse.click(panel.x, panel.y);
+      expect(await page.evaluate("+document.body.dataset.hits")).toBe(4);
     } finally {
       await browser.close();
     }

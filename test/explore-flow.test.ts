@@ -196,6 +196,7 @@ describe("explore runs a compiled workflow on its page (flow)", () => {
     const r = await send({ cmd: "flow", name: "buy" }, true);
     expect(r.status).toBe(403);
     expect(asked.at(-1)?.what).toMatch(/Buy now/i);
+    expect((await journal()).at(-1)?.text).toBe("flow buy stopped");
     yes = true;
     const again = await send({ cmd: "flow", name: "buy" }, true);
     expect(again.body).toMatchObject({ status: "done" });

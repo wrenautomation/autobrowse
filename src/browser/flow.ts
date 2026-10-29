@@ -743,9 +743,11 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             // guard like "the dialog opened, else a person" never misses its
             // control behind a banner or a screen learned on this site.
             if (withinMs > 0)
-              await clearWay(hints, { kind: "click" }, lastGoal ?? "wait", withinMs).catch(
-                () => undefined,
-              );
+              await overlay
+                .hold(active, () =>
+                  clearWay(hints, { kind: "click" }, lastGoal ?? "wait", withinMs),
+                )
+                .catch(() => undefined);
             return locate(active, hints)
               .first()
               .isVisible()
@@ -779,7 +781,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               ),
           nextPage: (timeout) =>
             session.context.waitForEvent("page", { timeout }).catch(() => null),
-          scroll: (dy) => hands.scroll(active, dy),
+          // Hands between steps: the panel lets them through.
+          scroll: (dy) => overlay.hold(active, () => hands.scroll(active, dy)),
           pages: () => session.context.pages(),
           switchTo(page) {
             active = page;

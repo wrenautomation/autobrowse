@@ -30,7 +30,8 @@ Its result comes back as JSON. A failure leaves the page open, and the agent goe
   The flow cannot buy what explore would ask about.
 - **Workflow gates:** `purchase`, `password` and `send` ask a person (explore's approver, the one yes per ask).
   `?wait=1` holds until the answer. Without it the call answers "asked"; send it again.
-  `choose` and `human` stop the run. The answer names the gate. The agent or a person fixes the page, then sends the same command: the step runs again.
+  `choose` and `human` stop the run. The answer names the gate. The agent or a person fixes it, then sends the same command.
+  The step runs again from its first `open`: a fix the site keeps holds, a fix on the page only does not.
   A no ends the run as `rejected`.
 - **State between calls:** a stopped run is kept by name for the session, so the next call goes on from its gate. `fresh:true` starts over. A finished run is dropped.
 - **Pause:** each step waits while the session is paused. A person can stop a flow between steps.
@@ -47,5 +48,8 @@ Its result comes back as JSON. A failure leaves the page open, and the agent goe
 - 2026-10-29: Journal flat, not a new `kind:"flow"` action. A flow action needs the compiler to emit sub-workflow calls. Flat acts compile today and make a mixed session one workflow.
   Later: a `flow` action, if a recording should call a workflow by name and pick up its fixes.
 - 2026-10-29: Compiled workflows only. Hand-written ones need API deps that explore does not hold.
+- 2026-10-29: Not reachable yet: the hand-written `BrowserFlow`s in `browser/flows/` (`cloudflare-token` and others). Their callers need worker deps.
+  Later: a typed catalog of those flows, each with a zod input, so `flow` runs them too.
+- 2026-10-29: Overlay busy is a count. A `flow` command's steps nest in it, and `hold` covers hands between steps (a banner wait, a scroll). The panel takes clicks only while nothing of ours acts.
 - 2026-10-29: Same-site legs only. `--login` sites hold place secrets, not a profile.
 - 2026-10-29: Overlay panel takes clicks by default (`[●]`). William: "defaulting to not clicks going through the panel is fine". While a command runs, the panel still lets every click through: the hands click at coordinates.

@@ -1623,39 +1623,45 @@ async function serve(
         ),
       ) as unknown;
     };
-    for (;;) {
-      flowGated = null;
-      const a = await advance(run.fx, workflow, deps, plan);
-      // Kept: the step that met the gate runs again on the next call.
-      if (flowGated) throw flowGated;
-      if (a.kind === "continue") continue;
-      if (a.kind === "finished") return answer(a.status);
-      const g = a.gate;
-      if (g.name === "human" || g.name === "choose") {
-        run.gate = g;
-        return answer("waiting");
-      }
-      try {
-        if (!approvals) throw new PaymentGate(g.prompt, "no-approver");
-        await approvals.decide(
-          `flow ${c.name} ${g.step} ${g.name}`,
-          { what: `${c.name}: ${g.prompt}`, url: page.url(), site: opts.site },
-          wait,
-        );
-      } catch (err) {
-        if (!(err instanceof PaymentGate) || err.reason !== "denied") throw err;
+    try {
+      for (;;) {
+        flowGated = null;
+        const a = await advance(run.fx, workflow, deps, plan);
+        // Kept: the step that met the gate runs again on the next call.
+        if (flowGated) throw flowGated;
+        if (a.kind === "continue") continue;
+        if (a.kind === "finished") return answer(a.status);
+        const g = a.gate;
+        if (g.name === "human" || g.name === "choose") {
+          run.gate = g;
+          return answer("waiting");
+        }
+        try {
+          if (!approvals) throw new PaymentGate(g.prompt, "no-approver");
+          await approvals.decide(
+            `flow ${c.name} ${g.step} ${g.name}`,
+            { what: `${c.name}: ${g.prompt}`, url: page.url(), site: opts.site },
+            wait,
+          );
+        } catch (err) {
+          if (!(err instanceof PaymentGate) || err.reason !== "denied") throw err;
+          await applyAnswer(run.fx, g, {
+            approved: false,
+            note: "explore: a person said no",
+            at: at(),
+          });
+          return answer("rejected");
+        }
         await applyAnswer(run.fx, g, {
-          approved: false,
-          note: "explore: a person said no",
+          approved: true,
+          note: "explore: a person said yes",
           at: at(),
         });
-        return answer("rejected");
       }
-      await applyAnswer(run.fx, g, {
-        approved: true,
-        note: "explore: a person said yes",
-        at: at(),
-      });
+    } catch (err) {
+      // An ask or a refusal: the run is kept, the journal says where it stopped.
+      journal({ kind: "note", text: `flow ${c.name} stopped` });
+      throw err;
     }
   };
 

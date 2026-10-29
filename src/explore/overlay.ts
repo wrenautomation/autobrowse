@@ -381,6 +381,8 @@ export function overlayFor(startOn: boolean) {
   const attr = `data-o${randomBytes(4).toString("hex")}`;
   let state: OverlayState = { ...EMPTY };
   let drawn = false;
+  /** Commands and holds in flight: nested (a flow's steps inside its `flow` command), so a count. */
+  let running = 0;
   let prefs: Prefs = {
     min: false,
     trace: true,
@@ -478,6 +480,7 @@ export function overlayFor(startOn: boolean) {
     /** A command starts: the panel goes inert before the act can reach the page. */
     async begin(page: Page, cmd?: string): Promise<void> {
       if (!enabled) return;
+      running++;
       state.busy = true;
       state.cmd = cmd ?? null;
       if (drawn) await draw(page);
@@ -488,11 +491,29 @@ export function overlayFor(startOn: boolean) {
       const n = (state.trace.at(-1)?.n ?? 0) + 1;
       const at = new Date().toTimeString().slice(0, 8);
       state.trace = [...state.trace, { ...row, n, at }].slice(-TRACE_KEEP);
-      state.busy = false;
-      state.cmd = null;
+      running = Math.max(0, running - 1);
+      state.busy = running > 0;
+      if (!state.busy) state.cmd = null;
       // The row holds the act now; the line waits for the next.
       state.doing = null;
       await draw(page);
+    },
+    /** Hands that may touch the page outside a command (a wait that clears a banner, a scroll): inert, no row. */
+    async hold<T>(page: Page, fn: () => Promise<T>): Promise<T> {
+      if (!enabled) return fn();
+      running++;
+      const was = state.busy;
+      state.busy = true;
+      if (!was && drawn) await draw(page);
+      try {
+        return await fn();
+      } finally {
+        running = Math.max(0, running - 1);
+        if (running === 0) {
+          state.busy = false;
+          if (drawn) await draw(page);
+        }
+      }
     },
     /** Before an act: the target flashes and the panel says what is done. */
     async flash(page: Page, hints: Hints, doing: string): Promise<void> {
