@@ -61,6 +61,9 @@ describe("headed overlay", () => {
       await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] });
       await page.mouse.click(40, 580);
       expect(await page.evaluate("+(document.body.dataset.hits||0)")).toBe(0);
+      const opacity = async () =>
+        Number(await page.evaluate(`getComputedStyle(${ui}.tuiEl).opacity`));
+      expect(await opacity()).toBe(1);
       // The [●] button: clicks pass through from now on.
       const btn = await page.evaluate<{ x: number; y: number }>(
         `(() => { const r = [...${ui}.tuiEl.querySelectorAll('.btn')].find((b) => b.getAttribute('data-a') === 'through').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
@@ -72,6 +75,8 @@ describe("headed overlay", () => {
       ]);
       await page.mouse.click(40, 580);
       expect(await page.evaluate("+document.body.dataset.hits")).toBe(1);
+      // Through mode reads as faded.
+      expect(await opacity()).toBeLessThan(0.5);
       // Its buttons still take clicks in through mode.
       await page.mouse.click(btn.x, btn.y);
       expect(await page.evaluate(`[${ui}.through, +document.body.dataset.hits]`)).toEqual([
