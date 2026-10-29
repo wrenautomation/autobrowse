@@ -47,7 +47,12 @@ export type Action =
   | (Base & { kind: "navigate" })
   /** An act outside the browser (an app, a menu, a root command); typed text is redacted like input. */
   | (Base & { kind: "desktop"; op: DesktopOp; redacted: boolean })
-  | (Base & { kind: "click"; target: LocatorHints })
+  | (Base & {
+      kind: "click";
+      target: LocatorHints;
+      /** The same control again after its last press changed the page (a stepper, a next arrow): kept, never a retry. */
+      again?: boolean;
+    })
   | (Base & {
       kind: "input";
       target: LocatorHints;

@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-29T01:21:51.183Z",
+  "status": "done",
+  "steps": [
+    {
+      "name": "www-amazon-com",
+      "status": "done",
+      "detail": "{\"title\":\"The Hobbit: The Classic Fantasy Novel and Prelude to The Lord of the Rings\",\"subtotal\":\"Subtotal (3 items): CAD 71.55\"}"
+    }
+  ],
+  "output": {
+    "title": "The Hobbit: The Classic Fantasy Novel and Prelude to The Lord of the Rings",
+    "subtotal": "Subtotal (3 items): CAD 71.55"
+  }
+}

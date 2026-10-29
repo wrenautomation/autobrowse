@@ -1,0 +1,149 @@
+{
+  "name": "amazon-cart",
+  "site": "amazon",
+  "description": "Recorded 2026-10-29 on amazon",
+  "fields": [
+    {
+      "key": "searchAmazon",
+      "label": "Search Amazon",
+      "example": null
+    }
+  ],
+  "secrets": [],
+  "steps": [
+    {
+      "kind": "browser",
+      "name": "www-amazon-com",
+      "description": "on www.amazon.com",
+      "irreversible": false,
+      "proof": null,
+      "url": "https://www.amazon.com/",
+      "ops": [
+        {
+          "kind": "select",
+          "goal": "select Books in Select the department you want to search in",
+          "hints": {
+            "tag": "",
+            "role": "combobox",
+            "name": "Select the department you want to search in",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": "Books"
+        },
+        {
+          "kind": "fill",
+          "goal": "fill Search Amazon",
+          "hints": {
+            "tag": "",
+            "role": "searchbox",
+            "name": "Search Amazon",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "searchAmazon"
+          }
+        },
+        {
+          "kind": "click",
+          "goal": "click Go",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Go",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click Hardcover",
+          "hints": {
+            "tag": "",
+            "role": "link",
+            "name": "Hardcover",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "read",
+          "goal": "read  as title",
+          "hints": {
+            "tag": "",
+            "role": null,
+            "name": null,
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null,
+            "css": "#productTitle"
+          },
+          "as": "title"
+        },
+        {
+          "kind": "select",
+          "goal": "select 2 in Quantity:",
+          "hints": {
+            "tag": "",
+            "role": "combobox",
+            "name": "Quantity:",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": "2"
+        },
+        {
+          "kind": "click",
+          "goal": "click Add to cart",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Add to cart",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click /items in cart$/",
+          "hints": {
+            "tag": "",
+            "role": "link",
+            "name": "/items in cart$/",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        }
+      ]
+    }
+  ]
+}

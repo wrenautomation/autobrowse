@@ -479,6 +479,34 @@ describe("explore mode", () => {
     expect(bad.body.error).toMatch(/batch\[1\]: close cannot be batched/);
   }, 60_000);
 
+  it("type after a click is that control's input; a stepper's second press is journaled as again", async () => {
+    const page = `data:text/html,${encodeURIComponent(
+      `<input id="w" aria-label="Where"><button onclick="n.textContent=(++window.k)+' guests'">Increase</button><div role="button" id="n">0 guests</div><button>Still</button><script>window.k=0</script>`,
+    )}`;
+    await send({ cmd: "open", url: page });
+    await send({ cmd: "click", hints: { role: "textbox", name: "Where" } });
+    expect((await send({ cmd: "type", text: "Lisbon" })).body).not.toHaveProperty("journaled");
+    await send({ cmd: "click", hints: { role: "button", name: "Increase" } });
+    await send({ cmd: "click", hints: { role: "button", name: "Increase" } });
+    await send({ cmd: "click", hints: { role: "button", name: "Still" } });
+    await send({ cmd: "click", hints: { role: "button", name: "Still" } });
+    const { actions } = (await send({ cmd: "journal", last: 5 })).body as {
+      actions: Array<{ kind: string; value?: string; again?: boolean; target: { name?: string } }>;
+    };
+    expect(actions.map((a) => [a.kind, a.target.name, a.value ?? a.again ?? null])).toEqual([
+      ["input", "Where", "Lisbon"],
+      ["click", "Increase", null],
+      // The guest count changed: a second press, not a retry.
+      ["click", "Increase", true],
+      ["click", "Still", null],
+      // Nothing changed: a retry, which the compiler collapses.
+      ["click", "Still", null],
+    ]);
+    // No click before it: typed, not journaled.
+    await send({ cmd: "open", url: page });
+    expect((await send({ cmd: "type", text: "x" })).body).toMatchObject({ journaled: false });
+  }, 60_000);
+
   it("marks: numbers the controls in view, acts on one by its hints, and redraws when stale", async () => {
     const rows = `data:text/html,${encodeURIComponent(
       `<div>Row A <button onclick="document.title='a'">Save</button></div><div>Row B <button onclick="document.title='b'"><span>Save</span></button></div><div onclick="document.title='card'" style="cursor:pointer">Open card</div><button style="display:none">Hidden</button>`,

@@ -1,0 +1,198 @@
+{
+  "name": "airbnb-search",
+  "site": "airbnb",
+  "description": "Recorded 2026-10-29 on airbnb",
+  "fields": [
+    {
+      "key": "where",
+      "label": "Where",
+      "example": null
+    }
+  ],
+  "secrets": [],
+  "steps": [
+    {
+      "kind": "browser",
+      "name": "www-airbnb-ca",
+      "description": "on www.airbnb.ca",
+      "irreversible": false,
+      "proof": null,
+      "url": "https://www.airbnb.ca/?locale=en",
+      "ops": [
+        {
+          "kind": "click",
+          "goal": "click Where",
+          "hints": {
+            "tag": "",
+            "role": "searchbox",
+            "name": "Where",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "fill",
+          "goal": "fill Where",
+          "hints": {
+            "tag": "",
+            "role": "searchbox",
+            "name": "Where",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "value": {
+            "from": "plan",
+            "field": "where"
+          }
+        },
+        {
+          "kind": "click",
+          "goal": "click {where}, Portugal",
+          "hints": {
+            "tag": "",
+            "role": "option",
+            "name": "{where}, Portugal",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click /^20, Friday, November 2026/",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "/^20, Friday, November 2026/",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click /^22, Sunday, November 2026/",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "/^22, Sunday, November 2026/",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click /^Who/",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "/^Who/",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click Increase Adults",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Increase Adults",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click Increase Adults",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Increase Adults",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "click",
+          "goal": "click Search",
+          "hints": {
+            "tag": "",
+            "role": "button",
+            "name": "Search",
+            "text": null,
+            "placeholder": null,
+            "id": null,
+            "testId": null,
+            "inputType": null
+          },
+          "irreversible": false
+        },
+        {
+          "kind": "records",
+          "as": "listings",
+          "goal": "the first listings",
+          "fields": [
+            {
+              "key": "title",
+              "says": "listing card title"
+            },
+            {
+              "key": "subtitle",
+              "says": "name line",
+              "optional": true
+            },
+            {
+              "key": "price",
+              "says": "price line",
+              "optional": true
+            },
+            {
+              "key": "rating",
+              "says": "rating text",
+              "optional": true
+            },
+            {
+              "key": "url",
+              "says": "room link"
+            }
+          ],
+          "key": "url",
+          "max": 20,
+          "code": "return Array.from(root.querySelectorAll('[data-testid=\"card-container\"]')).map(c => { const t = (s) => (c.querySelector(s)?.textContent || '').trim(); const a = c.querySelector('a[href*=\"/rooms/\"]'); return { title: t('[data-testid=\"listing-card-title\"]'), subtitle: t('[data-testid=\"listing-card-name\"]'), price: t('[data-testid=\"price-availability-row\"]'), rating: (c.innerText.match(/\\d\\.\\d+ \\(\\d+\\)/) || [''])[0], url: a ? a.href.split('?')[0] : '' }; }).filter(r => r.title && r.url);",
+          "min": 10,
+          "sample": []
+        }
+      ]
+    }
+  ]
+}

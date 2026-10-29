@@ -1265,8 +1265,24 @@ async function serve(
     if (!there) throw new Error(`no ${a.role ?? "control"} "${a.name}" in ${app}`);
     await decide(`os ${JSON.stringify(a)}`, `${what} in ${app}`, `app:${app}`, wait);
   };
-  const journalAct = (t: Target, act: (target: LocatorHints) => Journaled) =>
-    journal(act(toLocatorHints(t.hints)));
+  const journalAct = (t: Target, act: (target: LocatorHints) => Journaled) => {
+    const j = act(toLocatorHints(t.hints));
+    if (j.kind !== "click") {
+      if (j.kind !== "input") lastClick = null;
+      return journal(j);
+    }
+    // A stepper's second press: the first one changed the page, so it is no retry.
+    const again =
+      lastClick !== null &&
+      JSON.stringify(lastClick.hints) === JSON.stringify(t.hints) &&
+      lastChanged;
+    lastClick = t;
+    journal(again ? { ...j, again } : j);
+  };
+  /** The control last clicked: a `type` after it is journaled as its input. */
+  let lastClick: Target | null = null;
+  /** Whether the last looked-at command changed the page's controls. */
+  let lastChanged = false;
   /** What leaves the socket: masked like a transcript, unless the caller asks for raw. */
   const out = (text: string, raw: boolean | undefined) => (raw ? text : redactText(text));
 
@@ -1360,7 +1376,9 @@ async function serve(
     const out = await act(c, wait).finally(() => overlay.after(fp.page));
     page = fp.page;
     const after = await rows();
-    return { answer: { ...(out as object), changed: pageChange(before, after) }, rows: after };
+    const changed = pageChange(before, after);
+    lastChanged = changed.added.length + changed.gone + (changed.more ?? 0) > 0;
+    return { answer: { ...(out as object), changed }, rows: after };
   };
   /**
    * What a person did since the agent's last command, once: the count, where
@@ -1532,9 +1550,37 @@ async function serve(
         if (spent?.charges) return { url: page.url(), ...set, told: await reportSpend(spent) };
         return { url: page.url(), ...set };
       }
-      case "type":
+      case "type": {
+        // Into the control just clicked: journaled as its input, so the flow types it too.
+        const into = lastClick;
+        const held = into
+          ? await find(into)
+              .evaluate(
+                (el) =>
+                  el === el.ownerDocument.activeElement ||
+                  el.contains(el.ownerDocument.activeElement),
+                undefined,
+                { timeout: 2_000 },
+              )
+              .catch(() => false)
+          : false;
         await hands.type(page, c.text, { timeout: 10_000 });
+        if (!into || !held)
+          return {
+            ok: true,
+            journaled: false,
+            note: "typed into a focus no clicked control holds: the recording lacks it; use fill",
+          };
+        const secret =
+          looksLikeSecretField(toLocatorHints(into.hints)) || looksLikeSecretValue(c.text);
+        journalAct(into, (target) => ({
+          kind: "input",
+          target,
+          value: secret ? REDACTED : c.text,
+          redacted: secret,
+        }));
         return { ok: true };
+      }
       case "key": {
         // Enter or Space presses whatever has focus: judged as a click on it.
         const focused = { ...c, hints: { css: "*:focus" } } as unknown as Target;

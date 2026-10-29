@@ -199,11 +199,13 @@ export function structure(rec: Recording, o: StructureOptions = {}): Outline {
    * this step replaces that earlier op (the last value entered is the one
    * that counts: a retyped field, a form re-entered after a reload).
    */
-  const add = (op: OutlineOp) => {
+  const add = (op: OutlineOp, again = false) => {
     const ops = open().ops;
-    // The same control clicked again right away is a retry (a menu that had not opened yet), not two clicks.
+    // The same control clicked again right away is a retry (a menu that had not opened yet), not two
+    // clicks, unless the journal says the first one changed the page.
     const last = ops.at(-1);
     if (
+      !again &&
       op.kind === "click" &&
       last?.kind === "click" &&
       JSON.stringify(last.hints) === JSON.stringify(op.hints)
@@ -334,12 +336,15 @@ export function structure(rec: Recording, o: StructureOptions = {}): Outline {
       case "resume":
         break;
       case "click":
-        add({
-          kind: "click",
-          goal: `click ${describe(a.target)}`,
-          hints: stripHints(a.target),
-          irreversible: IRREVERSIBLE_CLICK.test(`${a.target.name ?? ""} ${a.target.text ?? ""}`),
-        });
+        add(
+          {
+            kind: "click",
+            goal: `click ${describe(a.target)}`,
+            hints: stripHints(a.target),
+            irreversible: IRREVERSIBLE_CLICK.test(`${a.target.name ?? ""} ${a.target.text ?? ""}`),
+          },
+          a.again === true,
+        );
         break;
       case "input": {
         const label = describe(a.target);

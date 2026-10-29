@@ -1,0 +1,155 @@
+{
+  "at": "2026-10-29T01:15:09.259Z",
+  "status": "done",
+  "steps": [
+    {
+      "name": "www-airbnb-ca",
+      "status": "done",
+      "detail": "{\"listings\":[{\"title\":\"Apartment in São Paulo\",\"subtitle\":\"central Lisbon apt with balcony ideal for families\",\"price\":\"$249 CAD totalShow price breakdown $249 CAD totalPay $0 todayFree cancellation\",\"rating\":\"4.69 (13)\",\"url\":\"https://www.airbnb.ca/rooms/1749384500173798791\"},{\"title\":\"Condo in Santo António\",\"subtitle\":\"BEST Avenida| Downtown, Terrace, A/C & Metro\",\"price\":\"$392 CAD totalShow price breakdown $392 CAD totalPay $0 todayFree cancellation\",\"rating\":\"4.94 (226)\",\"url\":\"https://www.airbnb.ca/rooms/955607150362016055\"},{\"title\":\"Apartment in Santo António\",\"subtitle\":\"Terrace and nice view of Lisbon historical center\",\"price\":\"$473 CAD $428 CAD total$428 CAD total, originally $473 CAD Pay $0 todayFree cancellation\",\"rating\":\"4.62 (526)\",\"url\":\"https://www.airbnb.ca/rooms/15938441\"},{\"title\":\"Apartment in Santa Maria Maior\",\"subtitle\":\"Charming Duplex • River View Terrace • Downtown\",\"price\":\"$536 CAD $459 CAD total$459 CAD total, originally $536 CAD Pay $0 todayFree cancellation\",\"rating\":\"4.9 (71)\",\"url\":\"https://www.airbnb.ca/rooms/1557371653757301816\"},{\"title\":\"Apartment in Misericórdia\",\"subtitle\":\"Tastefully Decorated Apartment in Bairro Alto\",\"price\":\"$445 CAD totalShow price breakdown $445 CAD total\",\"rating\":\"4.88 (259)\",\"url\":\"https://www.airbnb.ca/rooms/52276978\"},{\"title\":\"Apartment in Santa Maria Maior\",\"subtitle\":\"Explore the Picturesque Alfama Neighborhood in a Quaint Flat\",\"price\":\"$322 CAD totalShow price breakdown $322 CAD totalPay $0 todayFree cancellation\",\"rating\":\"4.9 (715)\",\"url\":\"https://www.airbnb.ca/rooms/22419451\"},{\"title\":\"Apartment in Misericórdia\",\"subtitle\":\"Cosy Apartment Bairro Alto\",\"price\":\"$687 CAD totalShow price breakdown $687 CAD total\",\"rating\":\"4.91 (282)\",\"url\":\"https://www.airbnb.ca/rooms/20739486\"},{\"title\":\"Apartment in Santa Maria Maior\",\"subtitle\":\"LISBON HISTORICAL CITY CENTER APART\",\"price\":\"$737 CAD totalShow price breakdown $737 CAD total\",\"rating\":\"4.85 (587)\",\"url\":\"https://www.airbnb.ca/rooms/322284\"},{\"title\":\"Apartment in Graça\",\"subtitle\":\"Lovely apartment in Graça with free parking\",\"price\":\"$322 CAD totalShow price breakdown $322 CAD total\",\"rating\":\"4.93 (599)\",\"url\":\"https://www.airbnb.ca/rooms/32567495\"},{\"title\":\"Condo in Arroios\",\"subtitle\":\"Downtown Penthouse|Metro, Terrace,A/C&Lift\",\"price\":\"$728 CAD totalShow price breakdown $728 CAD total\",\"rating\":\"4.99 (97)\",\"url\":\"https://www.airbnb.ca/rooms/1352695055219763182\"},{\"title\":\"Apartment in Santa Maria Maior\",\"subtitle\":\"Alfama Village with air conditioning, door 15\",\"price\":\"$614 CAD totalShow price breakdown $614 CAD total\",\"rating\":\"4.83 (252)\",\"url\":\"https://www.airbnb.ca/rooms/978838022718621393\"},{\"title\":\"Apartment in São Paulo\",\"subtitle\":\"Apartment on the Wharf\",\"price\":\"$772 CAD $689 CAD total$689 CAD total, originally $772 CAD\",\"rating\":\"4.91 (326)\",\"url\":\"https://www.airbnb.ca/rooms/27023726\"},{\"title\":\"Apartment in Misericórdia\",\"subtitle\":\"Elegant Apartment w/ Balcony in Bairro Alto\",\"price\":\"$407 CAD $380 CAD total$380 CAD total, originally $407 CAD Book early to savePay $0 todayFree cancellation\",\"rating\":\"4.58 (43)\",\"url\":\"https://www.airbnb.ca/rooms/1565390939198657595\"},{\"title\":\"Apartment in Santa Maria Maior\",\"subtitle\":\"Superb Design & Areas, stunning Views Top Location\",\"price\":\"$579 CAD $459 CAD total$459 CAD total, originally $579 CAD\",\"rating\":\"4.76 (825)\",\"url\":\"https://www.airbnb.ca/rooms/2393974\"},{\"title\":\"Apartment in Arroios\",\"subtitle\":\"Your house in the center of Lisbon\",\"price\":\"$320 CAD totalShow price breakdown $320 CAD totalPay $0 todayFree cancellation\",\"rating\":\"4.91 (463)\",\"url\":\"https://www.airbnb.ca/rooms/7367013\"},{\"title\":\"Apartment in Campo de Ourique\",\"subtitle\":\"Modern São Bento II @ Cozy apartment with balcony\",\"price\":\"$584 CAD $529 CAD total$529 CAD total, originally $584 CAD Pay $0 todayFree cancellation\",\"rating\":\"4.9 (324)\",\"url\":\"https://www.airbnb.ca/rooms/51498369\"},{\"title\":\"Apartment in São Paulo\",\"subtitle\":\"central Lisbon charming flat perfect for families\",\"price\":\"$249 CAD totalShow price breakdown $249 CAD totalPay $0 todayFree cancellation\",\"rating\":\"4.51 (69)\",\"url\":\"https://www.airbnb.ca/rooms/1553066487764848585\"},{\"title\":\"Apartment in Estrela\",\"subtitle\":\"FLH Madragoa Bright Place\",\"price\":\"$324 CAD totalShow price breakdown $324 CAD totalPay $0 todayFree cancellation\",\"rating\":null,\"url\":\"https://www.airbnb.ca/rooms/1764406598498954451\"},{\"title\":\"Condo in Santa Maria Maior\",\"subtitle\":\"Old Town Haven\",\"price\":\"$597 CAD $459 CAD total$459 CAD total, originally $597 CAD Pay $0 todayFree cancellation\",\"rating\":\"4.94 (152)\",\"url\":\"https://www.airbnb.ca/rooms/1260812418252115772\"},{\"title\":\"Apartment in Santa Maria Maior\",\"subtitle\":\"Dona Conceição\",\"price\":\"$623 CAD $490 CAD total$490 CAD total, originally $623 CAD Pay $0 todayFree cancellation\",\"rating\":\"4.86 (279)\",\"url\":\"https://www.airbnb.ca/rooms/10228529\"}]}"
+    }
+  ],
+  "output": {
+    "listings": [
+      {
+        "title": "Apartment in São Paulo",
+        "subtitle": "central Lisbon apt with balcony ideal for families",
+        "price": "$249 CAD totalShow price breakdown $249 CAD totalPay $0 todayFree cancellation",
+        "rating": "4.69 (13)",
+        "url": "https://www.airbnb.ca/rooms/1749384500173798791"
+      },
+      {
+        "title": "Condo in Santo António",
+        "subtitle": "BEST Avenida| Downtown, Terrace, A/C & Metro",
+        "price": "$392 CAD totalShow price breakdown $392 CAD totalPay $0 todayFree cancellation",
+        "rating": "4.94 (226)",
+        "url": "https://www.airbnb.ca/rooms/955607150362016055"
+      },
+      {
+        "title": "Apartment in Santo António",
+        "subtitle": "Terrace and nice view of Lisbon historical center",
+        "price": "$473 CAD $428 CAD total$428 CAD total, originally $473 CAD Pay $0 todayFree cancellation",
+        "rating": "4.62 (526)",
+        "url": "https://www.airbnb.ca/rooms/15938441"
+      },
+      {
+        "title": "Apartment in Santa Maria Maior",
+        "subtitle": "Charming Duplex • River View Terrace • Downtown",
+        "price": "$536 CAD $459 CAD total$459 CAD total, originally $536 CAD Pay $0 todayFree cancellation",
+        "rating": "4.9 (71)",
+        "url": "https://www.airbnb.ca/rooms/1557371653757301816"
+      },
+      {
+        "title": "Apartment in Misericórdia",
+        "subtitle": "Tastefully Decorated Apartment in Bairro Alto",
+        "price": "$445 CAD totalShow price breakdown $445 CAD total",
+        "rating": "4.88 (259)",
+        "url": "https://www.airbnb.ca/rooms/52276978"
+      },
+      {
+        "title": "Apartment in Santa Maria Maior",
+        "subtitle": "Explore the Picturesque Alfama Neighborhood in a Quaint Flat",
+        "price": "$322 CAD totalShow price breakdown $322 CAD totalPay $0 todayFree cancellation",
+        "rating": "4.9 (715)",
+        "url": "https://www.airbnb.ca/rooms/22419451"
+      },
+      {
+        "title": "Apartment in Misericórdia",
+        "subtitle": "Cosy Apartment Bairro Alto",
+        "price": "$687 CAD totalShow price breakdown $687 CAD total",
+        "rating": "4.91 (282)",
+        "url": "https://www.airbnb.ca/rooms/20739486"
+      },
+      {
+        "title": "Apartment in Santa Maria Maior",
+        "subtitle": "LISBON HISTORICAL CITY CENTER APART",
+        "price": "$737 CAD totalShow price breakdown $737 CAD total",
+        "rating": "4.85 (587)",
+        "url": "https://www.airbnb.ca/rooms/322284"
+      },
+      {
+        "title": "Apartment in Graça",
+        "subtitle": "Lovely apartment in Graça with free parking",
+        "price": "$322 CAD totalShow price breakdown $322 CAD total",
+        "rating": "4.93 (599)",
+        "url": "https://www.airbnb.ca/rooms/32567495"
+      },
+      {
+        "title": "Condo in Arroios",
+        "subtitle": "Downtown Penthouse|Metro, Terrace,A/C&Lift",
+        "price": "$728 CAD totalShow price breakdown $728 CAD total",
+        "rating": "4.99 (97)",
+        "url": "https://www.airbnb.ca/rooms/1352695055219763182"
+      },
+      {
+        "title": "Apartment in Santa Maria Maior",
+        "subtitle": "Alfama Village with air conditioning, door 15",
+        "price": "$614 CAD totalShow price breakdown $614 CAD total",
+        "rating": "4.83 (252)",
+        "url": "https://www.airbnb.ca/rooms/978838022718621393"
+      },
+      {
+        "title": "Apartment in São Paulo",
+        "subtitle": "Apartment on the Wharf",
+        "price": "$772 CAD $689 CAD total$689 CAD total, originally $772 CAD",
+        "rating": "4.91 (326)",
+        "url": "https://www.airbnb.ca/rooms/27023726"
+      },
+      {
+        "title": "Apartment in Misericórdia",
+        "subtitle": "Elegant Apartment w/ Balcony in Bairro Alto",
+        "price": "$407 CAD $380 CAD total$380 CAD total, originally $407 CAD Book early to savePay $0 todayFree cancellation",
+        "rating": "4.58 (43)",
+        "url": "https://www.airbnb.ca/rooms/1565390939198657595"
+      },
+      {
+        "title": "Apartment in Santa Maria Maior",
+        "subtitle": "Superb Design & Areas, stunning Views Top Location",
+        "price": "$579 CAD $459 CAD total$459 CAD total, originally $579 CAD",
+        "rating": "4.76 (825)",
+        "url": "https://www.airbnb.ca/rooms/2393974"
+      },
+      {
+        "title": "Apartment in Arroios",
+        "subtitle": "Your house in the center of Lisbon",
+        "price": "$320 CAD totalShow price breakdown $320 CAD totalPay $0 todayFree cancellation",
+        "rating": "4.91 (463)",
+        "url": "https://www.airbnb.ca/rooms/7367013"
+      },
+      {
+        "title": "Apartment in Campo de Ourique",
+        "subtitle": "Modern São Bento II @ Cozy apartment with balcony",
+        "price": "$584 CAD $529 CAD total$529 CAD total, originally $584 CAD Pay $0 todayFree cancellation",
+        "rating": "4.9 (324)",
+        "url": "https://www.airbnb.ca/rooms/51498369"
+      },
+      {
+        "title": "Apartment in São Paulo",
+        "subtitle": "central Lisbon charming flat perfect for families",
+        "price": "$249 CAD totalShow price breakdown $249 CAD totalPay $0 todayFree cancellation",
+        "rating": "4.51 (69)",
+        "url": "https://www.airbnb.ca/rooms/1553066487764848585"
+      },
+      {
+        "title": "Apartment in Estrela",
+        "subtitle": "FLH Madragoa Bright Place",
+        "price": "$324 CAD totalShow price breakdown $324 CAD totalPay $0 todayFree cancellation",
+        "rating": null,
+        "url": "https://www.airbnb.ca/rooms/1764406598498954451"
+      },
+      {
+        "title": "Condo in Santa Maria Maior",
+        "subtitle": "Old Town Haven",
+        "price": "$597 CAD $459 CAD total$459 CAD total, originally $597 CAD Pay $0 todayFree cancellation",
+        "rating": "4.94 (152)",
+        "url": "https://www.airbnb.ca/rooms/1260812418252115772"
+      },
+      {
+        "title": "Apartment in Santa Maria Maior",
+        "subtitle": "Dona Conceição",
+        "price": "$623 CAD $490 CAD total$490 CAD total, originally $623 CAD Pay $0 todayFree cancellation",
+        "rating": "4.86 (279)",
+        "url": "https://www.airbnb.ca/rooms/10228529"
+      }
+    ]
+  }
+}

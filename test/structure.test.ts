@@ -141,6 +141,23 @@ describe("structure fields", () => {
     expect(o.fields.map((f) => f.key)).toEqual(["changePhoto"]);
   });
 
+  it("a stepper pressed again after it changed the page is two clicks", () => {
+    const plus = { tag: "button", role: "button", name: "Increase Adults" };
+    const rec = {
+      ...base,
+      name: "r",
+      actions: [
+        { t: 0, kind: "navigate", url: "https://example.com/" },
+        at(1, "click", plus, {}),
+        at(2, "click", plus, { again: true }),
+        at(3, "click", plus, {}),
+      ],
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: fixture
+    const o = structure(rec as any);
+    expect(o.steps[0].ops.map((op) => op.kind)).toEqual(["click", "click"]);
+  });
+
   it("keeps only the last fill of a control within a step and prunes the fields it dropped", () => {
     const rec = {
       ...base,
