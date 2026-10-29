@@ -1389,12 +1389,11 @@ async function serve(
       const out = await looked(c, wait);
       left = { url: page.url(), rows: out.rows ?? left?.rows ?? null };
       answer = out.answer;
-      const tools = await newSiteTools().catch(() => null);
-      return (helped || tools) &&
-        out.answer &&
-        typeof out.answer === "object" &&
-        !Array.isArray(out.answer)
-        ? { ...(helped ? { helped } : {}), ...out.answer, ...(tools ? { tools } : {}) }
+      const plain = out.answer && typeof out.answer === "object" && !Array.isArray(out.answer);
+      // only an object answer can carry it: the next one gets it otherwise
+      const tools = plain ? await newSiteTools().catch(() => null) : null;
+      return plain && (helped || tools)
+        ? { ...(helped ? { helped } : {}), ...(out.answer as object), ...(tools ? { tools } : {}) }
         : out.answer;
     } catch (err) {
       failed = err;
@@ -1419,8 +1418,10 @@ async function serve(
     if (!opts.workflows) return null;
     const host = URL.canParse(page.url()) ? new URL(page.url()).host : "";
     if (host === toolsHost) return null;
+    const all = await toolsNow().catch(() => null);
+    // a catalog that failed to load: the next answer tries again
+    if (!all) return null;
     toolsHost = host;
-    const all = await toolsNow();
     const kit = toolkitFor(host, SITE_LOGINS, all);
     const key = kit?.sites.join(",") ?? "";
     if (key === toolsSent) return null;

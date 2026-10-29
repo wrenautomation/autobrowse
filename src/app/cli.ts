@@ -198,7 +198,7 @@ program
 program
   .command("tools [site]")
   .description(
-    "The toolkit: every workflow `flow` can run, by site. No site: each site and its count; `--find`: a fuzzy search",
+    "The toolkit: every workflow and leg, by site (`(any)`: multi-site, run with `run`). No site: each site and its count; `--find`: a fuzzy search",
   )
   .option("--find <words>", "search names, aims, sites, steps and inputs")
   .option("--json", "the rows as JSON")
