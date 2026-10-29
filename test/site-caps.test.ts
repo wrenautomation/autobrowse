@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Credential, CredentialStore } from "credvault";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { already, markReached } from "../src/browser/attempt.js";
 import { linkedinCompanyJobs, linkedinConnect } from "../src/browser/flows/linkedin-reach.js";
 import { xProfile, xSearch } from "../src/browser/flows/x-read.js";
 import { httpClient } from "../src/clients/http.js";
@@ -434,6 +435,8 @@ describe("who spent a cap", () => {
     const browser = fakeBrowser(calls);
     browser.on(linkedinCompanyJobs, async (i) => {
       calls.push(`jobs ${i.company}`);
+      // the page loaded, then broke: the site saw the read
+      markReached();
       if (fail) throw new Error("page changed");
       return { companyId: "1", jobs: [] };
     });
@@ -504,12 +507,17 @@ describe("who spent a cap", () => {
     expect(JSON.stringify(rows)).not.toMatch(/stripe|acme/);
     expect(rows[1]).toMatchObject({ caller: null, outcome: "failed" });
     const report = facade(caps, []).caps(undefined, "linkedin");
-    expect(report).toMatchObject({ day: "2026-09-29", used: { "linkedin|r@x.com|company": 2 } });
+    // the failure reached the site: a try, not a use
+    expect(report).toMatchObject({
+      day: "2026-09-29",
+      used: { "linkedin|r@x.com|company": 1 },
+      tried: { "linkedin|r@x.com|company": 2 },
+    });
     expect(report.calls).toHaveLength(2);
     expect(facade(caps, []).caps("2026-09-28").calls).toEqual([]);
   });
 
-  it("a failed metered read is a terminal 502: a durable retry would spend a read per try", async () => {
+  it("a failed metered read is a terminal 502: a durable retry would spend a try each time", async () => {
     const caps = memoryCaps(() => noon);
     const err = await facade(caps, [], true)
       .call("linkedin", "GET", "/company/acme/jobs", {}, "linkedin@research")
@@ -517,9 +525,90 @@ describe("who spent a cap", () => {
     expect(err).toBeInstanceOf(SiteError);
     expect(err).toMatchObject({ status: 502 });
     expect((err as Error).message).toMatch(
-      /GET \/company\/\{company\}\/jobs failed after spending a read/,
+      /GET \/company\/\{company\}\/jobs failed after spending a try/,
     );
-    expect(caps.today()).toEqual({ "linkedin|r@x.com|company": 1, "linkedin|r@x.com|total": 1 });
+    expect(caps.today()).toEqual({ "linkedin|r@x.com|company": 0, "linkedin|r@x.com|total": 0 });
+    expect(caps.tried()).toEqual({ "linkedin|r@x.com|company": 1, "linkedin|r@x.com|total": 1 });
+    expect(caps.calls().at(-1)).toMatchObject({ outcome: "failed", spent: true });
+  });
+});
+
+describe("tries over a cap", () => {
+  it("failures that reached the site spend the buffer, not the cap; a broken flow still stops", () => {
+    const caps = memoryCaps(() => noon);
+    const take = () => caps.take("instagram", "w@x.com", { follow: 1 }, { follow: 4 }, 0.25);
+    // ceiling 4 + 1: five failed tries, then refused, with no follow done
+    for (let i = 0; i < 5; i++) {
+      expect(take().ok).toBe(true);
+      caps.giveBack("instagram", "w@x.com", { follow: 1 }, true);
+    }
+    expect(take()).toMatchObject({ ok: false, tries: true, used: 5, cap: 5 });
+    expect(caps.today()).toEqual({ "instagram|w@x.com|follow": 0 });
+    expect(caps.tried()).toEqual({ "instagram|w@x.com|follow": 5 });
+  });
+
+  it("a cap of 0 has no buffer; a call that never reached the site spends neither count", () => {
+    const caps = memoryCaps(() => noon);
+    expect(caps.take("x", "a", { follow: 1 }, { follow: 0 }, 0.5).ok).toBe(false);
+    for (let i = 0; i < 10; i++) {
+      expect(caps.take("x", "a", { like: 1 }, { like: 2 }, 0.5).ok).toBe(true);
+      caps.giveBack("x", "a", { like: 1 });
+    }
+    expect(caps.tried()).toEqual({ "x|a|like": 0 });
+    // successes stop at the cap, whatever the buffer
+    for (let i = 0; i < 2; i++) caps.take("x", "a", { like: 1 }, { like: 2 }, 0.5);
+    expect(caps.take("x", "a", { like: 1 }, { like: 2 }, 0.5)).toMatchObject({ ok: false, cap: 2 });
+  });
+
+  it("a caps file from before tries were kept reads its uses as tries", () => {
+    const dir = mkdtempSync(join(tmpdir(), "caps-"));
+    const path = join(dir, "caps.json");
+    writeFileSync(path, JSON.stringify({ day: "2026-09-29", used: { "x|a|like": 3 } }));
+    const caps = fileCaps(path, () => noon);
+    expect(caps.tried()).toEqual({ "x|a|like": 3 });
+    expect(caps.take("x", "a", { like: 1 }, { like: 3 }, 0.34).ok).toBe(false);
+  });
+
+  const follows = (out: () => Promise<unknown>) => {
+    const caps = memoryCaps(() => noon);
+    const browser = fakeBrowser([]);
+    browser.on(linkedinConnect, out as never);
+    const sites = siteFacade([{ ...linkedin, pace: { gapMs: 0 } }], {
+      http: httpClient({ fetch: fakeFetch(() => ({ status: 500 })).fetch }),
+      env: () => undefined,
+      sink: memorySink(),
+      runner: browser,
+      flow: (n) => (n === "linkedin/connect" ? (linkedinConnect as never) : null),
+      caps,
+      now: () => noon,
+      accountOf: async (_site, name) => (name === "linkedin@wren" ? "w@x.com" : null),
+    });
+    const call = () =>
+      sites
+        .call("linkedin", "POST", "/in/ada/connect", { vanity: "ada" }, "linkedin@wren")
+        .catch((e: unknown) => e);
+    return { caps, call };
+  };
+
+  it("a leg that broke before the site answered gives its slot back and keeps its own error", async () => {
+    const { caps, call } = follows(async () => {
+      throw new Error("browser did not start");
+    });
+    const err = await call();
+    expect(err).not.toBeInstanceOf(SiteError);
+    expect((err as Error).message).toBe("browser did not start");
+    expect(Object.values(caps.tried()).every((n) => n === 0)).toBe(true);
+    expect(caps.calls().at(-1)).toMatchObject({ outcome: "failed", spent: false });
+  });
+
+  it("an answer of already there spends a try, not a use", async () => {
+    const { caps, call } = follows(async () => {
+      markReached();
+      return already({ connected: true, already: true });
+    });
+    await call();
+    expect(Object.values(caps.today()).every((n) => n === 0)).toBe(true);
+    expect(Object.values(caps.tried()).some((n) => n > 0)).toBe(true);
   });
 });
 

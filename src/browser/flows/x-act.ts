@@ -9,6 +9,7 @@
  * `article` carries `[data-testid=like]` (`unlike` once liked), and under it the inline reply
  * box `tweetTextarea_0` with `tweetButtonInline`. The rail's `AppTabBar_Profile_Link` names us.
  */
+import { already } from "../attempt.js";
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
 import { firstShown, RENDER_MS, SETTLE_MS } from "./kit.js";
@@ -56,7 +57,8 @@ export const xFollow = defineFlow<FollowInput, unknown>({
     if (state === "missing") return notFound(`no X user @${username}`);
     if (state === null) return fp.human(`no Follow button on @${username} (${fp.url()})`);
     const following = state === 0;
-    if (following === !undo) return { data: { following, pending_follow: false, already: true } };
+    if (following === !undo)
+      return already({ data: { following, pending_follow: false, already: true } });
     if (undo) {
       await fp.act({ kind: "click" }, on, { goal: `unfollow @${username}` });
       if (await fp.has(confirm, 5_000))
@@ -89,7 +91,7 @@ export const xLike = defineFlow<LikeInput, unknown>({
     if (state === "missing") return notFound(`no X post ${id}`);
     if (state === null) return fp.human(`no Like button on post ${id} (${fp.url()})`);
     const liked = state === 0;
-    if (liked === !undo) return { data: { liked, already: true } };
+    if (liked === !undo) return already({ data: { liked, already: true } });
     await fp.act({ kind: "click" }, undo ? on : off, {
       goal: `${undo ? "unlike" : "like"} post ${id}`,
     });

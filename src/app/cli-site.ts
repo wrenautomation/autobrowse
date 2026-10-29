@@ -27,11 +27,16 @@ export function printCaps(r: CapsReport, rows: boolean): void {
   if (!used.length) console.log("  nothing used");
   for (const [k, n] of used) {
     const [site, account, bucket] = k.split("|");
-    console.log(`  ${site} ${maskAddress(account ?? "")} ${bucket}: ${n}`);
+    // a box from before 2026-10-29 sends no tries
+    const t = r.tried?.[k] ?? n;
+    console.log(
+      `  ${site} ${maskAddress(account ?? "")} ${bucket}: ${n}${t > n ? ` (${t} tries)` : ""}`,
+    );
   }
   const groups = new Map<string, number>();
   for (const c of r.calls) {
-    const k = `${c.caller ?? "(unnamed)"}  ${c.site} ${maskAddress(c.account)}  ${c.route}  ${c.outcome}${c.bucket ? ` ${c.bucket}` : ""}`;
+    const spent = c.outcome === "failed" && c.spent === false ? " unspent" : "";
+    const k = `${c.caller ?? "(unnamed)"}  ${c.site} ${maskAddress(c.account)}  ${c.route}  ${c.outcome}${spent}${c.bucket ? ` ${c.bucket}` : ""}`;
     groups.set(k, (groups.get(k) ?? 0) + 1);
   }
   console.log(`calls: ${r.calls.length}`);

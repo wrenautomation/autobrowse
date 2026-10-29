@@ -4,6 +4,11 @@
  * reads never spend another's. A call takes all its buckets or none; over a
  * cap it is refused with the seconds until the day turns (UTC), never queued.
  *
+ * Two counts per bucket: `used` (calls that worked, and those in flight) stays under the cap;
+ * `tried` (every call that reached the site, worked or not) stays under the cap plus a buffer,
+ * so a few failures leave room to try again and a broken flow still stops. A call that never
+ * reached the site (its profile busy, the browser down) spends neither (`giveBack`).
+ *
  * Pace: a person does not open ten profiles in ten seconds. A paced site
  * books each call a slot at least `gapMs` (plus up to `jitterMs`, random)
  * after the last one for that account; the caller sleeps until it. A slot
@@ -29,6 +34,8 @@ export interface Taken {
   bucket?: string;
   used?: number;
   cap?: number;
+  /** The tries ceiling (cap plus buffer) was full, not the cap itself. */
+  tries?: true;
   /** Seconds until the day turns. */
   retryAfter?: number;
 }
@@ -50,18 +57,25 @@ export interface Slot {
 }
 
 export interface DailyCaps {
+  /** `buffer`: the tries allowed over each cap, as a fraction of it (0.25 = a quarter more). */
   take(
     site: string,
     account: string,
     use: Record<string, number>,
     caps: Record<string, number>,
+    buffer?: number,
   ): Taken;
-  /** Undo a `take` whose call never reached the site (its browser profile was busy). */
-  giveBack(site: string, account: string, use: Record<string, number>): void;
+  /**
+   * Undo a `take`. `reached` false: the call never reached the site, both counts return.
+   * `reached` true: it reached the site and did not do the thing, only `used` returns.
+   */
+  giveBack(site: string, account: string, use: Record<string, number>, reached?: boolean): void;
   /** Book the next slot for `site|account` under `pace`; nothing is booked when refused. */
   slot(site: string, account: string, pace: Pace): Slot;
   /** What each bucket has used today, by `site|account|bucket`. */
   today(): Record<string, number>;
+  /** Each bucket's tries today (`used` plus the failures that reached the site). */
+  tried(): Record<string, number>;
   /** Note one metered call: who asked, which route, how it went. */
   note(call: MeteredCall): void;
   /** The day's noted calls (UTC `YYYY-MM-DD`, today when absent), oldest first. */
@@ -79,17 +93,27 @@ export interface MeteredCall {
   caller: string | null;
   /** The Restate invocation, so the caller's own target can be looked up there. */
   invocation?: string;
-  /** `capped` and `paced` spent nothing; `failed` spent the cap and got no answer. */
+  /** `capped` and `paced` spent nothing; `failed` got no answer. */
   outcome: "ok" | "failed" | "capped" | "paced";
+  /** A failed call: whether it reached the site, so it spent a try. */
+  spent?: boolean;
   /** The full bucket, when capped. */
   bucket?: string;
 }
 
 const KEEP_DAYS = 14;
 
+/**
+ * Default tries over a cap: a quarter for acts (refused follows in a row are a flag of their
+ * own), half for reads.
+ */
+export const RETRY_BUFFER = { act: 0.25, read: 0.5 } as const;
+
 interface Day {
   day: string;
   used: Record<string, number>;
+  /** Absent in a file from before 2026-10-29: `used` then. */
+  tried?: Record<string, number>;
   /** The earliest next call per `site|account`, epoch ms; it outlives the day. */
   next?: Record<string, number>;
 }
@@ -120,26 +144,43 @@ function capsOn(
     if (d && d.day === day) return d;
     return { day, used: {}, ...(d?.next ? { next: d.next } : {}) };
   };
+  const keyOf = (site: string, account: string, b: string) =>
+    `${site}|${account.trim().toLowerCase()}|${b}`;
+  const triedOf = (d: Day) => d.tried ?? { ...d.used };
   return {
-    take(site, account, use, caps) {
+    take(site, account, use, caps, buffer = 0) {
       const d = current();
-      const key = (b: string) => `${site}|${account.trim().toLowerCase()}|${b}`;
+      const tried = triedOf(d);
+      const key = (b: string) => keyOf(site, account, b);
       for (const [bucket, n] of Object.entries(use)) {
         const cap = caps[bucket];
+        if (cap === undefined) continue;
         const used = d.used[key(bucket)] ?? 0;
-        if (cap !== undefined && used + n > cap)
-          return { ok: false, bucket, used, cap, retryAfter: untilTomorrow(now()) };
+        const retryAfter = untilTomorrow(now());
+        if (used + n > cap) return { ok: false, bucket, used, cap, retryAfter };
+        // at least one spare try on any cap above 0
+        const ceiling = cap + (cap > 0 && buffer > 0 ? Math.max(1, Math.ceil(cap * buffer)) : 0);
+        const t = tried[key(bucket)] ?? 0;
+        if (t + n > ceiling)
+          return { ok: false, bucket, used: t, cap: ceiling, tries: true, retryAfter };
       }
-      for (const [bucket, n] of Object.entries(use))
+      for (const [bucket, n] of Object.entries(use)) {
         d.used[key(bucket)] = (d.used[key(bucket)] ?? 0) + n;
+        tried[key(bucket)] = (tried[key(bucket)] ?? 0) + n;
+      }
+      d.tried = tried;
       save(d);
       return { ok: true };
     },
-    giveBack(site, account, use) {
+    giveBack(site, account, use, reached = false) {
       const d = current();
-      const key = (b: string) => `${site}|${account.trim().toLowerCase()}|${b}`;
-      for (const [bucket, n] of Object.entries(use))
+      const tried = triedOf(d);
+      const key = (b: string) => keyOf(site, account, b);
+      for (const [bucket, n] of Object.entries(use)) {
         d.used[key(bucket)] = Math.max(0, (d.used[key(bucket)] ?? 0) - n);
+        if (!reached) tried[key(bucket)] = Math.max(0, (tried[key(bucket)] ?? 0) - n);
+      }
+      d.tried = tried;
       save(d);
     },
     slot(site, account, pace) {
@@ -156,6 +197,7 @@ function capsOn(
       return { ok: true, waitMs };
     },
     today: () => current().used,
+    tried: () => triedOf(current()),
     note: (call) => log.add(call.at.slice(0, 10), call),
     calls: (day) => log.read(day ?? dayOf(now())),
   };

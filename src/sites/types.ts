@@ -279,6 +279,11 @@ export interface SiteApi {
   capsPerKey?: Record<string, string>;
   /** Spacing between one account's browser-leg calls, so its reads look like a person's. */
   pace?: Pace;
+  /**
+   * Tries allowed over each cap for calls that reached the site and failed, as a fraction of
+   * the cap; default `RETRY_BUFFER` (a quarter for acts, half for reads).
+   */
+  retryBuffer?: number;
 }
 
 export class SiteError extends Error {

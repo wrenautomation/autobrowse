@@ -12,6 +12,7 @@
  *
  * Mapped 2026-10-26 in explore (the reply dialog opened and was cancelled; nothing was sent).
  */
+import { already } from "../attempt.js";
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
 import { RENDER_MS, SETTLE_MS } from "./kit.js";
@@ -153,7 +154,7 @@ export const threadsLike = defineFlow<
     const state = await shown(fp, [liked, like]);
     if (state === "missing") return { found: false, reason: `no Threads post ${code}` };
     if (state === null) return fp.human(`no Like on Threads post ${code} (${fp.url()})`);
-    if (state === 0) return { code, liked: true, already: true };
+    if (state === 0) return already({ code, liked: true, already: true });
     await fp.act({ kind: "click" }, like, { goal: `like Threads post ${code}` });
     if (!(await fp.has(liked, RENDER_MS)))
       return fp.human(`Threads did not take the like on ${code}`);
@@ -211,7 +212,7 @@ export const threadsFollow = defineFlow<
     const state = await shown(fp, [following, followButton]);
     if (state === "missing") return { found: false, reason: `no Threads account @${handle}` };
     if (state === null) return fp.human(`no Follow on @${handle} (${fp.url()})`);
-    if (state === 0) return { username: handle, following: true, already: true };
+    if (state === 0) return already({ username: handle, following: true, already: true });
     await fp.act({ kind: "click" }, followButton, { goal: `follow @${handle} on Threads` });
     if (!(await fp.has(following, RENDER_MS)))
       return fp.human(`Threads did not take the follow of @${handle}`);

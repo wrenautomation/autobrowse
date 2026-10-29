@@ -14,6 +14,7 @@
  * Mapped 2026-10-26 in explore on the tiktok profile (reads only; no act was sent).
  */
 import type { Response } from "playwright";
+import { already } from "../attempt.js";
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
 import { RENDER_MS, SETTLE_MS } from "./kit.js";
@@ -158,7 +159,7 @@ export const tiktokLike = defineFlow<
     if (state === "missing")
       return { found: false, status: 404, reason: `no TikTok video ${videoId}` };
     if (state === null) return fp.human(`no Like on video ${videoId} (${fp.url()})`);
-    if (state === 0) return { videoId, liked: true, already: true };
+    if (state === 0) return already({ videoId, liked: true, already: true });
     await fp.act({ kind: "click" }, like, { goal: `like video ${videoId}` });
     if (!(await fp.has(liked, RENDER_MS)))
       return fp.human(`TikTok did not take the like on ${videoId}`);
@@ -246,7 +247,7 @@ export const tiktokFollow = defineFlow<
     if (!shown) return fp.human(`no Follow button on @${handle} (${fp.url()})`);
     // Followed already: the button reads Following or Friends.
     if (!/^follow( back)?$/i.test((await fp.read(followButton)).trim()))
-      return { username: handle, following: true, already: true };
+      return already({ username: handle, following: true, already: true });
     await fp.act({ kind: "click" }, followButton, { goal: `follow @${handle}` });
     let flipped = false;
     for (let i = 0; i < RENDER_MS / SETTLE_MS && !flipped; i++) {

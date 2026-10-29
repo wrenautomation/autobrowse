@@ -17,6 +17,7 @@
  * The flow makes that call from the signed-in page, a page at a time, with a person's pause between.
  */
 import type { Response } from "playwright";
+import { already } from "../attempt.js";
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
 import { scrollCollect } from "../scroll-collect.js";
@@ -63,7 +64,7 @@ export const instagramFollow = defineFlow<
     if (state === "missing") return { found: false, reason: `no Instagram account @${username}` };
     if (state === null) return fp.human(`no Follow button on @${username} (${fp.url()})`);
     const following = state === 0;
-    if (following === !undo) return { username, following, already: true };
+    if (following === !undo) return already({ username, following, already: true });
     if (undo) {
       await fp.act({ kind: "click" }, followingButton, { goal: `open @${username}'s Following` });
       await fp.act({ kind: "click" }, unfollow, { goal: `unfollow @${username}` });
@@ -101,7 +102,7 @@ export const instagramLike = defineFlow<
     if (state === "missing") return { found: false, reason: `no Instagram post ${shortcode}` };
     if (state === null) return fp.human(`no Like on post ${shortcode} (${fp.url()})`);
     const liked = state === 0;
-    if (liked === !undo) return { shortcode, liked, already: true };
+    if (liked === !undo) return already({ shortcode, liked, already: true });
     await fp.act({ kind: "click" }, undo ? hearted : heart, {
       goal: `${undo ? "unlike" : "like"} post ${shortcode}`,
     });

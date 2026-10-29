@@ -55,8 +55,31 @@ export const withCall = <T>(
 /** The durable call this code runs under, or null (a local run: nothing retries it). */
 export const currentCall = (): string | null => calls.getStore()?.key ?? null;
 
+/**
+ * What one metered call did at the site (`sites/facade.ts` settles its cap from it): `reached`,
+ * the site answered a request; `already`, the thing was there and nothing was done.
+ */
+export interface Reach {
+  reached: boolean;
+  already?: boolean;
+}
+
+const reaches = new AsyncLocalStorage<Reach>();
+
+export const withReach = <T>(r: Reach, fn: () => Promise<T>): Promise<T> => reaches.run(r, fn);
+
+/** The metered call this code runs under, or null. */
+export const currentReach = (): Reach | null => reaches.getStore() ?? null;
+
+/** A request went to the site. */
+export const markReached = (): void => {
+  const r = reaches.getStore();
+  if (r) r.reached = true;
+};
+
 /** The step that sends starts now: from here a failure may have gone through. */
 export const markSubmitted = (): void => {
+  markReached();
   const t = calls.getStore();
   if (!t || t.submitted) return;
   t.onSubmit?.();
@@ -70,6 +93,8 @@ export const markSubmitted = (): void => {
 export const markAlready = (): void => {
   const t = calls.getStore();
   if (t) t.already = true;
+  const r = reaches.getStore();
+  if (r) r.already = true;
 };
 
 /** `out`, answered as already there (`markAlready`). */

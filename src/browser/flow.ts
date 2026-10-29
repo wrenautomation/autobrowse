@@ -25,7 +25,7 @@ import { redactAria, redactText } from "../recorder/redact.js";
 import { type FlowOutcome, type FlowRunRow, type FlowRuns, fileFlowRuns } from "../runs/flows.js";
 import { shareOff, shareTrace } from "../share/share.js";
 import { failureShape, firstTraceOfShape } from "../shots/traces.js";
-import { currentCall, type DoneActs, markSubmitted } from "./attempt.js";
+import { currentCall, currentReach, type DoneActs, markReached, markSubmitted } from "./attempt.js";
 import { bare } from "./bare.js";
 import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js";
 import { filmLog, filmStep } from "./film.js";
@@ -413,6 +413,7 @@ const NAVIGATE_MS = 90_000;
  * before that would call an unauthenticated page "signed in".
  */
 async function settle(page: Page, url: string): Promise<void> {
+  markReached();
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAVIGATE_MS });
   await page.waitForLoadState("networkidle", { timeout: SETTLE_MS }).catch(() => undefined);
 }
@@ -760,6 +761,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           read: async (hints) => {
             lastHints = hints;
             actsBefore = acts++;
+            markReached();
             return shown(
               { kind: "read", goal: "read", hints },
               async () => (await textOf(locate(active, hints))).slice(0, 2_000),
@@ -1124,6 +1126,14 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           const key = flowKey(flow.site, flow.name);
           for (const f of fixesUsed) runner.fixes?.drop(key, f.goal, f.hints);
         }
+        // Any answer to this browser came from the site, an in-page fetch too: the cap counts a try.
+        // A request with no answer (offline) spends nothing.
+        // Playwright fires events outside this run's async context: the call's reach is held here.
+        const reach = currentReach();
+        const onResponse = () => {
+          if (reach) reach.reached = true;
+        };
+        if (reach) session.context.on("response", onResponse);
         const run = tallied(() => flow.run(fp, input));
         try {
           const out = await run.done;
@@ -1248,6 +1258,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               seed,
             }),
           );
+          if (reach) session.context.off("response", onResponse);
           runner.fixes?.flush();
           learned.flush();
           if (overlay.enabled) {

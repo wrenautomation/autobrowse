@@ -14,7 +14,14 @@
 
 import { randomUUID } from "node:crypto";
 import type { Page } from "playwright";
-import { currentCall, type DoneActs, markSubmitted } from "../browser/attempt.js";
+import {
+  currentCall,
+  type DoneActs,
+  markReached,
+  markSubmitted,
+  type Reach,
+  withReach,
+} from "../browser/attempt.js";
 import { profileBusyOf } from "../browser/browsers.js";
 import type { BrowserFlow, FlowRunner, HeldTab } from "../browser/flow.js";
 import type { Render } from "../browser/render.js";
@@ -27,7 +34,7 @@ import type { Approver } from "../gates/payment.js";
 import { envSource, ringCount, type SpentKeys } from "../reach/key-ring.js";
 import { type KeysDep, keyCall } from "../reach/key-source.js";
 import type { Proof, RunAs } from "../workflows/proof.js";
-import type { DailyCaps, MeteredCall } from "./caps.js";
+import { type DailyCaps, type MeteredCall, RETRY_BUFFER } from "./caps.js";
 import { type Effective, effective, type LimitStore, type SiteLimits } from "./limits.js";
 import {
   accessTokens,
@@ -230,6 +237,8 @@ export interface CapsReport {
   day: string;
   /** By `site|account|bucket`; today's only (a past day keeps its calls, not its counts). */
   used: Record<string, number>;
+  /** Tries by the same key: `used` plus the failures that reached the site. */
+  tried: Record<string, number>;
   calls: MeteredCall[];
 }
 
@@ -695,12 +704,13 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
     caps(day, only) {
       const today = new Date((deps.now ?? Date.now)()).toISOString().slice(0, 10);
       const at = day ?? today;
-      const used = at === today && deps.caps ? deps.caps.today() : {};
+      const caps = at === today ? deps.caps : undefined;
+      const mine = (r: Record<string, number>) =>
+        Object.fromEntries(Object.entries(r).filter(([k]) => !only || k.startsWith(`${only}|`)));
       return {
         day: at,
-        used: Object.fromEntries(
-          Object.entries(used).filter(([k]) => !only || k.startsWith(`${only}|`)),
-        ),
+        used: mine(caps?.today() ?? {}),
+        tried: mine(caps?.tried() ?? {}),
         calls: (deps.caps?.calls(at) ?? []).filter((c) => !only || c.site === only),
       };
     },
@@ -753,7 +763,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       const byBrowser = !(r.api && token !== null) && Boolean(r.browser);
       const use = r.meter?.(parsed.data as never);
       const lim = limitsOf(s);
-      const note = (outcome: MeteredCall["outcome"], bucket?: string) => {
+      const note = (outcome: MeteredCall["outcome"], bucket?: string, spent?: boolean) => {
         if (!use || !lim.caps || !deps.caps) return;
         deps.caps.note({
           at: new Date((deps.now ?? Date.now)()).toISOString(),
@@ -765,6 +775,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           ...(from?.invocation ? { invocation: from.invocation } : {}),
           outcome,
           ...(bucket ? { bucket } : {}),
+          ...(spent !== undefined ? { spent } : {}),
         });
       };
       // Paced before counted: a refusal here spends none of the day's cap.
@@ -786,7 +797,8 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           ...(await capsOfKeys(s, lim, keyAccount)),
           ...(await capsOfAccount(s, lim, chosen)),
         };
-        const t = deps.caps.take(s.site, chosen ?? s.site, use, limits);
+        const buffer = lim.retryBuffer ?? (method === "GET" ? RETRY_BUFFER.read : RETRY_BUFFER.act);
+        const t = deps.caps.take(s.site, chosen ?? s.site, use, limits, buffer);
         if (!t.ok) {
           note("capped", t.bucket);
           const who = chosen ?? "the default account";
@@ -794,14 +806,18 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
             429,
             t.cap === 0
               ? `${s.site} ${t.bucket} reads are off for ${who} (cap 0)`
-              : `${s.site} ${t.bucket} cap for ${who} is used (${t.used}/${t.cap} today); retry after ${t.retryAfter}s`,
+              : t.tries
+                ? `${s.site} ${t.bucket} tries for ${who} are used (${t.used}/${t.cap} today, failures included); retry after ${t.retryAfter}s`
+                : `${s.site} ${t.bucket} cap for ${who} is used (${t.used}/${t.cap} today); retry after ${t.retryAfter}s`,
             t.retryAfter,
           );
         }
         taken = true;
       }
+      // What the call did at the site settles its slot: none, a try, or a use.
+      const reach: Reach = { reached: false };
       try {
-        const out = await answer();
+        const out = await withReach(reach, answer);
         note("ok");
         // The answer says the call used less (no invite offered): the day's count follows it.
         const real = taken && use && r.used?.(parsed.data as never, out as never);
@@ -809,23 +825,25 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           const who = chosen ?? s.site;
           deps.caps.giveBack(s.site, who, use);
           deps.caps.take(s.site, who, real, {});
-        }
+        } else if (taken && use && deps.caps && reach.already)
+          // The thing was there (already following): the site saw a load, not the act.
+          deps.caps.giveBack(s.site, chosen ?? s.site, use, true);
         return out;
       } catch (e) {
-        // The profile was open elsewhere: nothing was asked of the site, so nothing is spent.
-        if (profileBusyOf(e)) {
-          if (taken && use) deps.caps?.giveBack(s.site, chosen ?? s.site, use);
-          throw e;
-        }
-        note("failed");
-        if (!use || !lim.caps || e instanceof SiteError) throw e;
-        // The slot is spent whatever broke: a durable retry would spend one per try, so
-        // a failed metered read ends here and the caller chooses (six reads ate 40, 2026-10-01).
+        // The profile was open elsewhere, the browser down, offline: nothing reached the site.
+        const reached = reach.reached && !profileBusyOf(e);
+        // Only a use that worked counts to the cap; a failure that reached the site is a try.
+        if (taken && use) deps.caps?.giveBack(s.site, chosen ?? s.site, use, reached);
+        if (profileBusyOf(e)) throw e;
+        note("failed", undefined, reached);
+        if (!use || !lim.caps || e instanceof SiteError || !reached) throw e;
+        // A durable retry here would spend a try each time: a failure that reached the site ends
+        // here and the caller chooses (six reads ate 40, 2026-10-01); the buffer holds its retries.
         // A platform's lasting refusal keeps its status (a 403 is a missing scope to the caller).
         const why = e instanceof Error ? e.message.slice(0, 300) : String(e);
         throw new SiteError(
           lastingRefusal(e) ? e.status : 502,
-          `${s.site} ${method} ${r.path} failed after spending a read: ${why}`,
+          `${s.site} ${method} ${r.path} failed after spending a try: ${why}`,
         );
       }
       async function answer(): Promise<unknown> {
@@ -853,6 +871,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
           // publish twice: the first try may have gone through before its answer was saved.
           const call = currentCall();
           // A write's request is its submit step: a failure from here may have gone through.
+          markReached();
           if (method !== "GET") markSubmitted();
           if (r.irreversible && !r.resumes && call && deps.started) {
             if (deps.started.has(call, STARTED))

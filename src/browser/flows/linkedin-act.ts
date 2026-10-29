@@ -9,6 +9,7 @@
  * Connect keeps Follow under "More". A company page shows "Follow <Company>". Once followed, the
  * label reads "Following <Name>" (or "Unfollow …").
  */
+import { already } from "../attempt.js";
 import { defineFlow } from "../flow.js";
 import type { Hints } from "../locate.js";
 import { firstShown, RENDER_MS, SETTLE_MS } from "./kit.js";
@@ -42,7 +43,7 @@ export const linkedinLike = defineFlow<
     if (state === "missing") return { found: false, reason: `no LinkedIn post ${urn}` };
     if (state === null) return fp.human(`no Like on post ${urn} (${fp.url()})`);
     const liked = state === 0;
-    if (liked === !undo) return { urn, liked, already: true };
+    if (liked === !undo) return already({ urn, liked, already: true });
     await fp.act({ kind: "click" }, undo ? reacted : unreacted, {
       goal: `${undo ? "take back the like on" : "like"} post ${urn}`,
     });
@@ -99,13 +100,13 @@ export const linkedinFollow = defineFlow<
           : null;
       if (state === null) return fp.human(`no Follow under More on ${who}`);
       const following = state === 0;
-      if (following === !undo) return { following, already: true };
+      if (following === !undo) return already({ following, already: true });
       await fp.act({ kind: "click" }, undo ? unfollowItem : followItem, {
         goal: `${undo ? "unfollow" : "follow"} ${who}`,
       });
     } else {
       const following = state === 0;
-      if (following === !undo) return { following, already: true };
+      if (following === !undo) return already({ following, already: true });
       await fp.act({ kind: "click" }, undo ? on : off, {
         goal: `${undo ? "unfollow" : "follow"} ${who}`,
       });

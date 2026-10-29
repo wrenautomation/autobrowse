@@ -11,7 +11,8 @@
  *   "linkedin": {
  *     "caps": { "connect": 40 },
  *     "accounts": { "linkedin": { "profile": 40 } },
- *     "pace": { "gapMs": 5000, "jitterMs": 10000 }
+ *     "pace": { "gapMs": 5000, "jitterMs": 10000 },
+ *     "retryBuffer": 0.5
  *   }
  * }
  */
@@ -41,6 +42,8 @@ const siteLimits = z.strictObject({
       maxWaitMs: z.number().int().positive().optional(),
     })
     .optional(),
+  /** Tries allowed over each cap, as a fraction of it (`SiteApi.retryBuffer`). */
+  retryBuffer: z.number().min(0).max(1).optional(),
 });
 
 export const limitsSchema = z.record(z.string(), siteLimits);
@@ -52,6 +55,7 @@ export interface Effective {
   caps?: Record<string, number>;
   accountCaps?: Record<string, Record<string, number>>;
   pace?: Pace;
+  retryBuffer?: number;
 }
 
 /** The site's defaults with the file's limits over them, bucket by bucket. */
@@ -66,10 +70,12 @@ export function effective(s: SiteApi, l: Limits): Effective {
     : undefined;
   // Parsed JSON holds no undefined values, so the merge is a whole Pace.
   const pace = own.pace ? ({ ...s.pace, ...own.pace } as Pace) : s.pace;
+  const retryBuffer = own.retryBuffer ?? s.retryBuffer;
   return {
     ...(caps ? { caps } : {}),
     ...(accountCaps ? { accountCaps } : {}),
     ...(pace ? { pace } : {}),
+    ...(retryBuffer !== undefined ? { retryBuffer } : {}),
   };
 }
 
