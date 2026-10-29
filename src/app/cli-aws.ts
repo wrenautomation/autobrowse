@@ -9,6 +9,7 @@ import type { Command } from "commander";
 import { awsCliLoginChore } from "../chores/aws-login.js";
 import { gcloudLoginChore } from "../chores/gcloud-login.js";
 import { wranglerLoginChore } from "../chores/wrangler-login.js";
+import { recorded } from "../engine/leg.js";
 import { profileOf } from "../sites/wire.js";
 import type { LocalBackend } from "./backend.js";
 import type { Settings } from "./config.js";
@@ -142,6 +143,7 @@ export function registerAwsCommands(
           g.name === "human"
             ? null
             : { approved: true, note: "autobrowse cloudflare-token", at: new Date().toISOString() },
+        recorded(),
       );
       for (const [step, r] of Object.entries(out.results))
         if (r) console.log(`${step.padEnd(12)} ${r.status}  ${r.detail}`);

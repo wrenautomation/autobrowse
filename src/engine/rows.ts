@@ -112,9 +112,12 @@ export function cursorOf(r: Pick<RunRow, "updatedAt" | "workflow" | "key">): str
   return `${r.updatedAt}~${idOf(r)}`;
 }
 
+// code-unit order, as the cursor's `<` (isBefore); localeCompare would disagree on ties
+const byCode = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
 /** Newest first; two rows updated in the same instant order by id, so a page edge cannot hide one. */
 export function compareRows(a: RunRow, b: RunRow): number {
-  return b.updatedAt.localeCompare(a.updatedAt) || idOf(b).localeCompare(idOf(a));
+  return byCode(b.updatedAt, a.updatedAt) || byCode(idOf(b), idOf(a));
 }
 
 /**

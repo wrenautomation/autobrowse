@@ -10,7 +10,7 @@ import type { BrowserFlow, FlowRunner } from "../browser/flow.js";
 import { statsDirOf } from "../deps/stats.js";
 import { type EngineRuns, fileEngineRuns } from "../runs/engine.js";
 import { memoryEffects } from "./memory.js";
-import { runFlow } from "./run.js";
+import { type RunFlowOptions, runFlow } from "./run.js";
 import { done, type Workflow } from "./workflow.js";
 
 /** `google/oauth-consent` → `google-oauth-consent`; a name that starts with its site keeps it once. */
@@ -25,6 +25,12 @@ export const engineRuns = (): EngineRuns | null => {
     ledger = dir ? fileEngineRuns(dir) : null;
   }
   return ledger;
+};
+
+/** `runFlow`'s `record` for an in-process run: the engine ledger, under the durable call. */
+export const recorded = (): RunFlowOptions => {
+  const runs = engineRuns();
+  return runs ? { record: { runs, key: currentCall() } } : {};
 };
 
 const PLAN = z.object({ dryRun: z.boolean() });

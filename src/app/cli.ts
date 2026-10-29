@@ -10,7 +10,7 @@ import { Command } from "commander";
 import { cloudflare } from "../clients/cloudflare.js";
 import { httpClient } from "../clients/http.js";
 import type { GateName } from "../engine/effects.js";
-import { runLeg } from "../engine/leg.js";
+import { recorded, runLeg } from "../engine/leg.js";
 import { cursorOf } from "../engine/rows.js";
 import { summarize } from "../engine/run.js";
 import { expandHome } from "../google/auth.js";
@@ -440,6 +440,7 @@ program
           o.ask || g.name === "human"
             ? null
             : { approved: true, note: "autobrowse try", at: new Date().toISOString() },
+        recorded(),
       );
       const steps = Object.entries(out.results).flatMap(([name, r]) => (r ? [{ name, ...r }] : []));
       for (const line of stepLines(steps)) console.log(line);

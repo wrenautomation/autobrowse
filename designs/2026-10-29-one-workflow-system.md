@@ -148,6 +148,10 @@ Built (WA-963):
 - `runLeg(runner, flow, input, {on})` (`engine/leg.ts`): a one-step run around the leg. The caller gets the leg's own answer and the same error object; the step sees only text. Input and the armed tab go to the leg as given.
 - On it: Restate `browser` handlers (`terminalLeg`), site route legs (`legOf`), armed `prepare`, `do`'s flows, the aws/gcloud/wrangler chores, the CLI's legs, the login check. `runCompiled` records too.
 - The Runs page lists ledger rows beside the registry's (`mergePages`). A ledger run's status has no actions: it stopped in its process.
+  One row per workflow and key: a retried call keeps its last try. A leg with a part (`site-flow.prepare`) opens too.
+  Month files parse once, then only their appended tail; the sorted list stays until a file changes. 30k rows: 69 ms cold, 9 ms after a write, 1 ms warm.
+- `autobrowse try` and the Cloudflare bootstrap record too (`recorded()`). Explore's `flow` keeps its own run log (`explored`).
+- `compareRows` now sorts by code unit, as the cursor's `<` does; `localeCompare` could put a tie on the wrong side of a page edge.
 - Lint (`test/leg-lint.test.ts`): `runner.run(` / `browser.run(` outside `engine/`, `workflows/`, `browser/` fails, but for counted files: the guard's runner wrapper, the compiler's step template, explore's held page, and pass two (cli-auth's 4 password and enroll legs, unsubscribe, 2 walk runs).
 - Usage before (desk ledger, 2026-10-22 to 10-29): 23,177 settled site calls, 40.0% failed; 6,718 flow runs, 31.0% failed. The week after is read on 2026-11-05.
 

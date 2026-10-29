@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { appendFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -11,6 +11,7 @@ import {
   fileEngineRuns,
   memoryEngineRuns,
   mergePages,
+  stepRows,
 } from "../src/runs/engine.js";
 
 const flow = defineFlow<{ x: number }, { lead: string }>({
@@ -123,5 +124,39 @@ describe("runLeg", () => {
       updatedAt: "2020-01-01T00:00:00.000Z",
     };
     expect(mergePages([old], view.list({}), 1)).toEqual([row]);
+  });
+
+  it("a retried call lists once, as its last try; a gate with no result shows its step", () => {
+    const dir = mkdtempSync(join(tmpdir(), "engine-runs-"));
+    const runs = fileEngineRuns(dir);
+    const at = new Date().toISOString();
+    const row = {
+      workflow: "s-f",
+      key: "k",
+      site: "s",
+      startedAt: at,
+      endedAt: at,
+      ms: 1,
+      gate: null,
+      steps: [],
+    };
+    runs.record({ ...row, status: "failed" });
+    runs.record({ ...row, status: "done" });
+    expect(
+      engineRunsView(dir)
+        .list({})
+        .map((r) => r.status),
+    ).toEqual(["done"]);
+    // a line half written waits for its end; then the tail alone is read
+    const view = engineRunsView(dir);
+    expect(view.list({})).toHaveLength(1);
+    const file = join(dir, `engine-${at.slice(0, 7)}.jsonl`);
+    const next = JSON.stringify({ ...row, key: "k2", status: "done" });
+    appendFileSync(file, next.slice(0, 20));
+    expect(view.list({})).toHaveLength(1);
+    appendFileSync(file, `${next.slice(20)}\n`);
+    expect(view.list({}).map((r) => r.key)).toEqual(["k2", "k"]);
+    const gate = { name: "human" as const, step: "pay", prompt: "card?", openedAt: at };
+    expect(stepRows({}, gate)).toEqual([{ name: "pay", status: "waiting", at, detail: "card?" }]);
   });
 });

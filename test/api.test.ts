@@ -483,6 +483,23 @@ describe("api", () => {
     expect(calls).toEqual([expect.stringMatching(/^run .*x\.com/), "approve purchase go", "pause"]);
   });
 
+  it("serves a ledger run whose leg is in no catalog", async () => {
+    const run = { workflow: "s-f.prepare", key: "k", plan: null, gate: null, paused: false };
+    const { app } = await setup(undefined, {
+      engineRuns: {
+        list: () => [],
+        status: (w, k) =>
+          w === run.workflow && k === run.key
+            ? { ...run, outcome: { status: "done", results: {}, memo: {} } }
+            : null,
+      },
+    });
+    const res = await app.request("/api/runs/s-f.prepare/k");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ workflow: "s-f.prepare", actions: [] });
+    expect((await app.request("/api/runs/s-f.prepare/other")).status).toBe(404);
+  });
+
   it("turns an inbound message into a command on the waiting run", async () => {
     const { app, calls } = await setup();
     const yes = await (

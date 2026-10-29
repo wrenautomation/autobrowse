@@ -137,6 +137,10 @@ const runParams = z.object({
   workflow: z.string().regex(NAME, "a workflow name: lowercase, dashes"),
   key: z.string().regex(KEY, "a run key: letters, digits, . @ _ -"),
 });
+// a ledger leg may carry a part: `site-flow.prepare`
+const ledgerRunParams = runParams.extend({
+  workflow: z.string().regex(/^[a-z][a-z0-9-]*(\.[a-z0-9-]+)?$/, "a workflow name"),
+});
 const recordingParam = z.object({
   name: z.string().regex(NAME, "a recording name: lowercase, dashes"),
 });
@@ -645,13 +649,14 @@ export function api(deps: ApiDeps): Hono<Env> {
   });
 
   app.get("/api/runs/:workflow/:key", async (c) => {
-    const path = readPath(c, runParams);
+    const path = readPath(c, ledgerRunParams);
     if (!path.ok) return path.res;
     const { workflow, key } = path.data;
-    if (!(await find(workflow))) return fail(c, 404, `no workflow ${workflow}`);
-    // A ledger run ran in one process and stopped: nothing to answer or resume.
+    // A ledger run ran in one process and stopped: nothing to answer or resume. Its leg may be no
+    // catalog entry (an armed `prepare`, an inline check).
     const ran = deps.engineRuns?.status(workflow, key);
     if (ran) return c.json({ ...ran, actions: [] });
+    if (!(await find(workflow))) return fail(c, 404, `no workflow ${workflow}`);
     const status = await runOf(workflow, key).status();
     return c.json({ ...status, actions: runAffordances(status) });
   });
