@@ -47,7 +47,7 @@ export class NeedsHuman extends Error {
 }
 
 /**
- * Why a read failed, as words the caller acts on (weaver, wren): sign in, try another way,
+ * Why a read failed, as words the caller acts on (birdwatch, wren): sign in, try another way,
  * wait, or report the site broke. One list on both sides of the seam.
  */
 export const ACCESS_CODES = [
