@@ -33,8 +33,10 @@ const wwwAmazonComFlow = defineFlow<WwwAmazonComInput, Record<string, string>>({
   async run(fp, input) {
     await fp.open("https://www.amazon.com/");
     // Some visits get the "go to your country's Amazon" modal over the search box.
-    const stay = { css: "#redir-stay-at-www" };
-    if (await fp.has(stay, 3_000)) await fp.act({ kind: "click" }, stay, { goal: "stay on .com" });
+    // Seen once: #redir-modal; Escape to close it is not proven yet.
+    const modal = { css: "#redir-modal" };
+    if (await fp.has(modal, 3_000))
+      await fp.act({ kind: "press", key: "Escape" }, modal, { goal: "close the redirect modal" });
     const out: Record<string, string> = {};
     await fp.act(
       { kind: "select", value: input.department },
