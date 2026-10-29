@@ -96,7 +96,7 @@ export const npm: SiteApi = {
       method: "POST",
       path: "/packages/{package}/trust",
       summary:
-        "Trust a GitHub Actions workflow to publish the package over OIDC (no token in CI); owner, repo and workflow are fixed once made",
+        "Trust a GitHub Actions workflow to publish the package over OIDC (no token in CI); owner, repo and workflow are fixed once made. `allowPublish` (default true; false = stage only) is set on a new or existing connection",
       request: z.object({
         package: z.string().min(1),
         owner: z.string().min(1),
