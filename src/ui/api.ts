@@ -137,8 +137,8 @@ const runParams = z.object({
   workflow: z.string().regex(NAME, "a workflow name: lowercase, dashes"),
   key: z.string().regex(KEY, "a run key: letters, digits, . @ _ -"),
 });
-// a ledger leg may carry a part: `site-flow.prepare`
-const ledgerRunParams = runParams.extend({
+// a ledger leg may carry a part (`site-flow.prepare`); its key is the durable call (`<id> site/flow`)
+const ledgerRunParams = z.object({
   workflow: z.string().regex(/^[a-z][a-z0-9-]*(\.[a-z0-9-]+)?$/, "a workflow name"),
 });
 const recordingParam = z.object({
@@ -656,6 +656,8 @@ export function api(deps: ApiDeps): Hono<Env> {
     // catalog entry (an armed `prepare`, an inline check).
     const ran = deps.engineRuns?.status(workflow, key);
     if (ran) return c.json({ ...ran, actions: [] });
+    const strict = readPath(c, runParams.pick({ key: true }));
+    if (!strict.ok) return strict.res;
     if (!(await find(workflow))) return fail(c, 404, `no workflow ${workflow}`);
     const status = await runOf(workflow, key).status();
     return c.json({ ...status, actions: runAffordances(status) });
