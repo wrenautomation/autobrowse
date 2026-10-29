@@ -95,6 +95,17 @@ export const opSchema = z.discriminatedUnion("kind", [
     /** Rows a model read off the page by eye when the code was written: the code found them. */
     sample: z.array(z.record(z.string(), z.string().nullable())).max(5),
   }),
+  /**
+   * The agent's code over the flow primitives (src/browser/code.ts): a loop, a branch. Its rows are
+   * kept under `as`; `plan` names the plan fields it reads as `plan.<field>`.
+   */
+  z.object({
+    kind: z.literal("code"),
+    goal: z.string(),
+    as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
+    code: z.string(),
+    plan: z.array(z.string().regex(/^[a-z][a-zA-Z0-9]*$/)),
+  }),
   /** A model call at run time, in the open and capped: a prompt over earlier reads, kept under `as`. */
   z.object({
     kind: z.literal("ai"),
@@ -185,6 +196,8 @@ export const outlineSchema = z
       if (step.kind !== "browser") return;
       if (step.url) check(step.url, ["steps", i, "url"], "url");
       step.ops.forEach((op, j) => {
+        if (op.kind === "code")
+          for (const f of op.plan) check(`{${f}}`, ["steps", i, "ops", j, "plan"], "code");
         if (!("hints" in op)) return;
         for (const k of HINT_TEXTS) {
           const v = op.hints[k];

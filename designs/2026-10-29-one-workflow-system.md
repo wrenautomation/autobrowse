@@ -1,10 +1,10 @@
-# One workflow system: the toolkit, scripts, the old flows folded in
+# One workflow system: the toolkit, the agent's code, the old flows folded in
 
 Follows `2026-10-29-explore-flow.md` (the `flow` command).
 
 ## Goal
 
-Every job autobrowse can do is a workflow in one catalog: compiled, hand-written or built from a script.
+Every job autobrowse can do is a workflow in one catalog: compiled, hand-written or built from the agent's code.
 Every run goes through the engine, so every run has steps, gates and a trace.
 A site route leg keeps today's durability: one Restate entry per leg (see "The fold").
 
@@ -21,7 +21,7 @@ A site route leg keeps today's durability: one Restate entry per leg (see "The f
 | Catalog | compiled workflows; 67 flows outside it | one catalog; each entry has a site, a one-line aim, a zod plan |
 | Run path | engine for workflows; `runner.run(flow)` direct for the old flows | engine only |
 | Find | `workflows` lists all; `do` sends the list to a model | the site's toolkit in explore's answers; `tools` tree and `--find` |
-| Loops | 100 commands → 100 rows → 100 steps | one `script` command → one op in the compiled step |
+| Loops | 100 commands → 100 rows → 100 steps | one `code` command → one op in the compiled step |
 | Iteration trace | none | one row per primitive call, with the loop's values |
 
 ## 1. The toolkit by site
@@ -57,46 +57,54 @@ See "The fold" below for the per-flow plan.
 - Callers keep their surface (CLI commands, site routes, Restate handlers, npm exports, their return values). Inside, each one runs the workflow through the engine.
 - When all callers are moved, a lint fails on any `runner.run(` outside the engine.
 
-## 3. `script`: the agent's code as an act
+## 3. `code`: the agent's code as an act
+
+Named `code`, not `script`: the op kind `script` already means page JS (`browser/flow.ts`).
 
 ```json
-{"cmd":"script","code":"let url = plan.start; while (url) { await fp.open(url); rows.push(...await records(fp, spec)); url = await fp.read({css:'a.next', attr:'href'}) }","plan":{"start":"https://…"}}
+{"cmd":"code","as":"rows","code":"let url = plan.start; while (url) { await fp.open(url); rows.push(...await records(spec)); url = await fp.read({css:'a.next'}) }","plan":{"start":"https://…"}}
 ```
 
-- `code` is a function body. In scope: `fp` (open, act, read, has, human), `records`, `log(values)`, `plan`, `rows`.
-  `fp` is built by hand from those five methods, never a spread of explore's page: `fp.page` is `undefined`, so no click goes around the money gate.
-  No `require`, no `fs`, no network outside `fp`. It runs in a `node:vm` context: a guard against mistakes, not a security wall (the code is our agent's).
-- Each `fp.act` goes through explore's money gate, as in a `flow`.
-- The answer: `rows` (counted), the last `log`, the page, and `failed {call, iteration, error, url, shot}` when a call failed.
+- `code` is a function body. In scope: `fp` (open, act, read, has, wait, human), `records(spec)`, `log(values)`, `plan`, `rows`.
+  `fp` is built by hand from those methods, never a spread of explore's page: `fp.page` is `undefined`, so no click goes around the money gate.
+  No `require`, no `fs`, no `eval`, no network outside `fp`. It runs in a `node:vm` context: a guard against mistakes, not a security wall (the code is our agent's).
+- Each `fp.act` goes through explore's money gate, as in a `flow`. A gate or a person's need stops the command as it stops a `flow`.
+- The answer: `rows` (counted), `first` (5 rows), the last `log`, `calls`, `stored`, the page, and `failed {call, i, n, url, log, error}` when it failed. `call` null: the code itself threw.
 - Inline only. A file would cost a write and a cleanup for the same text.
-- `plan` names the inputs. Compile turns each into a plan field; it never guesses which values are inputs.
-- Journal: one row, `kind:"script"`, with the code and the plan's keys. Compile puts the code into the step verbatim, beside the other ops.
-- The skill gets a page on the leg format (fp, hints, records, flow), with examples taken from compiled workflows.
+- `plan` holds the inputs, as strings. Compile turns each into a plan field of the same key; it never guesses which values are inputs.
+- Code or plan that holds a secret is refused: secrets go on the page by `place`.
+- Journal: one row, `kind:"code"`, with the code, `as` and the plan. Its inner ops are not journaled. Compile renders `out.<as> = (await runCode(fp, {plan, code})).rows`; a walk runs the same `runCode`.
 
 ### Durable iterations
 
-- Each primitive call in a script saves its result under a key: the primitive, its arguments, the URL of the last `open`, and n, the count of earlier calls with the same key in this run.
+- Each `read`, `has` and `records` saves its result under a key: the call, its arguments, the URL of the last `open`, and n, the count of earlier calls with the same key in this run.
   The URL alone is not enough. A "Next" button on one URL, or an infinite scroll, makes the same call on the same URL each page: without n, the rerun gets page 1's rows 36 times.
   During a replay the page is not loaded, so the URL is the last `open`'s, not `page.url()`.
   An edit breaks a key only when it changes how many same calls run per page.
 - A rerun (after a fix, or after a crash) returns a saved result without touching the page. The first call with no saved result runs live.
 - So page 37 fails, the agent fixes the code, sends it again, and pages 1–36 come back from the store at once.
 - Keys use what a call does, not its place in the code. An edit to the code still finds the saved pages.
-- A skipped `open` navigates only when a live call needs the page.
-- Acts (`fp.act`) never replay: they change the site.
-- Rule for the agent (in the skill): no `Date.now()`, no `Math.random()` in a script. They break the keys.
+- `open` is lazy: it navigates before the next live call, even to the URL the page is on. A run of only saved calls ends with one navigation to the last `open`.
+- Acts (`fp.act`) never replay: they change the site. A loop that acts per item does those acts again on a rerun; keep acts to navigation, or carry where to start in `plan`.
+- Explore's store is a file beside the journal, scoped by `as` and the plan; it goes with the journal on close. `fresh` starts over. A compiled run's store is in memory for now.
+- `wait` after an `open` not yet loaded is held, and runs once the page loads: a replay waits for nothing.
+- A sandbox `records` is checked as the command is: a required field empty on most rows fails the call.
+- Limits: 30 min and 20,000 calls a run, checked at each call. The vm timeout (5 s) stops only sync code before the first `await`: a sync loop after one is not stopped.
+- Rule for the agent (in the skill): no `Date.now()`, no `Math.random()`, no literal secrets. The first two break the keys.
 
 ### The iteration trace
 
-- Each primitive call is one trace row: the call, its arguments, its result (counted for rows), ms, and whether it came from the store.
+- Each primitive call is one `call` row in the run history (`runs/log.ts`): the call, its arguments, n, the URL, ms, stored or not, its result (text cut at 300 chars, rows counted), the error.
 - `log({page, url})` adds the loop's own values to the row of the next call.
-- So a person reads iteration 37 as a debugger shows it: the values, the call, the error.
-- Large results (rows) go to the run's files; the trace row and the engine's state hold a reference. The size cutoff is a constant set from Restate's state value limit, checked at build.
+- So a person reads iteration 37 as a debugger shows it: the values, the call, the error. `autobrowse explored show <run>` prints them.
 
-### Later: a script calls a workflow
+Built (WA-962, 2026-10-29): `browser/code.ts` (`runCode`, `CodeFailed`, exported), the `code` command, the `call` row, the `code` Action, outline op and walk op, the render.
+Not yet: large rows to the run's files with a reference in the trace and the engine's state; a saved trace and a file store for compiled runs. Both wait for the run recorder (WA-963).
 
-`flow(name, plan)` inside a script is not in the first build. It needs a design: a nested run's steps and trace under the caller's, its gates shown to the caller, and what `advance` does with a step that holds a run.
-Until then, the agent sends `flow` and `script` as separate commands, and the journal keeps them in order.
+### Later: code calls a workflow
+
+`flow(name, plan)` inside code is not in the first build. It needs a design: a nested run's steps and trace under the caller's, its gates shown to the caller, and what `advance` does with a step that holds a run.
+Until then, the agent sends `flow` and `code` as separate commands, and the journal keeps them in order.
 
 ## The fold
 
@@ -170,6 +178,8 @@ Cost: one more in-process call per leg (`advance` on memory effects), under 1 ms
 - 2026-10-29: A script's nested `flow` call waits for its own design.
 - 2026-10-29: Leg inputs are generated into one file, not written beside each of 108 legs. The types stay the one source; the generated file cannot drift past typecheck.
 - 2026-10-29: Pass two (run paths, lint) waits for the run recorder. A lint that forces a path with no record would be a no-op.
+- 2026-10-29: The command is `code`, not `script`: `script` already names the page-JS op.
+- 2026-10-29: Explore keeps saved call results in a file beside the journal, not in the run history: the store is resume state and goes on close; the history keeps only the trace.
 - 2026-10-29: A workflow names its site in code (`site`, rendered by the compiler), not in outline.json beside it: one source, and hand-tuned workflows have no outline.
 - 2026-10-29: `do` shortlists by search before the model: about 10 rows a pick instead of 150, so the pick prompt stays the same size as the catalog grows.
 - 2026-10-29: The trace holds each iteration's values (William: "at each iteration of the for loop what the values are").

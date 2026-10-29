@@ -198,6 +198,20 @@ export const commandSchema = z.discriminatedUnion("cmd", [
     choice: z.string().min(1).optional(),
   }),
   /**
+   * The agent's code over the flow primitives, run here (src/browser/code.ts): `fp.open/act/read/has/wait`,
+   * `records(spec)`, `log(values)`, `plan`, `rows`. A failed call answers `failed` with its log; the same
+   * command after a fix takes the reads so far from the store and goes on. `fresh` starts over.
+   * Journaled as one row: a workflow built from this run runs the code.
+   */
+  z.object({
+    cmd: z.literal("code"),
+    as: z.string().regex(/^[a-z][a-zA-Z0-9]*$/),
+    code: z.string().min(1).max(20_000),
+    /** Its inputs: plan fields in the workflow built from it. */
+    plan: z.record(z.string().regex(/^[a-z][a-zA-Z0-9]*$/), z.string()).optional(),
+    fresh: z.boolean().optional(),
+  }),
+  /**
    * The workflows `flow` can run (the toolkit). No field: the sites and their counts.
    * `site`: that site's workflows. `find`: a fuzzy search over all of them.
    */
@@ -234,6 +248,7 @@ export type Command = z.infer<typeof commandSchema>;
 export const LOOKS = new Set<Command["cmd"]>([
   "open",
   "flow",
+  "code",
   "captcha",
   "click",
   "drag",
@@ -249,6 +264,7 @@ export const LOOKS = new Set<Command["cmd"]>([
 export const UNBATCHABLE = new Set<Command["cmd"]>([
   "batch",
   "flow",
+  "code",
   "close",
   "pause",
   "resume",

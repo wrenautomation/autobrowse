@@ -417,6 +417,21 @@ export function structure(rec: Recording, o: StructureOptions = {}): Outline {
         // Render refuses it by name: a list read replays in a walk, not compiled code.
         add(a.op);
         break;
+      case "code":
+        // The code reads `plan.<key>`: the field keeps that key, never a uniquer's.
+        for (const [key, example] of Object.entries(a.plan)) {
+          const f = fields.find((f) => f.key === key);
+          if (f) f.example = example;
+          else fields.push({ key, label: `${key} for the code`, example });
+        }
+        add({
+          kind: "code",
+          goal: `code into ${a.as}`,
+          as: a.as,
+          code: a.code,
+          plan: Object.keys(a.plan),
+        });
+        break;
       case "keep":
         add({
           kind: "keep",
@@ -469,6 +484,7 @@ export function structure(rec: Recording, o: StructureOptions = {}): Outline {
       if (s.kind === "browser" && "hints" in op)
         for (const k of HINT_TEXTS) if (typeof op.hints[k] === "string") named(op.hints[k]);
       if ("file" in op && op.file.from === "plan") used.add(op.file.field);
+      if (op.kind === "code") for (const f of op.plan) used.add(f);
       if (!("value" in op) || typeof op.value !== "object") continue;
       if (op.value.from === "secret") used.add(op.value.key);
       if (op.value.from === "plan") used.add(op.value.field);

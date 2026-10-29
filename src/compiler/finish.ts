@@ -106,7 +106,7 @@ What to finish:
 3. Proof reads. After the irreversible act the flow waits briefly, reads what the page says (fp.text(), or fp.read(hints) for one element) and returns it; the step keeps it in memo and in done("..."). Re-runs skip when memo already has it. When the page shows an error and the send button is still there, fp.human("...") with the reason.
 4. Tests: keep the dry-run test; add one that runs to the gate ("waiting"), then answers it and runs to "done", asserting the fake browser saw submit false then true. Fake the browser with { run: async (_flow, input) => ... } as never.
 
-The library (imported from the same path the module already uses). Its only exports you may import: defineFlow, defineWorkflow, done, skipped, rejected, memoryEffects, runFlow, type FlowRunner, type StepDef. fp is the flow's run(fp, input) parameter; gate, fx, memo, plan and deps come from the step's run({ ... }) context: never import them.
+The library (imported from the same path the module already uses). Its only exports you may import: defineFlow, defineWorkflow, done, skipped, rejected, memoryEffects, runFlow, records, runCode, type FlowRunner, type StepDef. fp is the flow's run(fp, input) parameter; gate, fx, memo, plan and deps come from the step's run({ ... }) context: never import them.
 - defineFlow<I, O>({ site, name, run(fp, input) }), FlowRunner { run(flow, input) }
 - fp.open(url), fp.url(), fp.text(), fp.html(), fp.has(hints, withinMs?), fp.read(hints), fp.wait(ms), fp.waitForUrl(re, ms), fp.act(op, hints, { goal, irreversible? }), fp.human(reason): never
 - op: { kind: "click" } | { kind: "fill", value } | { kind: "select", value } | { kind: "press", key } | { kind: "upload", files: [...] }

@@ -32,6 +32,7 @@ import { writeRecords } from "../agent/records.js";
 import { SecretLeak, urlWithoutQuery } from "../auth/guard.js";
 import type { SecretValues } from "../auth/signup.js";
 import { SITE_LOGINS } from "../auth/sites.js";
+import { CodeFailed, type CodeStore, planScope, runCode } from "../browser/code.js";
 import { fetchFile } from "../browser/download.js";
 import { extrasOf } from "../browser/extras.js";
 import { filmLog } from "../browser/film.js";
@@ -176,6 +177,8 @@ export { journalFileFor, readJournal, tokenFileFor } from "./journal.js";
 const brief = ({ name, aim, inputs }: Tool) => ({ name, aim, inputs });
 
 const FLOW_MS = 30 * 60_000;
+/** A `code` command stops after this long: a loop that never ends. */
+const CODE_MS = 30 * 60_000;
 /** How long a spending click's page gets to say paid or declined before it counts as no charge. */
 const SETTLE_MS = Number(process.env.EXPLORE_CHARGE_SETTLE_MS ?? 60_000);
 /** A frame's visible, editable text inputs, each tagged `data-ab-billing` so a locator finds it again; `billingKind` reads the label. */
@@ -1513,8 +1516,14 @@ async function serve(
       });
     // upload: the flow's own paths or bytes; a recording names stored files, so none
   };
-  const flowPage = (flow: BrowserFlow<unknown, unknown>, wait: boolean): FlowPage => {
+  const flowPage = (
+    flow: BrowserFlow<unknown, unknown>,
+    wait: boolean,
+    o: { journal?: boolean } = {},
+  ): FlowPage => {
     const quiet = flow.secret === true;
+    // `code` journals itself as one row: its inner ops are not replayed on their own.
+    const journals = !quiet && o.journal !== false;
     /** One row per step, as a flow draws its own; a pause holds the next step. */
     const step = async <T>(
       s: { cmd: string; goal: string; hints?: Hints; url?: string },
@@ -1566,7 +1575,7 @@ async function serve(
       open: (url, o) =>
         step({ cmd: "open", goal: `open ${url}`, url }, async () => {
           await fp.open(url, o);
-          if (!quiet) journal({ kind: "navigate" });
+          if (journals) journal({ kind: "navigate" });
         }),
       read: (hints) =>
         step(
@@ -1587,7 +1596,7 @@ async function serve(
           }
           await fp.act(op, hints, o);
           page = fp.page;
-          if (!quiet) journalOp(op, hints);
+          if (journals) journalOp(op, hints);
           if (spent?.charges) await reportSpend(spent);
         }),
     };
@@ -1698,6 +1707,99 @@ async function serve(
       // An ask or a refusal: the run is kept, the journal says where it stopped.
       journal({ kind: "note", text: `flow ${c.name} stopped` });
       throw err;
+    }
+  };
+
+  /**
+   * Saved call results of `code`, by its `as` and plan, beside the journal: a resend after a fix
+   * goes on from the call that failed, across a kept close. Gone with the journal.
+   */
+  const codeFile = opts.journalFile ? `${opts.journalFile}.code` : null;
+  let codeSaved: Map<string, Map<string, { value: unknown }>> | null = null;
+  const codeScopes = () => {
+    if (codeSaved) return codeSaved;
+    codeSaved = new Map();
+    if (codeFile && existsSync(codeFile))
+      for (const line of readFileSync(codeFile, "utf8").split("\n")) {
+        if (!line.trim()) continue;
+        try {
+          const r = JSON.parse(line) as { scope: string; key?: string; value?: unknown };
+          if (r.key === undefined) codeSaved.delete(r.scope);
+          else
+            codeSaved.set(
+              r.scope,
+              (codeSaved.get(r.scope) ?? new Map()).set(r.key, { value: r.value }),
+            );
+        } catch {
+          // cut by a crash
+        }
+      }
+    return codeSaved;
+  };
+  const codeWrite = (row: object) => {
+    if (codeFile) appendFileSync(codeFile, `${JSON.stringify(row)}\n`, { mode: 0o600 });
+  };
+  const codeStore = (scope: string, fresh: boolean): CodeStore => {
+    const all = codeScopes();
+    if (fresh && all.delete(scope)) codeWrite({ scope });
+    const mine = all.get(scope) ?? new Map<string, { value: unknown }>();
+    all.set(scope, mine);
+    return {
+      get: (key) => mine.get(key),
+      set: (key, value) => {
+        mine.set(key, { value });
+        codeWrite({ scope, key, value });
+      },
+    };
+  };
+  const runCodeHere = async (c: Extract<Command, { cmd: "code" }>, wait: boolean) => {
+    const plan = c.plan ?? {};
+    for (const text of [c.code, ...Object.values(plan)])
+      if (holdsSecret(text) || redactText(text) !== text)
+        throw new Error("code: it holds a secret; `place` it on the page, never in code or plan");
+    const store = codeStore(planScope({ as: c.as, plan }), c.fresh === true);
+    const here = flowPage(
+      { site: opts.site, name: "code" } as BrowserFlow<unknown, unknown>,
+      wait,
+      {
+        journal: false,
+      },
+    );
+    const shown = (o: object) => JSON.parse(redactText(JSON.stringify(o))) as unknown;
+    try {
+      const r = await runCode(
+        here,
+        { code: c.code, plan },
+        {
+          store,
+          trace: (row) => logged((h) => h.call(row)),
+          deadline: now() + CODE_MS,
+          passThrough: (err) => err instanceof PaymentGate,
+        },
+      );
+      page = fp.page;
+      journal({ kind: "code", code: c.code, as: c.as, plan });
+      return shown({
+        as: c.as,
+        rows: r.rows.length,
+        calls: r.calls,
+        stored: r.stored,
+        first: r.rows.slice(0, 5),
+        ...(r.log === undefined ? {} : { log: r.log }),
+        url: page.url(),
+      });
+    } catch (err) {
+      if (!(err instanceof CodeFailed)) throw err;
+      page = fp.page;
+      const r = err.result;
+      return shown({
+        as: c.as,
+        rows: r.rows.length,
+        calls: r.calls,
+        stored: r.stored,
+        failed: r.failed,
+        url: page.url(),
+      });
     }
   };
 
@@ -2180,6 +2282,8 @@ async function serve(
       }
       case "flow":
         return runWorkflow(c, wait);
+      case "code":
+        return runCodeHere(c, wait);
       case "close":
         // Closed on purpose: nothing left to resume, unless asked to keep it.
         closing = !c.keep;
@@ -2188,6 +2292,7 @@ async function serve(
           closedWhy = c.why;
         }
         if (opts.journalFile && closing) rmSync(opts.journalFile, { force: true });
+        if (codeFile && closing) rmSync(codeFile, { force: true });
         await overlay.remove(page);
         queueMicrotask(() => finish());
         return { ok: true };

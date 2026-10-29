@@ -74,7 +74,7 @@ Act (journaled):
 - `{"cmd":"captcha"}` — solves the page's captcha (a checkbox by a human click, a picture by a model, cropped in memory). Returns `{solved, kind, vendor, reason?}`. Never screenshot a captcha yourself.
 - `{"cmd":"note","text":"…"}` — a comment in the journal.
 - `{"cmd":"eval","js":"…"}` — last resort; not journaled as a click, so the recording misses it.
-- `{"cmd":"batch","cmds":[{…},{…}]}` — up to 30 commands in order, one answer, one `changed`. No `close`, `pause`, `resume`, `save`, `flow` or nested batch.
+- `{"cmd":"batch","cmds":[{…},{…}]}` — up to 30 commands in order, one answer, one `changed`. No `close`, `pause`, `resume`, `save`, `flow`, `code` or nested batch.
 - `{"cmd":"flow","name":"amazon-cart","plan":{"searchFor":"Dune"}}` — runs a workflow on this page: a compiled one (`autobrowse workflows`) or a hand-written leg as `<site>-<name>` (`linkedin-create-post`; its input fields are the plan). Its saved plan goes under yours.
   Answer: `{status, steps, gate?, url}`. The page stays where it ended: go on by hand. Mix freely: sign in, explore, `flow`, explore again.
   - Its legs must be on this session's site. Another site's workflow needs its own session.
@@ -82,6 +82,12 @@ Act (journaled):
   - `waiting` with `gate.name` `human`: fix it, then send the same command. The step runs again from its first `open`, so a fix the site keeps (a sign-in, a setting) holds; a fix on the page only (a closed dialog) does not. `choose`: send it again with `"choice":"…"`.
   - `failed`: the same command goes on from the failed step. `"fresh":true` starts over.
   - The journal keeps its acts flat, so `save` makes one recording. A secret flow keeps only its start and end notes.
+- `{"cmd":"code","as":"titles","code":"…","plan":{"pages":"40"}}` — a loop, a while, a branch: your code over the primitives, in one command. Use it for any job of more than a few same acts (100 pages, a feed to its end).
+  - In scope: `fp.open(url)`, `fp.act(op, hints, {goal})`, `fp.read(hints)`, `fp.has(hints, ms?)`, `fp.wait(ms)`, `fp.human(reason)`, `records({fields, code, key?, max?})` (as the command, no model), `log(values)`, `plan` (strings), `rows` (push your output).
+  - Example: `for (let p = 1; p <= Number(plan.pages); p++) { log({p}); await fp.open(plan.base + "?page=" + p); rows.push(...await records({fields:[{key:"title",says:"…"}], code:"return [...root.querySelectorAll('h2')].map(h => ({title: h.textContent}))"})); }`
+  - Answer: `{rows, first, calls, stored, log?, url}`. `failed: {call, i, url, log, error}`: fix the code, send it again. Saved reads come back at once (`stored`), the loop goes on from the failed call. `"fresh":true` starts over.
+  - Rules: every input in `plan`, never a literal (compile makes each a plan field). No `Date.now()`, no `Math.random()`: they break the saved reads. No secrets in code or plan (refused). Acts are not saved: a rerun does them again, so keep acts to navigation or start from a `plan` value. A changed `records` code reads every page again.
+  - Money acts ask the person, as yours do. Journaled as one row: `save` compiles it into the workflow. Each call is a row in the run history (`autobrowse explored show <run>`).
 - `tools` in an answer: the first answer on a page of a known site lists that site's workflows (`{sites, tools:[{name, aim, inputs}], more}`; `q, max?` = required, optional). It comes once per site. Use one with `flow` before you do the job by hand.
 - `{"cmd":"tools"}` — each site and its count. `"site":"x"`: that site's workflows (past the 20 an answer shows). `"find":"words"`: a fuzzy search over all of them.
 

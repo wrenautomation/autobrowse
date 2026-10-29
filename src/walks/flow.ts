@@ -10,6 +10,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { SecretValues } from "../auth/signup.js";
+import { runCode } from "../browser/code.js";
 import { type Fetched, fetchFile } from "../browser/download.js";
 import { type BrowserFlow, defineFlow, type FlowPage } from "../browser/flow.js";
 import type { Hints } from "../browser/locate.js";
@@ -362,6 +363,14 @@ async function walkSpec(
         }
         out.records[op.as] = rows;
         deps.archive?.(op.as, html);
+        return;
+      }
+      case "code": {
+        const plan: Record<string, string> = {};
+        for (const f of op.plan) plan[f] = await fieldValue(f, op.goal);
+        const { rows } = await runCode(fp, { code: op.code, plan });
+        // Plain objects as rows: what an `each` walks over.
+        out.records[op.as] = listed(JSON.stringify(rows));
         return;
       }
       case "ai": {

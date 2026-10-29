@@ -28,6 +28,7 @@ export {
 } from "./browser/captcha/index.js";
 /** A captcha's eyes from any model that sees: `makeLlm` counts its calls by default. */
 export { eyesOf } from "./browser/captcha/llm-eyes.js";
+export { type CodeCall, CodeFailed, type CodeResult, runCode } from "./browser/code.js";
 export type {
   ActOptions,
   BrowserFlow,

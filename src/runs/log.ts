@@ -11,6 +11,7 @@
  * `verifyChain` checks a run file like any other ledger. Acts are stored as
  * the journal has them: a placed secret is its name, never its value.
  */
+
 import { randomBytes } from "node:crypto";
 import {
   appendFileSync,
@@ -26,6 +27,7 @@ import {
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { rowHash } from "credvault";
+import type { CodeCall } from "../browser/code.js";
 import type { PageLook } from "../browser/screens.js";
 import type { Action } from "../recorder/types.js";
 
@@ -100,6 +102,8 @@ export type RunRow =
       /** A person did it, not a command: a load it caused is not an `open` to replay. */
       hand?: true;
     }
+  /** One primitive call of a `code` command: the debugger's view of each loop turn (src/browser/code.ts). */
+  | ({ kind: "call"; at: string } & CodeCall)
   | {
       kind: "end";
       at: string;
@@ -138,6 +142,7 @@ export interface RunLog {
   goal(goal: string): void;
   cmd(b: Omit<Body<"cmd">, "n" | "tokens">): void;
   act(act: Action, look: PageLook | null, hand?: boolean): void;
+  call(c: CodeCall): void;
   /** Once; later calls, and any row after it, are ignored (a `done`, then the close that follows it). */
   end(b: Body<"end">): void;
   ended(): boolean;
@@ -243,6 +248,10 @@ export function runLog(
       if (done) return;
       acts += 1;
       write("act", { act, look, ...(hand ? { hand: true } : {}) });
+    },
+    call(c) {
+      if (done) return;
+      write("call", c);
     },
     end(b) {
       if (done) return;

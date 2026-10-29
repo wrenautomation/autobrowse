@@ -244,7 +244,9 @@ export const walkSpecSchema = z
     const secrets = new Set(w.secrets.map((s) => s.key));
     const lists = new Set(
       w.screens.flatMap((s) =>
-        s.ops.flatMap((op) => (op.kind === "records" || op.kind === "each" ? [op.as] : [])),
+        s.ops.flatMap((op) =>
+          op.kind === "records" || op.kind === "each" || op.kind === "code" ? [op.as] : [],
+        ),
       ),
     );
     w.screens.forEach((s, i) => {
@@ -320,6 +322,7 @@ function refText(op: WalkOp): string {
   if (op.kind === "download") return op.url ?? "";
   if (op.kind === "select") return op.value;
   if (op.kind === "pick") return `${op.region.css}\n${op.choices}`;
+  if (op.kind === "code") return op.plan.map((f) => `{${f}}`).join("\n");
   if (op.kind === "see")
     return [op.hints?.text, op.hints?.name, op.file].filter(Boolean).join("\n");
   return "";

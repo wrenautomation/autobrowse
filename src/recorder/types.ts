@@ -70,6 +70,8 @@ export type Action =
   | (Base & { kind: "read"; target: LocatorHints; as: string; value: string })
   /** A list page read as rows by checked extractor code: a walk replays the op whole. */
   | (Base & { kind: "records"; op: RecordsOp })
+  /** The agent's code over the flow primitives (src/browser/code.ts); `plan`: its inputs as this run gave them. */
+  | (Base & { kind: "code"; code: string; as: string; plan: Record<string, string> })
   /** A secret read off the page (a minted API key) and put in the secret sink as `env`; the value is never here. */
   | (Base & { kind: "keep"; target: LocatorHints; env: string })
   /** A script that acted on the page (a click no locator reached); `target`: the element it ran on. */

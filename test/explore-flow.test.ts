@@ -46,6 +46,8 @@ describe("explore runs a compiled workflow on its page (flow)", () => {
   let yes = true;
   /** The human step fails until a person fixed the page (here: the test flips it). */
   let fixed = false;
+  /** Page 3 of the `code` loop has no title until the test fixes it. */
+  let page3 = false;
 
   const wf = (name: string, run: (d: Deps, p: z.infer<typeof plan>) => Promise<string>) =>
     defineWorkflow<Deps, Record<string, never>>()({
@@ -122,8 +124,10 @@ describe("explore runs a compiled workflow on its page (flow)", () => {
 
   beforeAll(async () => {
     dir = await mkdtemp(join(tmpdir(), "explore-flow-"));
-    web = createServer((_req, res) => {
+    web = createServer((req, res) => {
       res.setHeader("content-type", "text/html");
+      const p = req.url?.match(/^\/p\/(\d+)/)?.[1];
+      if (p) return res.end(p === "3" && !page3 ? "<p>loading</p>" : `<h1>page ${p}</h1>`);
       res.end(
         `<label>Search <input id="q"></label><button onclick="out.textContent='found '+q.value">Go</button><button>Buy now</button><p id="out"></p>`,
       );
@@ -213,6 +217,38 @@ describe("explore runs a compiled workflow on its page (flow)", () => {
     const tree = await send({ cmd: "tools" });
     expect(tree.body.sites).toEqual(expect.arrayContaining([{ site: "shop", tools: 1 }]));
   });
+
+  it("code: a loop fails on page 3 with its log; the resend takes pages 1-2 from the store", async () => {
+    const code = `for (let p = 1; p <= 3; p++) {
+      log({ page: p });
+      await fp.open("http://localhost:${webPort}/p/" + p);
+      rows.push(...(await records({
+        fields: [{ key: "title", says: "the page title" }],
+        code: "const h = root.querySelector('h1'); if (!h) throw new Error('no h1'); return [{ title: h.textContent }];",
+      })));
+    }`;
+    const before = (await journal()).length;
+    const r = await send({ cmd: "code", as: "titles", code });
+    expect(r.body).toMatchObject({
+      rows: 2,
+      stored: 0,
+      failed: { call: "records", log: { page: 3 }, url: `http://localhost:${webPort}/p/3` },
+    });
+    expect((await journal()).length).toBe(before);
+    page3 = true;
+    const again = await send({ cmd: "code", as: "titles", code });
+    expect(again.body).toMatchObject({
+      rows: 3,
+      stored: 2,
+      first: [{ title: "page 1" }, { title: "page 2" }, { title: "page 3" }],
+    });
+    expect(again.body.failed).toBeUndefined();
+    // One row for the whole loop: a workflow built from this run runs the code.
+    const rows = (await journal()).slice(before) as Array<{ kind: string; as?: string }>;
+    expect(rows.map((a) => [a.kind, a.as])).toEqual([["code", "titles"]]);
+    const fresh = await send({ cmd: "code", as: "titles", code, fresh: true });
+    expect(fresh.body).toMatchObject({ rows: 3, stored: 0 });
+  }, 30_000);
 
   it("refuses a leg for another site's profile", async () => {
     const r = await send({ cmd: "flow", name: "elsewhere" });

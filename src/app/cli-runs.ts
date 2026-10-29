@@ -213,6 +213,10 @@ export function registerRunsCommands(
           console.log(
             `${t} act    ${r.act.kind.padEnd(9)}${r.hand ? " by hand" : ""}${r.look ? `  ${r.look.url} [${r.look.landmarks.length} landmarks]` : ""}`,
           );
+        else if (r.kind === "call")
+          console.log(
+            `${t} call   ${r.call.padEnd(9)}${r.stored ? "stored" : `${r.ms} ms`}${r.error ? `  err ${masked(r.error)}` : ""}${r.log === undefined ? "" : `  log ${masked(JSON.stringify(r.log))}`}`,
+          );
         else console.log(`${t} end    ${r.outcome}${r.look ? `  ${r.look.url}` : ""}`);
       }
     });
@@ -340,7 +344,7 @@ export function registerRunsCommands(
                 ? ` → ${op.walk}`
                 : op.kind === "each"
                   ? ` → ${op.walk} per ${op.over} → ${op.as}`
-                  : op.kind === "records" || op.kind === "ai"
+                  : op.kind === "records" || op.kind === "ai" || op.kind === "code"
                     ? ` → ${op.as}`
                     : "";
           console.log(`    ${op.kind}${at}${from}`);

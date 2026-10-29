@@ -454,34 +454,76 @@ describe("polish", () => {
   });
 });
 
+/** The agent's code row, as explore journals it: a loop over pages, its plan as given. */
+const coded: Recording = {
+  ...recording,
+  name: "pages-loop",
+  commands: [],
+  terminal: null,
+  actions: [
+    { t: 0, kind: "navigate", url: "https://s.test/" },
+    {
+      t: 1,
+      kind: "code",
+      url: "https://s.test/",
+      as: "titles",
+      plan: { pages: "3" },
+      code: 'for (let p = 1; p <= Number(plan.pages); p++) {\n  await fp.open("https://s.test/" + p);\n  rows.push({ p, title: await fp.read({ css: "h1" }) });\n}',
+    },
+  ],
+};
+
+describe("code", () => {
+  it("renders the agent's code as runCode, its plan a plan field", async () => {
+    const out = await compile(coded);
+    const src = out.files["index.ts"] ?? "";
+    // The example goes to the operator's defaults, as a typed value does.
+    expect(out.outline.fields).toEqual([
+      { key: "pages", label: "pages for the code", example: null },
+    ]);
+    expect(src).toContain(
+      "out.titles = (await runCode(fp, { plan: { pages: input.pages }, code: `for",
+    );
+    expect(src).toMatch(/import \{[^}]*runCode/);
+    expect(src).toContain("pages: z.string()");
+  });
+});
+
 describe("compile", () => {
-  it("emits a workflow and test that typecheck against the library", async () => {
-    const dir = await mkdtemp(join(import.meta.dirname, ".generated-"));
-    try {
-      const lib = join(import.meta.dirname, "../src/index.ts");
-      const out = await compile(recording, { lib });
-      const files = await writeRendered(dir, out);
-      const config = ts.readConfigFile(
-        join(import.meta.dirname, "../tsconfig.json"),
-        ts.sys.readFile,
-      );
-      const parsed = ts.parseJsonConfigFileContent(
-        config.config,
-        ts.sys,
-        join(import.meta.dirname, ".."),
-      );
-      const program = ts.createProgram(files, {
-        ...parsed.options,
-        noEmit: true,
-        allowImportingTsExtensions: true,
-        types: ["node"],
-      });
-      const diagnostics = ts
-        .getPreEmitDiagnostics(program)
-        .map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
-      expect(diagnostics).toEqual([]);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  }, 60_000);
+  it.each([
+    ["a recording", recording],
+    ["a code row", coded],
+  ])(
+    "emits a workflow and test that typecheck against the library (%s)",
+    async (_, rec) => {
+      const dir = await mkdtemp(join(import.meta.dirname, ".generated-"));
+      try {
+        const lib = join(import.meta.dirname, "../src/index.ts");
+        const out = await compile(rec, { lib });
+        const files = await writeRendered(dir, out);
+        const config = ts.readConfigFile(
+          join(import.meta.dirname, "../tsconfig.json"),
+          ts.sys.readFile,
+        );
+        const parsed = ts.parseJsonConfigFileContent(
+          config.config,
+          ts.sys,
+          join(import.meta.dirname, ".."),
+        );
+        const program = ts.createProgram(files, {
+          ...parsed.options,
+          noEmit: true,
+          allowImportingTsExtensions: true,
+          types: ["node"],
+        });
+        const diagnostics = ts
+          .getPreEmitDiagnostics(program)
+          .map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
+        expect(diagnostics).toEqual([]);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
 });

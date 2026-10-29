@@ -520,6 +520,19 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
         return [{ kind: "keep", goal: `keep ${a.env}`, hints: hintsOf(a.target), env: a.env }];
       case "records":
         return [a.op];
+      case "code":
+        for (const [key, example] of Object.entries(a.plan))
+          if (!fields.some((f) => f.key === key))
+            fields.push({ key, label: `${key} for the code`, example });
+        return [
+          {
+            kind: "code",
+            goal: `code into ${a.as}`,
+            as: a.as,
+            code: a.code,
+            plan: Object.keys(a.plan),
+          },
+        ];
       default:
         return [];
     }

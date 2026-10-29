@@ -83,6 +83,10 @@ export function renderOp(op: OutlineOp): string {
   if (op.kind === "ai")
     throw new Error(`an ai op runs in a walk; compile does not render it (${op.goal})`);
   if (op.kind === "records") return `    out.${op.as} = await records(fp, ${renderRecordsOp(op)});`;
+  if (op.kind === "code") {
+    const plan = op.plan.map((f) => `${f}: input.${f}`).join(", ");
+    return `    out.${op.as} = (await runCode(fp, { plan: { ${plan} }, code: ${renderCode(op.code)} })).rows;`;
+  }
   const plan = planLocator(op.hints);
   const hints = `{ ${Object.entries(op.hints)
     .filter(([, v]) => v)
@@ -143,6 +147,7 @@ export function flowInputs(step: Extract<OutlineStep, { kind: "browser" }>) {
   };
   named(step.url ?? "");
   for (const op of step.ops) {
+    if (op.kind === "code") for (const f of op.plan) if (!fields.includes(f)) fields.push(f);
     if ("hints" in op)
       for (const k of HINT_TEXTS) if (typeof op.hints[k] === "string") named(op.hints[k]);
     const value = op.kind === "fill" ? op.value : op.kind === "upload" ? op.file : null;
@@ -165,8 +170,10 @@ function renderBrowserStep(o: Outline, step: Extract<OutlineStep, { kind: "brows
   const inputType = inputLines.length
     ? `export interface ${Input} {\n${inputLines.join("\n")}\n}`
     : `export type ${Input} = Record<string, never>;`;
-  const reads = step.ops.filter((op) => op.kind === "read" || op.kind === "records");
-  const out = step.ops.some((op) => op.kind === "records")
+  const reads = step.ops.filter(
+    (op) => op.kind === "read" || op.kind === "records" || op.kind === "code",
+  );
+  const out = step.ops.some((op) => op.kind === "records" || op.kind === "code")
     ? "Record<string, unknown>"
     : "Record<string, string>";
   const flowLines = [
@@ -330,8 +337,12 @@ export function render(o: Outline, opts: RenderOptions = {}): Rendered {
   const anyRecords = o.steps.some(
     (s) => s.kind === "browser" && s.ops.some((op) => op.kind === "records"),
   );
+  const anyCode = o.steps.some(
+    (s) => s.kind === "browser" && s.ops.some((op) => op.kind === "code"),
+  );
   const imports = [
     ...(anyRecords ? ["records"] : []),
+    ...(anyCode ? ["runCode"] : []),
     "defineFlow",
     "defineWorkflow",
     "done",
