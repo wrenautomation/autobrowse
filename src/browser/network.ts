@@ -239,6 +239,8 @@ export class NetLog {
   private held: number[] = [];
   private bytes = 0;
   private next = 1;
+  /** Id ranges (after, before) dropped by `forget`. */
+  private gone: Array<[number, number]> = [];
   private readonly t0: number;
   private readonly now: () => number;
   readonly personal: boolean;
@@ -273,6 +275,20 @@ export class NetLog {
 
   row(id: number): NetRow | undefined {
     return this.list.find((r) => r.id === id);
+  }
+
+  /** The newest row's id; 0 before any. */
+  last(): number {
+    return this.next - 1;
+  }
+
+  /** Drop every row after `id` (what a secret flow made); a row still being read lands dropped too. */
+  forget(after: number): void {
+    this.gone.push([after, this.next]);
+    const keep = this.list.map((r) => r.id <= after);
+    this.bytes -= this.held.reduce((n, b, i) => (keep[i] ? n : n + b), 0);
+    this.held = this.held.filter((_, i) => keep[i]);
+    this.list = this.list.filter((_, i) => keep[i]);
   }
 
   /** The last `n` rows as JSON lines. */
@@ -322,6 +338,7 @@ export class NetLog {
         }
       }
     }
+    if (this.gone.some(([a, b]) => row.id > a && row.id < b)) return null;
     const bytes = row.body === undefined ? 0 : JSON.stringify(row.body).length;
     this.list.push(row);
     this.held.push(bytes);

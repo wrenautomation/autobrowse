@@ -35,11 +35,15 @@ import { fetchFile } from "../browser/download.js";
 import { extrasOf } from "../browser/extras.js";
 import { filmLog } from "../browser/film.js";
 import {
+  type BrowserFlow,
   chooseOption,
   defineFlow,
   type FilePayload,
   type FlowPage,
+  type FlowRunner,
   flowRunner,
+  type Op,
+  pageWide,
   type RunnerOptions,
   seedOf,
 } from "../browser/flow.js";
@@ -67,9 +71,14 @@ import { snapshotPage } from "../browser/repair.js";
 import { lookAt, type PageLook, urlShape } from "../browser/screens.js";
 import { holdsSecret, secret } from "../browser/secrets.js";
 import { type BrowserOptions, bodyText, looksLikeWall, NeedsHuman } from "../browser/session.js";
+import type { KeyKeeper } from "../deps/keys.js";
 import type { SecretSink } from "../deps/sink.js";
 import { macDesktop } from "../desktop/mac.js";
 import { type Desktop, type DesktopOp, noDesktop, treeText } from "../desktop/types.js";
+import type { Effects } from "../engine/effects.js";
+import { memoryEffects } from "../engine/memory.js";
+import { advance, applyAnswer, type OpenGate, outcomeOf, type RunStatus } from "../engine/run.js";
+import type { AnyWorkflow } from "../engine/workflow.js";
 import {
   describeFile,
   type FileLine,
@@ -132,6 +141,7 @@ import type { Action, LocatorHints, Recording } from "../recorder/types.js";
 import { type Capture, captureFor } from "../runs/capture.js";
 import { machine, type RunLog, type RunOutcome, runLog } from "../runs/log.js";
 import { missCause, targetOf } from "../runs/success.js";
+import { compiledDeps } from "../workflows/compiled-deps.js";
 import {
   type Command,
   commandSchema,
@@ -248,6 +258,15 @@ export interface ExploreOptions {
   desktop?: Desktop;
   /** Draw the overlay (ref boxes, the act's target, the agent's goal and thought); default: when headed. */
   overlay?: boolean;
+  /**
+   * Compiled workflows the `flow` command may run on this page: by name, the plan with its saved
+   * defaults under what the command gives, the key vault a key-minting flow keeps into. Absent: refused.
+   */
+  workflows?: {
+    get(name: string): Promise<AnyWorkflow | null>;
+    plan(name: string, given: Record<string, unknown>): Promise<Record<string, unknown>>;
+    keys?: KeyKeeper;
+  };
   /** Writes `records` code when the command sends none; absent: `records` needs `code`. */
   llm?: Llm | null;
   /** Where `keep` puts a secret read off the page (.env locally, SSM in prod). */
@@ -596,7 +615,7 @@ async function serve(
   let lastSession: string | null = process.env.CLAUDE_CODE_SESSION_ID ?? null;
   const picture = async (): Promise<string | null> => {
     const c = capture;
-    if (!c || page.isClosed()) return null;
+    if (!c || page.isClosed() || secretFlow) return null;
     try {
       const shot = await overlay.around(page, () =>
         page.screenshot({ type: "jpeg", quality: 80, scale: "css" }),
@@ -1404,6 +1423,242 @@ async function serve(
     left = { url: page.url(), rows: now_ };
     return out;
   };
+  /** A script that clicks, on a page that shows a spending button, needs the click's yes first. */
+  const scriptGate = async (js: string, wait: boolean) => {
+    if (!scriptActs(js)) return;
+    const labels = await page.evaluate<string[]>(BUTTON_LABELS).catch(() => [] as string[]);
+    const spend = labels
+      .map((text) => paymentGate("click", { text: text.trim().slice(0, 200) }))
+      .find((w) => w !== null);
+    if (spend)
+      await decide(
+        `eval ${js.slice(0, 80)}`,
+        `run a script on a page where it can ${spend.replace(/^press /, "press ")}`,
+        page.url(),
+        wait,
+      );
+  };
+
+  /**
+   * `flow`: a compiled workflow on this page (designs/2026-10-29-explore-flow.md). Its browser
+   * legs run on the session's own FlowPage; each money act passes this session's gate first.
+   */
+  const flowRuns = new Map<string, { fx: Effects; gate: OpenGate | null }>();
+  /** A secret flow runs: no pictures, rows or flat journal. */
+  let secretFlow = false;
+  /** The payment refusal a flow's act met: the command answers with it, not with a failed step. */
+  let flowGated: PaymentGate | null = null;
+  const unpaused = () =>
+    paused ? new Promise<void>((resolve) => waiters.push(resolve)) : Promise.resolve();
+  /** A flow's acts journaled flat, as the same commands would be: a mixed session saves as one recording. */
+  const journalOp = (op: Op, hints: Hints) => {
+    const t = { hints } as Target;
+    if (op.kind === "click") journalAct(t, (target) => ({ kind: "click", target }));
+    else if (op.kind === "fill") {
+      const secret =
+        looksLikeSecretField(toLocatorHints(t.hints)) ||
+        looksLikeSecretValue(op.value) ||
+        holdsSecret(op.value);
+      journalAct(t, (target) => ({
+        kind: "input",
+        target,
+        value: secret ? REDACTED : op.value,
+        redacted: secret,
+      }));
+    } else if (op.kind === "select")
+      journalAct(t, (target) => ({ kind: "select", target, value: op.value }));
+    else if (op.kind === "press")
+      journalAct(t, (target) => ({ kind: "press", target, key: op.key }));
+    else if (op.kind === "script" && scriptActs(op.js))
+      journal({
+        kind: "eval",
+        target: pageWide(hints) ? null : toLocatorHints(t.hints),
+        js: op.js,
+      });
+    // upload: the flow's own paths or bytes; a recording names stored files, so none
+  };
+  const flowPage = (flow: BrowserFlow<unknown, unknown>, wait: boolean): FlowPage => {
+    const quiet = flow.secret === true;
+    /** One row per step, as a flow draws its own; a pause holds the next step. */
+    const step = async <T>(
+      s: { cmd: string; goal: string; hints?: Hints; url?: string },
+      run: () => Promise<T>,
+      answer?: (r: T) => unknown,
+    ): Promise<T> => {
+      await unpaused();
+      page = fp.page;
+      if (quiet) return run();
+      const from = page.url();
+      const began = now();
+      await overlay.begin(page, s.cmd);
+      if (s.hints) await overlay.flash(page, s.hints, `${s.cmd}: ${s.goal}`);
+      let failed: unknown = null;
+      let got: T | undefined;
+      try {
+        got = await run();
+        return got;
+      } catch (err) {
+        failed = err;
+        throw err;
+      } finally {
+        page = fp.page;
+        await overlay.after(page);
+        // An open's goal holds the whole URL: the row shows its host and path only.
+        const c = { cmd: s.cmd, hints: s.hints, url: s.url, ...(s.url ? {} : { goal: s.goal }) };
+        await overlay.end(
+          page,
+          traceRow(c as unknown as Command, failed, now() - began, {
+            from,
+            to: page.url(),
+            ...(answer && got !== undefined ? { answer: answer(got) } : {}),
+          }),
+        );
+      }
+    };
+    const money = (op: Op) =>
+      op.kind === "click" || (op.kind === "press" && activates(op.key))
+        ? "click"
+        : op.kind === "fill" || op.kind === "select"
+          ? op.kind
+          : null;
+    return {
+      ...fp,
+      // Live, not copied: after `switchTo` (a popup) it is the page acted on now.
+      get page() {
+        return fp.page;
+      },
+      open: (url, o) =>
+        step({ cmd: "open", goal: `open ${url}`, url }, async () => {
+          await fp.open(url, o);
+          if (!quiet) journal({ kind: "navigate" });
+        }),
+      read: (hints) =>
+        step(
+          { cmd: "read", goal: "read", hints },
+          () => fp.read(hints),
+          (text) => ({ as: "text", text }),
+        ),
+      act: (op, hints, o) =>
+        step({ cmd: op.kind, goal: o.goal, hints }, async () => {
+          const kind = money(op);
+          let spent: Awaited<ReturnType<typeof gate>> = null;
+          try {
+            if (kind) spent = await gate(kind, { hints } as Target, wait);
+            if (op.kind === "script") await scriptGate(op.js, wait);
+          } catch (err) {
+            if (err instanceof PaymentGate) flowGated = err;
+            throw err;
+          }
+          await fp.act(op, hints, o);
+          page = fp.page;
+          if (!quiet) journalOp(op, hints);
+          if (spent?.charges) await reportSpend(spent);
+        }),
+    };
+  };
+  /** Explore as the workflow's browser: its legs run here, on this site's profile only. */
+  const onPage = (wait: boolean): FlowRunner => ({
+    run: async <I, O>(flow: BrowserFlow<I, O>, input: I): Promise<O> => {
+      const here = opts.site.split("@")[0];
+      if (flow.site !== here)
+        throw new Error(
+          `flow: ${flow.site}/${flow.name} needs ${flow.site}'s profile; this session is ${here}: open explore on ${flow.site}`,
+        );
+      secretFlow = flow.secret === true;
+      const mark = fp.network?.last() ?? 0;
+      try {
+        return await flow.run(flowPage(flow as BrowserFlow<unknown, unknown>, wait), input);
+      } finally {
+        if (secretFlow) {
+          await settle(fp.page).catch(() => undefined);
+          fp.network?.forget(mark);
+        }
+        secretFlow = false;
+      }
+    },
+  });
+  const runWorkflow = async (c: Extract<Command, { cmd: "flow" }>, wait: boolean) => {
+    const from = opts.workflows;
+    if (!from) throw new Error("flow: no workflows in this session (the CLI's explore has them)");
+    const workflow = await from.get(c.name);
+    if (!workflow)
+      throw new Error(`flow: no compiled workflow ${c.name}; see: autobrowse workflows`);
+    const plan = workflow.plan.parse({ dryRun: false, ...(await from.plan(c.name, c.plan ?? {})) });
+    if (c.fresh) flowRuns.delete(c.name);
+    const run = flowRuns.get(c.name) ?? { fx: memoryEffects().fx, gate: null };
+    flowRuns.set(c.name, run);
+    const deps = compiledDeps(onPage(wait), {
+      ...(opts.audit ? { audit: opts.audit } : {}),
+      ...(opts.sink ? { sink: opts.sink } : {}),
+      ...(from.keys ? { keys: from.keys } : {}),
+    });
+    const at = () => new Date().toISOString();
+    // The gate it stopped on: the same command sent again answers it.
+    if (run.gate?.name === "human")
+      await applyAnswer(run.fx, run.gate, {
+        approved: true,
+        note: "explore: sent again",
+        at: at(),
+      });
+    else if (run.gate?.name === "choose" && c.choice)
+      await applyAnswer(run.fx, run.gate, { approved: true, note: c.choice, at: at() });
+    run.gate = null;
+    journal({ kind: "note", text: `flow ${c.name} start` });
+    const answer = async (status: RunStatus) => {
+      const o = await outcomeOf(run.fx, workflow, status);
+      // Done or refused: nothing to go on from. Failed or waiting: the next call goes on.
+      if (status === "done" || status === "rejected") flowRuns.delete(c.name);
+      journal({ kind: "note", text: `flow ${c.name} ${status}` });
+      page = fp.page;
+      const g = run.gate;
+      return JSON.parse(
+        redactText(
+          JSON.stringify({
+            flow: c.name,
+            status,
+            steps: o.results,
+            ...(g ? { gate: { name: g.name, step: g.step, prompt: g.prompt } } : {}),
+            url: page.url(),
+          }),
+        ),
+      ) as unknown;
+    };
+    for (;;) {
+      flowGated = null;
+      const a = await advance(run.fx, workflow, deps, plan);
+      // Kept: the step that met the gate runs again on the next call.
+      if (flowGated) throw flowGated;
+      if (a.kind === "continue") continue;
+      if (a.kind === "finished") return answer(a.status);
+      const g = a.gate;
+      if (g.name === "human" || g.name === "choose") {
+        run.gate = g;
+        return answer("waiting");
+      }
+      try {
+        if (!approvals) throw new PaymentGate(g.prompt, "no-approver");
+        await approvals.decide(
+          `flow ${c.name} ${g.step} ${g.name}`,
+          { what: `${c.name}: ${g.prompt}`, url: page.url(), site: opts.site },
+          wait,
+        );
+      } catch (err) {
+        if (!(err instanceof PaymentGate) || err.reason !== "denied") throw err;
+        await applyAnswer(run.fx, g, {
+          approved: false,
+          note: "explore: a person said no",
+          at: at(),
+        });
+        return answer("rejected");
+      }
+      await applyAnswer(run.fx, g, {
+        approved: true,
+        note: "explore: a person said yes",
+        at: at(),
+      });
+    }
+  };
+
   const act = async (given: Command, wait: boolean): Promise<unknown> => {
     page = fp.page;
     // A mark from the last picture acts, and journals, as the control's own hints.
@@ -1684,21 +1939,8 @@ async function serve(
       case "html":
         return html(c);
       case "eval": {
-        // A click by script never meets the click's gate: on a page that shows a spending button,
-        // it needs the same yes first.
-        if (scriptActs(c.js)) {
-          const labels = await page.evaluate<string[]>(BUTTON_LABELS).catch(() => [] as string[]);
-          const spend = labels
-            .map((text) => paymentGate("click", { text: text.trim().slice(0, 200) }))
-            .find((w) => w !== null);
-          if (spend)
-            await decide(
-              `eval ${c.js.slice(0, 80)}`,
-              `run a script on a page where it can ${spend.replace(/^press /, "press ")}`,
-              page.url(),
-              wait,
-            );
-        }
+        // A click by script never meets the click's gate.
+        await scriptGate(c.js, wait);
         const result: unknown = c.hints
           ? await locate(page, c.hints as Hints)
               .first()
@@ -1888,6 +2130,8 @@ async function serve(
         }
         return answer({});
       }
+      case "flow":
+        return runWorkflow(c, wait);
       case "close":
         // Closed on purpose: nothing left to resume, unless asked to keep it.
         closing = !c.keep;

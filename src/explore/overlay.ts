@@ -123,7 +123,7 @@ interface Prefs {
   trace: boolean;
   right: boolean;
   hidden: boolean;
-  /** Clicks pass through the panel to the page; only its buttons take them. Default on. */
+  /** Clicks pass through the panel to the page; only its buttons take them. Default off. */
   through: boolean;
   /** Panel width and trace height, px; `sized` once a person dragged the grip. */
   w: number;
@@ -386,8 +386,8 @@ export function overlayFor(startOn: boolean) {
     trace: true,
     right: false,
     hidden: false,
-    // A visual only: the page under the panel stays usable until a person opts in.
-    through: true,
+    // The panel takes a person's clicks; while a command runs it lets every click through.
+    through: false,
     w: 460,
     h: 220,
     sized: false,

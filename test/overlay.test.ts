@@ -49,7 +49,7 @@ describe("headed overlay", () => {
     }
   });
 
-  it("by default the panel lets every click through; its toggle makes it take them", async () => {
+  it("by default the panel takes clicks; its toggle lets every click through", async () => {
     const browser = await chromium.launch();
     try {
       const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
@@ -60,18 +60,24 @@ describe("headed overlay", () => {
       await o.set(page, { goal: "save the form" });
       await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] });
       await page.mouse.click(40, 580);
-      expect(await page.evaluate("+document.body.dataset.hits")).toBe(1);
-      // The [⊙] button still takes its click.
+      expect(await page.evaluate("+(document.body.dataset.hits||0)")).toBe(0);
+      // The [●] button: clicks pass through from now on.
       const btn = await page.evaluate<{ x: number; y: number }>(
         `(() => { const r = [...${ui}.tuiEl.querySelectorAll('.btn')].find((b) => b.getAttribute('data-a') === 'through').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
       );
+      await page.mouse.click(btn.x, btn.y);
+      expect(await page.evaluate(`[${ui}.through, +(document.body.dataset.hits||0)]`)).toEqual([
+        true,
+        0,
+      ]);
+      await page.mouse.click(40, 580);
+      expect(await page.evaluate("+document.body.dataset.hits")).toBe(1);
+      // Its buttons still take clicks in through mode.
       await page.mouse.click(btn.x, btn.y);
       expect(await page.evaluate(`[${ui}.through, +document.body.dataset.hits]`)).toEqual([
         false,
         1,
       ]);
-      await page.mouse.click(40, 580);
-      expect(await page.evaluate("+document.body.dataset.hits")).toBe(1);
     } finally {
       await browser.close();
     }
@@ -89,7 +95,6 @@ describe("headed overlay", () => {
       await page.focus("#f");
       const o = overlayFor(true);
       await o.set(page, { goal: "save the form" });
-      await page.evaluate(`${ui}.through = false`);
       await o.begin(page);
       await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] });
       const panel = { x: 40, y: 580 };
@@ -152,7 +157,8 @@ describe("headed overlay", () => {
         note: "→ a.com/next",
         detail: [],
       });
-      // Click-through (the default): the grip still takes the drag.
+      // Click-through mode: the grip still takes the drag.
+      await page.evaluate(`${ui}.through = true; ${ui}.draw(${ui}.s)`);
       const width = () =>
         page.evaluate(`${ui}.tuiEl.getBoundingClientRect().toJSON()`) as Promise<DOMRect>;
       const before = await width();

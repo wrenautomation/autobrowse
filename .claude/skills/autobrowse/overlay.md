@@ -25,8 +25,8 @@ It is off for every screenshot and every film frame. Nothing depends on it, so r
 
 ## Buttons
 
-- `[○]` (default): clicks pass through the panel to the page. Only the buttons take them.
-- `[●]`: the panel takes clicks (expand a row, scroll the trace). The page never sees them.
+- `[●]` (default): the panel takes clicks (expand a row, scroll the trace). The page never sees them.
+- `[○]`: clicks pass through the panel to the page. Only the buttons and the grip take them.
 - `[▸]`/`[◂]` moves it to the other side. `[_]`/`[+]` folds it.
 - `[×]` hides it to a chip at the bottom (`▌autobrowse ○ show`). Click the chip to show it again.
 - Drag the top corner grip to resize it.

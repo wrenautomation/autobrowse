@@ -288,6 +288,15 @@ export function healer(
     });
 }
 
+/** Every compiled workflow this machine has: the user dir, the shipped ones, trusted mods'. */
+export const catalogFor = (settings: Settings): CompiledCatalog =>
+  compiledCatalog(
+    COMPILED_DIR,
+    undefined,
+    () => [...shippedRoots(), ...modWorkflowRoots(modsDirFor(settings))],
+    linkOnce,
+  );
+
 /**
  * How every face opens an explore server: one browser on a site, the worker's
  * login, a person's pace, its secret sink and payment approver. The CLI's
@@ -320,6 +329,8 @@ export function explorerOpener(
   const cardCode = cardCodeFor(settings);
   const profiles = profilesForPlace(settings);
   const files = filesForExplore(settings);
+  const catalog = catalogFor(settings);
+  const plans = filePlans(settings.plansDir);
   return async (site, port, { signIn = true, ...extra } = {}) =>
     startExplore({
       site,
@@ -339,6 +350,12 @@ export function explorerOpener(
       pace: paceFor(settings), // an agent browses at a person's pace: sites watch for the other kind
       sink,
       runs: runsDirFor(settings),
+      // `flow`: any compiled workflow on the open page, its saved plan under the command's.
+      workflows: {
+        get: async (name) => (await catalog.get(name))?.workflow ?? null,
+        plan: (name, given) => withDefaults(plans, name, given),
+        keys: keyKeeperFor(settings),
+      },
       ...(approver ? { approve: approver } : {}),
       ...extra,
     });
@@ -398,12 +415,7 @@ export function localParts(
   settings: Settings,
   o: { headless?: boolean; overlay?: boolean } = {},
 ): BackendParts {
-  const catalog = compiledCatalog(
-    COMPILED_DIR,
-    undefined,
-    () => [...shippedRoots(), ...modWorkflowRoots(modsDirFor(settings))],
-    linkOnce,
-  );
+  const catalog = catalogFor(settings);
   const gmail = gmailFor(settings);
   const display = o.headless === undefined ? displayOf(settings) : { headless: o.headless };
   const browser = flowRunner(browserOptions(settings, display), {

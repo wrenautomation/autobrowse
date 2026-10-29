@@ -72,7 +72,14 @@ Act (journaled):
 - `{"cmd":"captcha"}` — solves the page's captcha (a checkbox by a human click, a picture by a model, cropped in memory). Returns `{solved, kind, vendor, reason?}`. Never screenshot a captcha yourself.
 - `{"cmd":"note","text":"…"}` — a comment in the journal.
 - `{"cmd":"eval","js":"…"}` — last resort; not journaled as a click, so the recording misses it.
-- `{"cmd":"batch","cmds":[{…},{…}]}` — up to 30 commands in order, one answer, one `changed`. No `close`, `pause`, `resume`, `save` or nested batch.
+- `{"cmd":"batch","cmds":[{…},{…}]}` — up to 30 commands in order, one answer, one `changed`. No `close`, `pause`, `resume`, `save`, `flow` or nested batch.
+- `{"cmd":"flow","name":"amazon-cart","plan":{"searchFor":"Dune"}}` — runs a compiled workflow (`autobrowse workflows`) on this page. Its saved plan goes under yours.
+  Answer: `{status, steps, gate?, url}`. The page stays where it ended: go on by hand. Mix freely: sign in, explore, `flow`, explore again.
+  - Its legs must be on this session's site. Another site's workflow needs its own session.
+  - Every money act asks the person, as yours do. A workflow's `purchase`/`password`/`send` gate asks too. Send with `?wait=1` to hold for the answer.
+  - `waiting` with `gate.name` `human`: fix the page, then send the same command. The step runs again. `choose`: send it again with `"choice":"…"`.
+  - `failed`: the same command goes on from the failed step. `"fresh":true` starts over.
+  - The journal keeps its acts flat, so `save` makes one recording. A secret flow keeps only its start and end notes.
 
 Files (the Mac's sealed store, `autobrowse files`): start with `--files <set>[,<set>]`
 (`start.sh <site> <url> <port> --files coop`) to have a named set at the ready; the

@@ -185,6 +185,18 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   }),
   /** Solve the captcha on the page: the checkbox by hand, a picture by the runner's eyes. Journaled, so the compiled flow solves it too. */
   z.object({ cmd: z.literal("captcha") }),
+  /**
+   * Run a compiled workflow on this page (`autobrowse workflows`): its plan, then its steps, one row each.
+   * A stopped run (a gate, a step that failed) is kept: the same command goes on from there; `fresh` starts over.
+   */
+  z.object({
+    cmd: z.literal("flow"),
+    name: z.string().regex(/^[a-z][a-z0-9-]*$/),
+    plan: z.record(z.string(), z.unknown()).optional(),
+    fresh: z.boolean().optional(),
+    /** The option a `choose` gate it stopped on asked for. */
+    choice: z.string().min(1).optional(),
+  }),
   /** Write the journal as a recording under `recordingsDir/<name>`. */
   z.object({ cmd: z.literal("save"), name: z.string().regex(/^[a-z][a-z0-9-]*$/) }),
   /** What is recorded so far; `last` = only the newest n. */
@@ -212,6 +224,7 @@ export type Command = z.infer<typeof commandSchema>;
 /** Acts whose answer says what changed on the page, so the caller need not look again. */
 export const LOOKS = new Set<Command["cmd"]>([
   "open",
+  "flow",
   "captcha",
   "click",
   "drag",
@@ -226,6 +239,7 @@ export const LOOKS = new Set<Command["cmd"]>([
 /** Session controls and nesting stay out of a batch. */
 export const UNBATCHABLE = new Set<Command["cmd"]>([
   "batch",
+  "flow",
   "close",
   "pause",
   "resume",
