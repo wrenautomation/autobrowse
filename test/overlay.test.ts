@@ -77,6 +77,32 @@ describe("headed overlay", () => {
     }
   });
 
+  it("hidden, the panel is a chip: the page is free where it stood, and the chip brings it back", async () => {
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
+      await page.setContent(
+        `<button id="big" style="position:fixed;inset:0;z-index:1" onclick="document.body.dataset.hits=+(document.body.dataset.hits||0)+1">x</button>`,
+      );
+      const o = overlayFor(true);
+      await o.set(page, { goal: "save the form" });
+      await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, detail: [] });
+      const ui = "window[Object.keys(window).find((k) => k.startsWith('__data-o'))]";
+      // As the [×] button does.
+      await page.evaluate(`${ui}.hidden = true; ${ui}.draw(${ui}.s)`);
+      // A redraw from the session keeps it hidden.
+      await o.end(page, { cmd: "click", what: "x", ok: true, ms: 5, detail: [] });
+      await page.mouse.click(200, 500);
+      expect(await page.evaluate("+document.body.dataset.hits")).toBe(1);
+      // The chip, bottom left: the page never sees it.
+      await page.mouse.click(30, 576);
+      expect(await page.evaluate("+document.body.dataset.hits")).toBe(1);
+      expect(await page.evaluate(`${ui}.hidden`)).toBe(false);
+    } finally {
+      await browser.close();
+    }
+  });
+
   it("a trace row names the aim, never a typed value or a query", () => {
     const fill = traceRow(
       { cmd: "fill", hints: { role: "textbox", name: "Email" }, value: "me@x.com" } as Command,

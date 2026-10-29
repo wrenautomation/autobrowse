@@ -77,14 +77,23 @@ const T = {
   bad: "#ff6b5e",
 };
 
+/** How a person left the panel: carried into each new document. */
+interface Prefs {
+  min: boolean;
+  trace: boolean;
+  right: boolean;
+  hidden: boolean;
+}
+
 /** In the page: the layer drawn from `s`, or taken away when `s` is undefined. */
-const layerScript = (attr: string, s: OverlayState | undefined) => `(() => {
+const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) => `(() => {
   const K = '__${attr}';
-  const ui = window[K] || (window[K] = { min: false, trace: true, right: false, open: null, scroll: 0 });
+  const ui = window[K] || (window[K] = { ...${JSON.stringify(prefs)}, open: null, scroll: 0 });
+  const prefs = () => ({ min: ui.min, trace: ui.trace, right: ui.right, hidden: ui.hidden });
   for (const old of document.querySelectorAll('[${attr}]')) old.remove();
   ui.host = null;
   const s = ${JSON.stringify(s ?? null)};
-  if (!s) return;
+  if (!s) return prefs();
   ui.s = s;
   if (!ui.bound) {
     ui.bound = true;
@@ -105,6 +114,7 @@ const layerScript = (attr: string, s: OverlayState | undefined) => `(() => {
       if (!a) return;
       const act = a.getAttribute('data-a');
       if (act === 'min') ui.min = !ui.min;
+      else if (act === 'hide') ui.hidden = !ui.hidden;
       else if (act === 'move') ui.right = !ui.right;
       else if (act === 'trace') ui.trace = !ui.trace;
       else if (act.startsWith('row:')) { const n = Number(act.slice(4)); ui.open = ui.open === n ? null : n; }
@@ -133,7 +143,10 @@ const layerScript = (attr: string, s: OverlayState | undefined) => `(() => {
       'background:${T.canvas} repeating-linear-gradient(0deg,rgba(255,255,255,.028) 0 1px,transparent 1px 3px);',
       'border:1px solid ${T.accent};box-shadow:0 0 0 1px #000,0 10px 32px rgba(0,0,0,.55),0 0 22px rgba(165,150,214,.14);',
       'text-shadow:0 0 6px rgba(165,150,214,.22)}',
-      '.tui.busy{pointer-events:none}',
+      '.tui.busy,.chip.busy{pointer-events:none}',
+      '.chip{position:fixed;bottom:12px;pointer-events:auto;cursor:pointer;user-select:none;padding:0 8px;font:700 11px/22px "JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace;color:${T.accent};background:${T.canvas};border:1px solid ${T.accent};box-shadow:0 4px 14px rgba(0,0,0,.4)}',
+      '.chip:hover{color:${T.onAccent};background:${T.accent}}',
+      '.chip .run{animation:blink 1s steps(2) infinite}',
       '.bar{display:flex;align-items:center;gap:8px;padding:2px 8px;background:${T.paper};border-bottom:1px solid ${T.accent}}',
       '.bar .name{font-weight:700;color:${T.accent};letter-spacing:.04em}',
       '.bar .state{color:${T.ink3}}',
@@ -170,7 +183,19 @@ const layerScript = (attr: string, s: OverlayState | undefined) => `(() => {
       root.appendChild(b);
     }
     if (s.target) root.appendChild(el('div', 'target', null, at(s.target)));
-    const tui = el('div', 'tui' + (s.busy ? ' busy' : ''), null, ui.right ? 'right:12px' : 'left:12px');
+    const side = ui.right ? 'right:12px' : 'left:12px';
+    if (ui.hidden) {
+      // Folded away: one small chip, the page free around it.
+      const chip = el('div', 'chip' + (s.busy ? ' busy' : ''), '▌ab ', side);
+      chip.appendChild(el('span', s.busy ? 'run' : '', s.busy ? '●' : '○'));
+      chip.setAttribute('data-a', 'hide');
+      root.appendChild(chip);
+      document.documentElement.appendChild(host);
+      ui.host = host;
+      ui.root = root;
+      return;
+    }
+    const tui = el('div', 'tui' + (s.busy ? ' busy' : ''), null, side);
     const bar = el('div', 'bar');
     bar.appendChild(el('span', 'name', '▌autobrowse'));
     bar.appendChild(el('span', 'state' + (s.busy ? ' run' : ''), s.busy ? '● run' : '○ idle'));
@@ -179,6 +204,7 @@ const layerScript = (attr: string, s: OverlayState | undefined) => `(() => {
     const btn = (a, t) => { const b = el('span', 'btn', t); b.setAttribute('data-a', a); return b; };
     bar.appendChild(btn('move', ui.right ? '[⇤]' : '[⇥]'));
     bar.appendChild(btn('min', ui.min ? '[+]' : '[_]'));
+    bar.appendChild(btn('hide', '[×]'));
     tui.appendChild(bar);
     if (!ui.min) {
       const body = el('div', 'body');
@@ -226,6 +252,7 @@ const layerScript = (attr: string, s: OverlayState | undefined) => `(() => {
     ui.root = root;
   };
   ui.draw(s);
+  return prefs();
 })()`;
 
 const clipLine = (s: string | null | undefined, n: number) =>
@@ -237,11 +264,14 @@ export function overlayFor(enabled: boolean) {
   const attr = `data-o${randomBytes(4).toString("hex")}`;
   let state: OverlayState = { ...EMPTY };
   let drawn = false;
-  const paint = (page: Page, s: OverlayState | undefined) =>
-    Promise.race([
-      page.evaluate(layerScript(attr, s)).catch(() => undefined),
-      new Promise((r) => setTimeout(r, DRAW_MS).unref()),
+  let prefs: Prefs = { min: false, trace: true, right: false, hidden: false };
+  const paint = async (page: Page, s: OverlayState | undefined) => {
+    const got = await Promise.race([
+      page.evaluate(layerScript(attr, s, prefs)).catch(() => undefined),
+      new Promise<undefined>((r) => setTimeout(() => r(undefined), DRAW_MS).unref()),
     ]);
+    if (got && typeof got === "object") prefs = got as Prefs;
+  };
   const draw = async (page: Page) => {
     if (!enabled) return;
     await paint(page, state);

@@ -833,7 +833,7 @@ const npm: SiteLogin = {
  * Apple (App Store Connect, the developer account): one Apple ID widget in an
  * iframe; the address, Continue, then the password shows late on the same
  * form. 2FA is a code on William's own devices: a person's step. Hints from
- * the 10-28 explore journal. UNVERIFIED until its first live run.
+ * the 10-28 explore journal. Verified live 2026-10-28 (William).
  */
 const APPLE_WIDGET = "iframe#aid-auth-widget-iFrame";
 const apple: SiteLogin = {
