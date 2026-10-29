@@ -8,6 +8,7 @@
  */
 
 import type { Command } from "commander";
+import { RETRY_BUFFER } from "../sites/caps.js";
 import type { CapsReport, LimitsRow } from "../sites/facade.js";
 import { type CheckRow, checkSite, type Method } from "../sites/index.js";
 import type { SiteLimits } from "../sites/limits.js";
@@ -67,7 +68,8 @@ export function printLimits(r: LimitsRow, used: Record<string, number>): void {
   const pace = r.pace
     ? `pace ${secs(r.pace.gapMs)}${r.pace.jitterMs ? ` + up to ${secs(r.pace.jitterMs)}` : ""}${mark(Boolean(r.set.pace))}`
     : "no pace";
-  console.log(`${accent(r.site)}  ${pace}`);
+  const buffer = `retries +${Math.round((r.retryBuffer ?? RETRY_BUFFER.act) * 100)}%${r.retryBuffer === undefined ? ` acts, +${RETRY_BUFFER.read * 100}% reads` : ""}${mark(r.set.retryBuffer !== undefined)}`;
+  console.log(`${accent(r.site)}  ${pace}  ${buffer}`);
   if (r.caps) console.log(`  caps  ${line(r.caps, r.set.caps)}`);
   for (const [name, caps] of Object.entries(r.accountCaps ?? {}))
     console.log(`  account ${name}  ${line(caps, r.set.accounts?.[name])}`);

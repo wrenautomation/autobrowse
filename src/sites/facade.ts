@@ -694,7 +694,7 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
       return sites
         .filter((s) => !only || s.site === only)
         .map((s) => ({ site: s.site, ...effective(s, file), set: file[s.site] ?? {} }))
-        .filter((r) => r.caps || r.accountCaps || r.pace);
+        .filter((r) => r.caps || r.accountCaps || r.pace || r.retryBuffer !== undefined);
     },
     editLimits(name, fn) {
       site(name);
