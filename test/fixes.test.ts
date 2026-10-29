@@ -104,6 +104,56 @@ describe("fixes", () => {
     });
   }, 60_000);
 
+  it("a repair whose run then fails is not kept; a kept fix in a failed run is dropped", async () => {
+    const url = await ready;
+    const dir = mkdtempSync(join(tmpdir(), "autobrowse-provisional-"));
+    const fixes = fileFixes(join(dir, "fixes.json"));
+    const repairer: Repairer = {
+      id: "wrong",
+      async propose() {
+        return { hints: { role: "button", name: "Pay now" }, reason: "renamed" };
+      },
+    };
+    const runner = flowRunner(
+      {
+        tier: "local",
+        channel: "chromium",
+        profilesDir: join(dir, "profiles"),
+        artifactsDir: join(dir, "artifacts"),
+        headless: true,
+      },
+      { pace: null, repairer, fixes },
+    );
+    const pay = defineFlow<undefined, string>({
+      site: "scratch",
+      name: "pay-check",
+      async run(fp) {
+        await fp.open(url);
+        await fp.act(
+          { kind: "click" },
+          { role: "button", name: "Checkout" },
+          { goal: "pay", timeoutMs: 2_000 },
+        );
+        // the click went to the wrong control: the check after it fails
+        return fp.human("the pay did not take");
+      },
+    });
+    await expect(runner.run(pay, undefined)).rejects.toThrow(/did not take/);
+    expect(fixes.list()).toEqual([]);
+    fixes.learn({
+      site: "scratch",
+      flow: "scratch/pay-check",
+      goal: "pay",
+      failed: { role: "button", name: "Checkout" },
+      hints: { role: "button", name: "Pay now" },
+      reason: "kept before",
+      url,
+      ok: true,
+    });
+    await expect(runner.run(pay, undefined)).rejects.toThrow(/did not take/);
+    expect(fixes.list()).toEqual([]);
+  }, 60_000);
+
   it("a new screen in the way: one detour click on the live page, then the op; kept for next run", async () => {
     const url = `${await ready}screen`;
     const dir = mkdtempSync(join(tmpdir(), "autobrowse-detour-"));

@@ -33,6 +33,25 @@ describe("looksLikeWall", () => {
       (await looksLikeWall(page("https://myaccount.google.com/intro/personal-info")))?.kind,
     ).toBe("login");
     expect(await looksLikeWall(page("https://myaccount.google.com/introspection"))).toBeNull();
+    // Signed out of TikTok: a Log in button under the side menu, the guest topic picker on top.
+    const tt = "For You\nExplore\nFollowing\nLIVE\nUpload\nProfile\nMore\nLog in\nCompany";
+    expect((await looksLikeWall(page("https://www.tiktok.com/@a", tt)))?.kind).toBe("login");
+    expect(
+      (
+        await looksLikeWall(
+          page("https://www.tiktok.com/@a", "What would you like to watch on TikTok?"),
+        )
+      )?.kind,
+    ).toBe("login");
+    const signedIn = "For You\nExplore\nFollowing\nLIVE\nUpload\nProfile\nMore\nCompany";
+    expect(await looksLikeWall(page("https://www.tiktok.com/@a", signedIn))).toBeNull();
+    expect(
+      (
+        await looksLikeWall(
+          page("https://www.tiktok.com/@a/video/1", "Drag the slider to fit the puzzle"),
+        )
+      )?.kind,
+    ).toBe("captcha");
     // Signed out of LinkedIn on a member's guest page: the top bar offers Join now and Sign in.
     const guest = "Top Content\nPeople\nLearning\nJobs\nGames\nJoin now\nSign in\nBill Gates";
     expect((await looksLikeWall(page("https://www.linkedin.com/in/someone", guest)))?.kind).toBe(

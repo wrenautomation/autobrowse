@@ -452,12 +452,19 @@ export function wallOf(url: string, text: string): Wall | null {
     /\bjoin now\s+sign in\b/i.test(text.slice(0, 600))
   )
     return { kind: "login", detail: `signed out (guest page): ${url}` };
+  // TikTok signed out: pages still load, with a Log in button under the side menu and a
+  // guest-only "What would you like to watch" picker on top. Mapped 2026-10-29.
+  if (
+    /^https:\/\/www\.tiktok\.com\//i.test(url) &&
+    /what would you like to watch on tiktok\?|\bMore\s+Log in\b/i.test(text)
+  )
+    return { kind: "login", detail: `signed out: ${url}` };
   // Google Account signed out: myaccount sends every page to its /intro/ twin with a "Sign in" button.
   if (/^https:\/\/myaccount\.google\.com\/intro(\/|\?|$)/i.test(url))
     return { kind: "login", detail: `signed out: ${url}` };
   // "protected by reCAPTCHA" is the legal footer on every sign-up form, not a wall.
   if (
-    /verify you are human|(?<!protected by re)captcha|i'm not a robot|unusual traffic|performing security verification|verifies you are not a bot/i.test(
+    /verify you are human|(?<!protected by re)captcha|i'm not a robot|unusual traffic|performing security verification|verifies you are not a bot|drag the slider to fit the puzzle/i.test(
       text,
     )
   )

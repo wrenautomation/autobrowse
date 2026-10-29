@@ -7,9 +7,8 @@ import {
   mergeComments,
   replyParentOf,
   tiktokPostComments,
-  videoAuthorIdIn,
-  videoUrl,
 } from "../src/browser/flows/tiktok-comments.js";
+import { openVideo, profileUserIdIn } from "../src/browser/flows/tiktok-video.js";
 import { httpClient } from "../src/clients/http.js";
 import { memorySink } from "../src/deps/sink.js";
 import { BROWSER_FLOWS } from "../src/engine/browser-service.js";
@@ -87,10 +86,12 @@ const REPLIES = {
   ],
 };
 const DATA = JSON.stringify({
-  __DEFAULT_SCOPE__: {
-    "webapp.video-detail": { itemInfo: { itemStruct: { id: VIDEO, author: { id: AUTHOR } } } },
-  },
+  __DEFAULT_SCOPE__: { "webapp.user-detail": { userInfo: { user: { id: AUTHOR } } } },
 });
+/** The video asked with its handle: the flow opens it from that profile's grid. */
+const ASK = { videoId: VIDEO, username: "the_creator" };
+const PROFILE = "https://www.tiktok.com/@the_creator";
+const TILE = { op: { kind: "click" }, hints: { css: `a[href*="/video/${VIDEO}"]` } };
 
 describe("tiktok comments: the calls' JSON", () => {
   it("makes rows from top-level comments and their reply previews", () => {
@@ -167,15 +168,56 @@ describe("tiktok comments: the calls' JSON", () => {
     expect(merged.at(-1)?.at).toBe("");
   });
 
-  it("finds the video's author in the page data; builds the video url", () => {
-    expect(videoAuthorIdIn(DATA)).toBe(AUTHOR);
-    expect(videoAuthorIdIn("{}")).toBeNull();
-    expect(videoAuthorIdIn("not json")).toBeNull();
-    expect(videoAuthorIdIn(null)).toBeNull();
-    expect(videoUrl(VIDEO)).toBe(`https://www.tiktok.com/@_/video/${VIDEO}`);
-    expect(videoUrl(VIDEO, "@the_creator")).toBe(
-      `https://www.tiktok.com/@the_creator/video/${VIDEO}`,
-    );
+  it("finds the profile owner in the page data", () => {
+    const data = JSON.stringify({
+      __DEFAULT_SCOPE__: { "webapp.user-detail": { userInfo: { user: { id: AUTHOR } } } },
+    });
+    expect(profileUserIdIn(data)).toBe(AUTHOR);
+    expect(profileUserIdIn("{}")).toBeNull();
+    expect(profileUserIdIn("not json")).toBeNull();
+    expect(profileUserIdIn(null)).toBeNull();
+  });
+
+  it("opens a video from its grid: with no handle, from our profile; an old one is not found", async () => {
+    let at = "https://www.tiktok.com/explore";
+    const { fp, acts } = fakePage({
+      text: ["Videos"],
+      present: () => true,
+      url: () => at,
+      onAct: (n) => {
+        if (n === 1) at = "https://www.tiktok.com/@wren.automation";
+      },
+    });
+    const opened: string[] = [];
+    fp.open = async (u) => {
+      opened.push(u);
+      at = u;
+    };
+    fp.page = { evaluate: async () => DATA } as unknown as FlowPage["page"];
+    expect(await openVideo(fp, VIDEO)).toEqual({ opened: true, authorId: AUTHOR });
+    expect(opened).toEqual([
+      "https://www.tiktok.com/explore",
+      "https://www.tiktok.com/@wren.automation",
+    ]);
+    expect(acts.map((a) => a.hints)).toEqual([
+      { css: '[data-e2e="nav-profile"]' },
+      { css: `a[href*="/video/${VIDEO}"]` },
+    ]);
+    // other tiles, not ours: too old, or gone; no tile at all: the grid did not load
+    const grid = (tiles: boolean) => {
+      const g = fakePage({
+        text: ["Videos"],
+        present: (h) => tiles && h.css === 'a[href*="/video/"]',
+      });
+      g.fp.page = { evaluate: async () => null } as unknown as FlowPage["page"];
+      g.fp.scroll = async () => {};
+      return g.fp;
+    };
+    expect(await openVideo(grid(true), VIDEO, "@a")).toEqual({
+      opened: false,
+      reason: `no video ${VIDEO} in @a's grid`,
+    });
+    await expect(openVideo(grid(false), VIDEO, "@a")).rejects.toThrow(/grid did not load/);
   });
 });
 
@@ -256,10 +298,9 @@ describe("tiktok comments: the flow and the route", () => {
 
   it("reads comments, more by scrolling and replies by one click; never types or likes", async () => {
     const page = videoPage({ onOpen: [TOP], onScroll: [MORE] });
-    const out = await tiktokPostComments.run(page.fp, { videoId: VIDEO });
-    expect(page.opened).toEqual([`https://www.tiktok.com/@_/video/${VIDEO}`]);
+    const out = await tiktokPostComments.run(page.fp, ASK);
+    expect(page.opened).toEqual([PROFILE]);
     expect(out.videoId).toBe(VIDEO);
-    expect(out.url).toBe(`https://www.tiktok.com/@_/video/${VIDEO}`);
     expect(out.comments.map((c) => [c.id, c.parentId, c.creator])).toEqual([
       ["202", "101", true],
       ["201", "101", true],
@@ -268,7 +309,8 @@ describe("tiktok comments: the flow and the route", () => {
       ["103", null, false],
     ]);
     expect(page.clicks()).toBe(1);
-    expect(page.acts).toEqual([]);
+    // the one act: the grid tile that opens the video
+    expect(page.acts).toEqual([TILE]);
     // Two scrolls with nothing new end the scrolling: one that brought MORE, then two empty.
     expect(page.evaluated).toHaveLength(3);
     expect(page.handlers.size).toBe(0);
@@ -276,24 +318,24 @@ describe("tiktok comments: the flow and the route", () => {
 
   it("a video with 0 comments answers none; a panel on You may like gets its Comments tab", async () => {
     const none = videoPage({ label: "Read or add comments 0 comments" });
-    expect(await tiktokPostComments.run(none.fp, { videoId: VIDEO })).toEqual({
+    expect(await tiktokPostComments.run(none.fp, ASK)).toEqual({
       videoId: VIDEO,
-      url: `https://www.tiktok.com/@_/video/${VIDEO}`,
+      url: PROFILE,
       comments: [],
     });
     expect(none.tabs()).toBe(0);
     const tab = videoPage({ label: "Read or add comments 5 comments", onTab: [TOP] });
-    const out = await tiktokPostComments.run(tab.fp, { videoId: VIDEO });
+    const out = await tiktokPostComments.run(tab.fp, ASK);
     expect(tab.tabs()).toBe(1);
     expect(out.comments.map((c) => c.id)).toContain("101");
-    expect(tab.acts).toEqual([]);
+    expect(tab.acts).toEqual([TILE]);
     // A click that lands before the tab is live is lost: the flow clicks again until a call comes.
     const late = videoPage({
       label: "Read or add comments 5 comments",
       onTab: [TOP],
       tabLiveAt: 2,
     });
-    const got = await tiktokPostComments.run(late.fp, { videoId: VIDEO });
+    const got = await tiktokPostComments.run(late.fp, ASK);
     expect(late.tabs()).toBe(2);
     expect(got.comments.map((c) => c.id)).toContain("101");
   });
@@ -316,14 +358,10 @@ describe("tiktok comments: the flow and the route", () => {
 
   it("goes to a person when no comment call comes or the id is not one", async () => {
     await expect(
-      tiktokPostComments.run(videoPage({ text: "Video currently unavailable" }).fp, {
-        videoId: VIDEO,
-      }),
+      tiktokPostComments.run(videoPage({ text: "Video currently unavailable" }).fp, ASK),
     ).rejects.toThrow(/not there/);
     const silent = videoPage({});
-    await expect(tiktokPostComments.run(silent.fp, { videoId: VIDEO })).rejects.toThrow(
-      /made no comment call/,
-    );
+    await expect(tiktokPostComments.run(silent.fp, ASK)).rejects.toThrow(/made no comment call/);
     expect(silent.handlers.size).toBe(0);
     await expect(tiktokPostComments.run(videoPage({}).fp, { videoId: "../x" })).rejects.toThrow(
       /not a TikTok video id/,

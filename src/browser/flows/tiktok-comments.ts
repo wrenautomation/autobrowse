@@ -4,11 +4,11 @@
  * opens the video page and keeps the JSON the page fetches for itself:
  * `/api/comment/list/` (top level) and `/api/comment/list/reply/` (replies).
  *
- * It opens `/@<username>/video/<id>`; with no username it opens `/@_/video/<id>`
- * and counts on TikTok sending a wrong handle to the right one. It scrolls the
+ * It opens the video from its author's grid (`openVideo`: a full load of the video URL gets
+ * 403); with no username, from ours. It scrolls the
  * comment panel a few times for more, and clicks at most ten "View N replies"
  * buttons. Clicking to expand is the only act: it never likes, replies or
- * types. The page's own item data names the video's author, so the author's
+ * types. The profile's own data names the video's author, so the author's
  * comments come back marked `creator`. Bounded in time.
  *
  * Live 2026-10-15: the side panel can open on "You may like", which makes no
@@ -21,8 +21,8 @@
 import type { Response } from "playwright";
 import { defineFlow } from "../flow.js";
 import { scrollList } from "./kit.js";
+import { openVideo } from "./tiktok-video.js";
 
-const WEB = "https://www.tiktok.com";
 const FIRST_MS = 15_000;
 const TOTAL_MS = 60_000;
 const POLL_MS = 500;
@@ -91,26 +91,6 @@ const idOf = (v: unknown): string | null => {
 };
 
 /** The video page; TikTok sends a wrong handle on to the right one. */
-export function videoUrl(videoId: string, username?: string): string {
-  const handle = (username ?? "").trim().replace(/^@/, "") || "_";
-  return `${WEB}/@${encodeURIComponent(handle)}/video/${videoId}`;
-}
-
-/** The video author's id in the page's item data (`webapp.video-detail`), or null. */
-export function videoAuthorIdIn(json: string | null): string | null {
-  if (!json) return null;
-  try {
-    const data = JSON.parse(json) as {
-      __DEFAULT_SCOPE__?: Record<
-        string,
-        { itemInfo?: { itemStruct?: { author?: { id?: unknown } } } } | undefined
-      >;
-    };
-    return idOf(data.__DEFAULT_SCOPE__?.["webapp.video-detail"]?.itemInfo?.itemStruct?.author?.id);
-  } catch {
-    return null;
-  }
-}
 
 /** The video's author wrote it: the same author id, or TikTok labels it Creator. */
 export function isCreator(
@@ -204,9 +184,6 @@ export function commentCountOf(label: string | null): number | null {
   return Math.round(n * (unit === "K" ? 1_000 : unit === "M" ? 1_000_000 : 1));
 }
 
-/** The page's own item data, as text. */
-const DATA_SCRIPT = `document.getElementById("__UNIVERSAL_DATA_FOR_REHYDRATION__")?.textContent ?? null`;
-
 export const tiktokPostComments = defineFlow<PostCommentsInput, PostComments>({
   site: "tiktok",
   name: "post-comments",
@@ -240,7 +217,9 @@ export const tiktokPostComments = defineFlow<PostCommentsInput, PostComments>({
     try {
       const started = Date.now();
       const left = () => TOTAL_MS - (Date.now() - started);
-      await fp.open(videoUrl(videoId, username));
+      const opened = await openVideo(fp, videoId, username);
+      if (!opened.opened) return fp.human(opened.reason);
+      authorId = opened.authorId;
       let count: number | null = null;
       let lastTab = TAB_AFTER_MS - TAB_EVERY_MS;
       for (let waited = 0; !bodies.length && waited < FIRST_MS; waited += POLL_MS) {
@@ -268,9 +247,6 @@ export const tiktokPostComments = defineFlow<PostCommentsInput, PostComments>({
         if (GONE.test(await fp.text())) return fp.human(`${fp.url()}: the video is not there`);
         return fp.human(`${fp.url()} made no comment call: the page may not show its comments`);
       }
-      authorId = videoAuthorIdIn(
-        await fp.page.evaluate<string | null>(DATA_SCRIPT).catch(() => null),
-      );
       let still = 0;
       for (let i = 0; i < SCROLLS && still < STILL_SCROLLS && left() > 0; i++) {
         const before = rows().length;

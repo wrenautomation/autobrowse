@@ -655,6 +655,10 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
         const hands = handsOn(seed);
         let outcome: FlowOutcome = "ok";
         let failure: string | null = null;
+        // Provisional until the run ends ok: a repair that clicked the wrong control fails later.
+        const repaired: { report: RepairReport; passed: { look: PageLook; reason: string }[] }[] =
+          [];
+        const fixesUsed: { goal: string; hints: Hints }[] = [];
         let submitted = false;
         let active = session.page;
         const overlay = overlayFor(runner.overlay === true && !flow.secret && !session.shared);
@@ -939,7 +943,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             try {
               for (const d of fix.detours) await doOp(page, d, { kind: "click" }, timeout, hands);
               await doOp(page, fix.hints, op, timeout, hands);
-              runner.fixes?.used(key, a.goal, hints);
+              fixesUsed.push({ goal: a.goal, hints });
               return "repaired";
             } catch {
               // The page moved again (or back): drop it and go the long way.
@@ -997,20 +1001,9 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               try {
                 await doOp(page, proposal.hints, op, timeout, hands);
                 report.ok = true;
-                // Each screen clicked past is an interrupt for every flow on the site from now on.
-                passed.forEach(({ look, reason }, i) => {
-                  learned.keep({
-                    site: flow.site,
-                    url: look.url,
-                    landmarks: keepOf(look),
-                    click: detours[i] as Hints,
-                    reason,
-                  });
-                });
+                repaired.push({ report, passed });
               } finally {
                 runner.onRepair?.(report);
-                runner.fixes?.learn(report);
-                if (canLearn(repairer)) await repairer.learn(report);
               }
               return "repaired";
             }
@@ -1107,10 +1100,35 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           if (kind === "failed" && !moved) resumes?.clear(call);
           else if (url) resumes?.put(call, { url, profile: key, screensDone, at: Date.now() });
         }
+        /** The run ended ok: its repairs and the fixes it went through are proven. */
+        async function keepRepairs(): Promise<void> {
+          const key = flowKey(flow.site, flow.name);
+          for (const f of fixesUsed) runner.fixes?.used(key, f.goal, f.hints);
+          for (const { report, passed } of repaired) {
+            // Each screen clicked past is an interrupt for every flow on the site from now on.
+            passed.forEach(({ look, reason }, i) => {
+              learned.keep({
+                site: flow.site,
+                url: look.url,
+                landmarks: keepOf(look),
+                click: report.detours?.[i] as Hints,
+                reason,
+              });
+            });
+            runner.fixes?.learn(report);
+            if (canLearn(repairer)) await repairer.learn(report);
+          }
+        }
+        /** The run failed in the page, not the network: the fixes it went through are suspect. */
+        function dropFixes(): void {
+          const key = flowKey(flow.site, flow.name);
+          for (const f of fixesUsed) runner.fixes?.drop(key, f.goal, f.hints);
+        }
         const run = tallied(() => flow.run(fp, input));
         try {
           const out = await run.done;
           if (call) resumes?.clear(call);
+          await keepRepairs();
           return out;
         } catch (err) {
           const artifacts: Artifacts = watch ? { steps: watch.dir } : {};
@@ -1196,6 +1214,8 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
           };
           outcome = kind;
           failure = record.error;
+          // a network cut proves nothing either way
+          if (kind !== "interrupted") dropFixes();
           if (artifacts.trace)
             await shareTrace(artifacts.trace, { site: key, flow: flow.name, outcome: kind });
           if (call && resumes) keepResume(call, kind);

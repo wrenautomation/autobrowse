@@ -9,13 +9,15 @@
  * `/api/comment/publish/` call answers `status_code` 0. Follow runs on the profile page, whose
  * `follow-button` reads Follow until it is pressed.
  *
+ * Signed out (a guest page) and the slider captcha are walls `open` checks (`wallOf`).
+ *
  * Mapped 2026-10-26 in explore on the tiktok profile (reads only; no act was sent).
  */
 import type { Response } from "playwright";
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
 import { RENDER_MS, SETTLE_MS } from "./kit.js";
-import { videoUrl } from "./tiktok-comments.js";
+import { openVideo } from "./tiktok-video.js";
 
 const WEB = "https://www.tiktok.com";
 const SEARCH = "/api/search/item/full/";
@@ -24,13 +26,6 @@ const SCROLLS = 6;
 export const MAX_SEARCH = 60;
 const GONE = /video currently unavailable|couldn.t find this video|this video is private/i;
 const NO_ACCOUNT = /couldn.t find this account/i;
-const SIGNED_OUT = /\/login\b/;
-
-async function openTt(fp: FlowPage, url: string): Promise<void> {
-  await fp.open(url);
-  if (SIGNED_OUT.test(fp.url()))
-    fp.human("TikTok is signed out on this profile: `autobrowse login tiktok`");
-}
 
 export interface TikTokVideo {
   id: string;
@@ -105,7 +100,7 @@ export const tiktokSearch = defineFlow<
     };
     fp.page.on("response", onResponse);
     try {
-      await openTt(fp, `${WEB}/search/video?q=${encodeURIComponent(q)}`);
+      await fp.open(`${WEB}/search/video?q=${encodeURIComponent(q)}`);
       for (let i = 0; i < RENDER_MS / SETTLE_MS && !bodies.length; i++) {
         await fp.wait(SETTLE_MS);
         await Promise.all(pending);
@@ -127,9 +122,12 @@ export const tiktokSearch = defineFlow<
   },
 });
 
-/** The asked video's own controls: the feed's first article. */
-const like: Hints = { css: 'article:first-of-type [data-e2e="like-icon"][aria-pressed="false"]' };
-const liked: Hints = { css: 'article:first-of-type [data-e2e="like-icon"][aria-pressed="true"]' };
+/** The asked video's own controls: the browse view's (opened from the grid), else the feed's first article. */
+const likeIn = (pressed: boolean): Hints => ({
+  css: `button[aria-pressed="${pressed}"]:has([data-e2e="browse-like-icon"]), article:first-of-type [data-e2e="like-icon"][aria-pressed="${pressed}"]`,
+});
+const like = likeIn(false);
+const liked = likeIn(true);
 
 async function videoShown(fp: FlowPage, what: Hints[]): Promise<number | "missing" | null> {
   for (let i = 0; i < RENDER_MS / SETTLE_MS; i++) {
@@ -154,7 +152,8 @@ export const tiktokLike = defineFlow<
   site: "tiktok",
   name: "like",
   async run(fp, { videoId, username }) {
-    await openTt(fp, videoUrl(videoId, username));
+    const opened = await openVideo(fp, videoId, username);
+    if (!opened.opened) return { found: false, status: 404, reason: opened.reason };
     const state = await videoShown(fp, [liked, like]);
     if (state === "missing")
       return { found: false, status: 404, reason: `no TikTok video ${videoId}` };
@@ -190,7 +189,8 @@ export const tiktokComment = defineFlow<
         },
       );
     };
-    await openTt(fp, videoUrl(videoId, username));
+    const opened = await openVideo(fp, videoId, username);
+    if (!opened.opened) return { found: false, status: 404, reason: opened.reason };
     const tab = { role: "button", name: "/^comments$/i" } as const;
     let state = await videoShown(fp, [commentBox, tab]);
     if (state === "missing")
@@ -223,6 +223,8 @@ export const tiktokComment = defineFlow<
 });
 
 const followButton: Hints = { css: '[data-e2e="follow-button"]' };
+const buttonText = async (fp: FlowPage) =>
+  (await fp.has(followButton)) ? (await fp.read(followButton)).trim() : "";
 
 export const tiktokFollow = defineFlow<
   { username: string },
@@ -232,7 +234,8 @@ export const tiktokFollow = defineFlow<
   name: "follow",
   async run(fp, { username }) {
     const handle = username.replace(/^@/, "");
-    await openTt(fp, `${WEB}/@${encodeURIComponent(handle)}`);
+    const profile = `${WEB}/@${encodeURIComponent(handle)}`;
+    await fp.open(profile);
     let shown = false;
     for (let i = 0; i < RENDER_MS / SETTLE_MS && !shown; i++) {
       shown = await fp.has(followButton);
@@ -245,11 +248,22 @@ export const tiktokFollow = defineFlow<
     if (!/^follow( back)?$/i.test((await fp.read(followButton)).trim()))
       return { username: handle, following: true, already: true };
     await fp.act({ kind: "click" }, followButton, { goal: `follow @${handle}` });
-    for (let i = 0; i < RENDER_MS / SETTLE_MS; i++) {
+    let flipped = false;
+    for (let i = 0; i < RENDER_MS / SETTLE_MS && !flipped; i++) {
       await fp.wait(SETTLE_MS);
-      const now = (await fp.has(followButton)) ? (await fp.read(followButton)).trim() : "";
-      if (!/^follow( back)?$/i.test(now)) return { username: handle, following: true };
+      flipped = !/^follow( back)?$/i.test(await buttonText(fp));
     }
-    return fp.human(`TikTok did not take the follow of @${handle}`);
+    if (!flipped) return fp.human(`TikTok did not take the follow of @${handle}`);
+    // The button flips before TikTok answers, and a limited account gets it undone (2026-10-29:
+    // a follow that read Following was gone on the next visit): a fresh load is the proof.
+    await fp.wait(SETTLE_MS);
+    await fp.open(profile);
+    for (let i = 0; i < RENDER_MS / SETTLE_MS; i++) {
+      const now = await buttonText(fp);
+      if (now && !/^follow( back)?$/i.test(now)) return { username: handle, following: true };
+      if (now) break;
+      await fp.wait(SETTLE_MS);
+    }
+    return fp.human(`TikTok did not keep the follow of @${handle}: the account may be limited`);
   },
 });
