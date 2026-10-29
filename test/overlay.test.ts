@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
 import { describe, expect, it } from "vitest";
 import { bare } from "../src/browser/bare.js";
 import type { Command } from "../src/explore/commands.js";
@@ -49,120 +49,81 @@ describe("headed overlay", () => {
     }
   });
 
-  it("by default the panel takes clicks; its toggle lets every click through", async () => {
-    const browser = await chromium.launch();
-    try {
-      const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
-      await page.setContent(
-        `<button id="big" style="position:fixed;inset:0;z-index:1" onclick="document.body.dataset.hits=+(document.body.dataset.hits||0)+1">x</button>`,
-      );
-      const o = overlayFor(true);
-      await o.set(page, { goal: "save the form" });
-      await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] });
-      await page.mouse.click(40, 580);
-      expect(await page.evaluate("+(document.body.dataset.hits||0)")).toBe(0);
-      const opacity = async () =>
-        Number(await page.evaluate(`getComputedStyle(${ui}.tuiEl).opacity`));
-      expect(await opacity()).toBe(1);
-      // The [●] button: clicks pass through from now on.
-      const btn = await page.evaluate<{ x: number; y: number }>(
-        `(() => { const r = [...${ui}.tuiEl.querySelectorAll('.btn')].find((b) => b.getAttribute('data-a') === 'through').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
-      );
-      await page.mouse.click(btn.x, btn.y);
-      expect(await page.evaluate(`[${ui}.through, +(document.body.dataset.hits||0)]`)).toEqual([
-        true,
-        0,
-      ]);
-      await page.mouse.click(40, 580);
-      expect(await page.evaluate("+document.body.dataset.hits")).toBe(1);
-      // Through mode reads as faded.
-      expect(await opacity()).toBeLessThan(0.5);
-      // Its buttons still take clicks in through mode.
-      await page.mouse.click(btn.x, btn.y);
-      expect(await page.evaluate(`[${ui}.through, +document.body.dataset.hits]`)).toEqual([
-        false,
-        1,
-      ]);
-    } finally {
-      await browser.close();
-    }
-  });
+  /** A button's centre in the panel, by its action. */
+  const btnAt = (page: Page, a: string) =>
+    page.evaluate<{ x: number; y: number }>(
+      `(() => { const r = [...${ui}.tuiEl.querySelectorAll('[data-a]')].find((b) => b.getAttribute('data-a') === '${a}').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
+    );
+  const panelBox = (page: Page) =>
+    page.evaluate(`${ui}.tuiEl.getBoundingClientRect().toJSON()`) as Promise<DOMRect>;
+  const BIG = `<input id="f"><button id="big" style="position:fixed;inset:0;z-index:1" onclick="document.body.dataset.hits=+(document.body.dataset.hits||0)+1">x</button>
+     <script>const b=document.body.dataset;b.seen=0;document.addEventListener('mousedown',()=>b.seen++,true);document.addEventListener('click',()=>b.seen++,true)</script>`;
+  const hits = (page: Page) => page.evaluate("+(document.body.dataset.hits||0)");
+  const seen = (page: Page) => page.evaluate("+document.body.dataset.seen");
+  const row = { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] };
 
-  it("the panel takes clicks unseen by the page when idle, and none while a command runs", async () => {
+  it("the panel's body lets every click through; its bar takes clicks unseen, none while a command runs", async () => {
     const browser = await chromium.launch();
     try {
       const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
-      // A control under the whole panel, a field with focus, and an observer-like capture listener.
-      await page.setContent(
-        `<input id="f"><button id="big" style="position:fixed;inset:0;z-index:1" onclick="document.body.dataset.hits=+(document.body.dataset.hits||0)+1">x</button>
-         <script>const b=document.body.dataset;b.seen=0;document.addEventListener('mousedown',()=>b.seen++,true);document.addEventListener('click',()=>b.seen++,true)</script>`,
-      );
+      await page.setContent(BIG);
       await page.focus("#f");
       const o = overlayFor(true);
       await o.set(page, { goal: "save the form" });
-      await o.begin(page);
-      await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] });
-      const panel = { x: 40, y: 580 };
-      await page.mouse.click(panel.x, panel.y);
-      expect(
-        await page.evaluate("[+(document.body.dataset.hits||0), +document.body.dataset.seen]"),
-      ).toEqual([0, 0]);
+      await o.end(page, row);
+      const p = await panelBox(page);
+      // The body: the page under it gets the click.
+      await page.mouse.click(p.left + 40, p.bottom - 20);
+      expect(await hits(page)).toBe(1);
+      // The bar: the page never sees it, and focus stays.
+      await page.focus("#f");
+      const before = await seen(page);
+      await page.mouse.click(p.left + 200, p.top + 8);
+      expect([await hits(page), await seen(page)]).toEqual([1, before]);
       expect(await page.evaluate("document.activeElement.id")).toBe("f");
+      // A command running: the bar is inert too.
       await o.begin(page);
-      await page.mouse.click(panel.x, panel.y);
-      expect(await page.evaluate("+document.body.dataset.hits")).toBe(1);
-      await o.end(page, { cmd: "click", what: "x", ok: true, ms: 5, note: "", detail: [] });
-      // Outside the panel, the page works as ever.
-      await page.mouse.click(700, 50);
-      expect(await page.evaluate("+document.body.dataset.hits")).toBe(2);
-      // A flow command: its steps nest; the panel stays inert until the outer one ends.
-      const row = { cmd: "open", what: "x", ok: true, ms: 5, note: "", detail: [] };
-      await o.begin(page, "flow");
-      await o.begin(page);
-      await o.end(page, row);
-      // Busy reads as faded: clicks go through.
       expect(Number(await page.evaluate(`getComputedStyle(${ui}.tuiEl).opacity`))).toBe(0.6);
-      await page.mouse.click(panel.x, panel.y);
-      expect(await page.evaluate("+document.body.dataset.hits")).toBe(3);
+      await page.mouse.click(p.left + 200, p.top + 8);
+      expect(await hits(page)).toBe(2);
       await o.end(page, row);
-      await page.mouse.click(panel.x, panel.y);
-      expect(await page.evaluate("+document.body.dataset.hits")).toBe(3);
-      // Hands between commands (a banner wait, a scroll): inert.
-      await o.hold(page, () => page.mouse.click(panel.x, panel.y));
-      expect(await page.evaluate("+document.body.dataset.hits")).toBe(4);
-      await page.mouse.click(panel.x, panel.y);
-      expect(await page.evaluate("+document.body.dataset.hits")).toBe(4);
+      // Hands between commands (a banner wait, a scroll): inert. The new row grew the panel up.
+      const q = await panelBox(page);
+      await o.hold(page, () => page.mouse.click(q.left + 200, q.top + 8));
+      expect(await hits(page)).toBe(3);
+      await page.mouse.click(q.left + 200, q.top + 8);
+      expect(await hits(page)).toBe(3);
     } finally {
       await browser.close();
     }
   });
 
-  it("hidden, the panel is a chip: the page is free where it stood, and the chip brings it back", async () => {
+  it("minimized, the panel is a tab at the left edge; the tab brings it back", async () => {
     const browser = await chromium.launch();
     try {
       const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
-      await page.setContent(
-        `<button id="big" style="position:fixed;inset:0;z-index:1" onclick="document.body.dataset.hits=+(document.body.dataset.hits||0)+1">x</button>`,
-      );
+      await page.setContent(BIG);
       const o = overlayFor(true);
       await o.set(page, { goal: "save the form" });
-      await o.end(page, { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] });
-      // As the [×] button does.
-      await page.evaluate(`${ui}.hidden = true; ${ui}.draw(${ui}.s)`);
-      // A redraw from the session keeps it hidden.
-      await o.end(page, { cmd: "click", what: "x", ok: true, ms: 5, note: "", detail: [] });
-      await page.mouse.click(200, 500);
-      expect(await page.evaluate("+document.body.dataset.hits")).toBe(1);
-      // The chip, bottom left: the page never sees it.
-      await page.mouse.click(30, 576);
-      expect(await page.evaluate("+document.body.dataset.hits")).toBe(1);
-      expect(await page.evaluate(`${ui}.hidden`)).toBe(false);
+      await o.end(page, row);
+      const p = await panelBox(page);
+      const min = await btnAt(page, "min");
+      await page.mouse.click(min.x, min.y);
+      expect(await page.evaluate(`[${ui}.min, ${ui}.tuiEl]`)).toEqual([true, null]);
+      // A redraw from the session keeps it minimized; the page is free where it stood.
+      await o.end(page, row);
+      await page.mouse.click(p.left + 200, p.top + 8);
+      expect(await hits(page)).toBe(1);
+      // The tab, left edge, mid height: the page never sees it.
+      await page.mouse.click(4, 300);
+      expect(await hits(page)).toBe(1);
+      expect(await page.evaluate(`${ui}.min`)).toBe(false);
     } finally {
       await browser.close();
     }
   });
 
-  it("the corner grip resizes the panel, and the page sees no move", async () => {
+  it("the bar drags the panel anywhere and the grip sizes it; the page sees no move", async () => {
     const browser = await chromium.launch();
     try {
       const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
@@ -171,32 +132,53 @@ describe("headed overlay", () => {
       );
       const o = overlayFor(true);
       await o.set(page, { goal: "save the form" });
-      await o.end(page, {
-        cmd: "click",
-        what: "Save",
-        ok: true,
-        ms: 12,
-        note: "→ a.com/next",
-        detail: [],
-      });
-      // Click-through mode: the grip still takes the drag.
-      await page.evaluate(`${ui}.through = true; ${ui}.draw(${ui}.s)`);
-      const width = () =>
-        page.evaluate(`${ui}.tuiEl.getBoundingClientRect().toJSON()`) as Promise<DOMRect>;
-      const before = await width();
+      await o.end(page, { ...row, note: "→ a.com/next" });
+      const before = await panelBox(page);
       expect(before.width).toBe(460);
-      // The grip: the panel's top right corner (panel on the left).
-      await page.mouse.move(before.right - 4, before.top + 4);
       await page.evaluate("document.body.dataset.moves = 0");
+      // Move: grab the bar, drop it near the top right.
+      await page.mouse.move(before.left + 150, before.top + 8);
       await page.mouse.down();
-      await page.mouse.move(before.right + 136, before.top - 76, { steps: 5 });
-      await page.mouse.move(before.right + 600, before.top - 76, { steps: 2 });
+      await page.mouse.move(600, 100, { steps: 5 });
+      await page.mouse.up();
+      const moved = await panelBox(page);
+      expect([moved.left, moved.top]).toEqual([450, 92]);
+      // Size: the bottom right grip.
+      await page.mouse.move(moved.right - 4, moved.bottom - 4);
+      await page.mouse.down();
+      await page.mouse.move(moved.right + 96, moved.bottom + 196, { steps: 5 });
       await page.mouse.up();
       expect(await page.evaluate("+document.body.dataset.moves")).toBe(0);
-      expect(await page.evaluate(`[${ui}.w, ${ui}.sized]`)).toEqual([1000 - 24, true]);
-      // A redraw keeps the size.
-      await o.end(page, { cmd: "click", what: "x", ok: true, ms: 5, note: "", detail: [] });
-      expect((await width()).width).toBe(976);
+      const sized = await panelBox(page);
+      expect(Math.round(sized.width)).toBe(Math.round(moved.width + 100));
+      expect(Math.round(sized.height)).toBe(Math.round(moved.height + 200));
+      // A redraw keeps the place and the size.
+      await o.end(page, row);
+      expect(await panelBox(page)).toEqual(sized);
+    } finally {
+      await browser.close();
+    }
+  });
+
+  it("the boxes button turns the boxes off, and off they are not looked up", async () => {
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
+      await page.setContent(PAGE);
+      const o = overlayFor(true);
+      const refs = [{ n: 1, hints: { role: "button", name: "Save" } }] as const;
+      expect(await o.set(page, { goal: "x", refs: [...refs] })).toEqual({ drawn: true, boxes: 1 });
+      const marks = await btnAt(page, "marks");
+      await page.mouse.click(marks.x, marks.y);
+      expect(await page.evaluate(`${ui}.marks`)).toBe(false);
+      // Off: no count, no box, no flash.
+      expect(await o.set(page, { refs: [...refs] })).toEqual({ drawn: true });
+      await o.flash(page, { role: "button", name: "Save" }, "click: save");
+      expect(await page.evaluate(`${ui}.s.target`)).toBeNull();
+      // The flash's line grew the panel up: the button moved.
+      const again = await btnAt(page, "marks");
+      await page.mouse.click(again.x, again.y);
+      expect(await o.set(page, { refs: [...refs] })).toEqual({ drawn: true, boxes: 1 });
     } finally {
       await browser.close();
     }

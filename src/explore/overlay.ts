@@ -7,13 +7,15 @@
  * the aria tree never reads it) and is taken off for every screenshot.
  * Headless, nothing is drawn.
  *
- * The panel takes clicks (fold, move, open a trace row) without the page
- * knowing: a window capture listener swallows every pointer event over it
- * before the page's handlers or the recorder's observer see one, and
- * mousedown's default is stopped so focus stays where it was. While a
- * command runs the panel is inert (pointer-events none): no act can land on it.
- * The corner grip resizes it; a drag holds pointer capture, so the page never
- * sees the moves.
+ * Decorative: it changes nothing a page, a run or a shot sees. The panel's
+ * body lets every click through to the page. Only its bar (drag to move,
+ * buttons: boxes on/off, minimize) and corner grip (resize) take a pointer,
+ * and a window capture listener swallows those events before the page's
+ * handlers or the recorder's observer see one; mousedown's default is
+ * stopped so focus stays where it was. While a command runs the whole layer
+ * is inert (pointer-events none): no act can land on it. A drag holds pointer
+ * capture, so the page never sees the moves. Minimized, it is a tab at the
+ * left edge. Boxes off, their positions are not looked up either.
  */
 import { randomBytes } from "node:crypto";
 import type { Page } from "playwright";
@@ -119,13 +121,15 @@ const T = {
 
 /** How a person left the panel: carried into each new document. */
 interface Prefs {
+  /** Folded to a tab at the left edge. */
   min: boolean;
   trace: boolean;
-  right: boolean;
-  hidden: boolean;
-  /** Clicks pass through the panel to the page; only its buttons take them. Default off. */
-  through: boolean;
-  /** Panel width and trace height, px; `sized` once a person dragged the grip. */
+  /** The boxes and the flashing target drawn; off, they are not looked up either. */
+  marks: boolean;
+  /** Top-left corner, px; null = bottom left. */
+  x: number | null;
+  y: number | null;
+  /** Panel width and height, px; `sized` once a person dragged the grip. */
   w: number;
   h: number;
   sized: boolean;
@@ -134,13 +138,19 @@ interface Prefs {
 /** In the page: the layer drawn from `s`, or taken away when `s` is undefined. */
 const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) => `(() => {
   const K = '__${attr}';
-  const ui = window[K] || (window[K] = { ...${JSON.stringify(prefs)}, open: null, scroll: 0 });
-  const prefs = () => ({ min: ui.min, trace: ui.trace, right: ui.right, hidden: ui.hidden, through: ui.through, w: ui.w, h: ui.h, sized: ui.sized });
+  const ui = window[K] || (window[K] = { ...${JSON.stringify(prefs)} });
+  const prefs = () => ({ min: ui.min, trace: ui.trace, marks: ui.marks, x: ui.x, y: ui.y, w: ui.w, h: ui.h, sized: ui.sized });
   for (const old of document.querySelectorAll('[${attr}]')) old.remove();
   ui.host = null;
   const s = ${JSON.stringify(s ?? null)};
   if (!s) return prefs();
   ui.s = s;
+  // In the viewport, at least a corner of the bar.
+  const clamp = () => {
+    if (ui.x == null) return;
+    ui.x = Math.round(Math.max(0, Math.min(innerWidth - 60, ui.x)));
+    ui.y = Math.round(Math.max(0, Math.min(innerHeight - 24, ui.y)));
+  };
   if (!ui.bound) {
     ui.bound = true;
     // Capture on window runs before the page's document listeners and the observer.
@@ -150,50 +160,51 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
     for (const k of KINDS) window.addEventListener(k, (e) => {
       if (!ui.host || e.target !== ui.host) return;
       e.stopImmediatePropagation();
-      // The grip: capture keeps every move on us until the button lifts.
-      if (k === 'pointerdown' && ui.root) {
-        const g = ui.root.elementFromPoint(e.clientX, e.clientY);
-        if (g && g.closest('.grip') && ui.tuiEl) {
-          ui.drag = { x: e.clientX, y: e.clientY, w: ui.w, h: ui.h };
+      const hit = ui.root && ui.root.elementFromPoint(e.clientX, e.clientY);
+      // The grip sizes, the bar moves; capture keeps every move on us until the button lifts.
+      if (k === 'pointerdown' && ui.tuiEl && hit && !hit.closest('.btn')) {
+        const r = ui.tuiEl.getBoundingClientRect();
+        if (hit.closest('.grip')) ui.drag = { kind: 'size', x: e.clientX, y: e.clientY, w: r.width, h: r.height };
+        else if (hit.closest('.bar')) ui.drag = { kind: 'move', x: e.clientX - r.left, y: e.clientY - r.top };
+        if (ui.drag) {
           ui.tuiEl.setPointerCapture(e.pointerId);
           e.preventDefault();
           return;
         }
       }
       if (ui.drag) {
-        if (k === 'pointermove') {
-          const dx = (e.clientX - ui.drag.x) * (ui.right ? -1 : 1);
-          ui.w = Math.round(Math.max(300, Math.min(innerWidth - 24, ui.drag.w + dx)));
-          ui.h = Math.round(Math.max(48, Math.min(innerHeight - 160, ui.drag.h - (e.clientY - ui.drag.y))));
+        if (k === 'pointermove' && ui.drag.kind === 'size') {
+          const top = ui.tuiEl.getBoundingClientRect().top;
+          ui.w = Math.round(Math.max(300, Math.min(innerWidth - 12, ui.drag.w + e.clientX - ui.drag.x)));
+          ui.h = Math.round(Math.max(60, Math.min(innerHeight - top, ui.drag.h + e.clientY - ui.drag.y)));
           ui.sized = true;
           ui.tuiEl.style.width = ui.w + 'px';
-          const r = ui.root.querySelector('.rows');
-          if (r) r.style.height = ui.h + 'px';
+          ui.tuiEl.style.height = ui.h + 'px';
+          ui.tuiEl.classList.add('sized');
+        } else if (k === 'pointermove') {
+          ui.x = e.clientX - ui.drag.x;
+          ui.y = e.clientY - ui.drag.y;
+          clamp();
+          ui.tuiEl.style.left = ui.x + 'px';
+          ui.tuiEl.style.top = ui.y + 'px';
+          ui.tuiEl.style.bottom = 'auto';
         } else if (k === 'pointerup' || k === 'pointercancel') ui.drag = null;
         e.preventDefault();
         return;
       }
       // mousedown's default moves focus.
-      if (k === 'mousedown' || k === 'click' || k === 'auxclick' || k === 'contextmenu' || k === 'dblclick') e.preventDefault();
-      const hit = ui.root && ui.root.elementFromPoint(e.clientX, e.clientY);
-      // A wheel scrolls the trace list, never the page under the panel.
-      if (k === 'wheel' && !(hit && hit.closest('.rows'))) e.preventDefault();
+      if (k === 'mousedown' || k === 'click' || k === 'auxclick' || k === 'contextmenu' || k === 'dblclick' || k === 'wheel') e.preventDefault();
       if (k !== 'click') return;
       const a = hit && hit.closest('[data-a]');
       if (!a) return;
       const act = a.getAttribute('data-a');
       if (act === 'min') ui.min = !ui.min;
-      else if (act === 'hide') ui.hidden = !ui.hidden;
-      else if (act === 'through') ui.through = !ui.through;
-      else if (act === 'move') ui.right = !ui.right;
+      else if (act === 'marks') ui.marks = !ui.marks;
       else if (act === 'trace') ui.trace = !ui.trace;
-      else if (act.startsWith('row:')) { const n = Number(act.slice(4)); ui.open = ui.open === n ? null : n; }
       ui.draw(ui.s);
     }, { capture: true, passive: false });
   }
   ui.draw = (s) => {
-    const list = ui.root && ui.root.querySelector('.rows');
-    if (list) ui.scroll = list.scrollTop;
     for (const old of document.querySelectorAll('[${attr}]')) old.remove();
     const host = document.createElement('div');
     host.setAttribute('${attr}', '');
@@ -212,30 +223,26 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       '.tag{position:absolute;left:-1.5px;font:700 10px/13px ui-monospace,Menlo,monospace;color:${T.onAccent};background:${T.accent};padding:0 4px}',
       '.target{position:fixed;border:2px solid ${T.accent};animation:pulse .9s ease-out infinite}',
       '@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(165,150,214,.75)}100%{box-shadow:0 0 0 12px rgba(165,150,214,0)}}',
-      '.tui{position:fixed;bottom:12px;max-width:calc(100vw - 24px);pointer-events:auto;cursor:default;user-select:none;',
+      // Only the bar, its buttons and the grip take a pointer: the page under the rest gets every click.
+      '.tui{position:fixed;display:flex;flex-direction:column;max-width:calc(100vw - 12px);cursor:default;user-select:none;',
       'font:12px/1.4 "JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace;color:${T.ink};',
       'background:${T.canvas} repeating-linear-gradient(0deg,rgba(255,255,255,.028) 0 1px,transparent 1px 3px);',
       'border:1px solid ${T.accent};box-shadow:0 0 0 1px #000,0 10px 32px rgba(0,0,0,.55),0 0 22px rgba(165,150,214,.14);',
       'text-shadow:0 0 6px rgba(165,150,214,.22)}',
-      '.tui.busy,.chip.busy{pointer-events:none}',
-      // Click-through shows: busy fades a little, the person's own mode more; a hover on its buttons brings it half up.
+      '.tui:not(.busy) :is(.bar,.grip){pointer-events:auto}',
       '.tui.busy{opacity:.6}',
-      '.tui.through{pointer-events:none;opacity:.32}',
-      '.tui.through:has(.btn:hover,.grip:hover){opacity:.7}',
-      '.tui.through:not(.busy) :is(.btn,.grip){pointer-events:auto}',
-      '.btn.on{color:${T.accent}}',
-      '.chip{position:fixed;bottom:12px;pointer-events:auto;cursor:pointer;user-select:none;padding:0 8px;font:700 11px/22px "JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace;color:${T.accent};background:${T.canvas};border:1px solid ${T.accent};box-shadow:0 4px 14px rgba(0,0,0,.4)}',
-      '.chip:hover{color:${T.onAccent};background:${T.accent}}',
-      '.chip .run{animation:blink 1s steps(2) infinite}',
-      '.bar{display:flex;align-items:center;gap:8px;padding:2px 8px;background:${T.paper};border-bottom:1px solid ${T.accent}}',
+      '.tab{position:fixed;left:0;top:50%;transform:translateY(-50%);width:10px;height:56px;cursor:pointer;',
+      'background:${T.canvas};border:1px solid ${T.accent};border-left:0;border-radius:0 5px 5px 0;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:width .15s}',
+      '.tab:not(.busy){pointer-events:auto}',
+      '.tab:hover{width:16px;background:${T.accent}}',
+      '.tab.busy::after{content:"";position:absolute;left:2px;top:25px;width:4px;height:4px;border-radius:50%;background:${T.accent};animation:blink 1s steps(2) infinite}',
+      '.bar{display:flex;align-items:center;gap:8px;padding:2px 8px;background:${T.paper};border-bottom:1px solid ${T.accent};cursor:move}',
       '.bar .name{font-weight:700;color:${T.accent};letter-spacing:.04em}',
       '.bar .state{color:${T.ink3}}',
       '.bar .state.run{color:${T.accent};animation:blink 1s steps(2) infinite}',
       '.bar .fill{flex:1}',
       '.bar .meta{color:${T.ink3};font-size:10.5px}',
-      '.grip{position:absolute;top:-1px;width:12px;height:12px;cursor:nwse-resize;border-top:2px solid ${T.accent}}',
-      '.grip.l{left:-1px;border-left:2px solid ${T.accent};cursor:nwse-resize}',
-      '.grip.r{right:-1px;border-right:2px solid ${T.accent};cursor:nesw-resize}',
+      '.grip{position:absolute;right:-1px;bottom:-1px;width:12px;height:12px;cursor:nwse-resize;border-right:2px solid ${T.accent};border-bottom:2px solid ${T.accent}}',
       '.live{color:${T.ink3}}',
       '.spin::before{content:"${SPIN[0]}";color:${T.accent};animation:spin .8s steps(1) infinite}',
       '.spin.slow::before{animation-duration:1.6s;color:${T.ink3}}',
@@ -245,6 +252,7 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       '${contentKeys("dots", ["", ".", "..", "..."])}',
       '.btn{color:${T.ink3};cursor:pointer;padding:0 2px}',
       '.btn:hover{color:${T.onAccent};background:${T.accent};text-shadow:none}',
+      '.btn.on{color:${T.accent}}',
       '.body{padding:4px 8px 5px}',
       '.k{color:${T.ink3}}',
       '.goal{color:${T.ink};font-weight:700}',
@@ -254,11 +262,13 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       '@keyframes blink{50%{opacity:0}}',
       '.rule{display:flex;gap:6px;color:${T.ink3};padding:0 8px;border-top:1px solid ${T.paper}}',
       '.rule .t{color:${T.ink3}}',
-      '.rows{display:grid;grid-template-columns:auto auto auto minmax(0,1fr) auto auto;column-gap:1ch;align-content:start;overflow-y:auto;padding:1px 0 3px;scrollbar-width:thin;scrollbar-color:${T.accent} transparent}',
-      '.row{display:grid;grid-column:1/-1;grid-template-columns:subgrid;padding:0 8px;cursor:pointer}',
+      '.rule .btn{pointer-events:auto}',
+      '.tui.busy .rule .btn{pointer-events:none}',
+      '.rows{display:grid;grid-template-columns:auto auto auto minmax(0,1fr) auto auto;column-gap:1ch;align-content:start;overflow:hidden;padding:1px 0 3px;max-height:220px}',
+      '.tui.sized .rows{flex:1;min-height:0;max-height:none}',
+      '.row{display:grid;grid-column:1/-1;grid-template-columns:subgrid;padding:0 8px}',
       '.row .note{grid-column:4/-1;color:${T.ink3};font-size:11px;line-height:1.3;overflow-wrap:anywhere}',
       '.row .note.no{color:${T.bad};opacity:.85}',
-      '.row:hover{background:${T.paper}}',
       '.row.new{animation:fresh 1.2s ease-out}',
       '@keyframes fresh{from{background:rgba(165,150,214,.28)}to{background:transparent}}',
       '.row .n{color:${T.ink3};text-align:right}',
@@ -267,107 +277,96 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       '.row .cmd{color:${T.accent}}',
       '.row .what{color:${T.ink};overflow-wrap:anywhere}',
       '.ok{color:${T.good}}.no{color:${T.bad}}',
-      '.detail{grid-column:4/-1;padding:0 8px 3px 0;color:${T.ink2};white-space:pre-wrap;overflow-wrap:anywhere}',
-      '.detail .no{color:${T.bad}}',
       ${JSON.stringify(contentKeys("ph", PHASES[s?.cmd ?? ""] ?? ["working"]))},
     ].join('');
     root.appendChild(style);
-    for (const { n, box } of s.boxes) {
-      const b = el('div', 'box', null, at(box) + 'border-color:${T.accent}');
-      b.appendChild(el('div', 'tag', String(n), box.y < 14 ? 'top:0' : 'top:-14px'));
-      root.appendChild(b);
+    if (ui.marks) {
+      for (const { n, box } of s.boxes) {
+        const b = el('div', 'box', null, at(box) + 'border-color:${T.accent}');
+        b.appendChild(el('div', 'tag', String(n), box.y < 14 ? 'top:0' : 'top:-14px'));
+        root.appendChild(b);
+      }
+      if (s.target) root.appendChild(el('div', 'target', null, at(s.target)));
     }
-    if (s.target) root.appendChild(el('div', 'target', null, at(s.target)));
-    const side = ui.right ? 'right:12px' : 'left:12px';
-    if (ui.hidden) {
-      // Folded away: one small chip, the page free around it.
-      const chip = el('div', 'chip' + (s.busy ? ' busy' : ''), '▌autobrowse ', side);
-      chip.appendChild(el('span', s.busy ? 'run' : '', s.busy ? '● run' : '○ show'));
-      chip.setAttribute('data-a', 'hide');
-      root.appendChild(chip);
+    const done = () => {
       document.documentElement.appendChild(host);
       ui.host = host;
       ui.root = root;
-      return;
+    };
+    if (ui.min) {
+      // Folded: a tab peeking from the left edge, the page free around it.
+      const tab = el('div', 'tab' + (s.busy ? ' busy' : ''));
+      tab.setAttribute('data-a', 'min');
+      tab.title = 'autobrowse: open';
+      root.appendChild(tab);
+      ui.tuiEl = null;
+      return done();
     }
-    const tui = el('div', 'tui' + (s.busy ? ' busy' : '') + (ui.through ? ' through' : ''), null, side + ';width:' + ui.w + 'px');
+    clamp();
+    const place = ui.x == null ? 'left:12px;bottom:12px' : 'left:' + ui.x + 'px;top:' + ui.y + 'px';
+    const tui = el('div', 'tui' + (s.busy ? ' busy' : '') + (ui.sized ? ' sized' : ''), null, place + ';width:' + ui.w + 'px' + (ui.sized ? ';height:' + ui.h + 'px' : ''));
     ui.tuiEl = tui;
-    tui.appendChild(el('div', 'grip ' + (ui.right ? 'l' : 'r')));
     const bar = el('div', 'bar');
     bar.appendChild(el('span', 'name', '▌autobrowse'));
     bar.appendChild(el('span', 'state' + (s.busy ? ' run' : ''), s.busy ? '● run' : '○ idle'));
     if (s.step) bar.appendChild(el('span', 'k', 'step ' + s.step));
     bar.appendChild(el('span', 'fill'));
     if (s.meta) bar.appendChild(el('span', 'meta', s.meta));
-    const btn = (a, t) => { const b = el('span', 'btn', t); b.setAttribute('data-a', a); return b; };
-    const thru = btn('through', ui.through ? '[○]' : '[●]');
-    if (ui.through) thru.className += ' on';
-    thru.title = ui.through ? 'clicks pass to the page' : 'the panel takes clicks';
-    const tip = (b, t) => { b.title = t; return b; };
-    bar.appendChild(thru);
-    bar.appendChild(tip(btn('move', ui.right ? '[◂]' : '[▸]'), 'move to the other side'));
-    bar.appendChild(tip(btn('min', ui.min ? '[+]' : '[_]'), ui.min ? 'open' : 'fold'));
-    bar.appendChild(tip(btn('hide', '[×]'), 'hide to a chip'));
+    const btn = (a, t, tip) => { const b = el('span', 'btn', t); b.setAttribute('data-a', a); b.title = tip; return b; };
+    const marks = btn('marks', ui.marks ? '[◆]' : '[◇]', ui.marks ? 'hide the boxes' : 'show the boxes');
+    if (ui.marks) marks.className += ' on';
+    bar.appendChild(marks);
+    bar.appendChild(btn('min', '[_]', 'minimize'));
     tui.appendChild(bar);
-    if (!ui.min) {
-      const body = el('div', 'body');
-      const line = (k, cls, t) => { const d = el('div'); d.appendChild(el('span', 'k', k)); d.appendChild(el('span', cls, t)); return d; };
-      if (s.goal) body.appendChild(line('goal ', 'goal', s.goal));
-      if (s.thought) body.appendChild(line('» ', 'thought', s.thought));
-      if (s.doing) body.appendChild(line('$ ', 'doing', s.doing));
-      // The busy line: the hands' phase while a command runs; between commands, the agent's turn.
-      const live = el('div', 'live');
-      if (s.busy) {
-        live.appendChild(el('span', 'spin'));
-        const ph = el('span', 'phase', ' ', '--d:' + ${JSON.stringify(PHASES[s?.cmd ?? ""]?.length ?? 1)} * ${PHASE_S} + 's;--t:-' + since + 's');
-        live.appendChild(ph);
-        live.appendChild(el('span', 'dots'));
-      } else if (s.goal) {
-        live.appendChild(el('span', 'spin slow'));
-        live.appendChild(el('span', '', ' thinking'));
-        live.appendChild(el('span', 'dots'));
-      } else {
-        live.appendChild(el('span', 'k', '$ waiting for the agent'));
-        live.appendChild(el('span', 'cursor'));
-      }
-      body.appendChild(live);
-      tui.appendChild(body);
-      const rule = el('div', 'rule');
-      rule.appendChild(el('span', 't', '─ trace'));
-      rule.appendChild(el('span', 't', String(s.trace.length)));
-      rule.appendChild(el('span', 'fill', null, 'flex:1'));
-      rule.appendChild(btn('trace', ui.trace ? '[▾]' : '[▸]'));
-      tui.appendChild(rule);
-      if (ui.trace && s.trace.length) {
-        const rows = el('div', 'rows', null, ui.sized ? 'height:' + ui.h + 'px' : 'max-height:' + ui.h + 'px');
-        const newest = s.trace[s.trace.length - 1].n;
-        for (const r of s.trace.slice().reverse()) {
-          const row = el('div', 'row' + (r.n === newest && ui.seen !== newest ? ' new' : ''));
-          row.setAttribute('data-a', 'row:' + r.n);
-          row.appendChild(el('span', 'n', String(r.n)));
-          row.appendChild(el('span', 'at', r.at));
-          row.appendChild(el('span', 'cmd', r.cmd));
-          row.appendChild(el('span', 'what', r.what));
-          row.appendChild(el('span', r.ok ? 'ok' : 'no', r.ok ? '✓' : '✗'));
-          row.appendChild(el('span', 'ms', r.ms < 1000 ? r.ms + 'ms' : (r.ms / 1000).toFixed(1) + 's'));
-          if (r.note) row.appendChild(el('span', 'note' + (r.ok ? '' : ' no'), r.note));
-          rows.appendChild(row);
-          if (ui.open === r.n && r.detail.length) {
-            const det = el('div', 'detail');
-            for (const t of r.detail) det.appendChild(el('div', t.startsWith('error') ? 'no' : '', t));
-            det.setAttribute('data-a', 'row:' + r.n);
-            rows.appendChild(det);
-          }
-        }
-        ui.seen = newest;
-        tui.appendChild(rows);
-        rows.scrollTop = ui.scroll;
-      }
+    const body = el('div', 'body');
+    const line = (k, cls, t) => { const d = el('div'); d.appendChild(el('span', 'k', k)); d.appendChild(el('span', cls, t)); return d; };
+    if (s.goal) body.appendChild(line('goal ', 'goal', s.goal));
+    if (s.thought) body.appendChild(line('» ', 'thought', s.thought));
+    if (s.doing) body.appendChild(line('$ ', 'doing', s.doing));
+    // The busy line: the hands' phase while a command runs; between commands, the agent's turn.
+    const live = el('div', 'live');
+    if (s.busy) {
+      live.appendChild(el('span', 'spin'));
+      const ph = el('span', 'phase', ' ', '--d:' + ${JSON.stringify(PHASES[s?.cmd ?? ""]?.length ?? 1)} * ${PHASE_S} + 's;--t:-' + since + 's');
+      live.appendChild(ph);
+      live.appendChild(el('span', 'dots'));
+    } else if (s.goal) {
+      live.appendChild(el('span', 'spin slow'));
+      live.appendChild(el('span', '', ' thinking'));
+      live.appendChild(el('span', 'dots'));
+    } else {
+      live.appendChild(el('span', 'k', '$ waiting for the agent'));
+      live.appendChild(el('span', 'cursor'));
     }
+    body.appendChild(live);
+    tui.appendChild(body);
+    const rule = el('div', 'rule');
+    rule.appendChild(el('span', 't', '─ trace'));
+    rule.appendChild(el('span', 't', String(s.trace.length)));
+    rule.appendChild(el('span', 'fill', null, 'flex:1'));
+    rule.appendChild(btn('trace', ui.trace ? '[▾]' : '[▸]', ui.trace ? 'fold the trace' : 'show the trace'));
+    tui.appendChild(rule);
+    if (ui.trace && s.trace.length) {
+      // Newest first; what does not fit is cut, never scrolled (the panel takes no wheel).
+      const rows = el('div', 'rows');
+      const newest = s.trace[s.trace.length - 1].n;
+      for (const r of s.trace.slice().reverse()) {
+        const row = el('div', 'row' + (r.n === newest && ui.seen !== newest ? ' new' : ''));
+        row.appendChild(el('span', 'n', String(r.n)));
+        row.appendChild(el('span', 'at', r.at));
+        row.appendChild(el('span', 'cmd', r.cmd));
+        row.appendChild(el('span', 'what', r.what));
+        row.appendChild(el('span', r.ok ? 'ok' : 'no', r.ok ? '✓' : '✗'));
+        row.appendChild(el('span', 'ms', r.ms < 1000 ? r.ms + 'ms' : (r.ms / 1000).toFixed(1) + 's'));
+        if (r.note) row.appendChild(el('span', 'note' + (r.ok ? '' : ' no'), r.note));
+        rows.appendChild(row);
+      }
+      ui.seen = newest;
+      tui.appendChild(rows);
+    }
+    tui.appendChild(el('div', 'grip'));
     root.appendChild(tui);
-    document.documentElement.appendChild(host);
-    ui.host = host;
-    ui.root = root;
+    done();
   };
   ui.draw(s);
   return prefs();
@@ -389,12 +388,11 @@ export function overlayFor(startOn: boolean) {
   let prefs: Prefs = {
     min: false,
     trace: true,
-    right: false,
-    hidden: false,
-    // The panel takes a person's clicks; while a command runs it lets every click through.
-    through: false,
+    marks: true,
+    x: null,
+    y: null,
     w: 460,
-    h: 220,
+    h: 320,
     sized: false,
   };
   const paint = async (page: Page, s: OverlayState | undefined) => {
@@ -419,6 +417,15 @@ export function overlayFor(startOn: boolean) {
     } finally {
       await draw(page);
     }
+  };
+  /** The boxes button as the page has it now: a click since the last draw counts. */
+  const marksOn = async (page: Page): Promise<boolean> => {
+    const on = await Promise.race([
+      page.evaluate(`(window['__${attr}'] || {}).marks`).catch(() => undefined),
+      new Promise<undefined>((r) => setTimeout(() => r(undefined), BOX_MS).unref()),
+    ]);
+    if (typeof on === "boolean") prefs = { ...prefs, marks: on };
+    return prefs.marks;
   };
   const boxOf = async (page: Page, hints: Hints): Promise<Box | null> => {
     const b = await locate(page, hints)
@@ -466,7 +473,8 @@ export function overlayFor(startOn: boolean) {
         };
       for (const [k, v] of Object.entries(fields))
         if (v !== undefined) (state as unknown as Record<string, unknown>)[k] = clipLine(v, 240);
-      if (refs) {
+      if (refs && !(await marksOn(page))) state.boxes = [];
+      else if (refs) {
         const boxes = await Promise.all(refs.map((r) => boxOf(page, r.hints)));
         state.boxes = refs.flatMap((r, i) => {
           const box = boxes[i];
@@ -474,7 +482,8 @@ export function overlayFor(startOn: boolean) {
         });
       }
       await draw(page);
-      return { drawn: true, boxes: state.boxes.length };
+      // Boxes off: no count, so a 0 never reads as controls missing.
+      return { drawn: true, ...(prefs.marks ? { boxes: state.boxes.length } : {}) };
     },
     /** The bar's right side (seed, pace); drawn with the next change. */
     tag(meta: string | null): void {
@@ -521,7 +530,7 @@ export function overlayFor(startOn: boolean) {
     /** Before an act: the target flashes and the panel says what is done. */
     async flash(page: Page, hints: Hints, doing: string): Promise<void> {
       if (!enabled) return;
-      state.target = await boxOf(page, hints);
+      state.target = (await marksOn(page)) ? await boxOf(page, hints) : null;
       state.doing = clipLine(doing, 160);
       await draw(page);
     },
