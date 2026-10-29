@@ -8,6 +8,7 @@ import { z } from "zod";
 import { startExplore } from "../src/explore/server.js";
 import type { Approval } from "../src/gates/payment.js";
 import { defineFlow, defineWorkflow, done, type FlowRunner } from "../src/index.js";
+import { legWorkflow } from "../src/workflows/legs.js";
 
 interface Deps {
   browser: FlowRunner;
@@ -55,6 +56,11 @@ describe("explore runs a compiled workflow on its page (flow)", () => {
       emptyMemo: () => ({}),
     });
   const flows = {
+    // A hand-written leg, as the catalog holds it.
+    "shop-search": legWorkflow(
+      search(() => webPort),
+      z.object({ q: z.string() }),
+    ),
     search: wf("search", (d, p) =>
       d.browser.run(
         search(() => webPort),
@@ -172,6 +178,20 @@ describe("explore runs a compiled workflow on its page (flow)", () => {
       "click",
       "flow search done",
       "read",
+    ]);
+  }, 30_000);
+
+  it("runs a hand-written leg from the catalog the same way", async () => {
+    const r = await send({ cmd: "flow", name: "shop-search", plan: { q: "leg" } });
+    expect(r.body).toMatchObject({ flow: "shop-search", status: "done" });
+    expect((r.body.steps as { search: { detail: string } }).search.detail).toBe('"found leg"');
+    const kinds = (await journal()).map((a) => (a.kind === "note" ? a.text : a.kind));
+    expect(kinds.slice(-5)).toEqual([
+      "flow shop-search start",
+      "navigate",
+      "input",
+      "click",
+      "flow shop-search done",
     ]);
   }, 30_000);
 

@@ -105,8 +105,16 @@ Run paths today:
 A direct run writes a flow row and failure artifacts, with no run id and no steps. An engine run has steps, gates and a run row.
 
 Plan:
-- One adapter, `legWorkflow(flow, input: zod)`: a one-step workflow around the leg. The catalog holds all 104 + 4 this way.
-- Each flow file declares its zod input beside `defineFlow`. The route's `request` schema stays the route body; `browser.input` still maps it.
+- One adapter, `legWorkflow(flow, input: zod)` (`workflows/legs.ts`): a one-step workflow around the leg, named `<site>-<name>`. The catalog holds all 108 this way, after the compiled ones.
+- The zod inputs are generated: `pnpm gen:flow-inputs` reads each leg's input type with the TypeScript checker and writes `browser/flows/inputs.gen.ts`.
+  Each entry is held to its leg's type, so a changed input fails typecheck until it is made again. A test fails on a leg with no entry.
+  An optional field only code passes (a key sink) is left out, so every input is JSON an agent can send.
+  The route's `request` schema stays the route body; `browser.input` still maps it.
+Pass one (done 2026-10-29): the catalog and the adapter. Explore's `flow` runs any leg.
+
+Pass two (WA-963) waits on one decision: what an in-memory run writes. `runFlow` on memory effects writes nothing today, so moving a caller onto it changes no row a person can read.
+First a run recorder (a run row with its steps, status and artifact paths, in the runs ledger), then the paths below, then the lint.
+
 - Every path above calls `runLeg(name, input)`: the adapter under `runFlow` on memory effects. Return values and errors stay as they are.
   Restate handlers already wrap the leg in `ctx.run`, and Restate forbids `ctx` calls inside it. So a site route keeps one Restate entry per leg, as today, and gains steps and a trace.
   Moving those handlers onto the run object would give per-step durability, but it changes the handler. Not in this pass.
@@ -148,4 +156,6 @@ Cost: one more in-process call per leg (`advance` on memory effects), under 1 ms
 - 2026-10-29: Durable by saved call results. A failed iteration: the agent fixes the script, the run goes on from there (William: "it should just continue from 37").
 - 2026-10-29: Site route legs keep one Restate entry per leg: Restate forbids `ctx` inside `ctx.run`, and moving the handlers would change their usage.
 - 2026-10-29: A script's nested `flow` call waits for its own design.
+- 2026-10-29: Leg inputs are generated into one file, not written beside each of 108 legs. The types stay the one source; the generated file cannot drift past typecheck.
+- 2026-10-29: Pass two (run paths, lint) waits for the run recorder. A lint that forces a path with no record would be a no-op.
 - 2026-10-29: The trace holds each iteration's values (William: "at each iteration of the for loop what the values are").

@@ -60,6 +60,7 @@ import { fileLimits } from "../sites/limits.js";
 import { type EventBus, eventBus } from "../ui/bus.js";
 import type { Jobs } from "../ui/jobs.js";
 import { type CompiledCatalog, compiledCatalog } from "../workflows/compiled.js";
+import { workflowCatalog } from "../workflows/legs.js";
 import { filePlans, type PlanStore, withDefaults } from "../workflows/plans.js";
 import type { Proof } from "../workflows/proof.js";
 import { proofLine, proveWorkflow, writeProof } from "../workflows/proof.js";
@@ -352,7 +353,7 @@ export function explorerOpener(
       runs: runsDirFor(settings),
       // `flow`: any compiled workflow on the open page, its saved plan under the command's.
       workflows: {
-        get: async (name) => (await catalog.get(name))?.workflow ?? null,
+        get: workflowCatalog(catalog).get,
         plan: (name, given) => withDefaults(plans, name, given),
         keys: keyKeeperFor(settings),
       },
