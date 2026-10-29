@@ -172,7 +172,9 @@ export async function profileOf(
   }
   // A handle login (X's `wren_automation`) is the account whose mail it gets: one match only.
   const byInbox = mine.filter(([, c]) => c.codesInbox && same(c.codesInbox, account));
-  return byInbox.length === 1 ? (byInbox[0]?.[0] ?? null) : null;
+  if (byInbox.length) return byInbox.length === 1 ? (byInbox[0]?.[0] ?? null) : null;
+  // the site's own handle login (npm's), when no labeled login claims the inbox
+  return own?.codesInbox && same(own.codesInbox, account) ? site : null;
 }
 
 /**

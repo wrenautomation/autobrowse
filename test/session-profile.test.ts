@@ -33,4 +33,15 @@ describe("the profile a via-credential works in", () => {
   it("is nothing when the provider has no credential for that address", async () => {
     expect(await profileOf(store({ google: cred("me@gmail.com") }), "google", "no@one")).toBe(null);
   });
+
+  it("is the site's own handle login whose codes go to that address (npm)", async () => {
+    const s = store({ npm: cred("handle_x", { codesInbox: "wren@example.com" }) });
+    expect(await profileOf(s, "npm", "wren@example.com")).toBe("npm");
+    // a labeled login on the same inbox still wins
+    const both = store({
+      npm: cred("handle_x", { codesInbox: "wren@example.com" }),
+      "npm@wren": cred("handle_y", { codesInbox: "wren@example.com" }),
+    });
+    expect(await profileOf(both, "npm", "wren@example.com")).toBe("npm@wren");
+  });
 });
