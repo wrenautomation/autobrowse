@@ -41,6 +41,89 @@ async function refused(fp: FlowPage, what: string): Promise<void> {
   if (BLOCKED.test(text)) fp.human(`Instagram refused the ${what}: ${text.slice(0, 200)}`);
 }
 
+/**
+ * Instagram's own answer to an act (mapped 2026-10-29): graphql `usePolarisFollowMutation` →
+ * `data.xdt_create_friendship.friendship_status.following`, `usePolarisLikeMediaXIGLikeMutation` →
+ * `data.xig_media_like.media.has_liked`. A block answers `errors` or `status: "fail"` (feedback_required).
+ * null: not this act's answer.
+ */
+export function igAnswer(
+  status: number,
+  body: string,
+  key: "following" | "has_liked",
+): { refused: string } | { value: boolean } | null {
+  let j: unknown;
+  try {
+    j = JSON.parse(body.trim().replace(/^for \(;;\);/, ""));
+  } catch {
+    return status >= 400 ? { refused: `HTTP ${status}` } : null;
+  }
+  const o = j as { errors?: Array<{ message?: string }>; status?: string; message?: string };
+  if (o.errors?.length) return { refused: o.errors.map((e) => e.message ?? "?").join("; ") };
+  if (o.status === "fail" || status >= 400) return { refused: o.message ?? `HTTP ${status}` };
+  const value = boolAt(j, key);
+  if (value === undefined) return null;
+  // a private account answers a request, not a follow
+  return { value: value || (key === "following" && boolAt(j, "outgoing_request") === true) };
+}
+
+/** The first boolean under `key`, at any depth. */
+function boolAt(v: unknown, key: string): boolean | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const rec = v as Record<string, unknown>;
+  if (typeof rec[key] === "boolean") return rec[key];
+  for (const x of Object.values(rec)) {
+    const got = boolAt(x, key);
+    if (got !== undefined) return got;
+  }
+  return undefined;
+}
+
+/** The act's own call: a graphql mutation named for it, or the older v1 path. */
+export const isActCall = (url: string, friendlyName = "") =>
+  (/instagram\.com\/(api\/graphql|graphql\/query)/.test(url) &&
+    /^usePolaris\w*(follow|like)\w*Mutation$/i.test(friendlyName)) ||
+  /instagram\.com\/api\/v1\/(friendships\/(create|destroy)|web\/likes|media\/\d+\/(un)?like)/.test(
+    url,
+  );
+
+/**
+ * Click, then read Instagram's answer to it: the flip on the page is drawn before the server
+ * answers. No answer seen (Instagram moved the call): a reload is the proof instead.
+ */
+async function actAndProve(
+  fp: FlowPage,
+  click: () => Promise<void>,
+  key: "following" | "has_liked",
+  want: boolean,
+  what: string,
+  reload: { url: string; on: Hints; off: Hints },
+): Promise<void> {
+  let answer: ReturnType<typeof igAnswer> = null;
+  const onResponse = async (r: Response) => {
+    const req = r.request();
+    if (answer || req.method() !== "POST") return;
+    if (!isActCall(r.url(), req.headers()["x-fb-friendly-name"])) return;
+    const got = igAnswer(r.status(), (await r.text().catch(() => "")) ?? "", key);
+    if (got) answer = got;
+  };
+  fp.page.on("response", onResponse);
+  try {
+    await click();
+    for (let i = 0; i < RENDER_MS / SETTLE_MS && !answer; i++) await fp.wait(SETTLE_MS);
+  } finally {
+    fp.page.off("response", onResponse);
+  }
+  const got = answer as ReturnType<typeof igAnswer>;
+  if (got && "refused" in got) fp.human(`Instagram refused the ${what}: ${got.refused}`);
+  if (got && got.value !== want) fp.human(`Instagram did not keep the ${what}`);
+  if (got) return;
+  await refused(fp, what);
+  await openIg(fp, reload.url);
+  if ((await firstShown(fp, [reload.on, reload.off], MISSING)) !== (want ? 0 : 1))
+    fp.human(`Instagram did not keep the ${what}: the account may be limited`);
+}
+
 // The first match is the profile's own: suggested accounts below carry their own Follow.
 // From 2026-10-29 the done state reads "Following Down chevron icon": a prefix, not the whole name.
 export const followButton: Hints = { role: "button", name: "/^follow( back)?\\b/i" };
@@ -59,29 +142,25 @@ export const instagramFollow = defineFlow<
   site: "instagram",
   name: "follow",
   async run(fp, { username, undo }) {
-    await openIg(fp, `${WEB}/${encodeURIComponent(username)}/`);
+    const profile = `${WEB}/${encodeURIComponent(username)}/`;
+    await openIg(fp, profile);
     const state = await firstShown(fp, [followingButton, followButton], MISSING);
     if (state === "missing") return { found: false, reason: `no Instagram account @${username}` };
     if (state === null) return fp.human(`no Follow button on @${username} (${fp.url()})`);
     const following = state === 0;
     if (following === !undo) return already({ username, following, already: true });
-    if (undo) {
-      await fp.act({ kind: "click" }, followingButton, { goal: `open @${username}'s Following` });
-      await fp.act({ kind: "click" }, unfollow, { goal: `unfollow @${username}` });
-    } else await fp.act({ kind: "click" }, followButton, { goal: `follow @${username}` });
-    await fp.wait(SETTLE_MS);
-    await refused(fp, undo ? "unfollow" : "follow");
-    const what = undo ? "unfollow" : "follow";
-    if (!(await fp.has(undo ? followButton : followingButton, RENDER_MS)))
-      return fp.human(`Instagram did not take the ${what} of @${username}`);
-    // the button flips before the server answers; a limited account gets it undone (TikTok, 10-29): reload is the proof
-    await fp.wait(SETTLE_MS);
-    await openIg(fp, `${WEB}/${encodeURIComponent(username)}/`);
-    const kept = await firstShown(fp, [followingButton, followButton], MISSING);
-    if (kept !== (undo ? 1 : 0))
-      return fp.human(
-        `Instagram did not keep the ${what} of @${username}: the account may be limited`,
-      );
+    const what = `${undo ? "unfollow" : "follow"} of @${username}`;
+    const click = async () => {
+      if (undo) {
+        await fp.act({ kind: "click" }, followingButton, { goal: `open @${username}'s Following` });
+        await fp.act({ kind: "click" }, unfollow, { goal: `unfollow @${username}` });
+      } else await fp.act({ kind: "click" }, followButton, { goal: `follow @${username}` });
+    };
+    await actAndProve(fp, click, "following", !undo, what, {
+      url: profile,
+      on: followingButton,
+      off: followButton,
+    });
     return { username, following: !undo };
   },
 });
@@ -112,13 +191,17 @@ export const instagramLike = defineFlow<
     if (state === null) return fp.human(`no Like on post ${shortcode} (${fp.url()})`);
     const liked = state === 0;
     if (liked === !undo) return already({ shortcode, liked, already: true });
-    await fp.act({ kind: "click" }, undo ? hearted : heart, {
-      goal: `${undo ? "unlike" : "like"} post ${shortcode}`,
+    const what = `${undo ? "unlike" : "like"} on ${shortcode}`;
+    const click = async () => {
+      await fp.act({ kind: "click" }, undo ? hearted : heart, {
+        goal: `${undo ? "unlike" : "like"} post ${shortcode}`,
+      });
+    };
+    await actAndProve(fp, click, "has_liked", !undo, what, {
+      url: postUrl(shortcode),
+      on: hearted,
+      off: heart,
     });
-    await fp.wait(SETTLE_MS);
-    await refused(fp, undo ? "unlike" : "like");
-    if (!(await fp.has(undo ? heart : hearted, RENDER_MS)))
-      return fp.human(`Instagram did not take the ${undo ? "unlike" : "like"} on ${shortcode}`);
     return { shortcode, liked: !undo };
   },
 });

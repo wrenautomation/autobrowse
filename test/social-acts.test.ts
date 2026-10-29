@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   countOf,
+  igAnswer,
   followButton as igFollowButton,
   followingButton as igFollowingButton,
   igPostOf,
   instagramComment,
   instagramFollow,
   instagramLike,
+  isActCall,
   postCodesOf,
 } from "../src/browser/flows/instagram-act.js";
 import { linkedinFollow, linkedinLike } from "../src/browser/flows/linkedin-act.js";
@@ -244,6 +246,70 @@ describe("instagram follow proof", () => {
       /did not keep the follow/,
     );
   });
+});
+
+describe("instagram act answers", () => {
+  // shapes captured live 2026-10-29
+  const follow = `{"data":{"xdt_create_friendship":{"username":"acme","friendship_status":{"following":true,"outgoing_request":false}}},"extensions":{"is_final":true}}`;
+  const like = `for (;;);{"data":{"xig_media_like":{"media":{"id":"1_2","has_liked":true}}}}`;
+  it("reads the server's own answer", () => {
+    expect(igAnswer(200, follow, "following")).toEqual({ value: true });
+    expect(igAnswer(200, like, "has_liked")).toEqual({ value: true });
+    expect(
+      igAnswer(200, follow.replace('"following":true', '"following":false'), "following"),
+    ).toEqual({ value: false });
+    expect(
+      igAnswer(
+        200,
+        follow.replace(
+          '"following":true,"outgoing_request":false',
+          '"following":false,"outgoing_request":true',
+        ),
+        "following",
+      ),
+    ).toEqual({ value: true });
+  });
+  it("reads a block as a refusal", () => {
+    expect(igAnswer(400, `{"message":"feedback_required","status":"fail"}`, "following")).toEqual({
+      refused: "feedback_required",
+    });
+    expect(igAnswer(200, `{"errors":[{"message":"Try Again Later"}]}`, "has_liked")).toEqual({
+      refused: "Try Again Later",
+    });
+    expect(igAnswer(200, `{"data":{}}`, "has_liked")).toBeNull();
+  });
+  it("matches only the act's own call", () => {
+    const gql = "https://www.instagram.com/api/graphql";
+    expect(isActCall(gql, "usePolarisFollowMutation")).toBe(true);
+    expect(isActCall(gql, "usePolarisLikeMediaXIGLikeMutation")).toBe(true);
+    expect(isActCall(gql, "PolarisProfilePageContentQuery")).toBe(false);
+    expect(isActCall(gql, "PolarisLikedByListQuery")).toBe(false);
+    expect(isActCall("https://www.instagram.com/api/v1/friendships/create/1/")).toBe(true);
+  });
+  // no answer seen: the button flips on click, gone again after the reload
+  for (const flow of ["follow", "like"] as const)
+    it(`hands a ${flow} the reload undid to a person`, async () => {
+      let done = false;
+      let opens = 0;
+      const { fp } = fakePage({
+        text: [""],
+        url: "https://www.instagram.com/acme/",
+        present: (h) =>
+          /following\|requested|Unlike/.test(`${h.css ?? ""}${h.name ?? ""}`) ===
+          (done && opens < 2),
+        onAct: () => {
+          done = true;
+        },
+      });
+      fp.open = async () => {
+        opens++;
+      };
+      const run =
+        flow === "follow"
+          ? instagramFollow.run(fp, { username: "acme" })
+          : instagramLike.run(fp, { shortcode: "AAA111" });
+      await expect(run).rejects.toThrow(new RegExp(`did not keep the ${flow}`));
+    });
 });
 
 describe("instagram follow names", () => {

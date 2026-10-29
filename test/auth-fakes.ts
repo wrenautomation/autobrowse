@@ -17,7 +17,7 @@ export function fakePage(script: {
   let i = 0;
   const fp: FlowPage = {
     captcha: async () => ({ solved: false, kind: null, vendor: null, reason: "fake" }),
-    page: {} as FlowPage["page"],
+    page: { on() {}, off() {} } as unknown as FlowPage["page"],
     async open() {},
     url: () =>
       (typeof script.url === "function" ? script.url() : script.url) ?? "https://site.test/login",

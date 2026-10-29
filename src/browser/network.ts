@@ -40,7 +40,8 @@ const KEEP_HEADERS =
 /** Resource types whose calls are rows. */
 const CALL_TYPES = new Set(["xhr", "fetch", "document"]);
 /** Content types whose body is text a reader can use. */
-const TEXT_BODY = /json|text\/(plain|csv|xml)|xml|javascript-ld|graphql/i;
+// text/javascript: Instagram's graphql answers (only xhr and fetch get here)
+const TEXT_BODY = /json|text\/(plain|csv|xml|javascript)|xml|javascript-ld|graphql/i;
 
 export interface NetRow {
   id: number;
@@ -122,7 +123,8 @@ export function redactJson(v: unknown, depth = 0): unknown {
 
 /** A body as text → JSON when it parses (form bodies as their fields), else the text; redacted. */
 export function redactBody(text: string, contentType = ""): unknown {
-  const t = text.trim();
+  // Meta's anti-hijack prefix
+  const t = text.trim().replace(/^for \(;;\);/, "");
   if (/^[[{]/.test(t)) {
     try {
       return redactJson(JSON.parse(t));
