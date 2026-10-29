@@ -2,15 +2,35 @@
  * The headed overlay (designs/2026-10-27-explore-gaps.md): what the agent
  * sees and why it acts, drawn over the page for a person who watches. Boxes
  * carry the outline's ref numbers; the control about to be acted on flashes;
- * a panel holds the goal, the step, the model's thought and the act. It sits
- * in a closed shadow root no press reaches, outside `body` (so the aria tree
- * never reads it), and is taken off for every screenshot. Headless, nothing
- * is drawn.
+ * a terminal-style panel holds the goal, the thought, the act and a live
+ * trace of every command. It sits in a closed shadow root outside `body` (so
+ * the aria tree never reads it) and is taken off for every screenshot.
+ * Headless, nothing is drawn.
+ *
+ * The panel takes clicks (fold, move, open a trace row) without the page
+ * knowing: a window capture listener swallows every pointer event over it
+ * before the page's handlers or the recorder's observer see one, and
+ * mousedown's default is stopped so focus stays where it was. While a
+ * command runs the panel is inert (pointer-events none): no act can land on it.
  */
 import { randomBytes } from "node:crypto";
 import type { Page } from "playwright";
 import { type Hints, locate } from "../browser/locate.js";
+import type { Command } from "./commands.js";
 import type { Box } from "./marks.js";
+
+/** One command as the trace shows it; never a typed value. */
+export interface TraceRow {
+  n: number;
+  /** HH:MM:SS, local. */
+  at: string;
+  cmd: string;
+  what: string;
+  ok: boolean;
+  ms: number;
+  /** Shown when the row is opened: target, url, error. */
+  detail: string[];
+}
 
 /** What the panel and boxes show; null leaves a part off. */
 export interface OverlayState {
@@ -21,6 +41,9 @@ export interface OverlayState {
   doing: string | null;
   boxes: Array<{ n: number; box: Box }>;
   target: Box | null;
+  /** A command is running: the panel takes no pointer. */
+  busy: boolean;
+  trace: TraceRow[];
 }
 
 const EMPTY: OverlayState = {
@@ -30,47 +53,177 @@ const EMPTY: OverlayState = {
   doing: null,
   boxes: [],
   target: null,
+  busy: false,
+  trace: [],
 };
 
 /** A ref's box resolves this fast or is left off: a slow find never holds up a step. */
 const BOX_MS = 400;
+/** A draw never holds a command longer than this. */
+const DRAW_MS = 1_000;
+/** Rows kept; the panel scrolls them. */
+const TRACE_KEEP = 200;
 
-const COLOURS = ["#e5484d", "#0090ff", "#30a46c", "#f76b15", "#8e4ec6", "#d6409f"];
+/** Wren dark tokens (wren/designs/2026-10-20-design-language). */
+const T = {
+  canvas: "#0d0d0c",
+  paper: "#171716",
+  ink: "#f2f0ea",
+  ink2: "#a9a79f",
+  ink3: "#8f8d86",
+  accent: "#a596d6",
+  onAccent: "#15121f",
+  good: "#4cc27a",
+  bad: "#ff6b5e",
+};
 
 /** In the page: the layer drawn from `s`, or taken away when `s` is undefined. */
 const layerScript = (attr: string, s: OverlayState | undefined) => `(() => {
+  const K = '__${attr}';
+  const ui = window[K] || (window[K] = { min: false, trace: true, right: false, open: null, scroll: 0 });
   for (const old of document.querySelectorAll('[${attr}]')) old.remove();
+  ui.host = null;
   const s = ${JSON.stringify(s ?? null)};
   if (!s) return;
-  const host = document.createElement('div');
-  host.setAttribute('${attr}', '');
-  host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none';
-  const root = host.attachShadow({ mode: 'closed' });
-  const COLOURS = ${JSON.stringify(COLOURS)};
-  const el = (tag, css, text) => { const e = document.createElement(tag); e.style.cssText = css; if (text) e.textContent = text; return e; };
-  const at = (b) => 'position:fixed;box-sizing:border-box;left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px;height:' + b.h + 'px;';
-  const style = document.createElement('style');
-  style.textContent = '@keyframes ab-pulse{0%{box-shadow:0 0 0 0 rgba(255,196,0,.7)}100%{box-shadow:0 0 0 14px rgba(255,196,0,0)}}';
-  root.appendChild(style);
-  for (const { n, box } of s.boxes) {
-    const c = COLOURS[n % COLOURS.length];
-    const b = el('div', at(box) + 'border:1.5px solid ' + c + ';border-radius:3px');
-    b.appendChild(el('div', 'position:absolute;left:-1px;' + (box.y < 14 ? 'top:0' : 'top:-14px') + ';background:' + c + ';color:#fff;font:600 10px/14px ui-monospace,monospace;padding:0 3px;border-radius:3px 3px 0 0', String(n)));
-    root.appendChild(b);
+  ui.s = s;
+  if (!ui.bound) {
+    ui.bound = true;
+    // Capture on window runs before the page's document listeners and the observer.
+    const KINDS = ['pointerdown','pointerup','pointermove','pointerover','pointerout','pointerenter','pointerleave',
+      'mousedown','mouseup','mousemove','mouseover','mouseout','mouseenter','mouseleave',
+      'click','dblclick','auxclick','contextmenu','wheel','touchstart','touchend','touchmove'];
+    for (const k of KINDS) window.addEventListener(k, (e) => {
+      if (!ui.host || e.target !== ui.host) return;
+      e.stopImmediatePropagation();
+      // mousedown's default moves focus; the list's wheel scroll is kept.
+      if (k === 'mousedown' || k === 'click' || k === 'auxclick' || k === 'contextmenu' || k === 'dblclick') e.preventDefault();
+      if (k !== 'click') return;
+      const hit = ui.root && ui.root.elementFromPoint(e.clientX, e.clientY);
+      const a = hit && hit.closest('[data-a]');
+      if (!a) return;
+      const act = a.getAttribute('data-a');
+      if (act === 'min') ui.min = !ui.min;
+      else if (act === 'move') ui.right = !ui.right;
+      else if (act === 'trace') ui.trace = !ui.trace;
+      else if (act.startsWith('row:')) { const n = Number(act.slice(4)); ui.open = ui.open === n ? null : n; }
+      ui.draw(ui.s);
+    }, { capture: true, passive: false });
   }
-  if (s.target) root.appendChild(el('div', at(s.target) + 'border:3px solid #ffc400;border-radius:4px;animation:ab-pulse .9s ease-out infinite'));
-  const lines = [
-    ['autobrowse' + (s.step ? ' · step ' + s.step : ''), 'font:600 11px/16px ui-monospace,monospace;color:#9aa4b2;letter-spacing:.02em'],
-    [s.goal, 'font:600 13px/18px system-ui,sans-serif;color:#fff;margin-top:2px'],
-    [s.thought, 'font:400 12px/17px system-ui,sans-serif;color:#d7dce3;margin-top:6px'],
-    [s.doing, 'font:500 12px/17px ui-monospace,monospace;color:#ffc400;margin-top:6px'],
-  ].filter(([t]) => t);
-  if (lines.length > 1 || s.step) {
-    const panel = el('div', 'position:fixed;left:12px;bottom:12px;max-width:380px;padding:10px 12px;border-radius:10px;background:rgba(17,20,24,.88);box-shadow:0 6px 24px rgba(0,0,0,.35);backdrop-filter:blur(6px)');
-    for (const [t, css] of lines) panel.appendChild(el('div', css, t));
-    root.appendChild(panel);
-  }
-  document.documentElement.appendChild(host);
+  ui.draw = (s) => {
+    const list = ui.root && ui.root.querySelector('.rows');
+    if (list) ui.scroll = list.scrollTop;
+    for (const old of document.querySelectorAll('[${attr}]')) old.remove();
+    const host = document.createElement('div');
+    host.setAttribute('${attr}', '');
+    host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none';
+    const root = host.attachShadow({ mode: 'closed' });
+    const el = (tag, cls, text, css) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; if (css) e.style.cssText = css; return e; };
+    const at = (b) => 'left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px;height:' + b.h + 'px;';
+    const style = document.createElement('style');
+    style.textContent = [
+      '*{box-sizing:border-box}',
+      '.box{position:fixed;border:1.5px dashed;border-radius:2px}',
+      '.tag{position:absolute;left:-1.5px;font:700 10px/13px ui-monospace,Menlo,monospace;color:${T.onAccent};background:${T.accent};padding:0 4px}',
+      '.target{position:fixed;border:2px solid ${T.accent};animation:pulse .9s ease-out infinite}',
+      '@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(165,150,214,.75)}100%{box-shadow:0 0 0 12px rgba(165,150,214,0)}}',
+      '.tui{position:fixed;bottom:12px;width:440px;max-width:calc(100vw - 24px);pointer-events:auto;cursor:default;user-select:none;',
+      'font:12px/1.5 "JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace;color:${T.ink};',
+      'background:${T.canvas} repeating-linear-gradient(0deg,rgba(255,255,255,.028) 0 1px,transparent 1px 3px);',
+      'border:1px solid ${T.accent};box-shadow:0 0 0 1px #000,0 10px 32px rgba(0,0,0,.55),0 0 22px rgba(165,150,214,.14);',
+      'text-shadow:0 0 6px rgba(165,150,214,.22)}',
+      '.tui.busy{pointer-events:none}',
+      '.bar{display:flex;align-items:center;gap:8px;padding:2px 8px;background:${T.paper};border-bottom:1px solid ${T.accent}}',
+      '.bar .name{font-weight:700;color:${T.accent};letter-spacing:.04em}',
+      '.bar .state{color:${T.ink3}}',
+      '.bar .state.run{color:${T.accent};animation:blink 1s steps(2) infinite}',
+      '.bar .fill{flex:1}',
+      '.btn{color:${T.ink3};cursor:pointer;padding:0 2px}',
+      '.btn:hover{color:${T.onAccent};background:${T.accent};text-shadow:none}',
+      '.body{padding:6px 10px 8px}',
+      '.k{color:${T.ink3}}',
+      '.goal{color:${T.ink};font-weight:700}',
+      '.thought{color:${T.ink2}}',
+      '.doing{color:${T.accent}}',
+      '.cursor{display:inline-block;width:.6em;height:1.05em;margin-left:2px;vertical-align:-2px;background:${T.accent};animation:blink 1s steps(2) infinite}',
+      '@keyframes blink{50%{opacity:0}}',
+      '.rule{display:flex;gap:6px;color:${T.ink3};padding:0 8px;border-top:1px solid ${T.paper};margin-top:2px}',
+      '.rule .t{color:${T.ink3}}',
+      '.rows{max-height:200px;overflow-y:auto;padding:2px 0 4px;scrollbar-width:thin;scrollbar-color:${T.accent} transparent}',
+      '.row{display:grid;grid-template-columns:3ch 8ch 7ch 1fr 1.5ch 6ch;gap:6px;padding:0 8px;cursor:pointer}',
+      '.row:hover{background:${T.paper}}',
+      '.row.new{animation:fresh 1.2s ease-out}',
+      '@keyframes fresh{from{background:rgba(165,150,214,.28)}to{background:transparent}}',
+      '.row .n,.row .at,.row .ms{color:${T.ink3}}',
+      '.row .ms{text-align:right}',
+      '.row .cmd{color:${T.accent}}',
+      '.row .what{color:${T.ink};overflow-wrap:anywhere}',
+      '.ok{color:${T.good}}.no{color:${T.bad}}',
+      '.detail{padding:0 8px 4px 23ch;color:${T.ink2};white-space:pre-wrap;overflow-wrap:anywhere}',
+      '.detail .no{color:${T.bad}}',
+    ].join('');
+    root.appendChild(style);
+    for (const { n, box } of s.boxes) {
+      const b = el('div', 'box', null, at(box) + 'border-color:${T.accent}');
+      b.appendChild(el('div', 'tag', String(n), box.y < 14 ? 'top:0' : 'top:-14px'));
+      root.appendChild(b);
+    }
+    if (s.target) root.appendChild(el('div', 'target', null, at(s.target)));
+    const tui = el('div', 'tui' + (s.busy ? ' busy' : ''), null, ui.right ? 'right:12px' : 'left:12px');
+    const bar = el('div', 'bar');
+    bar.appendChild(el('span', 'name', '▌autobrowse'));
+    bar.appendChild(el('span', 'state' + (s.busy ? ' run' : ''), s.busy ? '● run' : '○ idle'));
+    if (s.step) bar.appendChild(el('span', 'k', 'step ' + s.step));
+    bar.appendChild(el('span', 'fill'));
+    const btn = (a, t) => { const b = el('span', 'btn', t); b.setAttribute('data-a', a); return b; };
+    bar.appendChild(btn('move', ui.right ? '[⇤]' : '[⇥]'));
+    bar.appendChild(btn('min', ui.min ? '[+]' : '[_]'));
+    tui.appendChild(bar);
+    if (!ui.min) {
+      const body = el('div', 'body');
+      const line = (k, cls, t) => { const d = el('div'); d.appendChild(el('span', 'k', k)); d.appendChild(el('span', cls, t)); return d; };
+      if (s.goal) body.appendChild(line('goal ', 'goal', s.goal));
+      if (s.thought) body.appendChild(line('» ', 'thought', s.thought));
+      const d = line('$ ', 'doing', s.doing || (s.busy ? '' : 'waiting for the agent'));
+      if (s.busy || !s.doing) d.appendChild(el('span', 'cursor'));
+      body.appendChild(d);
+      tui.appendChild(body);
+      const rule = el('div', 'rule');
+      rule.appendChild(el('span', 't', '─ trace'));
+      rule.appendChild(el('span', 't', String(s.trace.length)));
+      rule.appendChild(el('span', 'fill', null, 'flex:1'));
+      rule.appendChild(btn('trace', ui.trace ? '[▾]' : '[▸]'));
+      tui.appendChild(rule);
+      if (ui.trace && s.trace.length) {
+        const rows = el('div', 'rows');
+        const newest = s.trace[s.trace.length - 1].n;
+        for (const r of s.trace.slice().reverse()) {
+          const row = el('div', 'row' + (r.n === newest && ui.seen !== newest ? ' new' : ''));
+          row.setAttribute('data-a', 'row:' + r.n);
+          row.appendChild(el('span', 'n', String(r.n)));
+          row.appendChild(el('span', 'at', r.at));
+          row.appendChild(el('span', 'cmd', r.cmd));
+          row.appendChild(el('span', 'what', r.what));
+          row.appendChild(el('span', r.ok ? 'ok' : 'no', r.ok ? '✓' : '✗'));
+          row.appendChild(el('span', 'ms', r.ms < 1000 ? r.ms + 'ms' : (r.ms / 1000).toFixed(1) + 's'));
+          rows.appendChild(row);
+          if (ui.open === r.n && r.detail.length) {
+            const det = el('div', 'detail');
+            for (const t of r.detail) det.appendChild(el('div', t.startsWith('error') ? 'no' : '', t));
+            det.setAttribute('data-a', 'row:' + r.n);
+            rows.appendChild(det);
+          }
+        }
+        ui.seen = newest;
+        tui.appendChild(rows);
+        rows.scrollTop = ui.scroll;
+      }
+    }
+    root.appendChild(tui);
+    document.documentElement.appendChild(host);
+    ui.host = host;
+    ui.root = root;
+  };
+  ui.draw(s);
 })()`;
 
 const clipLine = (s: string | null | undefined, n: number) =>
@@ -82,9 +235,14 @@ export function overlayFor(enabled: boolean) {
   const attr = `data-o${randomBytes(4).toString("hex")}`;
   let state: OverlayState = { ...EMPTY };
   let drawn = false;
+  const paint = (page: Page, s: OverlayState | undefined) =>
+    Promise.race([
+      page.evaluate(layerScript(attr, s)).catch(() => undefined),
+      new Promise((r) => setTimeout(r, DRAW_MS).unref()),
+    ]);
   const draw = async (page: Page) => {
     if (!enabled) return;
-    await page.evaluate(layerScript(attr, state)).catch(() => undefined);
+    await paint(page, state);
     drawn = true;
   };
   const boxOf = async (page: Page, hints: Hints): Promise<Box | null> => {
@@ -111,7 +269,7 @@ export function overlayFor(enabled: boolean) {
     ): Promise<{ drawn: boolean; boxes?: number }> {
       if (!enabled) return { drawn: false };
       const { refs, clear, ...fields } = patch;
-      if (clear) state = { ...EMPTY };
+      if (clear) state = { ...EMPTY, trace: state.trace, busy: state.busy };
       for (const [k, v] of Object.entries(fields))
         if (v !== undefined) (state as unknown as Record<string, unknown>)[k] = clipLine(v, 240);
       if (refs) {
@@ -123,6 +281,23 @@ export function overlayFor(enabled: boolean) {
       }
       await draw(page);
       return { drawn: true, boxes: state.boxes.length };
+    },
+    /** A command starts: the panel goes inert before the act can reach the page. */
+    async begin(page: Page): Promise<void> {
+      if (!enabled) return;
+      state.busy = true;
+      if (drawn) await draw(page);
+    },
+    /** A command ended: its row joins the trace and the panel takes clicks again. */
+    async end(page: Page, row: Omit<TraceRow, "n" | "at">): Promise<void> {
+      if (!enabled) return;
+      const n = (state.trace.at(-1)?.n ?? 0) + 1;
+      const at = new Date().toTimeString().slice(0, 8);
+      state.trace = [...state.trace, { ...row, n, at }].slice(-TRACE_KEEP);
+      state.busy = false;
+      // The row holds the act now; the line waits for the next.
+      state.doing = null;
+      await draw(page);
     },
     /** Before an act: the target flashes and the panel says what is done. */
     async flash(page: Page, hints: Hints, doing: string): Promise<void> {
@@ -146,7 +321,7 @@ export function overlayFor(enabled: boolean) {
     /** `fn` runs with the layer off: a screenshot shows the page, not us. */
     async around<T>(page: Page, fn: () => Promise<T>): Promise<T> {
       if (!enabled || !drawn) return fn();
-      await page.evaluate(layerScript(attr, undefined)).catch(() => undefined);
+      await paint(page, undefined);
       try {
         return await fn();
       } finally {
@@ -158,9 +333,56 @@ export function overlayFor(enabled: boolean) {
       if (!drawn) return;
       drawn = false;
       state = { ...EMPTY };
-      await page.evaluate(layerScript(attr, undefined)).catch(() => undefined);
+      await paint(page, undefined);
     },
   };
 }
 
 export type Overlay = ReturnType<typeof overlayFor>;
+
+const hintLabel = (h: Record<string, unknown>): string => {
+  const said = h.name ?? h.text ?? h.placeholder ?? h.id ?? h.testId ?? h.href ?? h.css;
+  return [h.role, said === undefined ? null : `"${String(said)}"`, h.mark ? `mark ${h.mark}` : null]
+    .filter(Boolean)
+    .join(" ");
+};
+
+/** Host and path: a query string may carry a token. */
+const shortUrl = (u: string): string => {
+  try {
+    const x = new URL(u);
+    return `${x.host}${x.pathname}`;
+  } catch {
+    return u;
+  }
+};
+
+/** A command as one trace row: what it aimed at, never a typed value. */
+export function traceRow(c: Command, failed: unknown, ms: number): Omit<TraceRow, "n" | "at"> {
+  const f = c as unknown as Record<string, unknown>;
+  const hints = (f.hints ?? null) as Record<string, unknown> | null;
+  const aim =
+    c.cmd === "open"
+      ? shortUrl(String(f.url))
+      : c.cmd === "place"
+        ? `${String(f.secret)} → ${hints ? hintLabel(hints) : "focus"}`
+        : c.cmd === "type"
+          ? `${String(f.text ?? "").length} chars`
+          : c.cmd === "key" || c.cmd === "press"
+            ? String(f.key)
+            : c.cmd === "batch"
+              ? `${(f.cmds as unknown[]).length} commands`
+              : c.cmd === "os"
+                ? String((f.act as { kind?: string }).kind)
+                : String(
+                    f.as ?? f["env"] ?? f.name ?? f.outcome ?? (hints ? hintLabel(hints) : ""),
+                  );
+  const what = typeof f.goal === "string" && f.goal ? `${f.goal} · ${aim}` : aim;
+  const detail = [
+    ...(hints ? [`target ${JSON.stringify(hints)}`] : []),
+    ...(failed
+      ? [`error ${clipLine(failed instanceof Error ? failed.message : String(failed), 400)}`]
+      : []),
+  ];
+  return { cmd: c.cmd, what: clipLine(what, 200) ?? "", ok: !failed, ms: Math.round(ms), detail };
+}

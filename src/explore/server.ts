@@ -146,7 +146,7 @@ import {
 import { type Journaled, readJournal } from "./journal.js";
 import { DEFAULT_IDLE_MINUTES } from "./lease.js";
 import { marksFor, missed } from "./marks.js";
-import { overlayFor } from "./overlay.js";
+import { overlayFor, traceRow } from "./overlay.js";
 
 export { type Command, commandSchema, placeHint } from "./commands.js";
 export { journalFileFor, readJournal, tokenFileFor } from "./journal.js";
@@ -1313,6 +1313,9 @@ async function serve(
     page = fp.page;
     if (IMMEDIATE.has(c.cmd)) return act(c, wait);
     busy++;
+    const began = now();
+    let failed: unknown = null;
+    await overlay.begin(page);
     try {
       const helped = await helpedSince();
       if (history && LOOKED_AT.has(c.cmd)) lookBefore = await lookAt(page).catch(() => null);
@@ -1330,7 +1333,11 @@ async function serve(
       return helped && out.answer && typeof out.answer === "object" && !Array.isArray(out.answer)
         ? { helped, ...out.answer }
         : out.answer;
+    } catch (err) {
+      failed = err;
+      throw err;
     } finally {
+      await overlay.end(fp.page, traceRow(c, failed, now() - began));
       busy--;
       quietAt = now() + HAND_GRACE_MS;
       lookBefore = null;
