@@ -4,10 +4,12 @@
  * reads, `code` is what a program branches on (`ErrorCode`), `issues` lists
  * each bad field. Statuses follow HTTP: 400 bad input, 401 no key, 403 not
  * yours, 404 no such thing, 409 not now, 413 too big, 415 not JSON, 429 slow
- * down, 501 not set up on this worker, 502 the site behind it failed.
+ * down, 501 not set up on this worker, 502 the site behind it failed. A site
+ * call's refusal may carry an access code instead (`need_login`: the site, not this API).
  */
 import type { Context } from "hono";
 import { z } from "zod";
+import type { AccessCode } from "../browser/session.js";
 
 export type ErrorCode =
   | "bad_request"
@@ -25,7 +27,8 @@ export type ErrorCode =
   | "internal"
   | "not_configured"
   | "upstream_error"
-  | "unavailable";
+  | "unavailable"
+  | AccessCode;
 
 const CODE_OF: Record<number, ErrorCode> = {
   400: "bad_request",

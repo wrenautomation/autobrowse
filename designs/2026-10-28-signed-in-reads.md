@@ -62,6 +62,20 @@ ad-account risk.
 send Chrome's user agent, headers and TLS. A Chrome user agent on weaver's own fetcher would save a
 desk call per blocked page, but it hides who reads. Revisit if the desk's `fetch` bucket runs out.
 
+**Access codes (10-29, WA-958).** From Agent-Reach's fixed codes. A failed read says what the
+caller does next: `need_login` (401), `platform_blocked` (403), `rate_limited` (429),
+`upstream_broken` (502). The runner's wall check already knew a login page from a captcha;
+`NeedsHuman` now keeps the wall's kind, and on a GET the facade turns it into a coded
+`SiteError`. A flow throws `AccessRefused` for what it reads off a page (reddit's read). Before,
+a login wall or a captcha on a read was not terminal: Restate retried it for hours and weaver
+gave up at 180 s with "the worker did not answer". The code rides as `code` on HTTP and as
+`metadata.code` on Restate's terminal error (Restate 1.6+; the box runs 1.7). Options weighed for
+the Restate hop: the HTTP status alone (403 already means the spend policy said no), a tagged
+message head (works everywhere, parsed from prose), error metadata (typed, kept in the journal).
+Pick metadata. autobrowse detects, so it owns the list; weaver reads it and decides. weaver's
+reddit reader reads signed in on `need_login`, `platform_blocked` or an uncoded miss, never on
+`rate_limited` (that would move the volume onto the account) or `upstream_broken`.
+
 ## Not done
 
 - B (signed-in render). Build when a site with no route keeps blocking.

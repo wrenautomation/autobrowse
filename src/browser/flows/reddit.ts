@@ -22,6 +22,7 @@
 import { already } from "../attempt.js";
 import { defineFlow, type FlowPage } from "../flow.js";
 import type { Hints } from "../locate.js";
+import { AccessRefused } from "../session.js";
 import { passCaptcha } from "./kit.js";
 import {
   type CommentStat,
@@ -465,7 +466,14 @@ export const redditRead = defineFlow<ReadInput, unknown>({
       const viaFeed = await readFeed(fp, path, q);
       if (viaFeed !== undefined) return viaFeed;
     }
-    if (got.status !== 200) throw new Error(`reddit read ${path}: HTTP ${got.status}`);
+    if (got.status !== 200) {
+      const said = `reddit read ${path}: HTTP ${got.status}`;
+      if (got.status === 429) throw new AccessRefused("rate_limited", said);
+      if (got.status === 401 || got.status === 403)
+        throw new AccessRefused(signedOut ? "platform_blocked" : "need_login", said);
+      if (got.status >= 500) throw new AccessRefused("upstream_broken", said);
+      throw new Error(said);
+    }
     const out = read.slim(got.body);
     if (path === "/api/me" && !(out as Obj).name)
       return fp.human(

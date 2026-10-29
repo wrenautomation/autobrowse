@@ -172,6 +172,10 @@ export function sentWords(message: string, submitted: boolean): string {
   return submitted ? `${message}; ${MAY_HAVE_GONE_THROUGH}` : `${NOT_SENT}${message}`;
 }
 
+/** A coded SiteError's code as Restate error metadata (`metadata.code` in the ingress answer). */
+const codeOf = (err: unknown): { metadata?: Record<string, string> } =>
+  err instanceof SiteError && err.code ? { metadata: { code: err.code } } : {};
+
 /**
  * A SiteError is the caller's to read (404 route, 400 request, 501 no leg, 409 blocked, 502 failed),
  * and so is a platform's lasting refusal; nothing else is.
@@ -199,10 +203,14 @@ async function terminalOnSiteError<T>(
       const message = err instanceof Error ? err.message : String(err);
       throw new restate.TerminalError(status < 500 ? message : sentWords(message, t.submitted), {
         errorCode: status,
+        ...codeOf(err),
       });
     }
     if (err instanceof SiteError || lastingRefusal(err))
-      throw new restate.TerminalError(err.message, { errorCode: err.status });
+      throw new restate.TerminalError(err.message, {
+        errorCode: err.status,
+        ...codeOf(err),
+      });
     if (attempt !== undefined && attempt >= API_READ_TRIES && err instanceof HttpError)
       throw new restate.TerminalError(err.message, {
         errorCode: err.status >= 400 ? err.status : 502,
@@ -464,6 +472,7 @@ export function sitesService(
           journal.forget(key);
           throw new restate.TerminalError(err.status < 500 ? why : sentWords(why, false), {
             errorCode: err.status,
+            ...codeOf(err),
           });
         }
         return { end: journal.settle(key, notSent(why, "before_submit")) };

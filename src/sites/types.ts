@@ -11,6 +11,7 @@
 import type { z } from "zod";
 import type { IdentityProvider } from "../auth/identities.js";
 import type { Render } from "../browser/render.js";
+import type { AccessCode } from "../browser/session.js";
 import type { HttpClient } from "../clients/http.js";
 import type { Amount } from "../gates/spend.js";
 import type { KeySource, SpentKeys } from "../reach/key-ring.js";
@@ -284,11 +285,15 @@ export class SiteError extends Error {
   readonly status: number;
   /** Seconds until the call can succeed (a 429 over a daily cap). */
   readonly retryAfter?: number;
-  constructor(status: number, message: string, retryAfter?: number) {
+  /** What the caller does next; a 429 is `rate_limited` unless said otherwise. */
+  readonly code?: AccessCode;
+  constructor(status: number, message: string, retryAfter?: number, code?: AccessCode) {
     super(message);
     this.name = "SiteError";
     this.status = status;
     if (retryAfter !== undefined) this.retryAfter = retryAfter;
+    const c = code ?? (status === 429 ? "rate_limited" : undefined);
+    if (c) this.code = c;
   }
 }
 

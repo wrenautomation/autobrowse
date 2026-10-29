@@ -88,6 +88,7 @@ function siteError(c: Context, err: unknown) {
     if (err.retryAfter !== undefined) c.header("Retry-After", String(err.retryAfter));
     return fail(c, err.status, err.message, {
       ...(err.status === 404 ? { code: "not_found" as const } : {}),
+      ...(err.code ? { code: err.code } : {}),
       ...(err.retryAfter !== undefined ? { retryAfter: err.retryAfter } : {}),
     });
   }

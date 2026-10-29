@@ -36,9 +36,36 @@ const chromium = async () =>
 export class NeedsHuman extends Error {
   /** Set by the runner, not the flow: where the screenshot and trace went. */
   artifacts: Artifacts = {};
-  constructor(reason: string) {
+  constructor(
+    reason: string,
+    /** The wall that stopped the flow, when one did: a read maps it to an access code. */
+    readonly wall?: Wall["kind"],
+  ) {
     super(safeUrls(reason));
     this.name = "NeedsHuman";
+  }
+}
+
+/**
+ * Why a read failed, as words the caller acts on (weaver, wren): sign in, try another way,
+ * wait, or report the site broke. One list on both sides of the seam.
+ */
+export const ACCESS_CODES = [
+  "need_login",
+  "platform_blocked",
+  "rate_limited",
+  "upstream_broken",
+] as const;
+export type AccessCode = (typeof ACCESS_CODES)[number];
+
+/** A flow's read the site refused for a known reason; the runner passes it on unwrapped. */
+export class AccessRefused extends Error {
+  constructor(
+    readonly code: AccessCode,
+    reason: string,
+  ) {
+    super(safeUrls(reason));
+    this.name = "AccessRefused";
   }
 }
 

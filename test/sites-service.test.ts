@@ -36,6 +36,7 @@ const facade: SiteFacade = {
   call: async (site, method, path, input, _account, from) => {
     calls.push({ site, method, path, input, from, call: currentCall() });
     if (path === "/rest/boom") throw new SiteError(502, "workflow failed");
+    if (path === "/rest/walled") throw new SiteError(401, "signed out", undefined, "need_login");
     if (path === "/rest/half") {
       markSubmitted();
       throw new Error("page closed after Post");
@@ -111,6 +112,10 @@ describe("sites service", () => {
     await expect(
       h.call?.(ctx, { site: "linkedin", method: "GET", path: "/rest/boom" }),
     ).rejects.toMatchObject({ name: "TerminalError", code: 502 });
+    // A coded one carries its code as metadata, for the caller past the ingress.
+    await expect(
+      h.call?.(ctx, { site: "linkedin", method: "GET", path: "/rest/walled" }),
+    ).rejects.toMatchObject({ name: "TerminalError", code: 401, metadata: { code: "need_login" } });
     await expect(
       h.call?.(ctx, { site: "linkedin", method: "GET", path: "/rest/flaky" }),
     ).rejects.toMatchObject({ name: "Error", message: "socket hang up" });

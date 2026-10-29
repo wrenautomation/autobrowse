@@ -70,6 +70,7 @@ import {
 } from "./screens.js";
 import { holdsSecret } from "./secrets.js";
 import {
+  AccessRefused,
   type Artifacts,
   type BrowserOptions,
   bodyText,
@@ -1070,10 +1071,10 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
                   .catch(() => undefined);
                 continue;
               }
-              throw new NeedsHuman(`${flow.site}: captcha (${got.reason})${after}`);
+              throw new NeedsHuman(`${flow.site}: captcha (${got.reason})${after}`, "captcha");
             }
             if (wall.kind === "captcha" || !runner.login || signingIn || attempt > 2)
-              throw new NeedsHuman(`${flow.site}: ${wall.detail}${after}`);
+              throw new NeedsHuman(`${flow.site}: ${wall.detail}${after}`, wall.kind);
             signingIn = true;
             try {
               const login = runner.login;
@@ -1082,7 +1083,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
                 () => login(fp, flow.site),
               );
               if (outcome !== "signed-in")
-                throw new NeedsHuman(`${flow.site}: ${wall.detail} (${outcome})`);
+                throw new NeedsHuman(`${flow.site}: ${wall.detail} (${outcome})`, wall.kind);
             } finally {
               signingIn = false;
             }
@@ -1202,6 +1203,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
             err.artifacts = artifacts;
             throw err;
           }
+          if (err instanceof AccessRefused) throw err;
           if (kind === "interrupted") {
             broken = true;
             throw new FlowInterrupted(`${flow.site}/${flow.name}`, err, artifacts);

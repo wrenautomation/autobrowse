@@ -18,6 +18,7 @@ import { currentCall, type DoneActs, markSubmitted } from "../browser/attempt.js
 import { profileBusyOf } from "../browser/browsers.js";
 import type { BrowserFlow, FlowRunner, HeldTab } from "../browser/flow.js";
 import type { Render } from "../browser/render.js";
+import { type AccessCode, AccessRefused, NeedsHuman } from "../browser/session.js";
 import { type HttpClient, HttpError, lastingRefusal } from "../clients/http.js";
 import type { SecretSink } from "../deps/sink.js";
 import { type JsonSchema, jsonSchemaOf } from "../engine/inputs.js";
@@ -60,6 +61,28 @@ import {
 } from "./types.js";
 import { withLocalFile } from "./upload-file.js";
 import type { NoVerify, RouteVerify } from "./verdict.js";
+
+const CODE_STATUS: Record<AccessCode, number> = {
+  need_login: 401,
+  platform_blocked: 403,
+  rate_limited: 429,
+  upstream_broken: 502,
+};
+
+/**
+ * A browser leg's failure on a read, as a coded SiteError: a flow's `AccessRefused`, or a wall
+ * the runner met (login → `need_login`, a captcha left → `platform_blocked`). Lasting, so terminal:
+ * Restate would retry it for hours. Anything else stays as it was.
+ */
+export function accessError(err: unknown): SiteError | null {
+  if (err instanceof AccessRefused)
+    return new SiteError(CODE_STATUS[err.code], err.message, undefined, err.code);
+  if (err instanceof NeedsHuman && err.wall) {
+    const code = err.wall === "captcha" ? "platform_blocked" : "need_login";
+    return new SiteError(CODE_STATUS[code], err.message, undefined, code);
+  }
+  return null;
+}
 
 export interface SiteFacadeDeps {
   http: HttpClient;
@@ -903,9 +926,12 @@ export function siteFacade(sites: readonly SiteApi[], deps: SiteFacadeDeps): Sit
             } finally {
               await armed.release();
             }
-          const out = r.browser.uploads
-            ? await withLocalFile(input as Record<string, unknown>, r.browser.uploads, run)
-            : await run(input);
+          const out = await (r.browser.uploads
+            ? withLocalFile(input as Record<string, unknown>, r.browser.uploads, run)
+            : run(input)
+          ).catch((e: unknown) => {
+            throw (method === "GET" && accessError(e)) || e;
+          });
           return r.browser.output ? r.browser.output(out) : out;
         }
         if (lacks.length)
