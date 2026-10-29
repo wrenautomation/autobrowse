@@ -413,8 +413,9 @@ const NAVIGATE_MS = 90_000;
  * before that would call an unauthenticated page "signed in".
  */
 async function settle(page: Page, url: string): Promise<void> {
-  markReached();
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAVIGATE_MS });
+  // after the load: a goto that fails offline reached nothing
+  markReached();
   await page.waitForLoadState("networkidle", { timeout: SETTLE_MS }).catch(() => undefined);
 }
 
