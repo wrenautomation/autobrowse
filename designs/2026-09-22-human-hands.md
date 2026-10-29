@@ -68,3 +68,4 @@ settings still turns it all off.
 ## Decision log
 
 - **2026-10-28: one seed per run (William asked).** mulberry32 on a fresh 32-bit seed. The run row keeps it; `AUTOBROWSE_SEED=<seed>` replays it. Options: (a) `Math.random`, no replay; (b) one fixed seed, where every run moves the same way and that is a fingerprint; (c) a fresh seed per run, kept. Picked (c). Each run gets its own hands, so two runs at once never share a stream. Limit: a replay is exact only on the same page, because the draw order follows the layout (off-screen wheel, wander).
+- **2026-10-28: key holds stay 65–95 ms at 2x (William).** `brisk(CALM_PACE, 2)` halved holds to 23–60 ms, below a fast typist's 60–90. Holds now sit at the high end; the rest stays 2x. Typing drops from ~120 to ~90 wpm on average. William types 160, so 2x speed elsewhere is fine.

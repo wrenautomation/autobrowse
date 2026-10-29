@@ -149,7 +149,9 @@ export function brisk(p: Pace, k: number): Pace {
 }
 
 /** Twice the calm pace (William 10-28: "I move really fast"). */
-export const HUMAN_PACE: Pace = brisk(CALM_PACE, 2);
+const brisker = brisk(CALM_PACE, 2);
+/** Key holds stay a fast typist's (60–90 ms); halved they read as a machine. */
+export const HUMAN_PACE: Pace = { ...brisker, typing: { ...brisker.typing, hold: [65, 95] } };
 
 /**
  * For a film: the pace of a demo. No slips, no stalls, no wander while
