@@ -41,6 +41,21 @@ describe("idle tracker", () => {
     expect(seen).toEqual([true]);
     expect(idle.busy()).toBe(false);
   });
+
+  it("a sync method answers as it is, not as a Promise", async () => {
+    const idle = idleTracker();
+    const facade = holding(idle, {
+      sendSpec: () => ({ irreversible: true }),
+      bad: (): number => {
+        throw new Error("no route");
+      },
+    });
+    expect(facade.sendSpec()).toEqual({ irreversible: true });
+    expect(() => facade.bad()).toThrow("no route");
+    // let go a microtask later, as an async method's hold is
+    await Promise.resolve();
+    expect(idle.busy()).toBe(false);
+  });
 });
 
 describe("idle stop", () => {

@@ -39,14 +39,35 @@ export function idleTracker(now: () => number = Date.now): Idle {
   };
 }
 
-/** A FlowRunner or SiteFacade whose every method runs under a hold. */
+/**
+ * A FlowRunner or SiteFacade whose every async method runs under a hold. A sync method answers
+ * as it is: wrapped, `sendSpec` came back a Promise, so every desk write lost its verify read,
+ * its `sentAs` id and its irreversible flag (10-16 to 10-30).
+ */
 export function holding<T extends object>(idle: Idle, target: T): T {
   return new Proxy(target, {
     get(t, prop, receiver) {
       const v = Reflect.get(t, prop, receiver) as unknown;
       if (typeof v !== "function") return v;
-      return (...args: unknown[]) =>
-        idle.hold(() => (v as (...a: unknown[]) => Promise<unknown>).apply(t, args));
+      return (...args: unknown[]) => {
+        // `hold` calls fn before its first await: a sync answer is known when it returns.
+        let sync: { value: unknown } | { error: unknown } | null = null;
+        const held = idle.hold(async () => {
+          let out: unknown;
+          try {
+            out = (v as (...a: unknown[]) => unknown).apply(t, args);
+          } catch (error) {
+            sync = { error };
+            return;
+          }
+          if (out instanceof Promise) return out;
+          sync = { value: out };
+        });
+        const got = sync as { value: unknown } | { error: unknown } | null;
+        if (!got) return held;
+        if ("error" in got) throw got.error;
+        return got.value;
+      };
     },
   });
 }
