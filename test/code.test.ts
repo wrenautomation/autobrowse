@@ -1,4 +1,8 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { fileCodeStores } from "../src/browser/attempt.js";
 import { type CodeCall, CodeFailed, memoryStore, runCode } from "../src/browser/code.js";
 import type { FlowPage } from "../src/browser/flow.js";
 import { NeedsHuman } from "../src/browser/session.js";
@@ -213,5 +217,20 @@ if (!plan.fixed) throw new Error("fix me");`;
     const { fp } = fake();
     const err = await runCode(fp, { code: `eval("1")` }).catch((e) => e);
     expect(err).toBeInstanceOf(CodeFailed);
+  });
+
+  it("under a durable call the store is on disk: a retry in a new process skips the done act", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "code-calls-"));
+    try {
+      const { fp, calls } = fake();
+      const code = `await fp.act({kind:"click"}, {css:"post"}, {goal:"post"});`;
+      const on = (stores: ReturnType<typeof fileCodeStores>) =>
+        ({ ...fp, codeStore: (scope: string) => stores("inv-1 step", scope) }) as FlowPage;
+      await runCode(on(fileCodeStores(dir)), { code });
+      await runCode(on(fileCodeStores(dir)), { code });
+      expect(calls).toEqual(["act click post"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

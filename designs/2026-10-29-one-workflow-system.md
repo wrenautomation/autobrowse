@@ -86,7 +86,7 @@ Named `code`, not `script`: the op kind `script` already means page JS (`browser
 - Keys use what a call does, not its place in the code. An edit to the code still finds the saved pages.
 - `open` is lazy: it navigates before the next live call, even to the URL the page is on. A run of only saved calls ends with one navigation to the last `open`.
 - Acts: see "Acts in a rerun" below.
-- Explore's store is a file beside the journal, scoped by `as` and the plan; it goes with the journal on close. `fresh` starts over. A compiled run's store is in memory for now.
+- Explore's store is a file beside the journal, scoped by `as` and the plan; it goes with the journal on close. `fresh` starts over. A compiled run's store is on disk per durable call (see "Acts in a rerun").
 - `wait` after an `open` not yet loaded is held, and runs once the page loads: a replay waits for nothing.
 - A sandbox `records` is checked as the command is: a required field empty on most rows fails the call.
 - Limits: 30 min and 20,000 calls a run, checked at each call. The vm timeout (5 s) stops only sync code before the first `await`: a sync loop after one is not stopped.
@@ -108,7 +108,7 @@ A rerun must not do a site change twice, and must not read the wrong page after 
 - A view act on a loaded page runs live and is queued too, for a later rebuild.
 - An effect act's change to the page with no new URL (a modal it opens) is not rebuilt. The next live call fails on the missing control, and the agent marks the act or moves it.
 - `fresh` forgets the done acts too: they run again.
-- Limit: a compiled run keeps its store in memory, so a crash and retry does its acts again. This waits for the run recorder (WA-963) to give compiled runs a lasting store.
+- A compiled run under a durable call (an engine step: invocation id + step) keeps its store on disk: `fileCodeStores`, one jsonl per call and code, under `<artifactsDir>/code-calls`, aged out after 7 days like `done-acts`. A Restate retry of the step skips the reads and acts the last try finished. A local run (no call) keeps it in memory.
 
 Built (WA-969, 2026-10-30): `browser/code.ts`; `started` on the `code` command.
 
@@ -237,3 +237,5 @@ Cost: one more in-process call per leg (`advance` on memory effects), under 1 ms
 - 2026-10-30: A `started` act with no `done` stops the run; the agent says `ran` or `redo`. We never guess that a site change did or did not happen.
 - 2026-10-30: The flag is `view`, not `again`: a recorded click's `again` already means "the same control after the page changed".
 - 2026-10-30: `hover` is an act (William): a view act in `code`.
+- 2026-10-30: A compiled `code` keeps its store per durable call on disk, beside `done-acts`, not in the run recorder: the call key is already the retry's identity, and the store is resume state, not history.
+- 2026-10-30: The hand-written legs stay as they are. They read the site's state and act only on the difference, and the engine runs one `fx.run` per item: that is option B done right by hand, stronger than a journal. Moving them into `code` would lose types and checks.

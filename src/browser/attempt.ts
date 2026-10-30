@@ -10,6 +10,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import {
+  appendFileSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -19,6 +20,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import type { CodeStore } from "./code.js";
 
 /** One try of a durable call: its key, and whether its submit step started. */
 export interface CallTry {
@@ -158,5 +160,42 @@ export function fileDoneActs(dir: string, now: () => number = Date.now): DoneAct
       const acts = [...(read(call)?.acts ?? []), act];
       writeCallFile(dir, call, { at: now(), acts }, now);
     },
+  };
+}
+
+/**
+ * `code`'s saved calls and act marks per durable call (`browser/code.ts`): a Restate retry of the
+ * step skips the reads and acts the last try finished. One jsonl per call and scope, appended
+ * at each set, so `started` is on disk before the act; aged out like `fileDoneActs`.
+ */
+export function fileCodeStores(
+  dir: string,
+  now: () => number = Date.now,
+): (call: string, scope: string) => CodeStore {
+  return (call, scope) => {
+    const file = callFile(dir, `${call} ${scope}`).replace(/\.json$/, ".jsonl");
+    const saved = new Map<string, { value: unknown }>();
+    try {
+      for (const line of readFileSync(file, "utf8").split("\n")) {
+        if (!line) continue;
+        const row = JSON.parse(line) as { key: string; value: unknown };
+        saved.set(row.key, { value: row.value });
+      }
+    } catch {
+      // none yet, or cut mid line by a crash: what was read stands
+    }
+    let ready = false;
+    return {
+      get: (key) => saved.get(key),
+      set(key, value) {
+        if (!ready) {
+          mkdirSync(dir, { recursive: true, mode: 0o700 });
+          ageOut(dir, now);
+          ready = true;
+        }
+        saved.set(key, { value });
+        appendFileSync(file, `${JSON.stringify({ key, value })}\n`, { mode: 0o600 });
+      },
+    };
   };
 }

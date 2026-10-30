@@ -135,7 +135,8 @@ export async function runCode(
   src: { code: string; plan?: Record<string, unknown> },
   o: CodeOptions = {},
 ): Promise<CodeResult> {
-  const store = o.store ?? memoryStore();
+  // A compiled run under a durable call keeps its store on disk: a retry goes on from there.
+  const store = o.store ?? fp.codeStore?.(planScope(src)) ?? memoryStore();
   const seen = new Map<string, number>();
   const rows: unknown[] = [];
   const max = o.maxCalls ?? MAX_CALLS;

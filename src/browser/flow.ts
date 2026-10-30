@@ -28,6 +28,7 @@ import { failureShape, firstTraceOfShape } from "../shots/traces.js";
 import { currentCall, currentReach, type DoneActs, markReached, markSubmitted } from "./attempt.js";
 import { bare } from "./bare.js";
 import { type CaptchaOutcome, type Eyes, solveCaptcha } from "./captcha/index.js";
+import type { CodeStore } from "./code.js";
 import { filmLog, filmStep } from "./film.js";
 import { type Fixes, flowKey } from "./fixes.js";
 import {
@@ -203,6 +204,8 @@ export interface FlowPage {
   newIp(): Promise<boolean>;
   /** Stop here and ask a person. */
   human(reason: string): never;
+  /** Under a durable call: `code`'s store for `scope`, kept across retries. Null on a local run. */
+  codeStore?(scope: string): CodeStore | null;
   /** What a screens walk asks of the runner: the page's shape, learned screens, a model (`browser/screens`). */
   screens?: ScreenHelp;
   /** The session's page calls, redacted (`browser/network`); absent in fakes. */
@@ -334,6 +337,8 @@ export interface RunnerOptions {
   screenReader?: ScreenReader | null;
   /** Irreversible acts a durable call already did: a retry never does them twice (`browser/attempt`). */
   done?: DoneActs;
+  /** `code`'s saved calls and acts per durable call: a retry goes on where the last try ended (`fileCodeStores`). */
+  codeStores?: (call: string, scope: string) => CodeStore;
   /** Every failure record written (kind failed/human/interrupted): what healing starts from. */
   onFailure?: (record: FailureRecord, file: string) => void;
   locks?: KeyedMutex;
@@ -852,6 +857,7 @@ export function flowRunner(opts: BrowserOptions, runner: RunnerOptions = {}): Fl
               async () => (await session.newIp?.()) ?? false,
               (got) => (got ? "ok" : "failed"),
             ),
+          codeStore: (scope) => (call && runner.codeStores ? runner.codeStores(call, scope) : null),
           human(reason) {
             throw new NeedsHuman(`${flow.site}: ${reason}`);
           },

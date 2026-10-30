@@ -3,7 +3,7 @@
 import { dirname, join } from "node:path";
 import type { CredentialStore } from "credvault";
 import type { Logger } from "pino";
-import { fileDoneActs } from "../browser/attempt.js";
+import { fileCodeStores, fileDoneActs } from "../browser/attempt.js";
 import type { FlowRunner } from "../browser/flow.js";
 import { flowRunner } from "../browser/flow.js";
 import { handsFor } from "../browser/human/index.js";
@@ -281,6 +281,7 @@ export async function buildApp(settings: Settings, log: Logger): Promise<App> {
       learnedScreens: screensFor(settings),
       screenReader: llm ? llmScreenReader(llm) : null,
       done: fileDoneActs(join(expandHome(settings.artifactsDir), "done-acts")),
+      codeStores: fileCodeStores(join(expandHome(settings.artifactsDir), "code-calls")),
       onRepair: (r) =>
         log.warn(
           { repair: r },
