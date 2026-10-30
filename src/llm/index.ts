@@ -20,7 +20,7 @@ export interface LlmSettings {
 }
 
 export const DEFAULT_MODELS: Record<LlmProvider, string> = {
-  anthropic: "claude-sonnet-5",
+  anthropic: "claude-sonnet-5-5",
   openai: "gpt-5",
   /** Cohere's own door, so a thinking model's answer is not merged into its reasoning. */
   cohere: "command-a-plus-05-2026",
