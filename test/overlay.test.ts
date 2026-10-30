@@ -135,7 +135,7 @@ describe("headed overlay", () => {
     }
   });
 
-  it("the bar drags the panel anywhere and the grip sizes it; the page sees no move", async () => {
+  it("the bar drags the panel anywhere and any corner sizes it; the page sees no move", async () => {
     const browser = await chromium.launch();
     try {
       const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
@@ -158,15 +158,40 @@ describe("headed overlay", () => {
       // Size: the bottom right grip.
       await page.mouse.move(moved.right - 4, moved.bottom - 4);
       await page.mouse.down();
-      await page.mouse.move(moved.right + 96, moved.bottom + 196, { steps: 5 });
+      await page.mouse.move(moved.right + 46, moved.bottom + 196, { steps: 5 });
       await page.mouse.up();
       expect(await page.evaluate("+document.body.dataset.moves")).toBe(0);
       const sized = await panelBox(page);
-      expect(Math.round(sized.width)).toBe(Math.round(moved.width + 100));
+      expect(Math.round(sized.width)).toBe(Math.round(moved.width + 50));
       expect(Math.round(sized.height)).toBe(Math.round(moved.height + 200));
+      // The top left corner: that edge moves, the bottom right stays.
+      await page.mouse.move(sized.left + 3, sized.top + 3);
+      await page.mouse.down();
+      await page.mouse.move(sized.left + 203, sized.top + 53, { steps: 5 });
+      await page.mouse.up();
+      const pulled = await panelBox(page);
+      expect([pulled.right, pulled.bottom].map(Math.round)).toEqual(
+        [sized.right, sized.bottom].map(Math.round),
+      );
+      expect(Math.round(pulled.width)).toBe(Math.round(sized.width - 200));
+      expect(Math.round(pulled.height)).toBe(Math.round(sized.height - 50));
+      // Narrow: smaller type, and the clock column goes.
+      const font = () =>
+        page.evaluate(`parseFloat(getComputedStyle(${ui}.tuiEl.querySelector('.body')).fontSize)`);
+      const wide = await font();
+      await page.mouse.move(pulled.left + 3, pulled.top + 3);
+      await page.mouse.down();
+      await page.mouse.move(pulled.right - 200, pulled.top + 3, { steps: 5 });
+      await page.mouse.up();
+      expect(Math.round((await panelBox(page)).width)).toBe(220);
+      expect(await font()).toBeLessThan(wide);
+      expect(
+        await page.evaluate(`getComputedStyle(${ui}.tuiEl.querySelector('.row .at')).display`),
+      ).toBe("none");
       // A redraw keeps the place and the size.
+      const last = await panelBox(page);
       await o.end(page, row);
-      expect(await panelBox(page)).toEqual(sized);
+      expect(await panelBox(page)).toEqual(last);
     } finally {
       await browser.close();
     }

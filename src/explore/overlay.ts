@@ -9,7 +9,7 @@
  *
  * Decorative: it changes nothing a page, a run or a shot sees. The whole
  * panel takes the pointer: its bar (drag to move, buttons: boxes on/off,
- * minimize), its corner grip (resize) and its body, where a click does
+ * minimize), its four corner grips (resize) and its body, where a click does
  * nothing. A window capture listener swallows those events before the page's
  * handlers or the recorder's observer see one; mousedown's default is
  * stopped so focus stays where it was. A person's click always lands on the
@@ -126,6 +126,8 @@ const READS_ONLY = new Set([
 /** Acts that press their target: `flash` looks it up first. Any other command is held. */
 const AIMED = new Set(["click", "fill", "place", "select", "press", "hover", "upload"]);
 
+/** The narrowest a person can size the panel, px. */
+const PANEL_MIN_W = 220;
 /** A ref's box resolves this fast or is left off: a slow find never holds up a step. */
 const BOX_MS = 400;
 /** A draw never holds a command longer than this. */
@@ -220,7 +222,9 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       // The grip sizes, the bar moves; capture keeps every move on us until the button lifts.
       if (k === 'pointerdown' && ui.tuiEl && hit && !hit.closest('.btn')) {
         const r = ui.tuiEl.getBoundingClientRect();
-        if (hit.closest('.grip')) ui.drag = { kind: 'size', x: e.clientX, y: e.clientY, w: r.width, h: r.height };
+        const g = hit.closest('.grip');
+        // A top or left corner moves that edge; the opposite corner stays put.
+        if (g) ui.drag = { kind: 'size', x: e.clientX, y: e.clientY, r, l: g.dataset.c[1] === 'w', t: g.dataset.c[0] === 'n' };
         else if (hit.closest('.bar')) ui.drag = { kind: 'move', x: e.clientX - r.left, y: e.clientY - r.top };
         if (ui.drag) {
           ui.tuiEl.setPointerCapture(e.pointerId);
@@ -230,12 +234,19 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       }
       if (ui.drag) {
         if (k === 'pointermove' && ui.drag.kind === 'size') {
-          const top = ui.tuiEl.getBoundingClientRect().top;
-          ui.w = Math.round(Math.max(300, Math.min(innerWidth - 12, ui.drag.w + e.clientX - ui.drag.x)));
-          ui.h = Math.round(Math.max(60, Math.min(innerHeight - top, ui.drag.h + e.clientY - ui.drag.y)));
+          const d = ui.drag, r = d.r, dx = e.clientX - d.x, dy = e.clientY - d.y;
+          const w = d.l ? r.width - dx : r.width + dx, h = d.t ? r.height - dy : r.height + dy;
+          ui.w = Math.round(Math.max(${PANEL_MIN_W}, Math.min(d.l ? r.right : innerWidth - r.left, w)));
+          ui.h = Math.round(Math.max(60, Math.min(d.t ? r.bottom : innerHeight - r.top, h)));
+          ui.x = Math.round(d.l ? r.right - ui.w : r.left);
+          ui.y = Math.round(d.t ? r.bottom - ui.h : r.top);
           ui.sized = true;
-          ui.tuiEl.style.width = ui.w + 'px';
-          ui.tuiEl.style.height = ui.h + 'px';
+          const st = ui.tuiEl.style;
+          st.width = ui.w + 'px';
+          st.height = ui.h + 'px';
+          st.left = ui.x + 'px';
+          st.top = ui.y + 'px';
+          st.bottom = 'auto';
           ui.tuiEl.classList.add('sized');
         } else if (k === 'pointermove') {
           ui.x = e.clientX - ui.drag.x;
@@ -285,6 +296,9 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       'background:${T.canvas} repeating-linear-gradient(0deg,rgba(255,255,255,.028) 0 1px,transparent 1px 3px);',
       'border:1px solid ${T.accent};box-shadow:0 0 0 1px #000,0 10px 32px rgba(0,0,0,.55),0 0 22px rgba(165,150,214,.14);',
       'text-shadow:0 0 6px rgba(165,150,214,.22)}',
+      // Width scales the type and the gaps: 12px wide open, 10px at the narrowest.
+      '.tui{container-type:inline-size}',
+      '.tui>*{--g:clamp(3px,1.6cqi,8px);font-size:clamp(10px,calc(8px + .9cqi),12px)}',
       '.tui:not(.inert){pointer-events:auto}',
       '.tui.inert{opacity:.6}',
       '.tab{position:fixed;left:0;top:50%;transform:translateY(-50%);width:10px;height:56px;cursor:pointer;',
@@ -292,13 +306,18 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       '.tab:not(.inert){pointer-events:auto}',
       '.tab:hover{width:16px;background:${T.accent}}',
       '.tab.busy::after{content:"";position:absolute;left:2px;top:25px;width:4px;height:4px;border-radius:50%;background:${T.accent};animation:blink 1s steps(2) infinite}',
-      '.bar{display:flex;align-items:center;gap:8px;padding:2px 8px;background:${T.paper};border-bottom:1px solid ${T.accent};cursor:move}',
+      '.bar{display:flex;align-items:center;gap:var(--g);padding:2px var(--g);background:${T.paper};border-bottom:1px solid ${T.accent};cursor:move}',
       '.bar .name{font-weight:700;color:${T.accent};letter-spacing:.04em}',
       '.bar .state{color:${T.ink3}}',
       '.bar .state.run{color:${T.accent};animation:blink 1s steps(2) infinite}',
       '.bar .fill{flex:1}',
-      '.bar .meta{color:${T.ink3};font-size:10.5px}',
-      '.grip{position:absolute;right:-1px;bottom:-1px;width:12px;height:12px;cursor:nwse-resize;border-right:2px solid ${T.accent};border-bottom:2px solid ${T.accent}}',
+      '.bar .meta{color:${T.ink3};font-size:.88em}',
+      '.grip{position:absolute;width:12px;height:12px;border:0 solid ${T.accent};opacity:.45}',
+      '.tui:hover .grip{opacity:1}',
+      '.grip.se{right:-1px;bottom:-1px;cursor:nwse-resize;border-width:0 2px 2px 0;opacity:1}',
+      '.grip.sw{left:-1px;bottom:-1px;cursor:nesw-resize;border-width:0 0 2px 2px}',
+      '.grip.ne{right:-1px;top:-1px;cursor:nesw-resize;border-width:2px 2px 0 0}',
+      '.grip.nw{left:-1px;top:-1px;cursor:nwse-resize;border-width:2px 0 0 2px}',
       '.live{color:${T.ink3}}',
       '.spin::before{content:"${SPIN[0]}";color:${T.accent};animation:spin .8s steps(1) infinite}',
       '.spin.slow::before{animation-duration:1.6s;color:${T.ink3}}',
@@ -309,21 +328,26 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       '.btn{color:${T.ink3};cursor:pointer;padding:0 2px}',
       '.btn:hover{color:${T.onAccent};background:${T.accent};text-shadow:none}',
       '.btn.on{color:${T.accent}}',
-      '.body{padding:4px 8px 5px}',
+      '.body{padding:4px var(--g) 5px}',
       '.k{color:${T.ink3}}',
       '.goal{color:${T.ink};font-weight:700}',
       '.thought{color:${T.ink2}}',
       '.doing{color:${T.accent}}',
       '.cursor{display:inline-block;width:.6em;height:1.05em;margin-left:2px;vertical-align:-2px;background:${T.accent};animation:blink 1s steps(2) infinite}',
       '@keyframes blink{50%{opacity:0}}',
-      '.rule{display:flex;gap:6px;color:${T.ink3};padding:0 8px;border-top:1px solid ${T.paper}}',
+      '.rule{display:flex;gap:var(--g);color:${T.ink3};padding:0 var(--g);border-top:1px solid ${T.paper}}',
       '.rule .t{color:${T.ink3}}',
       '.rule .btn{pointer-events:auto}',
       '.tui.inert .rule .btn{pointer-events:none}',
-      '.rows{display:grid;grid-template-columns:auto auto auto minmax(0,1fr) auto auto;column-gap:1ch;align-content:start;overflow:hidden;padding:1px 0 3px;max-height:220px}',
+      '.rows{display:grid;grid-template-columns:auto auto auto minmax(0,1fr) auto auto;column-gap:0;align-content:start;overflow:hidden;padding:1px 0 3px;max-height:220px}',
       '.tui.sized .rows{flex:1;min-height:0;max-height:none}',
-      '.row{display:grid;grid-column:1/-1;grid-template-columns:subgrid;padding:0 8px}',
-      '.row .note{grid-column:4/-1;color:${T.ink3};font-size:11px;line-height:1.3;overflow-wrap:anywhere}',
+      '.row{display:grid;grid-column:1/-1;grid-template-columns:subgrid;padding:0 var(--g)}',
+      // Cells placed by column, gaps as padding: a hidden column takes no room and moves nothing.
+      '.row .n{grid-column:1}.row .at{grid-column:2}.row .cmd{grid-column:3}.row .what{grid-column:4}.row .ok,.row .no:not(.note){grid-column:5}.row .ms{grid-column:6}',
+      '.row>:not(:first-child):not(.note){padding-left:var(--g)}',
+      // Narrow: the clock and the seed go; the act, its target, ✓ and ms stay, the note takes the width.
+      '@container (max-width:360px){.row .at,.bar .meta{display:none}.rows .row .note{grid-column:3/-1}}',
+      '.row .note{grid-column:4/-1;padding-left:var(--g);color:${T.ink3};font-size:.92em;line-height:1.3;overflow-wrap:anywhere}',
       '.row .note.no{color:${T.bad};opacity:.85}',
       '.row.new{animation:fresh 1.2s ease-out}',
       '@keyframes fresh{from{background:rgba(165,150,214,.28)}to{background:transparent}}',
@@ -424,7 +448,11 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       ui.seen = newest;
       tui.appendChild(rows);
     }
-    tui.appendChild(el('div', 'grip'));
+    for (const c of ['nw', 'ne', 'sw', 'se']) {
+      const g = el('div', 'grip ' + c);
+      g.dataset.c = c;
+      tui.appendChild(g);
+    }
     root.appendChild(tui);
     done(tui);
   };
