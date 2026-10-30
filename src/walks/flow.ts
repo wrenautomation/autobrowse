@@ -259,6 +259,8 @@ async function walkSpec(
         });
       case "press":
         return fp.act({ kind: "press", key: op.key }, op.hints as Hints, { goal: op.goal });
+      case "hover":
+        return fp.act({ kind: "hover" }, op.hints as Hints, { goal: op.goal });
       case "upload":
         return fp.act(
           { kind: "upload", files: [await textFor(op.file, op.goal)] },

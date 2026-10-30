@@ -1508,6 +1508,7 @@ async function serve(
       journalAct(t, (target) => ({ kind: "select", target, value: op.value }));
     else if (op.kind === "press")
       journalAct(t, (target) => ({ kind: "press", target, key: op.key }));
+    else if (op.kind === "hover") journalAct(t, (target) => ({ kind: "hover", target }));
     else if (op.kind === "script" && scriptActs(op.js))
       journal({
         kind: "eval",
@@ -1775,6 +1776,7 @@ async function serve(
           trace: (row) => logged((h) => h.call(row)),
           deadline: now() + CODE_MS,
           passThrough: (err) => err instanceof PaymentGate,
+          ...(c.started ? { started: c.started } : {}),
         },
       );
       page = fp.page;
@@ -1862,6 +1864,13 @@ async function serve(
         const set = billing.length ? { billing } : {};
         if (spent?.charges) return { url: page.url(), ...set, told: await reportSpend(spent) };
         return { url: page.url(), ...set };
+      }
+      case "hover": {
+        await hands.think(page);
+        await hands.hover(find(c), { timeout: 10_000 });
+        await settle(page);
+        journalAct(c, (target) => ({ kind: "hover", target }));
+        return { url: page.url() };
       }
       case "drag": {
         await hands.think(page);

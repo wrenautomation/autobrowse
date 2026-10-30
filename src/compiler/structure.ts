@@ -393,6 +393,13 @@ export function structure(rec: Recording, o: StructureOptions = {}): Outline {
             key: a.key,
           });
         break;
+      case "hover":
+        add({
+          kind: "hover",
+          goal: `hover over ${describe(a.target)}`,
+          hints: stripHints(a.target),
+        });
+        break;
       case "upload": {
         const label = describe(a.target);
         const key = fieldKey(camel(label));

@@ -104,6 +104,8 @@ export type Op =
   | { kind: "fill"; value: string }
   | { kind: "select"; value: string }
   | { kind: "press"; key: string }
+  /** The pointer onto the control, and it stays: a hover menu, a control shown on hover, a tooltip. */
+  | { kind: "hover" }
   /**
    * Files into a file input, or through the chooser a button opens: paths or refs, or bytes
    * held in memory (a stored file), which reach the page without touching the disk.
@@ -469,6 +471,8 @@ async function doOp(
       return chooseOption(target, op.value, timeout, hands);
     case "press":
       return hands.press(target, op.key, { timeout });
+    case "hover":
+      return hands.hover(target, { timeout });
     case "upload": {
       if (op.files.some((f) => typeof f !== "string"))
         return uploadFiles(page, target, op.files as FilePayload[], timeout, hands);

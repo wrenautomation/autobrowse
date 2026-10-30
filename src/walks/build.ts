@@ -491,6 +491,10 @@ export function walkFromRuns(inputs: readonly RunInput[], o: BuildOptions): Buil
       }
       case "press":
         return [{ kind: "press", goal: `press ${a.key}`, hints: hintsOf(a.target), key: a.key }];
+      case "hover":
+        return [
+          { kind: "hover", goal: `hover over ${describe(a.target)}`, hints: hintsOf(a.target) },
+        ];
       case "upload": {
         const key = said?.key ?? fieldKey(`${camel(describe(a.target)) || "upload"}File`);
         fields.push({

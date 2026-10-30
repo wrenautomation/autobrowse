@@ -212,6 +212,28 @@ describe("records", () => {
   });
 });
 
+describe("hover", () => {
+  it("a journaled hover becomes a hover act", () => {
+    const menu = h({ tag: "button", role: "button", name: "Account" });
+    const o = structure({
+      ...recording,
+      terminal: null,
+      commands: [],
+      actions: [
+        { t: 0, kind: "navigate", url: "https://dash.cloudflare.com/" },
+        { t: 1, kind: "hover", url: "https://dash.cloudflare.com/", target: menu },
+      ],
+    });
+    const step = o.steps[0];
+    if (step?.kind !== "browser") throw new Error("expected browser step");
+    const op = step.ops[0];
+    expect(op).toMatchObject({ kind: "hover", goal: "hover over Account" });
+    expect(renderOp(op as Parameters<typeof renderOp>[0])).toContain(
+      'await fp.act({ kind: "hover" }',
+    );
+  });
+});
+
 describe("keep", () => {
   it("renders a minted secret through the input sink, never the journaled result", () => {
     const rec: Recording = {

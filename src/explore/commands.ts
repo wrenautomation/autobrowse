@@ -47,6 +47,8 @@ export const commandSchema = z.discriminatedUnion("cmd", [
   }),
   targetSchema.extend({ cmd: z.literal("select"), value: z.string(), goal: z.string().optional() }),
   targetSchema.extend({ cmd: z.literal("press"), key: z.string(), goal: z.string().optional() }),
+  /** The pointer onto the control, and it stays: a hover menu opens, a hidden control shows. */
+  targetSchema.extend({ cmd: z.literal("hover"), goal: z.string().optional() }),
   targetSchema.extend({
     cmd: z.literal("upload"),
     files: z.array(z.string().min(1)).min(1),
@@ -210,6 +212,8 @@ export const commandSchema = z.discriminatedUnion("cmd", [
     /** Its inputs: plan fields in the workflow built from it. */
     plan: z.record(z.string().regex(/^[a-z][a-zA-Z0-9]*$/), z.string()).optional(),
     fresh: z.boolean().optional(),
+    /** An act an earlier run left `started` (it died mid act): count it done, or do it again. */
+    started: z.enum(["ran", "redo"]).optional(),
   }),
   /**
    * The workflows `flow` can run (the toolkit). No field: the sites and their counts.
@@ -257,6 +261,7 @@ export const LOOKS = new Set<Command["cmd"]>([
   "select",
   "upload",
   "press",
+  "hover",
   "type",
   "key",
 ]);
@@ -281,6 +286,7 @@ export const LOOKED_AT = new Set<Command["cmd"]>([
   "select",
   "upload",
   "press",
+  "hover",
   "read",
   "keep",
   "captcha",

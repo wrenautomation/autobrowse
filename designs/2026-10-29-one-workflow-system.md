@@ -85,12 +85,36 @@ Named `code`, not `script`: the op kind `script` already means page JS (`browser
 - So page 37 fails, the agent fixes the code, sends it again, and pages 1–36 come back from the store at once.
 - Keys use what a call does, not its place in the code. An edit to the code still finds the saved pages.
 - `open` is lazy: it navigates before the next live call, even to the URL the page is on. A run of only saved calls ends with one navigation to the last `open`.
-- Acts (`fp.act`) never replay: they change the site. A loop that acts per item does those acts again on a rerun; keep acts to navigation, or carry where to start in `plan`.
+- Acts: see "Acts in a rerun" below.
 - Explore's store is a file beside the journal, scoped by `as` and the plan; it goes with the journal on close. `fresh` starts over. A compiled run's store is in memory for now.
 - `wait` after an `open` not yet loaded is held, and runs once the page loads: a replay waits for nothing.
 - A sandbox `records` is checked as the command is: a required field empty on most rows fails the call.
 - Limits: 30 min and 20,000 calls a run, checked at each call. The vm timeout (5 s) stops only sync code before the first `await`: a sync loop after one is not stopped.
 - Rule for the agent (in the skill): no `Date.now()`, no `Math.random()`, no literal secrets. The first two break the keys.
+
+### Acts in a rerun (WA-969)
+
+A rerun must not do a site change twice, and must not read the wrong page after it skips one.
+
+- Two classes of act.
+  - A view act changes only the page: `hover`, `fill`, `select`, `upload`, and any act with `{view: true}` (a "Next" that keeps the URL, a menu, a tab).
+  - An effect act changes the site: `click`, `press`, `script`, unless marked `view`.
+- An effect act is saved under the key a read uses (call, args, the URL, n). The store gets `started` before the act and `done {url}` after it.
+- A rerun skips a `done` act. If the act moved the page to another URL, that URL becomes the one the code is on (the lazy `open` goes there).
+- An act that throws counts as not run (a locate miss throws before it acts): the next run tries it again.
+- A `started` act with no `done` stops the run: it may have run. The agent looks at the page, then sends the code again with `started: "ran"` (count it done) or `"redo"` (do it again).
+- After a live effect act, the URL the page went to becomes the URL in later keys. A rerun gets the same URL from `done`, so keys match.
+- A view act on a page that is not loaded yet is queued, not run. When a live call needs the page: `open` the URL, then the queued waits and view acts, in order. So a replay rebuilds the page: the last URL, plus the view acts after it. A run of saved calls clicks nothing.
+- A view act on a loaded page runs live and is queued too, for a later rebuild.
+- An effect act's change to the page with no new URL (a modal it opens) is not rebuilt. The next live call fails on the missing control, and the agent marks the act or moves it.
+- `fresh` forgets the done acts too: they run again.
+- Limit: a compiled run keeps its store in memory, so a crash and retry does its acts again. This waits for the run recorder (WA-963) to give compiled runs a lasting store.
+
+Built (WA-969, 2026-10-30): `browser/code.ts`; `started` on the `code` command.
+
+### Hover
+
+`{kind: "hover"}` is an act: the pointer goes to the control and stays (human hands: a path, then the hover pause). For hover menus, controls shown only on hover, and tooltips and hovercards to read. It is a view act in `code`. Through `doOp`, explore's `hover` command, the journal, the outline, the render and the walk op.
 
 ### The iteration trace
 
@@ -179,6 +203,15 @@ Cost: one more in-process call per leg (`advance` on memory effects), under 1 ms
 | C. An `each(items, fn)` helper that saves per item | No: one more thing the agent must use right |
 | D. One engine step per iteration, made at run time | No: a bigger engine change for the same result |
 
+### How a rerun treats acts (WA-969)
+
+| Option | Verdict |
+|---|---|
+| A. Save each effect act as `started`/`done` by its call key; rebuild the page from the last URL plus the queued view acts | **Chosen**. No site change twice; the page is right after a skip; one flag (`view`) for the agent |
+| B. A check before each act (`done: hints`): skip when the page shows the result | No: a live check per act, a check per act for the agent to write, and a wrong check skips with no error |
+| C. `once(id, fn)` around each item | No: one more thing the agent must use right; the page after a skip is still wrong |
+| D. One Restate step per act | No: positional, and `ctx` is not allowed inside a leg's `ctx.run` |
+
 ## Decision log
 
 - 2026-10-29: One system. The old flows become workflows; the direct path is deleted, no compat. Usage stays the same (William: "make sure the usage will stay the same").
@@ -200,3 +233,7 @@ Cost: one more in-process call per leg (`advance` on memory effects), under 1 ms
 - 2026-10-29: `runLeg` keeps the answer and error in a closure, not in the step's result: `advance` turns errors into strings, and Restate's retry and terminal codes need the same `NeedsHuman`, `FlowFailed`, `FlowInterrupted` objects.
 - 2026-10-29: An armed `prepare` is its own one-step run, not the leg's first step. Arm and run are two requests; one run would hold engine state beside the tab for no reader. A deviation from the plan above.
 - 2026-10-29: The lint allowlist counts per file, so a file with a pass-two leg cannot gain a new direct run.
+- 2026-10-30: Acts in `code` run once: `started`/`done` in the call store; view acts are queued and rebuild the page (William: option A, "as long as its durable enough").
+- 2026-10-30: A `started` act with no `done` stops the run; the agent says `ran` or `redo`. We never guess that a site change did or did not happen.
+- 2026-10-30: The flag is `view`, not `again`: a recorded click's `again` already means "the same control after the page changed".
+- 2026-10-30: `hover` is an act (William): a view act in `code`.

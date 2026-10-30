@@ -17,7 +17,7 @@ The journal is the one input to the compiler. Typed values are redacted at captu
 
 ## Shape
 
-- `Action` kinds: navigate, desktop, click, input, select, press, upload, submit, read (as), keep (env), note, pause, resume — `src/recorder/types.ts:43-66`
+- `Action` kinds: navigate, desktop, click, input, select, press, hover, upload, submit, read (as), keep (env), note, pause, resume — `src/recorder/types.ts:43-66`
 - `Recording { name, site, startedAt, finishedAt, actions, trace, terminal, commands }` — `:68-80`; `RecordingSummary` — `:82-90`; `MANIFEST`, `SUMMARY` — `:100-102`
 - Store: `recordingDir`, `saveRecording`, `loadRecording`, `listRecordings`, `listRecordingSummaries` — `src/recorder/store.ts:15-56`
 - Captured by the in-page observer (`src/recorder/observer.ts`), the browser and terminal recorders, redaction (`src/recorder/redact.ts`)

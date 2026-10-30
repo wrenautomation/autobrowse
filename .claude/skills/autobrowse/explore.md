@@ -65,7 +65,7 @@ Look:
 Act (journaled):
 - `{"cmd":"open","url":"https://…"}`
 - `{"cmd":"click","hints":{"role":"button","name":"Create"},"goal":"…"}`
-- `{"cmd":"fill","hints":{…},"value":"…"}`, `select`, `press` (`"key":"Enter"`), `upload` (`"files":["path"]` or a stored file, below).
+- `{"cmd":"fill","hints":{…},"value":"…"}`, `select`, `press` (`"key":"Enter"`), `hover` (a menu or a control that shows on hover, a tooltip to read), `upload` (`"files":["path"]` or a stored file, below).
 - `{"cmd":"type","text":"…"}`, `{"cmd":"key","key":"Escape"}` — into whatever is focused.
 - `{"cmd":"place","hints":{…},"secret":"code"}` — types a secret the session holds (signup.md); the value never reaches you. `"secret":"profile.taxId"` fills a field of the Mac's wallet profile (signup.md).
 - `{"cmd":"read","hints":{…},"as":"fieldName"}` — text off the page into the flow's output.
@@ -86,7 +86,9 @@ Act (journaled):
   - In scope: `fp.open(url)`, `fp.act(op, hints, {goal})`, `fp.read(hints)`, `fp.has(hints, ms?)`, `fp.wait(ms)`, `fp.human(reason)`, `records({fields, code, key?, max?})` (as the command, no model), `log(values)`, `plan` (strings), `rows` (push your output).
   - Example: `for (let p = 1; p <= Number(plan.pages); p++) { log({p}); await fp.open(plan.base + "?page=" + p); rows.push(...await records({fields:[{key:"title",says:"…"}], code:"return [...root.querySelectorAll('h2')].map(h => ({title: h.textContent}))"})); }`
   - Answer: `{rows, first, calls, stored, log?, url}`. `failed: {call, i, url, log, error}`: fix the code, send it again. Saved reads come back at once (`stored`), the loop goes on from the failed call. `"fresh":true` starts over.
-  - Rules: every input in `plan`, never a literal (compile makes each a plan field). No `Date.now()`, no `Math.random()`: they break the saved reads. No secrets in code or plan (refused). Acts are not saved: a rerun does them again, so keep acts to navigation or start from a `plan` value. A changed `records` code reads every page again.
+  - Rules: every input in `plan`, never a literal (compile makes each a plan field). No `Date.now()`, no `Math.random()`: they break the saved reads. No secrets in code or plan (refused). A changed `records` code reads every page again.
+  - Acts in a rerun: a click, press or script is done once; a rerun skips it and goes on from the URL it left. Hover, fill, select and upload are replayed to rebuild the page. Mark a click that changes only the page (a "Next" with no new URL, a tab, a menu) `{goal, view:true}`, or a rerun skips it and reads the wrong page.
+  - `failed` says an act "may have run" (the last run died mid act): look at the page, then send again with `"started":"ran"` (it happened) or `"redo"`.
   - Money acts ask the person, as yours do. Journaled as one row: `save` compiles it into the workflow. Each call is a row in the run history (`autobrowse explored show <run>`).
 - `tools` in an answer: the first answer on a page of a known site lists that site's workflows (`{sites, tools:[{name, aim, inputs}], more}`; `q, max?` = required, optional). It comes once per site. Use one with `flow` before you do the job by hand.
 - `{"cmd":"tools"}` — each site and its count. `"site":"x"`: that site's workflows (past the 20 an answer shows). `"find":"words"`: a fuzzy search over all of them.

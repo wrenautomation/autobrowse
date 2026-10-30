@@ -30,6 +30,7 @@ const actionSchema = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("place"), ref, secret: z.string().min(1), goal: z.string() }),
   z.object({ cmd: z.literal("select"), ref, value: z.string(), goal: z.string() }),
   z.object({ cmd: z.literal("press"), ref, key: z.string(), goal: z.string() }),
+  z.object({ cmd: z.literal("hover"), ref, goal: z.string() }),
   z.object({
     cmd: z.literal("upload"),
     ref,
@@ -177,6 +178,7 @@ Actions, with "cmd" set to exactly one of these words:
   {"cmd":"place","ref":n,"secret":"name","goal":"why"}   (a SECRET by its name goes into the field; you never see or type its value)
   {"cmd":"select","ref":n,"value":"...","goal":"why"}
   {"cmd":"press","ref":n,"key":"Enter","goal":"why"}
+  {"cmd":"hover","ref":n,"goal":"why"}   (the pointer onto it and it stays: a menu that opens on hover, a control that shows on hover, a tooltip)
   {"cmd":"upload","ref":n,"files":["path"],"goal":"why"}   ("file:<name>" for a stored file by its name)
   {"cmd":"open","url":"https://..."}
   {"cmd":"key","key":"Escape"}
@@ -548,6 +550,8 @@ function toCommand(a: Act, page: Digest): ExploreCommand {
       return { cmd: "select", hints, value: a.value, goal: a.goal };
     case "press":
       return { cmd: "press", hints, key: a.key, goal: a.goal };
+    case "hover":
+      return { cmd: "hover", hints, goal: a.goal };
     case "upload":
       return { cmd: "upload", hints, files: a.files, goal: a.goal };
     case "read":

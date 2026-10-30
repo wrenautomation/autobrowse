@@ -64,6 +64,7 @@ export type Action =
   /** `options`: the values the list offered (teach makes them a field's choices). */
   | (Base & { kind: "select"; target: LocatorHints; value: string; options?: string[] })
   | (Base & { kind: "press"; target: LocatorHints; key: string })
+  | (Base & { kind: "hover"; target: LocatorHints })
   | (Base & { kind: "upload"; target: LocatorHints; files: string[] })
   | (Base & { kind: "submit"; target: LocatorHints })
   /** Text read off an element and kept under a name: the scraping half of a workflow. */

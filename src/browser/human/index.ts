@@ -216,6 +216,8 @@ export interface Hands {
   /** A control: replace what it holds with `text`. A page: type at the caret. */
   type(target: KeyTarget, text: string, o: ActTimeout): Promise<void>;
   press(target: KeyTarget, key: string, o: ActTimeout): Promise<void>;
+  /** The pointer onto the control, and it stays there. */
+  hover(target: Locator, o: ActTimeout): Promise<void>;
   /** A control: replace what it holds with `text` in one go, as autofill does. A dropdown: choose the option. */
   paste(target: Locator, text: string, o: ActTimeout): Promise<void>;
   /** Press at `from`, carry to `to`, let go: points inside the control from its top-left (a slider, a captcha piece). */
@@ -239,6 +241,7 @@ export const instantHands: Hands = {
     (at ? target : await pressable(target, o)).click({ ...o, ...(at ? { position: at } : {}) }),
   type: (target, text, o) => (isPage(target) ? target.keyboard.type(text) : target.fill(text, o)),
   press: (target, key, o) => (isPage(target) ? target.keyboard.press(key) : target.press(key, o)),
+  hover: (target, o) => target.hover(o),
   paste: async (target, text, o) => {
     if (!(await chosen(target, text, o, (l) => l.click(o)))) await target.fill(text, o);
   },
@@ -388,15 +391,15 @@ export function handsFor(
     return first;
   };
 
-  const click = async (asked: Locator, { at, ...o }: ActTimeout & { at?: Point }) => {
-    const target = at ? asked : await pressable(asked, o);
+  /** Wheel to the control, glide onto it, rest: null when it has no box (no pointer path). */
+  const pointAt = async (target: Locator, o: ActTimeout, at?: Point) => {
     const page = target.page();
     await wheelTo(target, o, pace, random, log).catch(() => undefined);
     const box = await target
       .scrollIntoViewIfNeeded(o)
       .then(() => target.boundingBox(o))
       .catch(() => null);
-    if (!box) return target.click({ ...o, ...(at ? { position: at } : {}) });
+    if (!box) return null;
     const aim = at ? { x: box.x + at.x, y: box.y + at.y } : await openAim(target, box);
     await glide(page, aim, Math.min(box.width, box.height), pace, random, log).catch(
       () => undefined,
@@ -404,6 +407,15 @@ export function handsFor(
     await rest(page, pace.mouse.hover, pace, random, log).catch(() => undefined);
     const { x, y, width: w, height: h } = box;
     log(page, { kind: "focus", t: Date.now(), box: { x, y, w, h } });
+    return { box, aim };
+  };
+
+  const click = async (asked: Locator, { at, ...o }: ActTimeout & { at?: Point }) => {
+    const target = at ? asked : await pressable(asked, o);
+    const pointed = await pointAt(target, o, at);
+    if (!pointed) return target.click({ ...o, ...(at ? { position: at } : {}) });
+    const { box, aim } = pointed;
+    const page = target.page();
     // Playwright's click at that spot: it checks the control is still there and uncovered,
     // finds the pointer already on it, and holds the button for `delay`.
     const delay = drawMs(pace.mouse.hold, random);
@@ -436,6 +448,16 @@ export function handsFor(
       await page.waitForTimeout(ms);
     },
     click,
+    async hover(target, o) {
+      const pointed = await pointAt(target, o);
+      // Playwright's hover at that spot: it checks the control is there; the pointer already is.
+      if (pointed)
+        await target.hover({
+          ...o,
+          position: { x: pointed.aim.x - pointed.box.x, y: pointed.aim.y - pointed.box.y },
+        });
+      else await target.hover(o);
+    },
     async drag(target, from, to, o) {
       const page = target.page();
       const box = await boxOf(target, o);

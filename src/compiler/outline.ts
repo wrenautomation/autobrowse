@@ -48,6 +48,7 @@ export const opSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("press"), goal: z.string(), hints: hintsSchema, key: z.string() }),
   /** One file, a path from the plan or a literal. */
   z.object({ kind: z.literal("upload"), goal: z.string(), hints: hintsSchema, file: valueSchema }),
+  z.object({ kind: z.literal("hover"), goal: z.string(), hints: hintsSchema }),
   /** Text read off an element, kept under `as` in the step's result. */
   z.object({
     kind: z.literal("read"),

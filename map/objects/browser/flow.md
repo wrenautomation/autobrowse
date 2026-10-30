@@ -18,7 +18,7 @@ Every act goes through `fp.act` with a goal in words, so the repairer, the trace
 ## Shape
 
 - `BrowserFlow { site, name, run(fp, input) }`; `defineFlow` — `src/browser/flow.ts:192-215`
-- `FlowPage { page, passkeys, open, act, read, scroll … }` — `:121`; `Op` (click, fill, select, press, upload) — `:89`; `ActOptions { goal, irreversible, timeoutMs }` — `:107`
+- `FlowPage { page, passkeys, open, act, read, scroll … }` — `:121`; `Op` (click, fill, select, press, hover, upload, script) — `:89`; `ActOptions { goal, irreversible, timeoutMs }` — `:107`
 - `FlowInterrupted` (browser died: host retries whole flow) and `FlowFailed` — `:241`, `:265`
 - `RunnerOptions`: `repairer`, `pace`, `login`, `captcha`, `fixes`, `learnedScreens`, `onRepair`, `done`, `runs`, `resume` — `:276-342`
 - Resume: a keyed run (`withCall`) that stops keeps its page; the next try's first `fp.open` goes there — `:568`, `:922`, `:982` ([[resume-record]])

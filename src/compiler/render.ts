@@ -113,7 +113,9 @@ export function renderOp(op: OutlineOp): string {
           ? `{ kind: "select", value: ${q(op.value)} }`
           : op.kind === "upload"
             ? `{ kind: "upload", files: [${renderValue(op.file)}] }`
-            : `{ kind: "press", key: ${q(op.key)} }`;
+            : op.kind === "hover"
+              ? `{ kind: "hover" }`
+              : `{ kind: "press", key: ${q(op.key)} }`;
   return `    await fp.act(${opSrc}, ${hints}, ${opts});${locatorNote}`;
 }
 
