@@ -1407,6 +1407,8 @@ async function serve(
         traceRow(c, failed, now() - began, { from, to: fp.page.url(), answer }),
       );
       busy--;
+      // Idle counts from a command's end: a long one is someone driving.
+      touch();
       quietAt = now() + HAND_GRACE_MS;
       lookBefore = null;
       lookWhenQuiet();
@@ -2386,7 +2388,7 @@ async function serve(
     idleMs > 0
       ? setInterval(
           () => {
-            if (now() - lastTouch >= (paused ? idleMs * 4 : idleMs)) {
+            if (busy === 0 && now() - lastTouch >= (paused ? idleMs * 4 : idleMs)) {
               endedBy = "idle";
               finish();
             }

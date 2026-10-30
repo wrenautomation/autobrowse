@@ -737,6 +737,38 @@ describe("a session nobody closes", () => {
       await rm(dir, { recursive: true, force: true, maxRetries: 5 });
     }
   }, 30_000);
+
+  it("never idle-closes while a command runs; idle counts from its end", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "explore-idle-"));
+    const ex = await startExplore({
+      site: "scratch",
+      port: 9950 + Math.floor(Math.random() * 40),
+      recordingsDir: join(dir, "recordings"),
+      idleMinutes: 0.005, // 300 ms
+      browser: {
+        tier: "local",
+        channel: "chromium",
+        profilesDir: join(dir, "profiles"),
+        artifactsDir: join(dir, "artifacts"),
+        headless: true,
+      },
+    });
+    try {
+      let closed = false;
+      void ex.done.then(() => {
+        closed = true;
+      });
+      // Four idle times long, no page load.
+      await ex.exec({ cmd: "eval", js: "new Promise(r => setTimeout(r, 1200))" });
+      expect(closed).toBe(false);
+      await Promise.race([ex.done, new Promise((r) => setTimeout(r, 5_000))]);
+      expect(closed).toBe(true);
+    } finally {
+      await ex.exec({ cmd: "close" }).catch(() => undefined);
+      await new Promise((r) => setTimeout(r, 500));
+      await rm(dir, { recursive: true, force: true, maxRetries: 5 });
+    }
+  }, 30_000);
 });
 
 describe("a session that dies", () => {

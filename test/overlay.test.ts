@@ -57,12 +57,13 @@ describe("headed overlay", () => {
   const panelBox = (page: Page) =>
     page.evaluate(`${ui}.tuiEl.getBoundingClientRect().toJSON()`) as Promise<DOMRect>;
   const BIG = `<input id="f"><button id="big" style="position:fixed;inset:0;z-index:1" onclick="document.body.dataset.hits=+(document.body.dataset.hits||0)+1">x</button>
+     <button id="far" style="position:fixed;right:10px;top:10px;z-index:2">far</button>
      <script>const b=document.body.dataset;b.seen=0;document.addEventListener('mousedown',()=>b.seen++,true);document.addEventListener('click',()=>b.seen++,true)</script>`;
   const hits = (page: Page) => page.evaluate("+(document.body.dataset.hits||0)");
   const seen = (page: Page) => page.evaluate("+document.body.dataset.seen");
   const row = { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] };
 
-  it("the panel takes clicks unseen, body and bar; none while a command acts", async () => {
+  it("the panel takes a person's clicks unseen; an act's press on a target under it goes through", async () => {
     const browser = await chromium.launch();
     try {
       const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
@@ -83,11 +84,20 @@ describe("headed overlay", () => {
       await page.mouse.click(p.left + 40, p.bottom - 20);
       expect(await hits(page)).toBe(0);
       await o.end(page, row);
-      // A command that acts: the bar is inert too.
+      // An act on a target clear of the panel: a person's click still lands on the panel.
       await o.begin(page, "click");
+      await o.flash(page, { css: "#far" }, "click: far");
+      await page.mouse.click(p.left + 40, p.bottom - 20);
+      expect(await hits(page)).toBe(0);
+      await o.after(page);
+      await o.end(page, row);
+      // An act on a target under the panel: the press goes through.
+      await o.begin(page, "click");
+      await o.flash(page, { css: "#big" }, "click: big");
       expect(Number(await page.evaluate(`getComputedStyle(${ui}.tuiEl).opacity`))).toBe(0.6);
       await page.mouse.click(p.left + 200, p.top + 8);
       expect(await hits(page)).toBe(1);
+      await o.after(page);
       await o.end(page, row);
       // Hands between commands (a banner wait, a scroll): inert. The new row grew the panel up.
       const q = await panelBox(page);
