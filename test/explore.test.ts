@@ -769,6 +769,46 @@ describe("a session nobody closes", () => {
       await rm(dir, { recursive: true, force: true, maxRetries: 5 });
     }
   }, 30_000);
+
+  it("an act on a page that polls forever settles once the DOM is still, not at the 1.5 s cap", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "explore-settle-"));
+    // A live app: a request every 150 ms, so the network is never idle for 500 ms.
+    const site = createServer((req, res) => {
+      if (req.url === "/poll") return setTimeout(() => res.end("{}"), 50);
+      res.setHeader("content-type", "text/html");
+      res.end(
+        `<button onclick="this.textContent='Done'">Go</button><script>setInterval(() => fetch('/poll'), 150)</script>`,
+      );
+    });
+    await new Promise<void>((r) => site.listen(0, r));
+    const port = (site.address() as { port: number }).port;
+    const ex = await startExplore({
+      site: "scratch",
+      port: 9950 + Math.floor(Math.random() * 40),
+      recordingsDir: join(dir, "recordings"),
+      browser: {
+        tier: "local",
+        channel: "chromium",
+        profilesDir: join(dir, "profiles"),
+        artifactsDir: join(dir, "artifacts"),
+        headless: true,
+      },
+    });
+    try {
+      await ex.exec({ cmd: "open", url: `http://127.0.0.1:${port}/` });
+      const t = Date.now();
+      await ex.exec({ cmd: "click", hints: { role: "button", name: "Go" } });
+      expect(Date.now() - t).toBeLessThan(1_400);
+      expect(await ex.exec({ cmd: "text" })).toMatchObject({
+        text: expect.stringContaining("Done"),
+      });
+    } finally {
+      await ex.exec({ cmd: "close" }).catch(() => undefined);
+      site.close();
+      await new Promise((r) => setTimeout(r, 500));
+      await rm(dir, { recursive: true, force: true, maxRetries: 5 });
+    }
+  }, 30_000);
 });
 
 describe("a session that dies", () => {

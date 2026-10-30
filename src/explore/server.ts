@@ -415,24 +415,27 @@ export interface Explorer {
 export type ExploreCommand = Command;
 
 /**
- * After an act: a page it navigated to loads, then a short wait for the network
- * to go quiet. Live apps (Facebook, X) poll forever and never reach networkidle,
- * so waiting for it cost the full cap on every act; the next command's locator
- * waits for its own control anyway.
+ * After an act: a page it navigated to loads, then the network goes quiet or the
+ * DOM stops changing for 500 ms, whichever comes first, at most 1.5 s. Live apps
+ * (LinkedIn, Facebook, X) poll forever and never reach networkidle, but stop
+ * redrawing; the next command's locator waits for its own control anyway.
  */
 async function settle(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded", { timeout: 8_000 }).catch(() => undefined);
-  await page.waitForLoadState("networkidle", { timeout: 1_500 }).catch(() => undefined);
+  const idle = page.waitForLoadState("networkidle", { timeout: 1_500 }).catch(() => undefined);
+  // A navigation mid-wait kills the evaluate: the network wait goes on alone.
+  const still = page.evaluate(`(${domQuiet(500, 1_500)})()`).catch(() => idle);
+  await Promise.race([idle, still]);
 }
 
-/** Resolves once the DOM has not changed for 300 ms, or after 3 s on a page that never stops. */
-const DOM_QUIET = `() => new Promise((done) => {
+/** Resolves once the DOM has not changed for `still` ms, or after `cap` ms on a page that never stops. */
+const domQuiet = (still: number, cap: number) => `() => new Promise((done) => {
   let t;
   const end = () => { o.disconnect(); clearTimeout(cap); done(true); };
-  const o = new MutationObserver(() => { clearTimeout(t); t = setTimeout(end, 300); });
+  const o = new MutationObserver(() => { clearTimeout(t); t = setTimeout(end, ${still}); });
   o.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
-  t = setTimeout(end, 300);
-  const cap = setTimeout(end, 3000);
+  t = setTimeout(end, ${still});
+  const cap = setTimeout(end, ${cap});
 })`;
 
 /**
@@ -604,7 +607,7 @@ async function serve(
     const p = page;
     void (async () => {
       await p.waitForLoadState("domcontentloaded", { timeout: 8_000 }).catch(() => undefined);
-      await p.evaluate(`(${DOM_QUIET})()`).catch(() => undefined);
+      await p.evaluate(`(${domQuiet(300, 3_000)})()`).catch(() => undefined);
       const look = p.isClosed() ? null : await lookAt(p).catch(() => null);
       if (gen === lookGen && look) handLook = look;
     })();
