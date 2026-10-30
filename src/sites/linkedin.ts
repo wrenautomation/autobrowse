@@ -600,14 +600,17 @@ export const linkedin: SiteApi = {
         words: (b) => b.message.text,
         read: async (b, get): Promise<VerifyRead | Seen> => {
           const asPage = PAGE_URN.test(b.actor);
-          // A member's comment names its author by a profile link, so the name says whose it is.
-          const name = asPage ? null : str(rec(await get("/v2/userinfo")).name);
-          if (!asPage && !name) return unclear("who the account is on LinkedIn did not come back");
           const parent = b.parentComment ?? (b.urn.startsWith("urn:li:comment:") ? b.urn : null);
           const r = await get(
             `/rest/socialActions/${encodeURIComponent(b.object ?? postOf(b.urn))}/comments`,
             { count: 100 },
           );
+          // A member's comment names its author by a profile link, so the name says whose it is.
+          // The browser read names the viewer off the same load; the API needs userinfo.
+          const name = asPage
+            ? null
+            : (str(rec(r).viewer) ?? str(rec(await get("/v2/userinfo")).name));
+          if (!asPage && !name) return unclear("who the account is on LinkedIn did not come back");
           return {
             // The same words under another comment, or by another person, are not ours.
             rows: arr(rec(r).elements).map((e) => {

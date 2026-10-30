@@ -279,6 +279,20 @@ export const READ_COMMENTS = `(() => [...document.querySelectorAll(${JSON.string
   };
 }))()`;
 
+/** The signed-in member's name: the nav's own photo, on every page. */
+export const READ_VIEWER = `(() => {
+  const img = document.querySelector("img.global-nav__me-photo, .global-nav__me img[alt]");
+  return img ? (img.getAttribute("alt") || "").trim() || null : null;
+})()`;
+
+async function viewerName(fp: FlowPage): Promise<string | null> {
+  try {
+    return await fp.page.evaluate<string | null>(READ_VIEWER);
+  } catch {
+    return null;
+  }
+}
+
 async function rawComments(fp: FlowPage): Promise<RawComment[]> {
   try {
     return await fp.page.evaluate<RawComment[]>(READ_COMMENTS);
@@ -297,7 +311,7 @@ export interface PostCommentsInput {
 
 export const linkedinPostComments = defineFlow<
   PostCommentsInput,
-  | { elements: CommentElement[]; paging: { start: number; count: number } }
+  | { elements: CommentElement[]; paging: { start: number; count: number }; viewer?: string }
   | { found: false; reason: string }
 >({
   site: "linkedin",
@@ -319,9 +333,12 @@ export const linkedinPostComments = defineFlow<
     const { out: raw, counts } = await withCounts(fp, urn, read);
     if (!Array.isArray(raw)) return raw;
     if (counts) seen.set(urn, { counts, at: Date.now() });
+    // Who we are, off the same load: a send's verify needs no second read.
+    const viewer = await viewerName(fp);
     return {
       elements: commentElements(raw, pages).slice(start, start + count),
       paging: { start, count },
+      ...(viewer ? { viewer } : {}),
     };
   },
 });

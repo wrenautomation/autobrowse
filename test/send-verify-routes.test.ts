@@ -558,6 +558,31 @@ describe("linkedin", () => {
     expect(found(r.seen)).toMatchObject({ id: "urn:li:comment:(urn:li:activity:111,222)" });
   });
 
+  it("comment: the browser read names the viewer, so no userinfo read", async () => {
+    const post = "urn:li:activity:111";
+    const r = await run(
+      "linkedin",
+      "POST",
+      "/rest/socialActions/{urn}/comments",
+      { urn: post, actor: ORG, message: { text: "Well said, thanks for sharing it." } },
+      {
+        [`GET /rest/socialActions/${encodeURIComponent(post)}/comments`]: {
+          viewer: "Test Person",
+          elements: [
+            {
+              actorName: "Test Person",
+              message: { text: "Well said, thanks for sharing it." },
+              created: { time: Date.parse(SENT) },
+              commentUrn: "urn:li:comment:(urn:li:activity:111,222)",
+            },
+          ],
+        },
+      },
+    );
+    expect(found(r.seen)).toMatchObject({ id: "urn:li:comment:(urn:li:activity:111,222)" });
+    expect(r.calls).toHaveLength(1);
+  });
+
   it("comment: the same words by another person are not ours", async () => {
     const post = "urn:li:activity:111";
     const r = await run(
