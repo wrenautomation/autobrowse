@@ -275,6 +275,12 @@ async function recorded<T>(
  */
 export const VERIFY_PAUSES_MS: readonly number[] = [30_000, 150_000, 420_000];
 
+/**
+ * Least time between two verify reads of one key, per site. LinkedIn: one an hour, so repeated
+ * asks never burst its post page (William, 10-30). A read too soon answers unknown, no read.
+ */
+export const VERIFY_GAP_MS: Readonly<Record<string, number>> = { linkedin: 3_600_000 };
+
 /** What a keyed call's leg step settles to: the verdict, or only the verify reads are left. */
 type Gate =
   | { end: SendVerdict }
@@ -342,12 +348,15 @@ export function sitesService(
     journal?: SendJournal;
     /** Pauses before each verify read; `VERIFY_PAUSES_MS` when absent. */
     verifyPausesMs?: readonly number[];
+    /** Least time between verify reads of one key, per site; `VERIFY_GAP_MS` when absent. */
+    verifyGapMs?: Readonly<Record<string, number>>;
     /** The owner's API keys, for `keys`, `keySpend`, `keyRevoke` and `keyRotate`; 501 when absent. */
     keys?: KeyAdmin;
   } = {},
 ) {
   const journal = o.journal ?? memorySendJournal();
   const pauses = o.verifyPausesMs ?? VERIFY_PAUSES_MS;
+  const gaps = o.verifyGapMs ?? VERIFY_GAP_MS;
   const keysHere = (): KeyAdmin => {
     if (!o.keys) throw new restate.TerminalError("no key vault here", { errorCode: 501 });
     return o.keys;
@@ -511,31 +520,46 @@ export function sitesService(
     if ("none" in v) return keep(() => unknown(v.none));
     let why = "no verify read ran";
     for (const [n, pause] of waits.entries()) {
+      // A gap outlasts the pauses: one read per call at most.
+      if (n > 0 && gaps[rec.site]) break;
       if (pause > 0) await ctx.sleep(pause);
-      const seen = await ctx.run(`send ${key} verify read ${n + 1}`, async (): Promise<Seen> => {
-        journal.tried(key);
-        try {
-          const input = spec.parse(rec.path, rec.input);
-          // The same account on the same site; another site (a signed-out one) has no account.
-          const get: VerifyGet = (path, inp = {}, at) =>
-            facade.call(
-              at?.site ?? rec.site,
-              at?.method ?? "GET",
-              path,
-              inp,
-              at?.site && at.site !== rec.site ? null : rec.account,
-              from,
-            );
-          const got = await v.read(input, get);
-          return settle(got, {
-            words: v.words(input),
-            since: rec.startedAt,
-            lags: v.lags?.(input) ?? null,
-          });
-        } catch (err) {
-          return { seen: "unclear", why: `the verify read failed: ${messageOf(err)}` };
-        }
-      });
+      const seen = await ctx.run(
+        `send ${key} verify read ${n + 1}`,
+        async (): Promise<Seen | null> => {
+          const gap = gaps[rec.site] ?? 0;
+          const last = journal.get(key)?.readAt;
+          if (gap && last && Date.now() - Date.parse(last) < gap) return null;
+          journal.tried(key);
+          try {
+            const input = spec.parse(rec.path, rec.input);
+            // The same account on the same site; another site (a signed-out one) has no account.
+            const get: VerifyGet = (path, inp = {}, at) =>
+              facade.call(
+                at?.site ?? rec.site,
+                at?.method ?? "GET",
+                path,
+                inp,
+                at?.site && at.site !== rec.site ? null : rec.account,
+                from,
+              );
+            const got = await v.read(input, get);
+            return settle(got, {
+              words: v.words(input),
+              since: rec.startedAt,
+              lags: v.lags?.(input) ?? null,
+            });
+          } catch (err) {
+            return { seen: "unclear", why: `the verify read failed: ${messageOf(err)}` };
+          }
+        },
+      );
+      // Too soon: answer what is stored, no read.
+      if (!seen)
+        return ctx.run(
+          `send ${key} stored`,
+          async () =>
+            journal.get(key)?.verdict ?? unknown(`${rec.site} reads a send at most once an hour`),
+        );
       if (seen.seen === "found")
         return keep(() => ({
           verdict: "sent",

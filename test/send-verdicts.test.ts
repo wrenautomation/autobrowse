@@ -26,12 +26,15 @@ const diskJournal = () => fileSendJournal(join(dir, "sends"));
 /** The pauses before the three verify reads in a test: small, and different. */
 const PAUSES = [1, 2, 3];
 
-function build(opts: { wait?: { boundMs: number; pausesMs: number[] } } = {}) {
+function build(
+  opts: { wait?: { boundMs: number; pausesMs: number[] }; gapMs?: Record<string, number> } = {},
+) {
   const facade = scratchFacade(join(dir, "started"));
   const svc = sitesService(facade, "sites_verdicts", undefined, null, {
     journal,
     verifyPausesMs: PAUSES,
     ...(opts.wait ? { wait: opts.wait } : {}),
+    ...(opts.gapMs ? { verifyGapMs: opts.gapMs } : {}),
   }) as unknown as { service: Record<string, (ctx: never, req: unknown) => Promise<unknown>> };
   const sleeps: number[] = [];
   let n = 0;
@@ -466,6 +469,25 @@ describe("the verdict handler", () => {
       how: "before_submit",
       reason: "no send under this key",
     });
+  });
+
+  it("10-30 LinkedIn: four verdict asks read 10 times in 16 min; a site's gap allows one read per key, later asks answer what is stored", async () => {
+    platform.mode = "lost";
+    platform.lagging = true;
+    const { call, verdict, sleeps } = build({ gapMs: { scratch: 3_600_000 } });
+    const first = await call({ ...VIDEO, input: { title: "gap video" }, sendKey: "k-gap" });
+    expect(first).toMatchObject({ verdict: "unknown" });
+    // One read, then no sleep before reads the gap forbids.
+    expect(platform.reads).toBe(1);
+    expect(sleeps).toEqual([PAUSES[0]]);
+    showVideos();
+    expect(await verdict("k-gap")).toEqual(first);
+    expect(await verdict("k-gap")).toEqual(first);
+    expect(platform.reads).toBe(1);
+    // An hour later it reads again.
+    const readAt = journal.get("k-gap")?.readAt ?? "";
+    journal.tried("k-gap", new Date(Date.parse(readAt) - 3_600_000));
+    expect(await verdict("k-gap")).toMatchObject({ verdict: "sent", how: "verified" });
   });
 
   it("a final verdict is answered as it stands", async () => {

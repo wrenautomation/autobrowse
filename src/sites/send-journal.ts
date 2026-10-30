@@ -42,6 +42,8 @@ export interface SendRecord {
   verdict?: SendVerdict;
   /** Verify reads made so far. */
   tries: number;
+  /** ISO. The last verify read began; a site's `VERIFY_GAP_MS` counts from it. */
+  readAt?: string;
 }
 
 /** What a new record is made from. */
@@ -60,7 +62,7 @@ export interface SendJournal {
    */
   settle(key: string, verdict: SendVerdict): SendVerdict;
   /** One more verify read made. */
-  tried(key: string): void;
+  tried(key: string, at?: Date): void;
   /** Drop a record that never submitted (a busy profile, a bad request): nothing was asked of the site. */
   forget(key: string): void;
   /** A call in this process is running this key's leg. Not kept on disk: a restart clears it. */
@@ -113,8 +115,8 @@ function journalOver(store: Store, now: () => number): SendJournal {
       });
       return standing;
     },
-    tried(key) {
-      update(key, (r) => ({ ...r, tries: r.tries + 1 }));
+    tried(key, at = new Date()) {
+      update(key, (r) => ({ ...r, tries: r.tries + 1, readAt: at.toISOString() }));
     },
     forget(key) {
       const rec = store.read(key);
