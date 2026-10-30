@@ -62,7 +62,7 @@ describe("headed overlay", () => {
   const seen = (page: Page) => page.evaluate("+document.body.dataset.seen");
   const row = { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] };
 
-  it("the panel takes clicks unseen, body and bar; none while a command runs", async () => {
+  it("the panel takes clicks unseen, body and bar; none while a command acts", async () => {
     const browser = await chromium.launch();
     try {
       const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
@@ -78,8 +78,13 @@ describe("headed overlay", () => {
       await page.mouse.click(p.left + 200, p.top + 8);
       expect([await hits(page), await seen(page)]).toEqual([0, before]);
       expect(await page.evaluate("document.activeElement.id")).toBe("f");
-      // A command running: the bar is inert too.
-      await o.begin(page);
+      // A command that only reads: the panel still takes the click.
+      await o.begin(page, "read");
+      await page.mouse.click(p.left + 40, p.bottom - 20);
+      expect(await hits(page)).toBe(0);
+      await o.end(page, row);
+      // A command that acts: the bar is inert too.
+      await o.begin(page, "click");
       expect(Number(await page.evaluate(`getComputedStyle(${ui}.tuiEl).opacity`))).toBe(0.6);
       await page.mouse.click(p.left + 200, p.top + 8);
       expect(await hits(page)).toBe(1);

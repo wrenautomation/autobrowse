@@ -12,8 +12,9 @@
  * minimize), its corner grip (resize) and its body, where a click does
  * nothing. A window capture listener swallows those events before the page's
  * handlers or the recorder's observer see one; mousedown's default is
- * stopped so focus stays where it was. While a command runs the whole layer
- * is inert (pointer-events none): no act can land on it. A drag holds pointer
+ * stopped so focus stays where it was. While the hands may press the page (a
+ * command that acts, a hold) the whole layer is inert (pointer-events none):
+ * no act can land on it. A command that only reads keeps it taking clicks. A drag holds pointer
  * capture, so the page never sees the moves. Minimized, it is a tab at the
  * left edge. Boxes off, their positions are not looked up either.
  */
@@ -48,8 +49,10 @@ export interface OverlayState {
   doing: string | null;
   boxes: Array<{ n: number; box: Box }>;
   target: Box | null;
-  /** A command is running: the panel takes no pointer. */
+  /** A command is running. */
   busy: boolean;
+  /** The hands may press the page: the panel takes no pointer. */
+  inert: boolean;
   /** The running command: picks its phase words. */
   cmd: string | null;
   /** The bar's right side: seed, pace. */
@@ -65,10 +68,48 @@ const EMPTY: OverlayState = {
   boxes: [],
   target: null,
   busy: false,
+  inert: false,
   cmd: null,
   meta: null,
   trace: [],
 };
+
+/**
+ * Commands whose hands never press the page at a point: the panel keeps taking clicks while they run.
+ * Keys go to the focus; a feed's scroll runs in a `hold`.
+ */
+const READS_ONLY = new Set([
+  "open",
+  "aria",
+  "snapshot",
+  "text",
+  "url",
+  "pages",
+  "page",
+  "screenshot",
+  "marks",
+  "overlay",
+  "network",
+  "html",
+  "eval",
+  "count",
+  "read",
+  "records",
+  "keep",
+  "note",
+  "cut",
+  "goal",
+  "done",
+  "files",
+  "read_file",
+  "tools",
+  "save",
+  "journal",
+  "pause",
+  "resume",
+  "type",
+  "key",
+]);
 
 /** A ref's box resolves this fast or is left off: a slow find never holds up a step. */
 const BOX_MS = 400;
@@ -229,11 +270,11 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       'background:${T.canvas} repeating-linear-gradient(0deg,rgba(255,255,255,.028) 0 1px,transparent 1px 3px);',
       'border:1px solid ${T.accent};box-shadow:0 0 0 1px #000,0 10px 32px rgba(0,0,0,.55),0 0 22px rgba(165,150,214,.14);',
       'text-shadow:0 0 6px rgba(165,150,214,.22)}',
-      '.tui:not(.busy){pointer-events:auto}',
-      '.tui.busy{opacity:.6}',
+      '.tui:not(.inert){pointer-events:auto}',
+      '.tui.inert{opacity:.6}',
       '.tab{position:fixed;left:0;top:50%;transform:translateY(-50%);width:10px;height:56px;cursor:pointer;',
       'background:${T.canvas};border:1px solid ${T.accent};border-left:0;border-radius:0 5px 5px 0;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:width .15s}',
-      '.tab:not(.busy){pointer-events:auto}',
+      '.tab:not(.inert){pointer-events:auto}',
       '.tab:hover{width:16px;background:${T.accent}}',
       '.tab.busy::after{content:"";position:absolute;left:2px;top:25px;width:4px;height:4px;border-radius:50%;background:${T.accent};animation:blink 1s steps(2) infinite}',
       '.bar{display:flex;align-items:center;gap:8px;padding:2px 8px;background:${T.paper};border-bottom:1px solid ${T.accent};cursor:move}',
@@ -263,7 +304,7 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       '.rule{display:flex;gap:6px;color:${T.ink3};padding:0 8px;border-top:1px solid ${T.paper}}',
       '.rule .t{color:${T.ink3}}',
       '.rule .btn{pointer-events:auto}',
-      '.tui.busy .rule .btn{pointer-events:none}',
+      '.tui.inert .rule .btn{pointer-events:none}',
       '.rows{display:grid;grid-template-columns:auto auto auto minmax(0,1fr) auto auto;column-gap:1ch;align-content:start;overflow:hidden;padding:1px 0 3px;max-height:220px}',
       '.tui.sized .rows{flex:1;min-height:0;max-height:none}',
       '.row{display:grid;grid-column:1/-1;grid-template-columns:subgrid;padding:0 8px}',
@@ -295,7 +336,7 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
     };
     if (ui.min) {
       // Folded: a tab peeking from the left edge, the page free around it.
-      const tab = el('div', 'tab' + (s.busy ? ' busy' : ''));
+      const tab = el('div', 'tab' + (s.busy ? ' busy' : '') + (s.inert ? ' inert' : ''));
       tab.setAttribute('data-a', 'min');
       tab.title = 'autobrowse: open';
       root.appendChild(tab);
@@ -304,7 +345,7 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
     }
     clamp();
     const place = ui.x == null ? 'left:12px;bottom:12px' : 'left:' + ui.x + 'px;top:' + ui.y + 'px';
-    const tui = el('div', 'tui' + (s.busy ? ' busy' : '') + (ui.sized ? ' sized' : ''), null, place + ';width:' + ui.w + 'px' + (ui.sized ? ';height:' + ui.h + 'px' : ''));
+    const tui = el('div', 'tui' + (s.busy ? ' busy' : '') + (s.inert ? ' inert' : '') + (ui.sized ? ' sized' : ''), null, place + ';width:' + ui.w + 'px' + (ui.sized ? ';height:' + ui.h + 'px' : ''));
     ui.tuiEl = tui;
     const bar = el('div', 'bar');
     bar.appendChild(el('span', 'name', '▌autobrowse'));
@@ -383,8 +424,12 @@ export function overlayFor(startOn: boolean) {
   const attr = `data-o${randomBytes(4).toString("hex")}`;
   let state: OverlayState = { ...EMPTY };
   let drawn = false;
-  /** Commands and holds in flight: nested (a flow's steps inside its `flow` command), so a count. */
-  let running = 0;
+  /** Commands and holds in flight, nested (a flow's steps inside its `flow` command): each one's inertness. */
+  const running: boolean[] = [];
+  const settle = () => {
+    state.busy = running.length > 0;
+    state.inert = running.includes(true);
+  };
   let prefs: Prefs = {
     min: false,
     trace: true,
@@ -468,6 +513,7 @@ export function overlayFor(startOn: boolean) {
           ...EMPTY,
           trace: state.trace,
           busy: state.busy,
+          inert: state.inert,
           cmd: state.cmd,
           meta: state.meta,
         };
@@ -489,11 +535,11 @@ export function overlayFor(startOn: boolean) {
     tag(meta: string | null): void {
       state.meta = meta;
     },
-    /** A command starts: the panel goes inert before the act can reach the page. */
+    /** A command starts: one that may press the page makes the panel inert before the act can reach it. */
     async begin(page: Page, cmd?: string): Promise<void> {
       if (!enabled) return;
-      running++;
-      state.busy = true;
+      running.push(!cmd || !READS_ONLY.has(cmd));
+      settle();
       state.cmd = cmd ?? null;
       if (drawn) await draw(page);
     },
@@ -503,8 +549,8 @@ export function overlayFor(startOn: boolean) {
       const n = (state.trace.at(-1)?.n ?? 0) + 1;
       const at = new Date().toTimeString().slice(0, 8);
       state.trace = [...state.trace, { ...row, n, at }].slice(-TRACE_KEEP);
-      running = Math.max(0, running - 1);
-      state.busy = running > 0;
+      running.pop();
+      settle();
       if (!state.busy) state.cmd = null;
       // The row holds the act now; the line waits for the next.
       state.doing = null;
@@ -513,18 +559,16 @@ export function overlayFor(startOn: boolean) {
     /** Hands that may touch the page outside a command (a wait that clears a banner, a scroll): inert, no row. */
     async hold<T>(page: Page, fn: () => Promise<T>): Promise<T> {
       if (!enabled) return fn();
-      running++;
-      const was = state.busy;
-      state.busy = true;
+      const was = state.inert;
+      running.push(true);
+      settle();
       if (!was && drawn) await draw(page);
       try {
         return await fn();
       } finally {
-        running = Math.max(0, running - 1);
-        if (running === 0) {
-          state.busy = false;
-          if (drawn) await draw(page);
-        }
+        running.pop();
+        settle();
+        if (!was && drawn) await draw(page);
       }
     },
     /** Before an act: the target flashes and the panel says what is done. */
