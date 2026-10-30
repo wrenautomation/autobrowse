@@ -7,10 +7,10 @@
  * the aria tree never reads it) and is taken off for every screenshot.
  * Headless, nothing is drawn.
  *
- * Decorative: it changes nothing a page, a run or a shot sees. The panel's
- * body lets every click through to the page. Only its bar (drag to move,
- * buttons: boxes on/off, minimize) and corner grip (resize) take a pointer,
- * and a window capture listener swallows those events before the page's
+ * Decorative: it changes nothing a page, a run or a shot sees. The whole
+ * panel takes the pointer: its bar (drag to move, buttons: boxes on/off,
+ * minimize), its corner grip (resize) and its body, where a click does
+ * nothing. A window capture listener swallows those events before the page's
  * handlers or the recorder's observer see one; mousedown's default is
  * stopped so focus stays where it was. While a command runs the whole layer
  * is inert (pointer-events none): no act can land on it. A drag holds pointer
@@ -223,13 +223,13 @@ const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) =>
       '.tag{position:absolute;left:-1.5px;font:700 10px/13px ui-monospace,Menlo,monospace;color:${T.onAccent};background:${T.accent};padding:0 4px}',
       '.target{position:fixed;border:2px solid ${T.accent};animation:pulse .9s ease-out infinite}',
       '@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(165,150,214,.75)}100%{box-shadow:0 0 0 12px rgba(165,150,214,0)}}',
-      // Only the bar, its buttons and the grip take a pointer: the page under the rest gets every click.
+      // The whole panel takes the pointer, so a person's click never reaches the page under it.
       '.tui{position:fixed;display:flex;flex-direction:column;max-width:calc(100vw - 12px);cursor:default;user-select:none;',
       'font:12px/1.4 "JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace;color:${T.ink};',
       'background:${T.canvas} repeating-linear-gradient(0deg,rgba(255,255,255,.028) 0 1px,transparent 1px 3px);',
       'border:1px solid ${T.accent};box-shadow:0 0 0 1px #000,0 10px 32px rgba(0,0,0,.55),0 0 22px rgba(165,150,214,.14);',
       'text-shadow:0 0 6px rgba(165,150,214,.22)}',
-      '.tui:not(.busy) :is(.bar,.grip){pointer-events:auto}',
+      '.tui:not(.busy){pointer-events:auto}',
       '.tui.busy{opacity:.6}',
       '.tab{position:fixed;left:0;top:50%;transform:translateY(-50%);width:10px;height:56px;cursor:pointer;',
       'background:${T.canvas};border:1px solid ${T.accent};border-left:0;border-radius:0 5px 5px 0;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:width .15s}',

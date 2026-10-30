@@ -62,7 +62,7 @@ describe("headed overlay", () => {
   const seen = (page: Page) => page.evaluate("+document.body.dataset.seen");
   const row = { cmd: "click", what: "Save", ok: true, ms: 12, note: "", detail: [] };
 
-  it("the panel's body lets every click through; its bar takes clicks unseen, none while a command runs", async () => {
+  it("the panel takes clicks unseen, body and bar; none while a command runs", async () => {
     const browser = await chromium.launch();
     try {
       const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
@@ -72,27 +72,24 @@ describe("headed overlay", () => {
       await o.set(page, { goal: "save the form" });
       await o.end(page, row);
       const p = await panelBox(page);
-      // The body: the page under it gets the click.
-      await page.mouse.click(p.left + 40, p.bottom - 20);
-      expect(await hits(page)).toBe(1);
-      // The bar: the page never sees it, and focus stays.
-      await page.focus("#f");
+      // The body and the bar: the page never sees them, and focus stays.
       const before = await seen(page);
+      await page.mouse.click(p.left + 40, p.bottom - 20);
       await page.mouse.click(p.left + 200, p.top + 8);
-      expect([await hits(page), await seen(page)]).toEqual([1, before]);
+      expect([await hits(page), await seen(page)]).toEqual([0, before]);
       expect(await page.evaluate("document.activeElement.id")).toBe("f");
       // A command running: the bar is inert too.
       await o.begin(page);
       expect(Number(await page.evaluate(`getComputedStyle(${ui}.tuiEl).opacity`))).toBe(0.6);
       await page.mouse.click(p.left + 200, p.top + 8);
-      expect(await hits(page)).toBe(2);
+      expect(await hits(page)).toBe(1);
       await o.end(page, row);
       // Hands between commands (a banner wait, a scroll): inert. The new row grew the panel up.
       const q = await panelBox(page);
       await o.hold(page, () => page.mouse.click(q.left + 200, q.top + 8));
-      expect(await hits(page)).toBe(3);
+      expect(await hits(page)).toBe(2);
       await page.mouse.click(q.left + 200, q.top + 8);
-      expect(await hits(page)).toBe(3);
+      expect(await hits(page)).toBe(2);
     } finally {
       await browser.close();
     }
