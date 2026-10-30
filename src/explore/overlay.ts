@@ -132,7 +132,7 @@ const PANEL_MIN_W = 220;
 const BOX_MS = 400;
 /** A draw never holds a command longer than this. */
 const DRAW_MS = 1_000;
-/** Rows kept; the panel scrolls them. */
+/** Rows the page keeps; the trace scrolls them by wheel. */
 const TRACE_KEEP = 200;
 
 /** What the busy line cycles through, in the order the hands do it. */
@@ -193,271 +193,296 @@ interface Prefs {
   sized: boolean;
 }
 
-/** In the page: the layer drawn from `s`, or taken away when `s` is undefined. */
-const layerScript = (attr: string, s: OverlayState | undefined, prefs: Prefs) => `(() => {
+/** In the page, once a document: the layer and its handlers; `ui.draw` updates it in place. */
+const installScript = (attr: string, prefs: Prefs) => `(() => {
   const K = '__${attr}';
-  const ui = window[K] || (window[K] = { ...${JSON.stringify(prefs)} });
-  const prefs = () => ({ min: ui.min, trace: ui.trace, marks: ui.marks, x: ui.x, y: ui.y, w: ui.w, h: ui.h, sized: ui.sized });
-  for (const old of document.querySelectorAll('[${attr}]')) old.remove();
-  ui.host = null;
-  const s = ${JSON.stringify(s ?? null)};
-  if (!s) return prefs();
-  ui.s = s;
+  if (window[K] && window[K].draw) return;
+  const ui = window[K] = { ...${JSON.stringify(prefs)}, lastN: -1, host: null };
+  ui.prefs = () => ({ min: ui.min, trace: ui.trace, marks: ui.marks, x: ui.x, y: ui.y, w: ui.w, h: ui.h, sized: ui.sized });
+  const el = (tag, cls, text, css) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; if (css) e.style.cssText = css; return e; };
+  const at = (b) => 'left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px;height:' + b.h + 'px;';
   // In the viewport, at least a corner of the bar.
   const clamp = () => {
     if (ui.x == null) return;
     ui.x = Math.round(Math.max(0, Math.min(innerWidth - 60, ui.x)));
     ui.y = Math.round(Math.max(0, Math.min(innerHeight - 24, ui.y)));
   };
-  if (!ui.bound) {
-    ui.bound = true;
-    // Capture on window runs before the page's document listeners and the observer.
-    const KINDS = ['pointerdown','pointerup','pointermove','pointerover','pointerout','pointerenter','pointerleave',
-      'mousedown','mouseup','mousemove','mouseover','mouseout','mouseenter','mouseleave',
-      'click','dblclick','auxclick','contextmenu','wheel','touchstart','touchend','touchmove','pointercancel'];
-    for (const k of KINDS) window.addEventListener(k, (e) => {
-      if (!ui.host || e.target !== ui.host) return;
-      e.stopImmediatePropagation();
-      const hit = ui.root && ui.root.elementFromPoint(e.clientX, e.clientY);
-      // The grip sizes, the bar moves; capture keeps every move on us until the button lifts.
-      if (k === 'pointerdown' && ui.tuiEl && hit && !hit.closest('.btn')) {
-        const r = ui.tuiEl.getBoundingClientRect();
-        const g = hit.closest('.grip');
-        // A top or left corner moves that edge; the opposite corner stays put.
-        if (g) ui.drag = { kind: 'size', x: e.clientX, y: e.clientY, r, l: g.dataset.c[1] === 'w', t: g.dataset.c[0] === 'n' };
-        else if (hit.closest('.bar')) ui.drag = { kind: 'move', x: e.clientX - r.left, y: e.clientY - r.top };
-        if (ui.drag) {
-          ui.tuiEl.setPointerCapture(e.pointerId);
-          e.preventDefault();
-          return;
-        }
-      }
+  const host = el('div', null, null, 'position:fixed;inset:0;z-index:2147483647;pointer-events:none');
+  host.setAttribute('${attr}', '');
+  const root = host.attachShadow({ mode: 'closed' });
+  const style = el('style', null, [
+        '*{box-sizing:border-box}',
+        '.box{position:fixed;border:1.5px dashed;border-radius:2px}',
+        '.tag{position:absolute;left:-1.5px;font:700 10px/13px ui-monospace,Menlo,monospace;color:${T.onAccent};background:${T.accent};padding:0 4px}',
+        '.target{position:fixed;border:2px solid ${T.accent};animation:pulse .9s ease-out infinite}',
+        '@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(165,150,214,.75)}100%{box-shadow:0 0 0 12px rgba(165,150,214,0)}}',
+        // The whole panel takes the pointer, so a person's click never reaches the page under it.
+        '.tui{position:fixed;display:flex;flex-direction:column;max-width:calc(100vw - 12px);cursor:default;user-select:none;',
+        'font:12px/1.4 "JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace;color:${T.ink};',
+        'background:${T.canvas} repeating-linear-gradient(0deg,rgba(255,255,255,.028) 0 1px,transparent 1px 3px);',
+        'border:1px solid ${T.accent};box-shadow:0 0 0 1px #000,0 10px 32px rgba(0,0,0,.55),0 0 22px rgba(165,150,214,.14);',
+        'text-shadow:0 0 6px rgba(165,150,214,.22)}',
+        // Width scales the type and the gaps: 12px wide open, 10px at the narrowest.
+        '.tui{container-type:inline-size}',
+        '.tui>*{--g:clamp(3px,1.6cqi,8px);font-size:clamp(10px,calc(8px + .9cqi),12px)}',
+        '.tui:not(.inert){pointer-events:auto}',
+        '.tui.inert{opacity:.6}',
+        '.tab{position:fixed;left:0;top:50%;transform:translateY(-50%);width:10px;height:56px;cursor:pointer;',
+        'background:${T.canvas};border:1px solid ${T.accent};border-left:0;border-radius:0 5px 5px 0;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:width .15s}',
+        '.tab:not(.inert){pointer-events:auto}',
+        '.tab:hover{width:16px;background:${T.accent}}',
+        '.tab.busy::after{content:"";position:absolute;left:2px;top:25px;width:4px;height:4px;border-radius:50%;background:${T.accent};animation:blink 1s steps(2) infinite}',
+        '.bar{display:flex;align-items:center;gap:var(--g);padding:2px var(--g);background:${T.paper};border-bottom:1px solid ${T.accent};cursor:move}',
+        '.bar .name{font-weight:700;color:${T.accent};letter-spacing:.04em}',
+        '.bar .state{color:${T.ink3}}',
+        '.bar .state.run{color:${T.accent};animation:blink 1s steps(2) infinite}',
+        '.bar .fill{flex:1}',
+        '.bar .meta{color:${T.ink3};font-size:.88em}',
+        '.grip{position:absolute;width:12px;height:12px;border:0 solid ${T.accent};opacity:.45}',
+        '.tui:hover .grip{opacity:1}',
+        '.grip.se{right:-1px;bottom:-1px;cursor:nwse-resize;border-width:0 2px 2px 0;opacity:1}',
+        '.grip.sw{left:-1px;bottom:-1px;cursor:nesw-resize;border-width:0 0 2px 2px}',
+        '.grip.ne{right:-1px;top:-1px;cursor:nesw-resize;border-width:2px 2px 0 0}',
+        '.grip.nw{left:-1px;top:-1px;cursor:nwse-resize;border-width:2px 0 0 2px}',
+        '.live{color:${T.ink3}}',
+        '.spin::before{content:"${SPIN[0]}";color:${T.accent};animation:spin .8s steps(1) infinite}',
+        '.spin.slow::before{animation-duration:1.6s;color:${T.ink3}}',
+        '${contentKeys("spin", SPIN)}',
+        '.phase::after{content:"";animation:ph var(--d) steps(1) forwards;animation-delay:var(--t)}',
+        '.dots::after{content:"";animation:dots 1.8s steps(1) infinite}',
+        '${contentKeys("dots", ["", ".", "..", "..."])}',
+        '.btn{color:${T.ink3};cursor:pointer;padding:0 2px}',
+        '.btn:hover{color:${T.onAccent};background:${T.accent};text-shadow:none}',
+        '.btn.on{color:${T.accent}}',
+        '.body{padding:4px var(--g) 5px}',
+        '.k{color:${T.ink3}}',
+        '.goal{color:${T.ink};font-weight:700}',
+        '.thought{color:${T.ink2}}',
+        '.doing{color:${T.accent}}',
+        '.cursor{display:inline-block;width:.6em;height:1.05em;margin-left:2px;vertical-align:-2px;background:${T.accent};animation:blink 1s steps(2) infinite}',
+        '@keyframes blink{50%{opacity:0}}',
+        '.rule{display:flex;gap:var(--g);color:${T.ink3};padding:0 var(--g);border-top:1px solid ${T.paper}}',
+        '.rule .t{color:${T.ink3}}',
+        '.rule .btn{pointer-events:auto}',
+        '.tui.inert .rule .btn{pointer-events:none}',
+        '.rows{display:grid;grid-template-columns:auto auto auto minmax(0,1fr) auto auto;column-gap:0;align-content:start;overflow-y:auto;overflow-anchor:none;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:${T.ink3} transparent;padding:1px 0 3px;max-height:220px}',
+        '.tui.sized .rows{flex:1;min-height:0;max-height:none}',
+        '.row{display:grid;grid-column:1/-1;grid-template-columns:subgrid;padding:0 var(--g)}',
+        // Cells placed by column, gaps as padding: a hidden column takes no room and moves nothing.
+        '.row .n{grid-column:1}.row .at{grid-column:2}.row .cmd{grid-column:3}.row .what{grid-column:4}.row .ok,.row .no:not(.note){grid-column:5}.row .ms{grid-column:6}',
+        '.row>:not(:first-child):not(.note){padding-left:var(--g)}',
+        // Narrow: the clock and the seed go; the act, its target, ✓ and ms stay, the note takes the width.
+        '@container (max-width:360px){.row .at,.bar .meta{display:none}.rows .row .note{grid-column:3/-1}}',
+        '.row .note{grid-column:4/-1;padding-left:var(--g);color:${T.ink3};font-size:.92em;line-height:1.3;overflow-wrap:anywhere}',
+        '.row .note.no{color:${T.bad};opacity:.85}',
+        '.row.new{animation:fresh 1.2s ease-out}',
+        '@keyframes fresh{from{background:rgba(165,150,214,.28)}to{background:transparent}}',
+        '.row .n{color:${T.ink3};text-align:right}',
+        '.row .at,.row .ms{color:${T.ink3}}',
+        '.row .ms{text-align:right}',
+        '.row .cmd{color:${T.accent}}',
+        '.row .what{color:${T.ink};overflow-wrap:anywhere}',
+        '.ok{color:${T.good}}.no{color:${T.bad}}',
+  ].join(''));
+  // The running command's phase words: one keyframes rule, swapped per command.
+  const phase = el('style');
+  const marks = el('div');
+  // Folded: a tab peeking from the left edge, the page free around it.
+  const tab = el('div', 'tab');
+  tab.setAttribute('data-a', 'min');
+  tab.title = 'autobrowse: open';
+  const tui = el('div', 'tui');
+  const bar = el('div', 'bar'), body = el('div', 'body'), rule = el('div', 'rule'), rows = el('div', 'rows');
+  tui.append(bar, body, rule, rows);
+  for (const c of ['nw', 'ne', 'sw', 'se']) {
+    const g = el('div', 'grip ' + c);
+    g.dataset.c = c;
+    tui.appendChild(g);
+  }
+  root.append(style, phase, marks, tab, tui);
+  // Capture on window runs before the page's document listeners and the observer.
+  const KINDS = ['pointerdown','pointerup','pointermove','pointerover','pointerout','pointerenter','pointerleave',
+    'mousedown','mouseup','mousemove','mouseover','mouseout','mouseenter','mouseleave',
+    'click','dblclick','auxclick','contextmenu','wheel','touchstart','touchend','touchmove','pointercancel'];
+  for (const k of KINDS) window.addEventListener(k, (e) => {
+    if (!ui.host || e.target !== ui.host) return;
+    e.stopImmediatePropagation();
+    const hit = root.elementFromPoint(e.clientX, e.clientY);
+    // The grip sizes, the bar moves; capture keeps every move on us until the button lifts.
+    if (k === 'pointerdown' && ui.tuiEl && hit && !hit.closest('.btn')) {
+      const r = ui.tuiEl.getBoundingClientRect();
+      const g = hit.closest('.grip');
+      // A top or left corner moves that edge; the opposite corner stays put.
+      if (g) ui.drag = { kind: 'size', x: e.clientX, y: e.clientY, r, l: g.dataset.c[1] === 'w', t: g.dataset.c[0] === 'n' };
+      else if (hit.closest('.bar')) ui.drag = { kind: 'move', x: e.clientX - r.left, y: e.clientY - r.top };
       if (ui.drag) {
-        if (k === 'pointermove' && ui.drag.kind === 'size') {
-          const d = ui.drag, r = d.r, dx = e.clientX - d.x, dy = e.clientY - d.y;
-          const w = d.l ? r.width - dx : r.width + dx, h = d.t ? r.height - dy : r.height + dy;
-          ui.w = Math.round(Math.max(${PANEL_MIN_W}, Math.min(d.l ? r.right : innerWidth - r.left, w)));
-          ui.h = Math.round(Math.max(60, Math.min(d.t ? r.bottom : innerHeight - r.top, h)));
-          ui.x = Math.round(d.l ? r.right - ui.w : r.left);
-          ui.y = Math.round(d.t ? r.bottom - ui.h : r.top);
-          ui.sized = true;
-          const st = ui.tuiEl.style;
-          st.width = ui.w + 'px';
-          st.height = ui.h + 'px';
-          st.left = ui.x + 'px';
-          st.top = ui.y + 'px';
-          st.bottom = 'auto';
-          ui.tuiEl.classList.add('sized');
-        } else if (k === 'pointermove') {
-          ui.x = e.clientX - ui.drag.x;
-          ui.y = e.clientY - ui.drag.y;
-          clamp();
-          ui.tuiEl.style.left = ui.x + 'px';
-          ui.tuiEl.style.top = ui.y + 'px';
-          ui.tuiEl.style.bottom = 'auto';
-        } else if (k === 'pointerup' || k === 'pointercancel') ui.drag = null;
+        ui.tuiEl.setPointerCapture(e.pointerId);
         e.preventDefault();
         return;
       }
-      // mousedown's default moves focus.
-      if (k === 'mousedown' || k === 'click' || k === 'auxclick' || k === 'contextmenu' || k === 'dblclick' || k === 'wheel') e.preventDefault();
-      if (k !== 'click') return;
-      const a = hit && hit.closest('[data-a]');
-      if (!a) return;
-      const act = a.getAttribute('data-a');
-      if (act === 'min') ui.min = !ui.min;
-      else if (act === 'marks') ui.marks = !ui.marks;
-      else if (act === 'trace') ui.trace = !ui.trace;
-      ui.draw(ui.s);
-    }, { capture: true, passive: false });
-  }
-  ui.draw = (s) => {
-    for (const old of document.querySelectorAll('[${attr}]')) old.remove();
-    const host = document.createElement('div');
-    host.setAttribute('${attr}', '');
-    host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none';
-    const root = host.attachShadow({ mode: 'closed' });
-    const el = (tag, cls, text, css) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; if (css) e.style.cssText = css; return e; };
-    const at = (b) => 'left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px;height:' + b.h + 'px;';
+    }
+    if (ui.drag) {
+      if (k === 'pointermove' && ui.drag.kind === 'size') {
+        const d = ui.drag, r = d.r, dx = e.clientX - d.x, dy = e.clientY - d.y;
+        const w = d.l ? r.width - dx : r.width + dx, h = d.t ? r.height - dy : r.height + dy;
+        ui.w = Math.round(Math.max(${PANEL_MIN_W}, Math.min(d.l ? r.right : innerWidth - r.left, w)));
+        ui.h = Math.round(Math.max(60, Math.min(d.t ? r.bottom : innerHeight - r.top, h)));
+        ui.x = Math.round(d.l ? r.right - ui.w : r.left);
+        ui.y = Math.round(d.t ? r.bottom - ui.h : r.top);
+        ui.sized = true;
+        const st = ui.tuiEl.style;
+        st.width = ui.w + 'px';
+        st.height = ui.h + 'px';
+        st.left = ui.x + 'px';
+        st.top = ui.y + 'px';
+        st.bottom = 'auto';
+        ui.tuiEl.classList.add('sized');
+      } else if (k === 'pointermove') {
+        ui.x = e.clientX - ui.drag.x;
+        ui.y = e.clientY - ui.drag.y;
+        clamp();
+        ui.tuiEl.style.left = ui.x + 'px';
+        ui.tuiEl.style.top = ui.y + 'px';
+        ui.tuiEl.style.bottom = 'auto';
+      } else if (k === 'pointerup' || k === 'pointercancel') ui.drag = null;
+      e.preventDefault();
+      return;
+    }
+    // The trace scrolls by hand; the page under it never does.
+    if (k === 'wheel' && hit && hit.closest('.rows')) rows.scrollTop += e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? rows.clientHeight : 1);
+    // mousedown's default moves focus.
+    if (k === 'mousedown' || k === 'click' || k === 'auxclick' || k === 'contextmenu' || k === 'dblclick' || k === 'wheel') e.preventDefault();
+    if (k !== 'click') return;
+    const a = hit && hit.closest('[data-a]');
+    if (!a) return;
+    const act = a.getAttribute('data-a');
+    if (act === 'min') ui.min = !ui.min;
+    else if (act === 'marks') ui.marks = !ui.marks;
+    else if (act === 'trace') ui.trace = !ui.trace;
+    ui.paint();
+  }, { capture: true, passive: false });
+  // Off for a shot: the node leaves the document; its rows and scroll come back with it.
+  ui.hide = () => {
+    if (!host.isConnected) return;
+    ui.top = rows.scrollTop;
+    host.remove();
+    ui.host = null;
+  };
+  const show = () => {
+    if (host.isConnected) return;
+    document.documentElement.appendChild(host);
+    ui.host = host;
+    rows.scrollTop = ui.top || 0;
+  };
+  const rowOf = (r) => {
+    const row = el('div', 'row');
+    row.appendChild(el('span', 'n', String(r.n)));
+    row.appendChild(el('span', 'at', r.at));
+    row.appendChild(el('span', 'cmd', r.cmd));
+    row.appendChild(el('span', 'what', r.what));
+    row.appendChild(el('span', r.ok ? 'ok' : 'no', r.ok ? '✓' : '✗'));
+    row.appendChild(el('span', 'ms', r.ms < 1000 ? r.ms + 'ms' : (r.ms / 1000).toFixed(1) + 's'));
+    if (r.note) row.appendChild(el('span', 'note' + (r.ok ? '' : ' no'), r.note));
+    return row;
+  };
+  // Newest first. Scrolled down, the rows in view stay put; at the top, the newest shows.
+  const add = (list, reset) => {
+    if (reset) rows.textContent = '';
+    // The rows as data: what a test or a later read sees.
+    ui.rows = (reset ? list : (ui.rows || []).concat(list)).slice(-${TRACE_KEEP});
+    if (!list.length) return;
+    const was = reset ? 0 : rows.scrollTop, h = rows.scrollHeight;
+    const fresh = document.createDocumentFragment();
+    for (let i = list.length - 1; i >= 0; i--) fresh.appendChild(rowOf(list[i]));
+    for (const old of rows.querySelectorAll('.new')) old.classList.remove('new');
+    fresh.firstChild.classList.add('new');
+    rows.insertBefore(fresh, rows.firstChild);
+    while (rows.childElementCount > ${TRACE_KEEP}) rows.lastChild.remove();
+    rows.scrollTop = was > 0 ? was + rows.scrollHeight - h : 0;
+  };
+  ui.paint = () => {
+    const s = ui.s;
+    show();
     // A command's phase words run on from when it began, across redraws.
     if (s.busy && !ui.wasBusy) ui.since = Date.now();
     ui.wasBusy = s.busy;
     const since = ((Date.now() - (ui.since || Date.now())) / 1000).toFixed(2);
-    const style = document.createElement('style');
-    style.textContent = [
-      '*{box-sizing:border-box}',
-      '.box{position:fixed;border:1.5px dashed;border-radius:2px}',
-      '.tag{position:absolute;left:-1.5px;font:700 10px/13px ui-monospace,Menlo,monospace;color:${T.onAccent};background:${T.accent};padding:0 4px}',
-      '.target{position:fixed;border:2px solid ${T.accent};animation:pulse .9s ease-out infinite}',
-      '@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(165,150,214,.75)}100%{box-shadow:0 0 0 12px rgba(165,150,214,0)}}',
-      // The whole panel takes the pointer, so a person's click never reaches the page under it.
-      '.tui{position:fixed;display:flex;flex-direction:column;max-width:calc(100vw - 12px);cursor:default;user-select:none;',
-      'font:12px/1.4 "JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace;color:${T.ink};',
-      'background:${T.canvas} repeating-linear-gradient(0deg,rgba(255,255,255,.028) 0 1px,transparent 1px 3px);',
-      'border:1px solid ${T.accent};box-shadow:0 0 0 1px #000,0 10px 32px rgba(0,0,0,.55),0 0 22px rgba(165,150,214,.14);',
-      'text-shadow:0 0 6px rgba(165,150,214,.22)}',
-      // Width scales the type and the gaps: 12px wide open, 10px at the narrowest.
-      '.tui{container-type:inline-size}',
-      '.tui>*{--g:clamp(3px,1.6cqi,8px);font-size:clamp(10px,calc(8px + .9cqi),12px)}',
-      '.tui:not(.inert){pointer-events:auto}',
-      '.tui.inert{opacity:.6}',
-      '.tab{position:fixed;left:0;top:50%;transform:translateY(-50%);width:10px;height:56px;cursor:pointer;',
-      'background:${T.canvas};border:1px solid ${T.accent};border-left:0;border-radius:0 5px 5px 0;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:width .15s}',
-      '.tab:not(.inert){pointer-events:auto}',
-      '.tab:hover{width:16px;background:${T.accent}}',
-      '.tab.busy::after{content:"";position:absolute;left:2px;top:25px;width:4px;height:4px;border-radius:50%;background:${T.accent};animation:blink 1s steps(2) infinite}',
-      '.bar{display:flex;align-items:center;gap:var(--g);padding:2px var(--g);background:${T.paper};border-bottom:1px solid ${T.accent};cursor:move}',
-      '.bar .name{font-weight:700;color:${T.accent};letter-spacing:.04em}',
-      '.bar .state{color:${T.ink3}}',
-      '.bar .state.run{color:${T.accent};animation:blink 1s steps(2) infinite}',
-      '.bar .fill{flex:1}',
-      '.bar .meta{color:${T.ink3};font-size:.88em}',
-      '.grip{position:absolute;width:12px;height:12px;border:0 solid ${T.accent};opacity:.45}',
-      '.tui:hover .grip{opacity:1}',
-      '.grip.se{right:-1px;bottom:-1px;cursor:nwse-resize;border-width:0 2px 2px 0;opacity:1}',
-      '.grip.sw{left:-1px;bottom:-1px;cursor:nesw-resize;border-width:0 0 2px 2px}',
-      '.grip.ne{right:-1px;top:-1px;cursor:nesw-resize;border-width:2px 2px 0 0}',
-      '.grip.nw{left:-1px;top:-1px;cursor:nwse-resize;border-width:2px 0 0 2px}',
-      '.live{color:${T.ink3}}',
-      '.spin::before{content:"${SPIN[0]}";color:${T.accent};animation:spin .8s steps(1) infinite}',
-      '.spin.slow::before{animation-duration:1.6s;color:${T.ink3}}',
-      '${contentKeys("spin", SPIN)}',
-      '.phase::after{content:"";animation:ph var(--d) steps(1) forwards;animation-delay:var(--t)}',
-      '.dots::after{content:"";animation:dots 1.8s steps(1) infinite}',
-      '${contentKeys("dots", ["", ".", "..", "..."])}',
-      '.btn{color:${T.ink3};cursor:pointer;padding:0 2px}',
-      '.btn:hover{color:${T.onAccent};background:${T.accent};text-shadow:none}',
-      '.btn.on{color:${T.accent}}',
-      '.body{padding:4px var(--g) 5px}',
-      '.k{color:${T.ink3}}',
-      '.goal{color:${T.ink};font-weight:700}',
-      '.thought{color:${T.ink2}}',
-      '.doing{color:${T.accent}}',
-      '.cursor{display:inline-block;width:.6em;height:1.05em;margin-left:2px;vertical-align:-2px;background:${T.accent};animation:blink 1s steps(2) infinite}',
-      '@keyframes blink{50%{opacity:0}}',
-      '.rule{display:flex;gap:var(--g);color:${T.ink3};padding:0 var(--g);border-top:1px solid ${T.paper}}',
-      '.rule .t{color:${T.ink3}}',
-      '.rule .btn{pointer-events:auto}',
-      '.tui.inert .rule .btn{pointer-events:none}',
-      '.rows{display:grid;grid-template-columns:auto auto auto minmax(0,1fr) auto auto;column-gap:0;align-content:start;overflow:hidden;padding:1px 0 3px;max-height:220px}',
-      '.tui.sized .rows{flex:1;min-height:0;max-height:none}',
-      '.row{display:grid;grid-column:1/-1;grid-template-columns:subgrid;padding:0 var(--g)}',
-      // Cells placed by column, gaps as padding: a hidden column takes no room and moves nothing.
-      '.row .n{grid-column:1}.row .at{grid-column:2}.row .cmd{grid-column:3}.row .what{grid-column:4}.row .ok,.row .no:not(.note){grid-column:5}.row .ms{grid-column:6}',
-      '.row>:not(:first-child):not(.note){padding-left:var(--g)}',
-      // Narrow: the clock and the seed go; the act, its target, ✓ and ms stay, the note takes the width.
-      '@container (max-width:360px){.row .at,.bar .meta{display:none}.rows .row .note{grid-column:3/-1}}',
-      '.row .note{grid-column:4/-1;padding-left:var(--g);color:${T.ink3};font-size:.92em;line-height:1.3;overflow-wrap:anywhere}',
-      '.row .note.no{color:${T.bad};opacity:.85}',
-      '.row.new{animation:fresh 1.2s ease-out}',
-      '@keyframes fresh{from{background:rgba(165,150,214,.28)}to{background:transparent}}',
-      '.row .n{color:${T.ink3};text-align:right}',
-      '.row .at,.row .ms{color:${T.ink3}}',
-      '.row .ms{text-align:right}',
-      '.row .cmd{color:${T.accent}}',
-      '.row .what{color:${T.ink};overflow-wrap:anywhere}',
-      '.ok{color:${T.good}}.no{color:${T.bad}}',
-      ${JSON.stringify(contentKeys("ph", PHASES[s?.cmd ?? ""] ?? ["working"]))},
-    ].join('');
-    root.appendChild(style);
+    if (phase.textContent !== s.ph.keys) phase.textContent = s.ph.keys;
+    marks.textContent = '';
     if (ui.marks) {
       for (const { n, box } of s.boxes) {
         const b = el('div', 'box', null, at(box) + 'border-color:${T.accent}');
         b.appendChild(el('div', 'tag', String(n), box.y < 14 ? 'top:0' : 'top:-14px'));
-        root.appendChild(b);
+        marks.appendChild(b);
       }
-      if (s.target) root.appendChild(el('div', 'target', null, at(s.target)));
+      if (s.target) marks.appendChild(el('div', 'target', null, at(s.target)));
     }
-    const done = (panel) => {
-      document.documentElement.appendChild(host);
-      ui.host = host;
-      ui.root = root;
-      // Inert only when the agent's press could land on the panel; 16px of room around it.
-      const r = panel.getBoundingClientRect(), a = s.aim, m = 16;
-      const under = !a || (a.x < r.right + m && a.x + a.w > r.left - m && a.y < r.bottom + m && a.y + a.h > r.top - m);
-      if (s.held || (s.aimed && under)) panel.classList.add('inert');
-    };
+    let panel = tab;
     if (ui.min) {
-      // Folded: a tab peeking from the left edge, the page free around it.
-      const tab = el('div', 'tab' + (s.busy ? ' busy' : ''));
-      tab.setAttribute('data-a', 'min');
-      tab.title = 'autobrowse: open';
-      root.appendChild(tab);
+      tui.style.display = 'none';
+      tab.style.display = '';
+      tab.className = 'tab' + (s.busy ? ' busy' : '');
       ui.tuiEl = null;
-      return done(tab);
-    }
-    clamp();
-    const place = ui.x == null ? 'left:12px;bottom:12px' : 'left:' + ui.x + 'px;top:' + ui.y + 'px';
-    const tui = el('div', 'tui' + (s.busy ? ' busy' : '') + (ui.sized ? ' sized' : ''), null, place + ';width:' + ui.w + 'px' + (ui.sized ? ';height:' + ui.h + 'px' : ''));
-    ui.tuiEl = tui;
-    const bar = el('div', 'bar');
-    bar.appendChild(el('span', 'name', '▌autobrowse'));
-    bar.appendChild(el('span', 'state' + (s.busy ? ' run' : ''), s.busy ? '● run' : '○ idle'));
-    if (s.step) bar.appendChild(el('span', 'k', 'step ' + s.step));
-    bar.appendChild(el('span', 'fill'));
-    if (s.meta) bar.appendChild(el('span', 'meta', s.meta));
-    const btn = (a, t, tip) => { const b = el('span', 'btn', t); b.setAttribute('data-a', a); b.title = tip; return b; };
-    const marks = btn('marks', ui.marks ? '[◆]' : '[◇]', ui.marks ? 'hide the boxes' : 'show the boxes');
-    if (ui.marks) marks.className += ' on';
-    bar.appendChild(marks);
-    bar.appendChild(btn('min', '[_]', 'minimize'));
-    tui.appendChild(bar);
-    const body = el('div', 'body');
-    const line = (k, cls, t) => { const d = el('div'); d.appendChild(el('span', 'k', k)); d.appendChild(el('span', cls, t)); return d; };
-    if (s.goal) body.appendChild(line('goal ', 'goal', s.goal));
-    if (s.thought) body.appendChild(line('» ', 'thought', s.thought));
-    if (s.doing) body.appendChild(line('$ ', 'doing', s.doing));
-    // The busy line: the hands' phase while a command runs; between commands, the agent's turn.
-    const live = el('div', 'live');
-    if (s.busy) {
-      live.appendChild(el('span', 'spin'));
-      const ph = el('span', 'phase', ' ', '--d:' + ${JSON.stringify(PHASES[s?.cmd ?? ""]?.length ?? 1)} * ${PHASE_S} + 's;--t:-' + since + 's');
-      live.appendChild(ph);
-      live.appendChild(el('span', 'dots'));
-    } else if (s.goal) {
-      live.appendChild(el('span', 'spin slow'));
-      live.appendChild(el('span', '', ' thinking'));
-      live.appendChild(el('span', 'dots'));
     } else {
-      live.appendChild(el('span', 'k', '$ waiting for the agent'));
-      live.appendChild(el('span', 'cursor'));
-    }
-    body.appendChild(live);
-    tui.appendChild(body);
-    const rule = el('div', 'rule');
-    rule.appendChild(el('span', 't', '─ trace'));
-    rule.appendChild(el('span', 't', String(s.trace.length)));
-    rule.appendChild(el('span', 'fill', null, 'flex:1'));
-    rule.appendChild(btn('trace', ui.trace ? '[▾]' : '[▸]', ui.trace ? 'fold the trace' : 'show the trace'));
-    tui.appendChild(rule);
-    if (ui.trace && s.trace.length) {
-      // Newest first; what does not fit is cut, never scrolled (the panel takes no wheel).
-      const rows = el('div', 'rows');
-      const newest = s.trace[s.trace.length - 1].n;
-      for (const r of s.trace.slice().reverse()) {
-        const row = el('div', 'row' + (r.n === newest && ui.seen !== newest ? ' new' : ''));
-        row.appendChild(el('span', 'n', String(r.n)));
-        row.appendChild(el('span', 'at', r.at));
-        row.appendChild(el('span', 'cmd', r.cmd));
-        row.appendChild(el('span', 'what', r.what));
-        row.appendChild(el('span', r.ok ? 'ok' : 'no', r.ok ? '✓' : '✗'));
-        row.appendChild(el('span', 'ms', r.ms < 1000 ? r.ms + 'ms' : (r.ms / 1000).toFixed(1) + 's'));
-        if (r.note) row.appendChild(el('span', 'note' + (r.ok ? '' : ' no'), r.note));
-        rows.appendChild(row);
+      tab.style.display = 'none';
+      clamp();
+      const place = ui.x == null ? 'left:12px;bottom:12px' : 'left:' + ui.x + 'px;top:' + ui.y + 'px';
+      tui.className = 'tui' + (s.busy ? ' busy' : '') + (ui.sized ? ' sized' : '');
+      tui.style.cssText = place + ';width:' + ui.w + 'px' + (ui.sized ? ';height:' + ui.h + 'px' : '');
+      ui.tuiEl = panel = tui;
+      bar.textContent = '';
+      bar.appendChild(el('span', 'name', '▌autobrowse'));
+      bar.appendChild(el('span', 'state' + (s.busy ? ' run' : ''), s.busy ? '● run' : '○ idle'));
+      if (s.step) bar.appendChild(el('span', 'k', 'step ' + s.step));
+      bar.appendChild(el('span', 'fill'));
+      if (s.meta) bar.appendChild(el('span', 'meta', s.meta));
+      const btn = (a, t, tip) => { const b = el('span', 'btn', t); b.setAttribute('data-a', a); b.title = tip; return b; };
+      const mk = btn('marks', ui.marks ? '[◆]' : '[◇]', ui.marks ? 'hide the boxes' : 'show the boxes');
+      if (ui.marks) mk.className += ' on';
+      bar.appendChild(mk);
+      bar.appendChild(btn('min', '[_]', 'minimize'));
+      body.textContent = '';
+      const line = (k, cls, t) => { const d = el('div'); d.appendChild(el('span', 'k', k)); d.appendChild(el('span', cls, t)); return d; };
+      if (s.goal) body.appendChild(line('goal ', 'goal', s.goal));
+      if (s.thought) body.appendChild(line('» ', 'thought', s.thought));
+      if (s.doing) body.appendChild(line('$ ', 'doing', s.doing));
+      // The busy line: the hands' phase while a command runs; between commands, the agent's turn.
+      const live = el('div', 'live');
+      if (s.busy) {
+        live.appendChild(el('span', 'spin'));
+        live.appendChild(el('span', 'phase', ' ', '--d:' + s.ph.n * ${PHASE_S} + 's;--t:-' + since + 's'));
+        live.appendChild(el('span', 'dots'));
+      } else if (s.goal) {
+        live.appendChild(el('span', 'spin slow'));
+        live.appendChild(el('span', '', ' thinking'));
+        live.appendChild(el('span', 'dots'));
+      } else {
+        live.appendChild(el('span', 'k', '$ waiting for the agent'));
+        live.appendChild(el('span', 'cursor'));
       }
-      ui.seen = newest;
-      tui.appendChild(rows);
+      body.appendChild(live);
+      rule.textContent = '';
+      rule.appendChild(el('span', 't', '─ trace'));
+      rule.appendChild(el('span', 't', String(s.count)));
+      rule.appendChild(el('span', 'fill', null, 'flex:1'));
+      rule.appendChild(btn('trace', ui.trace ? '[▾]' : '[▸]', ui.trace ? 'fold the trace' : 'show the trace'));
+      rows.style.display = ui.trace && s.count ? '' : 'none';
     }
-    for (const c of ['nw', 'ne', 'sw', 'se']) {
-      const g = el('div', 'grip ' + c);
-      g.dataset.c = c;
-      tui.appendChild(g);
-    }
-    root.appendChild(tui);
-    done(tui);
+    // Inert only when the agent's press could land on the panel; 16px of room around it.
+    const r = panel.getBoundingClientRect(), a = s.aim, m = 16;
+    const under = !a || (a.x < r.right + m && a.x + a.w > r.left - m && a.y < r.bottom + m && a.y + a.h > r.top - m);
+    if (s.held || (s.aimed && under)) panel.classList.add('inert');
+    return ui.prefs();
   };
-  ui.draw(s);
-  return prefs();
+  /** \`from\`: the newest row the caller thinks the page holds; -1 sends them all. */
+  ui.draw = (s, list, from, last) => {
+    if (from >= 0 && from !== ui.lastN) return { need: true };
+    ui.s = s;
+    show();
+    add(list, from < 0);
+    ui.lastN = last;
+    return ui.paint();
+  };
 })()`;
 
 const clipLine = (s: string | null | undefined, n: number) =>
@@ -487,12 +512,45 @@ export function overlayFor(startOn: boolean) {
     h: 320,
     sized: false,
   };
-  const paint = async (page: Page, s: OverlayState | undefined) => {
-    const got = await Promise.race([
-      page.evaluate(layerScript(attr, s, prefs)).catch(() => undefined),
+  /** The newest row the page holds; -1: none known, so the next draw sends every row. */
+  let sentN = -1;
+  const run = (page: Page, script: string) =>
+    Promise.race([
+      page.evaluate(script).catch(() => undefined),
       new Promise<undefined>((r) => setTimeout(() => r(undefined), DRAW_MS).unref()),
     ]);
-    if (got && typeof got === "object") prefs = got as Prefs;
+  const K = `window['__${attr}']`;
+  /** Each draw sends the state and the rows the page lacks; a new document gets the layer first. */
+  const paint = async (page: Page, s: OverlayState | undefined) => {
+    if (!s) {
+      const got = await run(
+        page,
+        `(() => { const ui = ${K}; if (ui && ui.hide) { ui.hide(); return ui.prefs(); } })()`,
+      );
+      if (got && typeof got === "object") prefs = got as Prefs;
+      return;
+    }
+    const { trace, ...rest } = s;
+    const words = PHASES[s.cmd ?? ""];
+    const view = {
+      ...rest,
+      count: trace.length,
+      ph: { keys: contentKeys("ph", words ?? ["working"]), n: words?.length ?? 1 },
+    };
+    const last = trace.at(-1)?.n ?? 0;
+    const call = (from: number) => {
+      const rows = trace.filter((r) => r.n > from).map(({ detail: _, ...r }) => r);
+      return `(() => { const ui = ${K}; return ui && ui.draw ? ui.draw(${JSON.stringify(view)}, ${JSON.stringify(rows)}, ${from}, ${last}) : 'gone'; })()`;
+    };
+    let got = await run(page, call(sentN));
+    if (got === "gone") {
+      await run(page, installScript(attr, prefs));
+      got = await run(page, call(-1));
+    } else if (got && typeof got === "object" && "need" in got) got = await run(page, call(-1));
+    if (got && typeof got === "object" && !("need" in got)) {
+      prefs = got as Prefs;
+      sentN = last;
+    }
   };
   const draw = async (page: Page) => {
     if (!enabled) return;
@@ -648,6 +706,7 @@ export function overlayFor(startOn: boolean) {
       if (!drawn) return;
       drawn = false;
       state = { ...EMPTY };
+      sentN = -1;
       drawsOn(page, null);
       await paint(page, undefined);
     },

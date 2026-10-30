@@ -46,7 +46,7 @@ describe("the overlay on a flow run", () => {
         );
         await fp.read({ css: "#total" });
         await fp.act({ kind: "click" }, { role: "button", name: "Pay" }, { goal: "pay" });
-        seen(await fp.page.evaluate(`${ui} ? ${ui}.s : null`));
+        seen(await fp.page.evaluate(`${ui} ? { ...${ui}.s, trace: ${ui}.rows } : null`));
       },
     });
 

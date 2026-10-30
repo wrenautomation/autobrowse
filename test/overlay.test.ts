@@ -281,7 +281,41 @@ describe("headed overlay", () => {
       expect(await page.evaluate(layers)).toBe(0);
       await o.toggle(page, true);
       expect(await page.evaluate(layers)).toBe(1);
-      expect(await page.evaluate(`${ui}.s.trace.length`)).toBe(1);
+      expect(await page.evaluate(`${ui}.s.count`)).toBe(1);
+    } finally {
+      await browser.close();
+    }
+  });
+
+  it("the trace scrolls by wheel, keeps its place as rows come, and a new document gets every row", async () => {
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      await page.setContent(`<div style="height:3000px">tall</div>`);
+      const o = overlayFor(true);
+      await o.set(page, { goal: "read" });
+      for (let i = 0; i < 40; i++) await o.end(page, { ...row, what: `r${i}` });
+      const rows = `${ui}.tuiEl.querySelector('.rows')`;
+      const top = () => page.evaluate<number>(`${rows}.scrollTop`);
+      const r = (await page.evaluate(`${rows}.getBoundingClientRect().toJSON()`)) as DOMRect;
+      await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
+      await page.mouse.wheel(0, 120);
+      await page.waitForFunction(`${rows}.scrollTop > 0`);
+      expect(await page.evaluate("scrollY")).toBe(0);
+      const was = await top();
+      const first = () =>
+        page.evaluate(
+          `[...${rows}.children].find((e) => e.getBoundingClientRect().top >= ${rows}.getBoundingClientRect().top).textContent`,
+        );
+      const seenRow = await first();
+      await o.end(page, { ...row, what: "new" });
+      expect(await top()).toBeGreaterThan(was);
+      expect(await first()).toBe(seenRow);
+      expect(await page.evaluate(`${rows}.childElementCount`)).toBe(41);
+      await page.setContent(PAGE);
+      await o.loaded(page);
+      expect(await page.evaluate(`${rows}.childElementCount`)).toBe(41);
+      expect(await page.evaluate(`${rows}.firstChild.textContent`)).toContain("new");
     } finally {
       await browser.close();
     }
